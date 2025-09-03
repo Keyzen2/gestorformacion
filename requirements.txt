@@ -3,3 +3,4 @@ supabase
 xmlschema
 pandas
 openpyxl
+fpdf
