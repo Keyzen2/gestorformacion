@@ -5,21 +5,22 @@ def main(supabase, session_state):
     st.subheader("Grupos")
 
     # Mostrar grupos existentes
-    grupos_res = supabase.table("grupos").select("*").execute()
-    grupos = grupos_res.data if grupos_res.data else []
-    st.dataframe(pd.DataFrame(grupos))
+    grupos = supabase.table("grupos").select("*").execute().data
+    df_grupos = pd.DataFrame(grupos) if grupos else pd.DataFrame()
+    st.dataframe(df_grupos)
 
     st.markdown("### Crear Grupo")
 
-    # Obtener empresas y acciones
+    # Empresas y acciones
     empresas_res = supabase.table("empresas").select("id, nombre").execute()
     empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
 
     acciones_res = supabase.table("acciones_formativas").select("id, nombre").execute()
     acciones_dict = {a["nombre"]: a["id"] for a in acciones_res.data} if acciones_res.data else {}
 
-    tutores_res = supabase.table("tutores").select("id, nombre").execute()
-    tutores_dict = {t["nombre"]: t["id"] for t in tutores_res.data} if tutores_res.data else {}
+    # Tutores
+    tutores_res = supabase.table("tutores").select("id, nombre, apellidos").execute()
+    tutores_dict = {f"{t['nombre']} {t['apellidos']}": t["id"] for t in tutores_res.data} if tutores_res.data else {}
 
     empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"])
     empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
@@ -43,7 +44,7 @@ def main(supabase, session_state):
                 st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
             else:
                 try:
-                    # Crear el grupo
+                    # Insertar grupo
                     result = supabase.table("grupos").insert({
                         "codigo_grupo": codigo_grupo,
                         "fecha_inicio": fecha_inicio.isoformat(),
@@ -51,16 +52,14 @@ def main(supabase, session_state):
                         "empresa_id": empresa_id,
                         "accion_formativa_id": accion_id
                     }).execute()
-
                     grupo_id = result.data[0]["id"]
 
-                    # Asignar tutores al grupo
+                    # Asociar tutores
                     for tid in tutor_ids:
                         supabase.table("tutores_grupos").insert({
                             "grupo_id": grupo_id,
                             "tutor_id": tid
                         }).execute()
-
-                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente con {len(tutor_ids)} tutores asignados.")
+                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
                 except Exception as e:
                     st.error(f"❌ Error al crear el grupo: {str(e)}")
