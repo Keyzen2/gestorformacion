@@ -12,45 +12,55 @@ from utils import (
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
-    
-    # =======================
-    # Mostrar acciones
-    # =======================
+
+    # ==========================
+    # Cargar acciones formativas
+    # ==========================
     acciones_res = supabase.table("acciones_formativas").select("*").execute()
     acciones = acciones_res.data if acciones_res.data else []
     df_acciones = pd.DataFrame(acciones)
-    
-    # Convertir fecha_inicio a datetime si existe
+
+    # Convertir fechas a datetime seguro
     if not df_acciones.empty and "fecha_inicio" in df_acciones.columns:
         df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
-    
+    if not df_acciones.empty and "fecha_fin" in df_acciones.columns:
+        df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
+
+    # ==========================
     # Filtrado por año
+    # ==========================
     anios = list(range(2020, datetime.now().year + 2))
     anio_filtrado = st.selectbox("Filtrar por Año", options=[None] + anios)
-    
+
     df_filtered = df_acciones.copy()
-    if anio_filtrado and not df_filtered.empty:
+    if anio_filtrado and not df_filtered.empty and "fecha_inicio" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["fecha_inicio"].notna()]
         df_filtered = df_filtered[df_filtered["fecha_inicio"].dt.year == anio_filtrado]
-    
+
     st.dataframe(df_filtered)
 
-    # =======================
+    # ==========================
     # Crear acción formativa
-    # =======================
+    # ==========================
     st.markdown("### Crear Acción Formativa")
-    
-    # Obtener empresas para el desplegable
-    empresas_res = supabase.table("empresas").select("id, nombre").execute()
-    empresas = empresas_res.data if empresas_res.data else []
+
+    # Obtener empresas según rol
+    if session_state.role == "admin":
+        empresas_res = supabase.table("empresas").select("id, nombre").execute()
+        empresas = empresas_res.data if empresas_res.data else []
+    else:  # gestor: solo su empresa
+        empresas_res = supabase.table("empresas").select("id, nombre").eq("id", session_state.user.get("empresa_id")).execute()
+        empresas = empresas_res.data if empresas_res.data else []
+
+    if not empresas:
+        st.warning("No hay empresas disponibles.")
+        return
+
     empresas_dict = {e["nombre"]: e["id"] for e in empresas}
+    empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()))
+    empresa_id = empresas_dict.get(empresa_nombre)
 
-    empresa_nombre = st.selectbox(
-        "Empresa",
-        options=list(empresas_dict.keys()) if empresas else ["No hay empresas"]
-    )
-    empresa_id = empresas_dict.get(empresa_nombre) if empresas else None
-
+    # Formulario
     with st.form("crear_accion_formativa"):
         nombre = st.text_input("Nombre *")
         descripcion = st.text_area("Descripción *")
@@ -64,6 +74,7 @@ def main(supabase, session_state):
 
         submitted = st.form_submit_button("Guardar")
         if submitted:
+            # Validaciones
             if not nombre or not descripcion or not empresa_id:
                 st.error("⚠️ Nombre, descripción y empresa son obligatorios.")
             elif fecha_fin < fecha_inicio:
