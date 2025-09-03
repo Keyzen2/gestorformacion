@@ -42,30 +42,29 @@ def logout():
 if not st.session_state.logged_in:
     st.title("Gestor de Formación - Login")
     with st.form("login_form"):
-        email = st.text_input("Usuario (email/CIF)")
-        password = st.text_input("Contraseña", type="password")
+        email_input = st.text_input("Usuario (email/CIF)")
+        password_input = st.text_input("Contraseña", type="password")
         submitted = st.form_submit_button("Entrar")
-
     if submitted:
         try:
-            # Autenticación con Supabase Auth
-            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            auth_response = supabase.auth.sign_in_with_password({
+                "email": email_input,
+                "password": password_input
+            })
             if auth_response.user:
-                auth_id = auth_response.user.id  # UUID real de Supabase Auth
-
-                # Recuperar usuario de la tabla 'usuarios' usando auth_id
-                res = supabase.table("usuarios").select("*").eq("auth_id", user.user.id).execute()
-                if res.data and len(res.data) > 0:
+                # Buscar usuario en la tabla usando auth_id
+                res = supabase.table("usuarios").select("*").eq("auth_id", auth_response.user.id).execute()
+                if res.data:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
                     st.session_state.role = res.data[0]["rol"]
                     st.experimental_rerun()
                 else:
-                    st.error("Usuario no encontrado en la base de datos interna.")
+                    st.error("Usuario no registrado en la base de datos interna")
             else:
-                st.error("Usuario o contraseña incorrectos.")
+                st.error("Usuario o contraseña incorrectos")
         except Exception as e:
-            st.error(f"Error de login: {str(e)}")
+            st.error(f"Error de login: {e}")
 
 # =======================
 # APP PRINCIPAL
