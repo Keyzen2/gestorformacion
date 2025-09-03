@@ -1,22 +1,25 @@
-# Streamlit UI
-streamlit==1.28.0
+# Streamlit para la interfaz
+streamlit==1.29.0
 
-# Supabase (Auth, DB, Storage)
+# Supabase cliente
 supabase==2.0.1
 
-# Data handling
-pandas>=2.3.2
-numpy>=1.26.0
+# Dataframes y manipulación de Excel
+pandas>=2.3.0
+openpyxl>=3.1.5
 
-# Excel import
-openpyxl
+# Numpy compatible con Python 3.13
+numpy>=1.26.4
 
-# XML and PDF generation
-lxml
-reportlab
+# Generación de PDFs
+reportlab>=4.4.3
 
-# Logging / exceptions
-rich<14
+# Validación y manejo de XML
+lxml>=6.0.0
 
-# Optional: charts
-altair>=4.2,<6
+# Logs y estilos en terminal
+rich>=14.1.0
+
+# Visualizaciones opcionales
+altair>=5.5.0
+
