@@ -18,7 +18,7 @@ reportlab>=4.4.3
 lxml>=6.0.0
 
 # Logs y estilos en terminal
-rich>=14.1.0
+rich>=10.14.0,<14
 
 # Visualizaciones opcionales
 altair>=5.5.0
