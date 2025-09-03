@@ -1,74 +1,55 @@
 import streamlit as st
 import pandas as pd
 from utils import (
-    importar_participantes_excel,
     generar_pdf,
-    validar_xml,
     generar_xml_accion_formativa,
-    generar_xml_inicio_grupo,
-    generar_xml_finalizacion_grupo
 )
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
 
-    # ==========================
-    # Cargar acciones formativas
-    # ==========================
+    # =======================
+    # Listado de acciones
+    # =======================
     acciones_res = supabase.table("acciones_formativas").select("*").execute()
-    acciones = acciones_res.data if acciones_res.data else []
-    df_acciones = pd.DataFrame(acciones)
+    df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+    
+    if not df_acciones.empty:
+        st.markdown("### Acciones Formativas Registradas")
+        st.dataframe(df_acciones)
 
-    st.dataframe(df_acciones)
-
-    # ==========================
-    # Crear acción formativa
-    # ==========================
-    st.markdown("### Crear Acción Formativa")
-
-    # Obtener empresas según rol
-    if session_state.role == "admin":
-        empresas_res = supabase.table("empresas").select("id, nombre").execute()
-        empresas = empresas_res.data if empresas_res.data else []
-    else:  # gestor: solo su empresa
-        empresas_res = supabase.table("empresas").select("id, nombre").eq("id", session_state.user.get("empresa_id")).execute()
-        empresas = empresas_res.data if empresas_res.data else []
-
-    if not empresas:
-        st.warning("No hay empresas disponibles.")
-        return
-
-    empresas_dict = {e["nombre"]: e["id"] for e in empresas}
-    empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()))
-    empresa_id = empresas_dict.get(empresa_nombre)
-
-    # Formulario
+    st.markdown("### Crear Nueva Acción Formativa")
+    
     with st.form("crear_accion_formativa"):
-        nombre = st.text_input("Nombre *")
-        descripcion = st.text_area("Descripción *")
-        objetivos = st.text_area("Objetivos")
-        contenidos = st.text_area("Contenidos")
-        requisitos = st.text_area("Requisitos")
-        horas = st.number_input("Horas", min_value=1, max_value=1000, step=1)
-        modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
-
-        submitted = st.form_submit_button("Guardar")
+        nombre = st.text_input("Nombre de la acción formativa *")
+        descripcion = st.text_area("Descripción")
+        codigo = st.text_input("Código")
+        modalidad = st.selectbox("Modalidad", options=["Presencial", "Online", "Mixta"])
+        duracion_horas = st.number_input("Duración en horas", min_value=1, step=1)
+        submitted = st.form_submit_button("Crear Acción")
+        
         if submitted:
-            # Validaciones
-            if not nombre or not descripcion or not empresa_id:
-                st.error("⚠️ Nombre, descripción y empresa son obligatorios.")
+            if not nombre:
+                st.error("⚠️ El nombre es obligatorio")
             else:
                 try:
                     supabase.table("acciones_formativas").insert({
                         "nombre": nombre,
                         "descripcion": descripcion,
-                        "objetivos": objetivos,
-                        "contenidos": contenidos,
-                        "requisitos": requisitos,
-                        "horas": horas,
+                        "codigo": codigo,
                         "modalidad": modalidad,
-                        "empresa_id": empresa_id
+                        "duracion_horas": duracion_horas
                     }).execute()
-                    st.success(f"✅ Acción formativa '{nombre}' creada correctamente.")
+                    st.success(f"✅ Acción Formativa '{nombre}' creada correctamente")
                 except Exception as e:
-                    st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+                    st.error(f"❌ Error al crear acción: {str(e)}")
+
+    # =======================
+    # Exportar XML de acción formativa
+    # =======================
+    if not df_acciones.empty:
+        accion_nombre = st.selectbox("Selecciona acción para exportar XML", options=list(df_acciones["nombre"]))
+        accion_id = df_acciones[df_acciones["nombre"] == accion_nombre]["id"].values[0]
+        if st.button("Generar XML"):
+            xml_string = generar_xml_accion_formativa(accion_id)
+            st.download_button("Descargar XML", xml_string, file_name=f"{accion_nombre}.xml")
