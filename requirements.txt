@@ -1,24 +1,7 @@
-# Core
 streamlit==1.28.0
-
-# Supabase client (v2 compatible con Python ≤3.12)
 supabase==2.0.1
-
-# Data handling
 pandas==2.1.0
 openpyxl==3.1.3
-
-# XML / XSD validation
 lxml==4.9.3
-
-# PDF generation
-reportlab==4.0.3
-
-# Interactive tables
-st-aggrid==0.3.2
-
-# Environment variables / secrets
-python-dotenv==1.0.0
-
-# HTTP requests if needed
-requests==2.31.0
+reportlab==4.4.3
+st-aggrid==0.4.5
