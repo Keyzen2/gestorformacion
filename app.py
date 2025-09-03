@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import os
 from supabase import create_client, Client
@@ -69,30 +70,32 @@ if st.session_state.get("logged_in"):
     # =======================
     # MENÚ LATERAL
     # =======================
-    opciones = ["Usuarios y Empresas", "Acciones Formativas", "Grupos", "Participantes", "Documentos"]
+    if st.session_state.role == "admin":
+        opciones = ["Usuarios y Empresas", "Acciones Formativas", "Grupos", "Participantes", "Documentos"]
+    else:
+        opciones = ["Acciones Formativas"]
+    
     menu = st.sidebar.radio("Menú", opciones)
 
     # =======================
-    # IMPORTAR PÁGINAS
+    # CARGA DE MÓDULOS SEGÚN MENÚ
     # =======================
-    if st.session_state.role == "admin":
-        if menu == "Usuarios y Empresas":
-            from pages.usuarios_empresas import main as usuarios_empresas_page
-            usuarios_empresas_page(supabase, st.session_state)
-        elif menu == "Acciones Formativas":
-            from pages.acciones_formativas import main as acciones_page
-            acciones_page(supabase, st.session_state)
-        elif menu == "Grupos":
-            from pages.grupos import main as grupos_page
-            grupos_page(supabase, st.session_state)
-        elif menu == "Participantes":
-            from pages.participantes import main as participantes_page
-            participantes_page(supabase, st.session_state)
-        elif menu == "Documentos":
-            from pages.documentos import main as documentos_page
-            documentos_page(supabase, st.session_state)
+    if menu == "Usuarios y Empresas":
+        from pages.usuarios_empresas import main as usuarios_empresas_page
+        usuarios_empresas_page(supabase, st.session_state)
 
-    elif st.session_state.role == "empresa":
-        st.subheader("Panel Empresa")
+    elif menu == "Acciones Formativas":
         from pages.acciones_formativas import main as acciones_page
         acciones_page(supabase, st.session_state)
+
+    elif menu == "Grupos":
+        from pages.grupos import main as grupos_page
+        grupos_page(supabase, st.session_state)
+
+    elif menu == "Participantes":
+        from pages.participantes import main as participantes_page
+        participantes_page(supabase, st.session_state)
+
+    elif menu == "Documentos":
+        from pages.documentos import main as documentos_page
+        documentos_page(supabase, st.session_state)
