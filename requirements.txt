@@ -4,3 +4,4 @@ xmlschema
 pandas
 openpyxl
 fpdf
+streamlit-aggrid
