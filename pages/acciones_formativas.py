@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 from utils import (
     importar_participantes_excel,
     generar_pdf,
@@ -20,24 +19,7 @@ def main(supabase, session_state):
     acciones = acciones_res.data if acciones_res.data else []
     df_acciones = pd.DataFrame(acciones)
 
-    # Convertir fechas a datetime seguro
-    if not df_acciones.empty and "fecha_inicio" in df_acciones.columns:
-        df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
-    if not df_acciones.empty and "fecha_fin" in df_acciones.columns:
-        df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
-
-    # ==========================
-    # Filtrado por año
-    # ==========================
-    anios = list(range(2020, datetime.now().year + 2))
-    anio_filtrado = st.selectbox("Filtrar por Año", options=[None] + anios)
-
-    df_filtered = df_acciones.copy()
-    if anio_filtrado and not df_filtered.empty and "fecha_inicio" in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered["fecha_inicio"].notna()]
-        df_filtered = df_filtered[df_filtered["fecha_inicio"].dt.year == anio_filtrado]
-
-    st.dataframe(df_filtered)
+    st.dataframe(df_acciones)
 
     # ==========================
     # Crear acción formativa
@@ -69,16 +51,12 @@ def main(supabase, session_state):
         requisitos = st.text_area("Requisitos")
         horas = st.number_input("Horas", min_value=1, max_value=1000, step=1)
         modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
-        fecha_inicio = st.date_input("Fecha Inicio")
-        fecha_fin = st.date_input("Fecha Fin")
 
         submitted = st.form_submit_button("Guardar")
         if submitted:
             # Validaciones
             if not nombre or not descripcion or not empresa_id:
                 st.error("⚠️ Nombre, descripción y empresa son obligatorios.")
-            elif fecha_fin < fecha_inicio:
-                st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
             else:
                 try:
                     supabase.table("acciones_formativas").insert({
@@ -89,8 +67,6 @@ def main(supabase, session_state):
                         "requisitos": requisitos,
                         "horas": horas,
                         "modalidad": modalidad,
-                        "fecha_inicio": fecha_inicio.isoformat(),
-                        "fecha_fin": fecha_fin.isoformat(),
                         "empresa_id": empresa_id
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre}' creada correctamente.")
