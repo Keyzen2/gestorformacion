@@ -3,5 +3,6 @@ supabase==2.0.1
 pandas==2.0.3
 numpy==1.25.2
 rich>=10.14.0,<14
-
-
+markdown-it-py>=2.2.0
+pyyaml>=6.0
+requests>=2.31.0
