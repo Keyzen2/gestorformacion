@@ -1,22 +1,12 @@
 import streamlit as st
 import pandas as pd
-from utils import (
-    importar_participantes_excel,
-    generar_pdf,
-    validar_xml,
-    generar_xml_accion_formativa,
-    generar_xml_inicio_grupo,
-    generar_xml_finalizacion_grupo
-)
 
 def main(supabase, session_state):
     st.subheader("Grupos")
     grupos = supabase.table("grupos").select("*").execute().data
-    st.dataframe(pd.DataFrame(grupos))
+    st.dataframe(pd.DataFrame(grupos) if grupos else pd.DataFrame())
 
     st.markdown("### Crear Grupo")
-    
-    # Obtener empresas y acciones
     empresas_res = supabase.table("empresas").select("id, nombre").execute()
     empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
     acciones_res = supabase.table("acciones_formativas").select("id, nombre").execute()
