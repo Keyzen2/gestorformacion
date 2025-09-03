@@ -1,7 +1,7 @@
-streamlit
-supabase
-xmlschema
+streamlit>=1.26.0
 pandas
 openpyxl
-fpdf
-streamlit-aggrid
+st-aggrid
+supabase
+lxml
+reportlab
