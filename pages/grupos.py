@@ -3,10 +3,15 @@ import pandas as pd
 
 def main(supabase, session_state):
     st.subheader("Grupos")
-    grupos = supabase.table("grupos").select("*").execute().data
+
+    # Mostrar grupos existentes
+    grupos_res = supabase.table("grupos").select("*").execute()
+    grupos = grupos_res.data if grupos_res.data else []
     st.dataframe(pd.DataFrame(grupos))
 
     st.markdown("### Crear Grupo")
+
+    # Obtener empresas y acciones
     empresas_res = supabase.table("empresas").select("id, nombre").execute()
     empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
 
@@ -38,6 +43,7 @@ def main(supabase, session_state):
                 st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
             else:
                 try:
+                    # Crear el grupo
                     result = supabase.table("grupos").insert({
                         "codigo_grupo": codigo_grupo,
                         "fecha_inicio": fecha_inicio.isoformat(),
@@ -45,12 +51,16 @@ def main(supabase, session_state):
                         "empresa_id": empresa_id,
                         "accion_formativa_id": accion_id
                     }).execute()
+
                     grupo_id = result.data[0]["id"]
+
+                    # Asignar tutores al grupo
                     for tid in tutor_ids:
                         supabase.table("tutores_grupos").insert({
                             "grupo_id": grupo_id,
                             "tutor_id": tid
                         }).execute()
-                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
+
+                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente con {len(tutor_ids)} tutores asignados.")
                 except Exception as e:
                     st.error(f"❌ Error al crear el grupo: {str(e)}")
