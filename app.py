@@ -45,18 +45,27 @@ if not st.session_state.logged_in:
         email = st.text_input("Usuario (email/CIF)")
         password = st.text_input("Contraseña", type="password")
         submitted = st.form_submit_button("Entrar")
+
     if submitted:
         try:
-            user = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if user.user:
-                res = supabase.table("usuarios").select("*").eq("auth_id", user.user.id).execute()
-                if res.data:
+            # Autenticación con Supabase Auth
+            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            if auth_response.user:
+                auth_id = auth_response.user.id  # UUID real de Supabase Auth
+
+                # Recuperar usuario de la tabla 'usuarios' usando auth_id
+                res = supabase.table("usuarios").select("*").eq("auth_id", auth_id).execute()
+                if res.data and len(res.data) > 0:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
                     st.session_state.role = res.data[0]["rol"]
                     st.experimental_rerun()
-        except Exception:
-            st.error("Usuario o contraseña incorrectos")
+                else:
+                    st.error("Usuario no encontrado en la base de datos interna.")
+            else:
+                st.error("Usuario o contraseña incorrectos.")
+        except Exception as e:
+            st.error(f"Error de login: {str(e)}")
 
 # =======================
 # APP PRINCIPAL
