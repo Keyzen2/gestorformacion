@@ -1,65 +1,66 @@
 import streamlit as st
-import pandas as pd
 
 def main(supabase, session_state):
-    st.subheader("Acciones Formativas")
+    st.title("Acciones Formativas")
 
-    # =========================
-    # Filtrado y listado
-    # =========================
-    acciones_res = supabase.table("acciones_formativas").select("*").execute()
-    acciones = acciones_res.data if acciones_res.data else []
+    # =======================
+    # Selección de empresa
+    # =======================
+    empresas_res = supabase.table("empresas").select("id, nombre").execute()
+    empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
 
-    if acciones:
-        df = pd.DataFrame(acciones)
-        # Filtrado por empresa si existe
-        empresas_res = supabase.table("empresas").select("id, nombre").execute()
-        empresas_dict = {e["id"]: e["nombre"] for e in empresas_res.data} if empresas_res.data else {}
-        df["empresa_nombre"] = df["empresa_id"].map(empresas_dict)
+    empresa_nombre = st.selectbox(
+        "Empresa",
+        options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"]
+    )
+    empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
 
-        st.markdown("### Filtrar Acciones Formativas")
-        empresa_filtrada = st.selectbox(
-            "Filtrar por empresa",
-            options=["Todas"] + list(empresas_dict.values())
-        )
-        if empresa_filtrada != "Todas":
-            df = df[df["empresa_nombre"] == empresa_filtrada]
-
-        st.dataframe(df)
-    else:
-        st.info("No hay acciones formativas registradas.")
-
-    # =========================
-    # Crear nueva acción formativa
-    # =========================
+    st.markdown("---")
     st.markdown("### Crear Acción Formativa")
-    empresas_dict_rev = {v: k for k, v in empresas_dict.items()}  # nombre -> id
 
-    with st.form("crear_accion"):
-        nombre_accion = st.text_input("Nombre de la Acción Formativa *")
-        descripcion = st.text_area("Descripción")
-        modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
-        empresa_nombre = st.selectbox(
-            "Empresa", options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"]
-        )
-        empresa_id = empresas_dict_rev.get(empresa_nombre)
-        num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
+    with st.form("crear_accion_formativa"):
+        nombre_accion = st.text_input("Nombre Acción Formativa *")
+        modalidad = st.selectbox("Modalidad", options=["Presencial", "Online", "Mixta"])
+        num_horas_str = st.text_input("Número de horas *")
 
-        submitted = st.form_submit_button("Crear Acción Formativa")
+        # Validar número de horas
+        try:
+            num_horas = int(num_horas_str)
+            if num_horas < 1:
+                st.error("⚠️ El número de horas debe ser mayor que 0")
+        except ValueError:
+            if num_horas_str:
+                st.error("⚠️ Introduce un número válido")
 
-        if submitted:
-            if not nombre_accion or not empresa_id:
-                st.error("⚠️ El nombre y la empresa son obligatorios.")
+        form_submitted = st.form_submit_button("Crear Acción Formativa")
+
+        if form_submitted:
+            if not nombre_accion or not empresa_id or not num_horas_str:
+                st.error("⚠️ Todos los campos son obligatorios")
             else:
                 try:
-                    supabase.table("acciones_formativas").insert({
+                    # Insertar en la tabla acciones_formativas
+                    result = supabase.table("acciones_formativas").insert({
                         "nombre": nombre_accion,
-                        "descripcion": descripcion,
                         "modalidad": modalidad,
-                        "empresa_id": empresa_id,
-                        "num_horas": num_horas
+                        "num_horas": num_horas,
+                        "empresa_id": empresa_id
                     }).execute()
-                    st.success(f"✅ Acción Formativa '{nombre_accion}' creada correctamente.")
-                    st.experimental_rerun()  # refresca la página para mostrar la nueva acción
+
+                    if result.data:
+                        st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente")
+                    else:
+                        st.error("❌ Error al crear la acción formativa")
                 except Exception as e:
                     st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+
+    # =======================
+    # Listado de acciones
+    # =======================
+    st.markdown("---")
+    st.subheader("Acciones Formativas existentes")
+    acciones_res = supabase.table("acciones_formativas").select("*").execute()
+    if acciones_res.data:
+        st.dataframe(acciones_res.data)
+    else:
+        st.info("No hay acciones formativas registradas.")
