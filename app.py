@@ -82,11 +82,12 @@ def validar_xml(xml_string, xsd_string):
 # =======================
 # APP PRINCIPAL
 # =======================
-if st.session_state.logged_in:
-    user_data = st.session_state.user or {}
+if st.session_state.get("logged_in"):
+    user_data = st.session_state.get("user", {})
     nombre_usuario = user_data.get("nombre") or user_data.get("email") or "Usuario"
     st.sidebar.title(f"Bienvenido {nombre_usuario}")
     st.sidebar.button("Cerrar sesión", on_click=logout)
+    
     # =======================
     # MENÚ LATERAL
     # =======================
