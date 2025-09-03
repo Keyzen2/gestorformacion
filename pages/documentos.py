@@ -1,19 +1,9 @@
 import streamlit as st
-from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo
 import pandas as pd
-from utils import (
-    importar_participantes_excel,
-    generar_pdf,
-    validar_xml,
-    generar_xml_accion_formativa,
-    generar_xml_inicio_grupo,
-    generar_xml_finalizacion_grupo
-)
+from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo
 
 def main(supabase, session_state):
     st.subheader("Documentos")
-
-    # Selección de acción formativa
     acciones_res = supabase.table("acciones_formativas").select("id, nombre").execute()
     acciones_dict = {a["nombre"]: a["id"] for a in acciones_res.data} if acciones_res.data else {}
     accion_nombre = st.selectbox("Selecciona Acción Formativa", options=list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
