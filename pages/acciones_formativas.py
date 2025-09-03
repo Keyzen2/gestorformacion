@@ -1,6 +1,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from utils import (
+    importar_participantes_excel,
+    generar_pdf,
+    validar_xml,
+    generar_xml_accion_formativa,
+    generar_xml_inicio_grupo,
+    generar_xml_finalizacion_grupo
+)
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
