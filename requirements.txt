@@ -1,7 +1,7 @@
 streamlit==1.28.0
 supabase==2.0.1
 pandas==2.0.3
-numpy==1.26.6
-lxml==4.8.1
-rich==14.1.0
+numpy==1.25.2
+rich>=10.14.0,<14
+
 
