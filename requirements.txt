@@ -1,8 +1,22 @@
+# Streamlit UI
 streamlit==1.28.0
+
+# Supabase (Auth, DB, Storage)
 supabase==2.0.1
-pandas>=2.0.3
+
+# Data handling
+pandas>=2.3.2
 numpy>=1.26.0
+
+# Excel import
 openpyxl
+
+# XML and PDF generation
 lxml
 reportlab
-rich>=14.0.0
+
+# Logging / exceptions
+rich<14
+
+# Optional: charts
+altair>=4.2,<6
