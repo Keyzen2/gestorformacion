@@ -1,107 +1,75 @@
+# utils.py
 import pandas as pd
 from io import BytesIO
-from lxml import etree
-from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
+from lxml import etree
 
-# ------------------------
-# IMPORTAR PARTICIPANTES DESDE EXCEL CON BATCHING
-# ------------------------
-def importar_participantes_excel(file, batch_size=None):
-    df = pd.read_excel(file)
-    participantes = df.to_dict(orient="records")
-    if batch_size:
-        # devuelve listas por lotes
-        for i in range(0, len(participantes), batch_size):
-            yield participantes[i:i+batch_size]
-    else:
-        yield participantes
+# =======================
+# IMPORTAR PARTICIPANTES DESDE EXCEL
+# =======================
+def importar_participantes_excel(uploaded_file):
+    df = pd.read_excel(uploaded_file)
+    required_columns = ["nif", "nombre", "fecha_nacimiento", "sexo", "grupo_id"]
+    if not all(col in df.columns for col in required_columns):
+        raise ValueError(f"El Excel debe contener las columnas: {required_columns}")
+    return df.to_dict(orient="records")
 
-# ------------------------
-# VALIDAR XML SEGÚN XSD
-# ------------------------
-def validar_xml(xml_bytes, xsd_path):
-    try:
-        xml_doc = etree.fromstring(xml_bytes)
-        with open(xsd_path, 'rb') as f:
-            xsd_doc = etree.XML(f.read())
-        xmlschema = etree.XMLSchema(xsd_doc)
-        return xmlschema.validate(xml_doc)
-    except Exception as e:
-        print("Error validando XML:", e)
-        return False
-
-# ------------------------
-# GENERAR DOCUMENTOS PDF
-# ------------------------
-def generar_pdf_grupo(grupo, participantes):
+# =======================
+# GENERAR PDF
+# =======================
+def generar_pdf_grupo(nombre_archivo, contenido="PDF de prueba"):
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    c.setFont("Helvetica", 12)
-    c.drawString(50, 800, f"Grupo: {grupo.get('codigo_grupo')}")
-    y = 780
-    for p in participantes:
-        c.drawString(50, y, f"{p.get('nombre')} — {p.get('nif')}")
-        y -= 20
-        if y < 50:
-            c.showPage()
-            y = 800
+    c = canvas.Canvas(buffer)
+    c.drawString(100, 750, contenido)
     c.save()
     buffer.seek(0)
-    return buffer.getvalue()
+    return buffer
 
-# ------------------------
-# GENERAR XML
-# ------------------------
+# =======================
+# VALIDAR XML
+# =======================
+def validar_xml(xml_string, xsd_string):
+    xml_doc = etree.fromstring(xml_string.encode())
+    xsd_doc = etree.fromstring(xsd_string.encode())
+    schema = etree.XMLSchema(xsd_doc)
+    return schema.validate(xml_doc)
+
+# =======================
+# GENERAR XML ACCIÓN FORMATIVA
+# =======================
 def generar_xml_accion_formativa(accion):
     root = etree.Element("AccionFormativa")
-    for key, value in accion.items():
-        etree.SubElement(root, key).text = str(value)
+    etree.SubElement(root, "id").text = str(accion["id"])
+    etree.SubElement(root, "nombre").text = accion.get("nombre", "")
+    etree.SubElement(root, "descripcion").text = accion.get("descripcion", "")
+    etree.SubElement(root, "fecha_inicio").text = str(accion.get("fecha_inicio", ""))
+    etree.SubElement(root, "fecha_fin").text = str(accion.get("fecha_fin", ""))
     return etree.tostring(root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
 
-def generar_xml_inicio_grupo(grupo, participantes):
+# =======================
+# GENERAR XML INICIO GRUPO
+# =======================
+def generar_xml_inicio_grupo(accion, participantes):
     root = etree.Element("InicioGrupo")
-    g = etree.SubElement(root, "Grupo")
-    for key, value in grupo.items():
-        etree.SubElement(g, key).text = str(value)
-    ps = etree.SubElement(root, "Participantes")
+    etree.SubElement(root, "accion_formativa_id").text = str(accion["id"])
     for p in participantes:
-        part = etree.SubElement(ps, "Participante")
-        for key, value in p.items():
-            etree.SubElement(part, key).text = str(value)
-    return etree.tostring(root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+        part_elem = etree.SubElement(root, "Participante")
+        etree.SubElement(part_elem, "nif").text = p["nif"]
+        etree.SubElement(part_elem, "nombre").text = p["nombre"]
+        etree.SubElement(part_elem, "fecha_nacimiento").text = str(p.get("fecha_nacimiento", ""))
+        etree.SubElement(part_elem, "sexo").text = p.get("sexo", "")
+    return BytesIO(etree.tostring(root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
 
-def generar_xml_finalizacion_grupo(grupo, participantes):
+# =======================
+# GENERAR XML FINALIZACIÓN GRUPO
+# =======================
+def generar_xml_finalizacion_grupo(accion, participantes):
     root = etree.Element("FinalizacionGrupo")
-    g = etree.SubElement(root, "Grupo")
-    for key, value in grupo.items():
-        etree.SubElement(g, key).text = str(value)
-    ps = etree.SubElement(root, "Participantes")
+    etree.SubElement(root, "accion_formativa_id").text = str(accion["id"])
     for p in participantes:
-        part = etree.SubElement(ps, "Participante")
-        for key, value in p.items():
-            etree.SubElement(part, key).text = str(value)
-    return etree.tostring(root, pretty_print=True, xml_declaration=True, encoding="UTF-8")
-
-# ------------------------
-# GUARDAR DOCUMENTO EN SUPABASE STORAGE
-# ------------------------
-def guardar_documento_en_storage(supabase, bucket, contenido_bytes, nombre_archivo, tipo, grupo_id, accion_id, usuario_id):
-    try:
-        path = f"{tipo}/{nombre_archivo}"
-        supabase.storage.from_(bucket).upload(path, contenido_bytes, overwrite=True)
-        doc_data = {
-            "archivo_path": path,
-            "tipo": tipo,
-            "grupo_id": grupo_id,
-            "accion_id": accion_id,
-            "usuario_auth_id": usuario_id
-        }
-        supabase.table("documentos").insert(doc_data).execute()
-        # Crear signed URL 1h
-        signed = supabase.storage.from_(bucket).create_signed_url(path, 3600)
-        url = signed.get("signed_url") or (signed.get("data") and signed["data"].get("signed_url"))
-        return url, path
-    except Exception as e:
-        print("Error guardando documento:", e)
-        return None, None
+        part_elem = etree.SubElement(root, "Participante")
+        etree.SubElement(part_elem, "nif").text = p["nif"]
+        etree.SubElement(part_elem, "nombre").text = p["nombre"]
+        etree.SubElement(part_elem, "fecha_nacimiento").text = str(p.get("fecha_nacimiento", ""))
+        etree.SubElement(part_elem, "sexo").text = p.get("sexo", "")
+    return BytesIO(etree.tostring(root, pretty_print=True, xml_declaration=True, encoding="UTF-8"))
