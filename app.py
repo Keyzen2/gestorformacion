@@ -49,7 +49,7 @@ if not st.session_state.logged_in:
         try:
             user = supabase.auth.sign_in_with_password({"email": email, "password": password})
             if user.user:
-                res = supabase.table("usuarios").select("*").eq("email", email).execute()
+                res = supabase.table("usuarios").select("*").eq("auth_id", user.user.id).execute()
                 if res.data:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
