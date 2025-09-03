@@ -11,12 +11,10 @@ lxml==4.9.3
 # PDF generation
 reportlab==4.4.3
 
-# Interactive tables for Streamlit
-st-aggrid==0.4.5
-
-# Rich logging and Markdown support compatible con Streamlit 1.28.0
+# Rich logging compatible con Streamlit 1.28.0
 rich==13.4.2
 markdown-it-py==4.0.0
 mdurl==0.1.2
 pygments==2.19.2
+
 
