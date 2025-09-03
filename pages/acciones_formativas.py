@@ -4,24 +4,28 @@ from datetime import datetime
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
-    
+
+    # Mostrar acciones
     acciones = supabase.table("acciones_formativas").select("*").execute().data
-    df_acciones = pd.DataFrame(acciones)
+    df_acciones = pd.DataFrame(acciones) if acciones else pd.DataFrame()
     
     anios = list(range(2020, datetime.now().year + 2))
-    anio_filtrado = st.selectbox("Filtrar por Año", options=[None]+anios)
-    df_filtered = df_acciones.copy() if not df_acciones.empty else pd.DataFrame()
+    anio_filtrado = st.selectbox("Filtrar por Año", options=[None] + anios)
+    
+    df_filtered = df_acciones.copy()
     if anio_filtrado and not df_filtered.empty:
-        df_filtered = df_filtered[df_filtered["fecha_inicio"].dt.year == anio_filtrado]
+        df_filtered = df_filtered[df_filtered["fecha_inicio"].str[:4].astype(int) == anio_filtrado]
+    
     st.dataframe(df_filtered)
 
     # Crear acción formativa
     st.markdown("### Crear Acción Formativa")
+    
     empresas_res = supabase.table("empresas").select("id, nombre").execute()
     empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
-
+    
     empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()) if empresas else ["No hay empresas"])
-    empresa_id = empresas_dict.get(empresa_nombre) if empresas_res.data else None
+    empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
 
     with st.form("crear_accion_formativa"):
         nombre = st.text_input("Nombre *")
@@ -33,8 +37,8 @@ def main(supabase, session_state):
         modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
         fecha_inicio = st.date_input("Fecha Inicio")
         fecha_fin = st.date_input("Fecha Fin")
-        submitted = st.form_submit_button("Guardar")
 
+        submitted = st.form_submit_button("Guardar")
         if submitted:
             if not nombre or not descripcion or not empresa_id:
                 st.error("⚠️ Nombre, descripción y empresa son obligatorios.")
@@ -56,4 +60,4 @@ def main(supabase, session_state):
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre}' creada correctamente.")
                 except Exception as e:
-                    st.error(f"❌ Error al crear la acción formativa: {e}")
+                    st.error(f"❌ Error al crear la acción formativa: {str(e)}")
