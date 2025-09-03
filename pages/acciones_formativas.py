@@ -31,7 +31,10 @@ def main(supabase, session_state):
         nombre_accion = st.text_input("Nombre de la acción *")
         modalidad = st.selectbox("Modalidad", options=["Presencial", "Online", "Mixta"])
         num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
-        empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"])
+        empresa_nombre = st.selectbox(
+            "Empresa",
+            options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"]
+        )
         empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
 
         submitted = st.form_submit_button("Crear Acción Formativa")
@@ -41,7 +44,7 @@ def main(supabase, session_state):
                 st.error("⚠️ Nombre y empresa son obligatorios.")
             else:
                 try:
-                    result = supabase.table("acciones_formativas").insert({
+                    supabase.table("acciones_formativas").insert({
                         "nombre": nombre_accion,
                         "modalidad": modalidad,
                         "num_horas": num_horas,
@@ -50,3 +53,12 @@ def main(supabase, session_state):
                     st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
                 except Exception as e:
                     st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+
+    # =========================
+    # Filtro por empresa
+    # =========================
+    if not df_acciones.empty and empresas_dict:
+        empresa_filter = st.selectbox("Filtrar por empresa", options=["Todas"] + list(empresas_dict.keys()))
+        if empresa_filter != "Todas":
+            df_acciones = df_acciones[df_acciones["empresa_id"] == empresas_dict[empresa_filter]]
+            st.dataframe(df_acciones)
