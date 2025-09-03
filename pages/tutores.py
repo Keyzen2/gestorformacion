@@ -3,9 +3,11 @@ import pandas as pd
 
 def main(supabase, session_state):
     st.subheader("Tutores")
-    if st.button("Ver Tutores"):
-        tutores = supabase.table("tutores").select("*").execute().data
-        st.dataframe(pd.DataFrame(tutores))
+
+    # Mostrar tutores existentes
+    tutores_res = supabase.table("tutores").select("*").execute()
+    tutores = tutores_res.data if tutores_res.data else []
+    st.dataframe(pd.DataFrame(tutores))
 
     st.markdown("### Crear Tutor")
     with st.form("crear_tutor"):
@@ -15,8 +17,8 @@ def main(supabase, session_state):
         submitted = st.form_submit_button("Guardar")
 
         if submitted:
-            if not nombre or not email:
-                st.error("⚠️ Nombre y email son obligatorios.")
+            if not nombre:
+                st.error("⚠️ El nombre es obligatorio.")
             else:
                 try:
                     supabase.table("tutores").insert({
