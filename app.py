@@ -42,29 +42,27 @@ def logout():
 if not st.session_state.logged_in:
     st.title("Gestor de Formación - Login")
     with st.form("login_form"):
-        email_input = st.text_input("Usuario (email/CIF)")
-        password_input = st.text_input("Contraseña", type="password")
+        email = st.text_input("Usuario (email/CIF)")
+        password = st.text_input("Contraseña", type="password")
         submitted = st.form_submit_button("Entrar")
     if submitted:
         try:
-            auth_response = supabase.auth.sign_in_with_password({
-                "email": email_input,
-                "password": password_input
-            })
+            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
             if auth_response.user:
-                # Buscar usuario en la tabla usando auth_id
-                res = supabase.table("usuarios").select("*").eq("auth_id", auth_response.user.id).execute()
+                # Consultar usuario en tabla 'usuarios' usando el uid de Supabase Auth
+                uid = auth_response.user.id
+                res = supabase.table("usuarios").select("*").eq("auth_id", uid).execute()
                 if res.data:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
                     st.session_state.role = res.data[0]["rol"]
                     st.experimental_rerun()
                 else:
-                    st.error("Usuario no registrado en la base de datos interna")
+                    st.error("Usuario no registrado en la tabla 'usuarios'.")
             else:
                 st.error("Usuario o contraseña incorrectos")
         except Exception as e:
-            st.error(f"Error de login: {e}")
+            st.error(f"Error de login: {str(e)}")
 
 # =======================
 # APP PRINCIPAL
