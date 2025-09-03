@@ -1,38 +1,36 @@
+# acciones_formativas.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import (
-    importar_participantes_excel,
-    generar_pdf,
-    validar_xml,
-    generar_xml_accion_formativa,
-    generar_xml_inicio_grupo,
-    generar_xml_finalizacion_grupo
-)
+from utils import generar_pdf, validar_xml, generar_xml_accion_formativa
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
     
-    # Mostrar acciones
+    # =======================
+    # FILTRO Y LISTADO
+    # =======================
     acciones = supabase.table("acciones_formativas").select("*").execute().data
-    df_acciones = pd.DataFrame(acciones)
-    
+    df_acciones = pd.DataFrame(acciones) if acciones else pd.DataFrame()
+
     anios = list(range(2020, datetime.now().year + 2))
     anio_filtrado = st.selectbox("Filtrar por Año", options=[None] + anios)
-    
-    df_filtered = df_acciones.copy() if not df_acciones.empty else pd.DataFrame()
+
+    df_filtered = df_acciones.copy()
     if anio_filtrado and not df_filtered.empty:
         df_filtered = df_filtered[df_acciones["fecha_inicio"].dt.year == anio_filtrado]
+
     st.dataframe(df_filtered)
 
-    # Crear acción formativa
+    # =======================
+    # CREAR ACCIÓN FORMATIVA
+    # =======================
     st.markdown("### Crear Acción Formativa")
-    
-    # Obtener empresas para el desplegable
+
     empresas_res = supabase.table("empresas").select("id, nombre").execute()
     empresas = empresas_res.data if empresas_res.data else []
     empresas_dict = {e["nombre"]: e["id"] for e in empresas}
-    
+
     empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()) if empresas else ["No hay empresas"])
     empresa_id = empresas_dict.get(empresa_nombre) if empresas else None
 
@@ -46,8 +44,8 @@ def main(supabase, session_state):
         modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
         fecha_inicio = st.date_input("Fecha Inicio")
         fecha_fin = st.date_input("Fecha Fin")
-
         submitted = st.form_submit_button("Guardar")
+
         if submitted:
             if not nombre or not descripcion or not empresa_id:
                 st.error("⚠️ Nombre, descripción y empresa son obligatorios.")
@@ -69,7 +67,7 @@ def main(supabase, session_state):
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre}' creada correctamente.")
                 except Exception as e:
-                    st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+                    st.error(f"❌ Error al crear la acción formativa: {e}")
 
 def empresa_panel(supabase, session_state):
     st.subheader("Panel Empresa")
