@@ -11,6 +11,7 @@ from utils import (
     validar_xml,
     guardar_documento_en_storage
 )
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # -------------------
 # Configuración
@@ -22,7 +23,7 @@ BUCKET_DOC = "documentos"
 supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 # -------------------
-# Helper para usuario autenticado
+# Helper usuario
 # -------------------
 def get_current_user_auth_id():
     try:
@@ -61,7 +62,7 @@ st.title("Soy tu gestor de formación")
 # -------------------
 if rol == "admin":
     menu = st.sidebar.selectbox("Menú Admin", [
-        "Inicio", "Acciones Formativas", "Grupos", "Participantes", 
+        "Inicio", "Acciones Formativas", "Grupos", "Participantes",
         "Usuarios / Empresas", "Documentos"
     ])
 else:
@@ -70,7 +71,7 @@ else:
     ])
 
 # -------------------
-# ADMIN - Inicio
+# Inicio
 # -------------------
 if menu == "Inicio":
     st.subheader("Bienvenido Admin" if rol=="admin" else "Bienvenido Empresa")
@@ -82,7 +83,6 @@ if menu == "Inicio":
 if rol == "admin" and menu == "Usuarios / Empresas":
     st.subheader("Gestión de Empresas y Usuarios")
     
-    # Formulario alta empresa
     with st.expander("Crear nueva empresa"):
         cif = st.text_input("CIF/NIF")
         razon_social = st.text_input("Razón Social")
@@ -92,7 +92,6 @@ if rol == "admin" and menu == "Usuarios / Empresas":
         email = st.text_input("Email de contacto")
         clave = st.text_input("Clave de acceso para empresa")
         if st.button("Crear Empresa"):
-            # Insert en empresas
             supabase.table("empresas").insert([{
                 "cif": cif,
                 "razon_social": razon_social,
@@ -104,10 +103,12 @@ if rol == "admin" and menu == "Usuarios / Empresas":
             }]).execute()
             st.success("Empresa creada correctamente.")
     
-    # Listado de empresas
     empresas = supabase.table("empresas").select("*").execute().data or []
-    st.write("Empresas existentes:")
-    st.dataframe(empresas)
+    if empresas:
+        gb = GridOptionsBuilder.from_dataframe(empresas)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(editable=False, filter=True, sortable=True)
+        AgGrid(empresas, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
 
 # -------------------
 # ADMIN - Acciones Formativas
@@ -115,7 +116,6 @@ if rol == "admin" and menu == "Usuarios / Empresas":
 if rol=="admin" and menu=="Acciones Formativas":
     st.subheader("Acciones Formativas")
     
-    # Formulario creación acción formativa
     with st.expander("Crear acción formativa"):
         tipo_accion = st.selectbox("Tipo acción", ["Propia", "Certificado Profesionalidad"])
         codigo = st.text_input("Código acción")
@@ -140,9 +140,12 @@ if rol=="admin" and menu=="Acciones Formativas":
             }]).execute()
             st.success("Acción formativa creada.")
 
-    # Mostrar tabla interactiva de acciones
     acciones = supabase.table("acciones_formativas").select("*").execute().data or []
-    st.dataframe(acciones)
+    if acciones:
+        gb = GridOptionsBuilder.from_dataframe(acciones)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(filter=True, sortable=True)
+        AgGrid(acciones, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
 
 # -------------------
 # ADMIN - Grupos
@@ -165,7 +168,11 @@ if rol=="admin" and menu=="Grupos":
             }]).execute()
             st.success("Grupo creado.")
     grupos = supabase.table("grupos").select("*").execute().data or []
-    st.dataframe(grupos)
+    if grupos:
+        gb = GridOptionsBuilder.from_dataframe(grupos)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(filter=True, sortable=True)
+        AgGrid(grupos, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
 
 # -------------------
 # ADMIN - Participantes
@@ -184,7 +191,11 @@ if rol=="admin" and menu=="Participantes":
             supabase.table("participantes").insert(participantes).execute()
             st.success(f"{len(participantes)} participantes importados")
     participantes = supabase.table("participantes").select("*").execute().data or []
-    st.dataframe(participantes)
+    if participantes:
+        gb = GridOptionsBuilder.from_dataframe(participantes)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(filter=True, sortable=True)
+        AgGrid(participantes, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
 
 # -------------------
 # ADMIN - Documentos
@@ -192,23 +203,60 @@ if rol=="admin" and menu=="Participantes":
 if rol=="admin" and menu=="Documentos":
     st.subheader("Documentos")
     documentos = supabase.table("documentos").select("*").order("created_at", desc=True).execute().data or []
-    st.dataframe(documentos)
+    if documentos:
+        gb = GridOptionsBuilder.from_dataframe(documentos)
+        gb.configure_pagination(paginationAutoPageSize=True)
+        gb.configure_default_column(filter=True, sortable=True)
+        AgGrid(documentos, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
 
 # -------------------
 # EMPRESA - Mis Acciones / Grupos / Participantes / Documentos
 # -------------------
-if rol=="empresa":
-    if menu=="Mis Acciones":
+if rol == "empresa":
+    if menu == "Mis Acciones":
         acciones = supabase.table("acciones_formativas").select("*").eq("empresa_id", empresa_id).execute().data or []
-        st.dataframe(acciones)
-    if menu=="Mis Grupos":
-        grupos = supabase.table("grupos").select("*").execute().data or []
-        grupos = [g for g in grupos if g.get("accion_formativa_id") in [a["id"] for a in supabase.table("acciones_formativas").select("*").eq("empresa_id", empresa_id).execute().data]]
-        st.dataframe(grupos)
-    if menu=="Mis Participantes":
-        participantes = supabase.table("participantes").select("*").execute().data or []
-        participantes = [p for p in participantes if p.get("grupo_id") in [g["id"] for g in supabase.table("grupos").select("*").execute().data]]
-        st.dataframe(participantes)
-    if menu=="Mis Documentos":
-        documentos = supabase.table("documentos").select("*").eq("empresa_id", empresa_id).execute().data or []
-        st.dataframe(documentos)
+        if acciones:
+            gb = GridOptionsBuilder.from_dataframe(acciones)
+            gb.configure_pagination(paginationAutoPageSize=True)
+            gb.configure_default_column(filter=True, sortable=True)
+            AgGrid(acciones, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
+
+    if menu == "Mis Grupos":
+        acciones_empresa = supabase.table("acciones_formativas").select("id").eq("empresa_id", empresa_id).execute().data or []
+        ids_acciones = [a["id"] for a in acciones_empresa]
+        grupos = supabase.table("grupos").select("*").in_("accion_formativa_id", ids_acciones).execute().data or []
+        if grupos:
+            gb = GridOptionsBuilder.from_dataframe(grupos)
+            gb.configure_pagination(paginationAutoPageSize=True)
+            gb.configure_default_column(filter=True, sortable=True)
+            AgGrid(grupos, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
+
+    if menu == "Mis Participantes":
+        acciones_empresa = supabase.table("acciones_formativas").select("id").eq("empresa_id", empresa_id).execute().data or []
+        ids_acciones = [a["id"] for a in acciones_empresa]
+        grupos_empresa = supabase.table("grupos").select("id").in_("accion_formativa_id", ids_acciones).execute().data or []
+        ids_grupos = [g["id"] for g in grupos_empresa]
+        participantes = supabase.table("participantes").select("*").in_("grupo_id", ids_grupos).execute().data or []
+        if participantes:
+            gb = GridOptionsBuilder.from_dataframe(participantes)
+            gb.configure_pagination(paginationAutoPageSize=True)
+            gb.configure_default_column(filter=True, sortable=True)
+            AgGrid(participantes, gridOptions=gb.build(), update_mode=GridUpdateMode.NO_UPDATE)
+
+    if menu == "Mis Documentos":
+        documentos = supabase.table("documentos").select("*").eq("empresa_id", empresa_id).order("created_at", desc=True).execute().data or []
+        for d in documentos:
+            st.write(f"{d.get('created_at')} — {d.get('tipo')} — {d.get('archivo_path')}")
+            try:
+                signed = supabase.storage.from_(BUCKET_DOC).create_signed_url(d.get("archivo_path"), 3600)
+                url = None
+                if signed and isinstance(signed, dict):
+                    if "signedURL" in signed:
+                        url = signed["signedURL"]
+                    elif "data" in signed and isinstance(signed["data"], dict):
+                        url = signed["data"].get("signedUrl") or signed["data"].get("signedURL")
+                if url:
+                    st.markdown(f"[Descargar (1h)]({url})")
+            except Exception:
+                st.write("No se pudo crear URL temporal para este documento.")
+
