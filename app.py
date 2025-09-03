@@ -54,7 +54,7 @@ if not st.session_state.logged_in:
                 auth_id = auth_response.user.id  # UUID real de Supabase Auth
 
                 # Recuperar usuario de la tabla 'usuarios' usando auth_id
-                res = supabase.table("usuarios").select("*").eq("auth_id", auth_id).execute()
+                res = supabase.table("usuarios").select("*").eq("auth_id", user.user.id).execute()
                 if res.data and len(res.data) > 0:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
