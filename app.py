@@ -12,7 +12,6 @@ from utils import (
     validar_xml,
     guardar_documento_en_storage
 )
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 # ------------------------
 # CONFIGURACIÓN
@@ -110,13 +109,10 @@ if rol_usuario == "admin" and opcion == "Acciones Formativas":
             }]).execute()
             st.success("Acción formativa creada")
 
-    # Mostrar tabla interactiva con AgGrid
+    # Mostrar tabla con st.dataframe
     acciones = supabase.table("acciones_formativas").select("*").execute().data or []
     if acciones:
-        gb = GridOptionsBuilder.from_dataframe(acciones)
-        gb.configure_pagination(paginationAutoPageSize=True)
-        gb.configure_default_column(editable=False, groupable=True)
-        AgGrid(acciones, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+        st.dataframe(acciones)
 
 # ------------------------
 # ADMIN - GRUPOS
@@ -129,9 +125,7 @@ if rol_usuario == "admin" and opcion == "Grupos":
                              format_func=lambda x: accion_map[x]["denominacion"])
     grupos = supabase.table("grupos").select("*").eq("accion_formativa_id", accion_id).execute().data or []
     if grupos:
-        gb = GridOptionsBuilder.from_dataframe(grupos)
-        gb.configure_pagination(paginationAutoPageSize=True)
-        AgGrid(grupos, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+        st.dataframe(grupos)
 
 # ------------------------
 # ADMIN - PARTICIPANTES
@@ -144,9 +138,7 @@ if rol_usuario == "admin" and opcion == "Participantes":
                             format_func=lambda x: grupo_map[x]["codigo_grupo"])
     participantes = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute().data or []
     if participantes:
-        gb = GridOptionsBuilder.from_dataframe(participantes)
-        gb.configure_pagination(paginationAutoPageSize=True)
-        AgGrid(participantes, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+        st.dataframe(participantes)
 
 # ------------------------
 # ADMIN - USUARIOS / EMPRESAS
@@ -154,8 +146,7 @@ if rol_usuario == "admin" and opcion == "Participantes":
 if rol_usuario == "admin" and opcion == "Usuarios / Empresas":
     st.subheader("Usuarios y Empresas")
     usuarios = supabase.table("usuarios").select("*").execute().data or []
-    for u in usuarios:
-        st.write(f"{u.get('nombre')} - {u.get('email')} - rol: {u.get('rol')}")
+    st.dataframe(usuarios)
     with st.form("form_usuario"):
         nombre = st.text_input("Nombre")
         email = st.text_input("Email")
@@ -176,7 +167,6 @@ if rol_usuario == "admin" and opcion == "Usuarios / Empresas":
 # ------------------------
 if rol_usuario == "admin" and opcion == "Generar Documentos":
     st.subheader("Generar XML / PDF")
-    # Aquí usaríamos tus funciones utils.py para generar y guardar documentos
     st.info("Aquí se generará y guardará XML/PDF de Fundae según acción/grupo seleccionados")
 
 # ------------------------
@@ -185,55 +175,31 @@ if rol_usuario == "admin" and opcion == "Generar Documentos":
 if rol_usuario == "admin" and opcion == "Histórico Documentos":
     st.subheader("Histórico de Documentos")
     docs = supabase.table("documentos").select("*").order("created_at", desc=True).execute().data or []
-    for d in docs:
-        st.write(f"{d.get('created_at')} — {d.get('tipo')} — {d.get('archivo_path')}")
-        try:
-            signed = supabase.storage.from_(BUCKET_DOC).create_signed_url(d.get("archivo_path"), 3600)
-            url = signed["signedURL"] if "signedURL" in signed else None
-            if url:
-                st.markdown(f"[Descargar (1h)]({url})")
-        except Exception:
-            st.write("No se pudo crear URL temporal para este documento")
+    st.dataframe(docs)
 
 # ------------------------
 # EMPRESA - MIS ACCIONES / GRUPOS / PARTICIPANTES / DOCUMENTOS
 # ------------------------
 if rol_usuario == "empresa":
     st.subheader(f"Bienvenido, empresa {empresa_id}")
-
     menu_empresa = st.sidebar.selectbox("Menú Empresa", [
         "Mis Acciones Formativas", "Mis Grupos", "Mis Participantes", "Mis Documentos"
     ])
 
-    # ------------------------
-    # ACCIONES FORMATIVAS
-    # ------------------------
     if menu_empresa == "Mis Acciones Formativas":
         acciones = supabase.table("acciones_formativas").select("*").eq("empresa_id", empresa_id).execute().data or []
         if acciones:
-            gb = GridOptionsBuilder.from_dataframe(acciones)
-            gb.configure_pagination(paginationAutoPageSize=True)
-            gb.configure_default_column(editable=False)
-            AgGrid(acciones, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+            st.dataframe(acciones)
         else:
             st.info("No tienes acciones formativas registradas.")
 
-    # ------------------------
-    # GRUPOS
-    # ------------------------
     elif menu_empresa == "Mis Grupos":
         grupos = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute().data or []
         if grupos:
-            gb = GridOptionsBuilder.from_dataframe(grupos)
-            gb.configure_pagination(paginationAutoPageSize=True)
-            gb.configure_default_column(editable=False)
-            AgGrid(grupos, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+            st.dataframe(grupos)
         else:
             st.info("No tienes grupos registrados.")
 
-    # ------------------------
-    # PARTICIPANTES
-    # ------------------------
     elif menu_empresa == "Mis Participantes":
         grupos = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute().data or []
         grupo_map = {g["id"]: g for g in grupos}
@@ -241,29 +207,15 @@ if rol_usuario == "empresa":
             grupo_id = st.selectbox("Selecciona grupo", list(grupo_map.keys()), format_func=lambda x: grupo_map[x]["codigo_grupo"])
             participantes = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute().data or []
             if participantes:
-                gb = GridOptionsBuilder.from_dataframe(participantes)
-                gb.configure_pagination(paginationAutoPageSize=True)
-                gb.configure_default_column(editable=False)
-                AgGrid(participantes, gridOptions=gb.build(), update_mode=GridUpdateMode.SELECTION_CHANGED)
+                st.dataframe(participantes)
             else:
                 st.info("No hay participantes en este grupo.")
         else:
             st.info("No tienes grupos registrados.")
 
-    # ------------------------
-    # DOCUMENTOS
-    # ------------------------
     elif menu_empresa == "Mis Documentos":
         documentos = supabase.table("documentos").select("*").eq("empresa_id", empresa_id).order("created_at", desc=True).execute().data or []
         if documentos:
-            for d in documentos:
-                st.write(f"{d.get('created_at')} — {d.get('tipo')} — {d.get('archivo_path')}")
-                try:
-                    signed = supabase.storage.from_(BUCKET_DOC).create_signed_url(d.get("archivo_path"), 3600)
-                    url = signed.get("signedURL") or (signed.get("data") and signed["data"].get("signedUrl"))
-                    if url:
-                        st.markdown(f"[Descargar (1h)]({url})")
-                except Exception:
-                    st.write("No se pudo crear URL temporal para este documento")
+            st.dataframe(documentos)
         else:
             st.info("No tienes documentos generados.")
