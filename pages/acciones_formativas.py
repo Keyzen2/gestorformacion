@@ -13,9 +13,16 @@ from utils import (
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
     
-    # Obtener todas las acciones
+    # =======================
+    # Mostrar acciones
+    # =======================
     acciones_res = supabase.table("acciones_formativas").select("*").execute()
-    df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+    acciones = acciones_res.data if acciones_res.data else []
+    df_acciones = pd.DataFrame(acciones)
+    
+    # Convertir fecha_inicio a datetime si existe
+    if not df_acciones.empty and "fecha_inicio" in df_acciones.columns:
+        df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
     
     # Filtrado por año
     anios = list(range(2020, datetime.now().year + 2))
@@ -23,27 +30,26 @@ def main(supabase, session_state):
     
     df_filtered = df_acciones.copy()
     if anio_filtrado and not df_filtered.empty:
-        df_filtered["fecha_inicio"] = pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce")
+        df_filtered = df_filtered[df_filtered["fecha_inicio"].notna()]
         df_filtered = df_filtered[df_filtered["fecha_inicio"].dt.year == anio_filtrado]
     
     st.dataframe(df_filtered)
-    
+
+    # =======================
     # Crear acción formativa
+    # =======================
     st.markdown("### Crear Acción Formativa")
     
-    # Obtener empresas según rol
-    if session_state.role == "admin":
-        empresas_res = supabase.table("empresas").select("id, nombre").execute()
-        empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
-    else:  # gestor solo su empresa
-        empresa = supabase.table("empresas").select("id, nombre").eq("id", session_state.user["empresa_id"]).execute()
-        empresas_dict = {empresa.data[0]["nombre"]: empresa.data[0]["id"]} if empresa.data else {}
+    # Obtener empresas para el desplegable
+    empresas_res = supabase.table("empresas").select("id, nombre").execute()
+    empresas = empresas_res.data if empresas_res.data else []
+    empresas_dict = {e["nombre"]: e["id"] for e in empresas}
 
     empresa_nombre = st.selectbox(
         "Empresa",
-        options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"]
+        options=list(empresas_dict.keys()) if empresas else ["No hay empresas"]
     )
-    empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
+    empresa_id = empresas_dict.get(empresa_nombre) if empresas else None
 
     with st.form("crear_accion_formativa"):
         nombre = st.text_input("Nombre *")
