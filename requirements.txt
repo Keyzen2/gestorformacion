@@ -1,5 +1,5 @@
 # Streamlit para la interfaz
-streamlit==1.29.0
+streamlit==1.28.0
 
 # Supabase cliente
 supabase==2.0.1
