@@ -1,113 +1,203 @@
+# app.py
 import streamlit as st
 from supabase import create_client
-from utils import generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo, validar_xml, importar_participantes_excel, generar_pdf
+from io import BytesIO
+from utils import (
+    generar_xml_accion_formativa,
+    generar_xml_inicio_grupo,
+    generar_xml_finalizacion_grupo,
+    generar_pdf_grupo,
+    importar_participantes_excel,
+    validar_xml,
+    guardar_documento_en_storage
+)
 
-# -------------------------
-# Configuración de Supabase
-# -------------------------
+# Config
 SUPABASE_URL = st.secrets["SUPABASE"]["url"]
-SUPABASE_KEY = st.secrets["SUPABASE"]["anon_key"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUPABASE_ANON_KEY = st.secrets["SUPABASE"]["anon_key"]
+SUPABASE_SERVICE_KEY = st.secrets["SUPABASE"].get("service_role_key")  # opcional, para operaciones server-side
+BUCKET_DOC = "documentos"
 
-# -------------------------
-# Autenticación y sesión
-# -------------------------
-if "rol" not in st.session_state:
-    st.session_state["rol"] = "empresa"  # Por defecto, empresa; en producción usar auth real
+# Cliente supabase (usar anon key para operaciones de usuario normal)
+supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+# Helper para obtener uid del usuario autenticado
+def get_current_user_auth_id():
+    try:
+        resp = supabase.auth.get_user()
+        # estructura: {'data': {'user': {...}}} en versiones recientes
+        if resp and hasattr(resp, "data") and resp.data and resp.data.get("user"):
+            return resp.data["user"]["id"]
+        if isinstance(resp, dict) and resp.get("data") and resp["data"].get("user"):
+            return resp["data"]["user"]["id"]
+    except Exception:
+        pass
+    # fallback (por si gestionas sesión manualmente)
+    return st.session_state.get("user_id")
+
+# UI
 st.title("Soy tu gestor de formación")
 
-# -------------------------
-# Panel de Administración
-# -------------------------
-if st.session_state["rol"] == "admin":
-    st.subheader("Panel de Administración de Usuarios")
-    usuarios = supabase.table("usuarios").select("*").execute().data
-    st.write("Usuarios registrados:")
+# --- Autenticación mínima (recomiendo integrar páginas de login con Supabase Auth)
+# en este ejemplo, asumimos usuario autenticado y que supabase.auth.get_user() funciona.
+usuario_uid = get_current_user_auth_id()
+
+# Mostrar admin panel si es admin (comprobación por la función is_admin en BD)
+is_admin_resp = False
+try:
+    # llamamos a la función SQL is_admin
+    r = supabase.rpc("is_admin", {"uid": usuario_uid}).execute()
+    if r and getattr(r, "data", None):
+        is_admin_resp = bool(r.data)
+except Exception:
+    pass
+
+# Panel administración
+if is_admin_resp:
+    st.subheader("Panel admin - Usuarios")
+    usuarios = supabase.table("usuarios").select("*").execute().data or []
     for u in usuarios:
-        st.write(f"{u['nombre']} ({u['email']}) - Rol: {u['rol']}")
-    
-    email_cambiar = st.text_input("Email del usuario a cambiar de rol")
-    nuevo_rol = st.selectbox("Nuevo rol", ["empresa", "admin"])
-    if st.button("Actualizar rol"):
-        if email_cambiar:
+        st.write(f"{u.get('nombre')} - {u.get('email')} - rol: {u.get('rol')}")
+
+    with st.form("cambiar_rol"):
+        email_cambiar = st.text_input("Email a cambiar")
+        nuevo_rol = st.selectbox("Nuevo rol", ["empresa", "admin"])
+        if st.form_submit_button("Actualizar rol"):
             supabase.table("usuarios").update({"rol": nuevo_rol}).eq("email", email_cambiar).execute()
-            st.success(f"Rol de {email_cambiar} actualizado a {nuevo_rol}")
+            st.success("Rol actualizado")
 
-# -------------------------
-# Selección de Acción Formativa y Grupo
-# -------------------------
-acciones_formativas = supabase.table("acciones_formativas").select("*").execute().data
-accion_formativa_id = st.selectbox("Selecciona una acción formativa", [a['id'] for a in acciones_formativas])
+# Selección acción formativa y grupo
+acciones = supabase.table("acciones_formativas").select("*").execute().data or []
+if not acciones:
+    st.info("No hay acciones formativas. Crea una en la base de datos.")
+else:
+    accion_map = {a["id"]: a for a in acciones}
+    accion_id = st.selectbox("Acción formativa", list(accion_map.keys()), format_func=lambda x: accion_map[x]["nombre"])
 
-grupos = supabase.table("grupos").select("*").eq("accion_formativa_id", accion_formativa_id).execute().data
-grupo_id = st.selectbox("Selecciona un grupo", [g['id'] for g in grupos])
-
-# -------------------------
-# Importación Masiva de Participantes
-# -------------------------
-archivo_excel = st.file_uploader("Sube un archivo Excel con los participantes", type=["xlsx"])
-if archivo_excel:
-    participantes_data = importar_participantes_excel(archivo_excel)
-    for p in participantes_data:
-        p["grupo_id"] = grupo_id
-        supabase.table("participantes").insert(p).execute()
-    st.success("Participantes importados correctamente.")
-
-# -------------------------
-# Filtrado y Paginación de Participantes
-# -------------------------
-pagina_actual = st.session_state.get("pagina_participantes", 0)
-pagina_size = 50
-
-filtro = st.text_input("Buscar participante por nombre o NIF")
-
-query = supabase.table("participantes").select("*").eq("grupo_id", grupo_id)
-if filtro:
-    query = query.ilike("nombre", f"%{filtro}%")  # También se puede filtrar por NIF si se desea
-
-participantes = query.range(pagina_actual*pagina_size, (pagina_actual+1)*pagina_size - 1).execute().data
-
-st.write(f"Mostrando participantes {pagina_actual*pagina_size + 1} a {(pagina_actual+1)*pagina_size}")
-for p in participantes:
-    st.write(f"{p['nombre']} - {p['nif']}")
-
-col1, col2 = st.columns(2)
-if col1.button("Página anterior") and pagina_actual > 0:
-    st.session_state["pagina_participantes"] = pagina_actual - 1
-    st.experimental_rerun()
-if col2.button("Página siguiente") and len(participantes) == pagina_size:
-    st.session_state["pagina_participantes"] = pagina_actual + 1
-    st.experimental_rerun()
-
-# -------------------------
-# Generación de XML y PDF
-# -------------------------
-if st.button("Generar XML de Acción Formativa"):
-    datos_accion_formativa = supabase.table("acciones_formativas").select("*").eq("id", accion_formativa_id).execute().data[0]
-    xml_bytes = generar_xml_accion_formativa(datos_accion_formativa)
-    if validar_xml(xml_bytes, st.secrets["FUNDAE"]["xsd_accion_formativa"]):
-        st.download_button("Descargar XML Acción Formativa", xml_bytes, "accion_formativa.xml", "application/xml")
+    grupos = supabase.table("grupos").select("*").eq("accion_formativa_id", accion_id).execute().data or []
+    grupo_map = {g["id"]: g for g in grupos}
+    if grupos:
+        grupo_id = st.selectbox("Grupo", list(grupo_map.keys()), format_func=lambda x: grupo_map[x]["codigo_grupo"])
     else:
-        st.error("El XML no es válido según FUNDAE")
+        st.info("No hay grupos para esta acción.")
+        grupo_id = None
 
-if st.button("Generar XML de Inicio de Grupo"):
-    datos_grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
-    xml_bytes = generar_xml_inicio_grupo(datos_grupo)
-    if validar_xml(xml_bytes, st.secrets["FUNDAE"]["xsd_inicio_grupo"]):
-        st.download_button("Descargar XML Inicio Grupo", xml_bytes, "inicio_grupo.xml", "application/xml")
-    else:
-        st.error("El XML no es válido según FUNDAE")
+    # Importación masiva de participantes
+    excel = st.file_uploader("Importar participantes (.xlsx)", type=["xlsx"])
+    if excel and grupo_id:
+        participantes = importar_participantes_excel(excel)
+        # bulk insert con batching
+        BATCH = 200
+        for i in range(0, len(participantes), BATCH):
+            batch = participantes[i:i+BATCH]
+            for p in batch:
+                p["grupo_id"] = grupo_id
+            supabase.table("participantes").insert(batch).execute()
+        st.success(f"{len(participantes)} participantes importados.")
 
-if st.button("Generar XML de Finalización de Grupo"):
-    datos_grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
-    xml_bytes = generar_xml_finalizacion_grupo(datos_grupo)
-    if validar_xml(xml_bytes, st.secrets["FUNDAE"]["xsd_finalizacion_grupo"]):
-        st.download_button("Descargar XML Finalización Grupo", xml_bytes, "finalizacion_grupo.xml", "application/xml")
-    else:
-        st.error("El XML no es válido según FUNDAE")
+    # Paginación + filtro
+    pagina = st.session_state.get("pagina_participantes", 0)
+    page_size = 50
+    filtro = st.text_input("Buscar por nombre o NIF")
 
-if st.button("Generar PDF del Grupo"):
-    datos_grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
-    pdf_bytes = generar_pdf(datos_grupo, participantes)
-    st.download_button("Descargar PDF del Grupo", pdf_bytes, "grupo.pdf", "application/pdf")
+    query = supabase.table("participantes").select("*").eq("grupo_id", grupo_id)
+    if filtro:
+        # filtro simple por nombre (ajusta si quieres por nif)
+        query = query.ilike("nombre", f"%{filtro}%")
+
+    participantes_page = query.range(pagina*page_size, (pagina+1)*page_size - 1).execute().data or []
+    st.write(f"Mostrando {len(participantes_page)} participantes (página {pagina+1})")
+    for p in participantes_page:
+        st.write(f"{p.get('nombre')} — {p.get('nif')}")
+
+    c1, c2 = st.columns(2)
+    if c1.button("Anterior") and pagina > 0:
+        st.session_state["pagina_participantes"] = pagina - 1
+        st.experimental_rerun()
+    if c2.button("Siguiente") and len(participantes_page) == page_size:
+        st.session_state["pagina_participantes"] = pagina + 1
+        st.experimental_rerun()
+
+    # -- Generar / Guardar documentos --
+    if st.button("Generar y guardar XML Acción Formativa"):
+        accion = supabase.table("acciones_formativas").select("*").eq("id", accion_id).execute().data[0]
+        xmlb = generar_xml_accion_formativa(accion)
+        # validar con XSD (ruta en secrets)
+        if validar_xml(xmlb, st.secrets["FUNDAE"]["xsd_accion_formativa"]):
+            # guardar en storage y registrar en documentos
+            signed_url, path = guardar_documento_en_storage(
+                supabase, BUCKET_DOC, xmlb, f"accion_{accion_id}.xml",
+                "AccionFormativa", None, accion_id, usuario_uid
+            )
+            st.success("XML validado y guardado.")
+            st.write("URL temporal (1h):", signed_url)
+        else:
+            st.error("XML inválido según XSD.")
+
+    if st.button("Generar y guardar XML Inicio Grupo"):
+        if not grupo_id:
+            st.error("Selecciona un grupo.")
+        else:
+            grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
+            # coger participantes del grupo (sin paginar para generar todo)
+            participantes_full = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute().data or []
+            xmlb = generar_xml_inicio_grupo(grupo, participantes_full)
+            if validar_xml(xmlb, st.secrets["FUNDAE"]["xsd_inicio_grupo"]):
+                signed_url, path = guardar_documento_en_storage(
+                    supabase, BUCKET_DOC, xmlb, f"inicio_grupo_{grupo_id}.xml",
+                    "InicioGrupo", grupo_id, accion_id, usuario_uid
+                )
+                st.success("XML inicio grupo guardado.")
+                st.write("URL temporal (1h):", signed_url)
+            else:
+                st.error("XML inválido según XSD.")
+
+    if st.button("Generar y guardar XML Finalización Grupo"):
+        if not grupo_id:
+            st.error("Selecciona un grupo.")
+        else:
+            grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
+            participantes_full = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute().data or []
+            xmlb = generar_xml_finalizacion_grupo(grupo, participantes_full)
+            if validar_xml(xmlb, st.secrets["FUNDAE"]["xsd_finalizacion_grupo"]):
+                signed_url, path = guardar_documento_en_storage(
+                    supabase, BUCKET_DOC, xmlb, f"finalizacion_grupo_{grupo_id}.xml",
+                    "FinalizacionGrupo", grupo_id, accion_id, usuario_uid
+                )
+                st.success("XML finalización guardado.")
+                st.write("URL temporal (1h):", signed_url)
+            else:
+                st.error("XML inválido según XSD.")
+
+    if st.button("Generar y guardar PDF del Grupo"):
+        if not grupo_id:
+            st.error("Selecciona un grupo.")
+        else:
+            grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
+            participantes_full = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute().data or []
+            pdfb = generar_pdf_grupo(grupo, participantes_full)
+            signed_url, path = guardar_documento_en_storage(
+                supabase, BUCKET_DOC, pdfb, f"grupo_{grupo_id}.pdf",
+                "PDFGrupo", grupo_id, accion_id, usuario_uid
+            )
+            st.success("PDF generado y guardado.")
+            st.write("URL temporal (1h):", signed_url)
+
+    # -- Histórico de documentos del usuario --
+    st.subheader("Histórico de Documentos")
+    docs = supabase.table("documentos").select("*").eq("usuario_auth_id", usuario_uid).order("created_at", desc=True).execute().data or []
+    for d in docs:
+        st.write(f"{d.get('created_at')} — {d.get('tipo')} — {d.get('archivo_path')}")
+        # generamos signed url para cada archivo (petición al storage)
+        try:
+            signed = supabase.storage.from_(BUCKET_DOC).create_signed_url(d.get("archivo_path"), 3600)
+            url = None
+            if signed and isinstance(signed, dict):
+                if "signedURL" in signed:
+                    url = signed["signedURL"]
+                elif "data" in signed and isinstance(signed["data"], dict):
+                    url = signed["data"].get("signedUrl") or signed["data"].get("signedURL")
+            if url:
+                st.markdown(f"[Descargar (1h)]({url})")
+        except Exception:
+            st.write("No se pudo crear URL temporal para este documento.")
