@@ -2,6 +2,14 @@ import streamlit as st
 import os
 from supabase import create_client, Client
 from datetime import datetime
+from utils import (
+    importar_participantes_excel,
+    generar_pdf,
+    validar_xml,
+    generar_xml_accion_formativa,
+    generar_xml_inicio_grupo,
+    generar_xml_finalizacion_grupo
+)
 
 # =======================
 # CONFIGURACIÓN SUPABASE
