@@ -47,22 +47,20 @@ if not st.session_state.logged_in:
         submitted = st.form_submit_button("Entrar")
     if submitted:
         try:
-            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if auth_response.user:
-                # Consultar usuario en tabla 'usuarios' usando el uid de Supabase Auth
-                uid = auth_response.user.id
-                res = supabase.table("usuarios").select("*").eq("auth_id", uid).execute()
+            auth_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            if auth_res.user:
+                res = supabase.table("usuarios").select("*").eq("email", email).execute()
                 if res.data:
                     st.session_state.logged_in = True
                     st.session_state.user = res.data[0]
                     st.session_state.role = res.data[0]["rol"]
                     st.experimental_rerun()
                 else:
-                    st.error("Usuario no registrado en la tabla 'usuarios'.")
+                    st.error("Usuario no registrado en la tabla interna")
             else:
                 st.error("Usuario o contraseña incorrectos")
         except Exception as e:
-            st.error(f"Error de login: {str(e)}")
+            st.error(f"Error de login: {e}")
 
 # =======================
 # APP PRINCIPAL
@@ -73,25 +71,42 @@ if st.session_state.get("logged_in"):
     st.sidebar.button("Cerrar sesión", on_click=logout)
 
     # =======================
-    # MENÚ LATERAL
+    # MENÚ DINÁMICO SEGÚN ROL
     # =======================
-    opciones = ["Usuarios y Empresas", "Acciones Formativas", "Grupos", "Participantes", "Documentos"]
+    if st.session_state.role == "admin":
+        opciones = ["Usuarios y Empresas", "Acciones Formativas", "Grupos", "Participantes", "Documentos", "Tutores"]
+    elif st.session_state.role == "gestor":
+        opciones = ["Grupos", "Participantes", "Documentos"]
+
     menu = st.sidebar.radio("Menú", opciones)
 
     # =======================
     # PANEL ADMIN / GESTOR
     # =======================
-    if st.session_state.role in ["admin", "gestor"]:
-        if menu == "Usuarios y Empresas" and st.session_state.role == "admin":
+    # Admin
+    if st.session_state.role == "admin":
+        if menu == "Usuarios y Empresas":
             from pages.usuarios_empresas import main as usuarios_empresas_page
             usuarios_empresas_page(supabase, st.session_state)
-        elif menu == "Usuarios y Empresas" and st.session_state.role == "gestor":
-            from pages.usuarios_empresas import empresas_only as empresas_page
-            empresas_page(supabase, st.session_state)
         elif menu == "Acciones Formativas":
             from pages.acciones_formativas import main as acciones_page
             acciones_page(supabase, st.session_state)
         elif menu == "Grupos":
+            from pages.grupos import main as grupos_page
+            grupos_page(supabase, st.session_state)
+        elif menu == "Participantes":
+            from pages.participantes import main as participantes_page
+            participantes_page(supabase, st.session_state)
+        elif menu == "Documentos":
+            from pages.documentos import main as documentos_page
+            documentos_page(supabase, st.session_state)
+        elif menu == "Tutores":
+            from pages.tutores import main as tutores_page
+            tutores_page(supabase, st.session_state)
+
+    # Gestor
+    elif st.session_state.role == "gestor":
+        if menu == "Grupos":
             from pages.grupos import main as grupos_page
             grupos_page(supabase, st.session_state)
         elif menu == "Participantes":
