@@ -40,6 +40,28 @@ def logout():
 # LOGIN
 # =======================
 if not st.session_state.logged_in:
+    # Menú lateral informativo antes del login
+    st.sidebar.title("ℹ️ Información de la App")
+    st.sidebar.markdown("""
+    **Usuarios y Empresas**  
+    Gestiona usuarios y empresas asociadas.
+
+    **Acciones Formativas**  
+    Crea y administra cursos y formaciones.
+
+    **Grupos**  
+    Organiza grupos de alumnos y tutores.
+
+    **Participantes**  
+    Alta y seguimiento de alumnos.
+
+    **Documentos**  
+    Genera PDFs y XML oficiales.
+
+    **Tutores**  
+    Gestiona tutores internos y externos.
+    """)
+
     st.title("Gestor de Formación - Login")
     with st.form("login_form"):
         email = st.text_input("Usuario (email/CIF)")
