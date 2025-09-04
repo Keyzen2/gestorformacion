@@ -91,10 +91,7 @@ def main(supabase, session_state):
 
                 st.session_state.accion_creada = True
                 st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
-
-                # Recargar datos
-                acciones_res = supabase.table("acciones_formativas").select("*").execute()
-                df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+                st.experimental_rerun()
 
             except Exception as e:
                 st.error(f"❌ Error al crear la acción formativa: {str(e)}")
@@ -120,7 +117,7 @@ def main(supabase, session_state):
                 if f"edit_done_{row['id']}" not in st.session_state:
                     st.session_state[f"edit_done_{row['id']}"] = False
 
-                if col1.button("✏️ Editar", key=f"edit_{row['id']}"):
+                with col1:
                     with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
                         nuevo_codigo = st.text_input("Código de la acción", value=row["codigo_accion"])
                         nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
@@ -149,43 +146,37 @@ def main(supabase, session_state):
 
                         guardar_cambios = st.form_submit_button("Guardar cambios")
 
-                        if guardar_cambios and not st.session_state[f"edit_done_{row['id']}"]:
-                            try:
-                                supabase.table("acciones_formativas").update({
-                                    "codigo_accion": nuevo_codigo,
-                                    "nombre": nuevo_nombre,
-                                    "cod_area_profesional": areas_dict.get(nueva_area_sel, ""),
-                                    "area_profesional": nueva_area_sel.split(" - ", 1)[1] if " - " in nueva_area_sel else nueva_area_sel,
-                                    "sector": nuevo_sector,
-                                    "objetivos": nuevos_objetivos,
-                                    "contenidos": nuevos_contenidos,
-                                    "nivel": nuevo_nivel,
-                                    "modalidad": nueva_modalidad
-                                    "num_horas": int(nuevas_horas),
-                                    "certificado_profesionalidad": nuevo_certificado,
-                                    "observaciones": nuevas_obs
-                                }).eq("id", row["id"]).execute()
+                    if guardar_cambios and not st.session_state[f"edit_done_{row['id']}"]:
+                        try:
+                            supabase.table("acciones_formativas").update({
+                                "codigo_accion": nuevo_codigo,
+                                "nombre": nuevo_nombre,
+                                "cod_area_profesional": areas_dict.get(nueva_area_sel, ""),
+                                "area_profesional": nueva_area_sel.split(" - ", 1)[1] if " - " in nueva_area_sel else nueva_area_sel,
+                                "sector": nuevo_sector,
+                                "objetivos": nuevos_objetivos,
+                                "contenidos": nuevos_contenidos,
+                                "nivel": nuevo_nivel,
+                                "modalidad": nueva_modalidad,
+                                "num_horas": int(nuevas_horas),
+                                "certificado_profesionalidad": nuevo_certificado,
+                                "observaciones": nuevas_obs
+                            }).eq("id", row["id"]).execute()
 
-                                st.session_state[f"edit_done_{row['id']}"] = True
-                                st.success("✅ Cambios guardados correctamente.")
+                            st.session_state[f"edit_done_{row['id']}"] = True
+                            st.success("✅ Cambios guardados correctamente.")
+                            st.experimental_rerun()
 
-                                # Recargar datos
-                                acciones_res = supabase.table("acciones_formativas").select("*").execute()
-                                df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar: {str(e)}")
 
-                            except Exception as e:
-                                st.error(f"❌ Error al actualizar: {str(e)}")
+                 with col2:
+                    if st.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
+                        try:
+                            supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
+                            st.success("✅ Acción formativa eliminada correctamente.")
+                            st.experimental_rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {str(e)}")
 
-                # Botón eliminar
-                if col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
-                    try:
-                        supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
-                        st.success("✅ Acción formativa eliminada correctamente.")
-
-                        # Recargar datos
-                        acciones_res = supabase.table("acciones_formativas").select("*").execute()
-                        df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
-
-                    except Exception as e:
-                        st.error(f"❌ Error al eliminar: {str(e)}")
                         
