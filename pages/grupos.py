@@ -126,41 +126,44 @@ def main(supabase, session_state):
                             st.error(f"❌ Error al eliminar: {str(e)}")
 
     # =========================
-    # Crear nuevo grupo
+    # Crear nuevo grupo (solo admin)
     # =========================
-    st.markdown("### ➕ Crear Grupo")
-    with st.form("crear_grupo"):
-        empresa_nombre = st.selectbox("Empresa", list(empresas_dict.keys()))
-        accion_nombre = st.selectbox("Acción Formativa", list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
-        tutores_seleccionados = st.multiselect("Selecciona Tutores", list(tutores_dict.keys()))
-        codigo_grupo = st.text_input("Código Grupo *")
-        fecha_inicio = st.date_input("Fecha Inicio")
-        fecha_fin = st.date_input("Fecha Fin")
-        submitted = st.form_submit_button("Crear Grupo")
+    if session_state.role == "admin":
+        st.markdown("### ➕ Crear Grupo")
+        with st.form("crear_grupo"):
+            empresa_nombre = st.selectbox("Empresa", list(empresas_dict.keys()))
+            accion_nombre = st.selectbox("Acción Formativa", list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
+            tutores_seleccionados = st.multiselect("Selecciona Tutores", list(tutores_dict.keys()))
+            codigo_grupo = st.text_input("Código Grupo *")
+            fecha_inicio = st.date_input("Fecha Inicio")
+            fecha_fin = st.date_input("Fecha Fin")
+            submitted = st.form_submit_button("Crear Grupo")
 
-        if submitted:
-            if not codigo_grupo or not empresa_nombre or not accion_nombre:
-                st.error("⚠️ Código, empresa y acción formativa son obligatorios.")
-            elif fecha_fin < fecha_inicio:
-                st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
-            else:
-                try:
-                    result = supabase.table("grupos").insert({
-                        "codigo_grupo": codigo_grupo,
-                        "fecha_inicio": fecha_inicio.isoformat(),
-                        "fecha_fin": fecha_fin.isoformat(),
-                        "empresa_id": empresas_dict[empresa_nombre],
-                        "accion_formativa_id": acciones_dict[accion_nombre]
-                    }).execute()
-                    grupo_id = result.data[0]["id"]
-
-                    for t in tutores_seleccionados:
-                        supabase.table("tutores_grupos").insert({
-                            "grupo_id": grupo_id,
-                            "tutor_id": tutores_dict[t]
+            if submitted:
+                if not codigo_grupo or not empresa_nombre or not accion_nombre:
+                    st.error("⚠️ Código, empresa y acción formativa son obligatorios.")
+                elif fecha_fin < fecha_inicio:
+                    st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
+                else:
+                    try:
+                        result = supabase.table("grupos").insert({
+                            "codigo_grupo": codigo_grupo,
+                            "fecha_inicio": fecha_inicio.isoformat(),
+                            "fecha_fin": fecha_fin.isoformat(),
+                            "empresa_id": empresas_dict[empresa_nombre],
+                            "accion_formativa_id": acciones_dict[accion_nombre]
                         }).execute()
+                        grupo_id = result.data[0]["id"]
 
-                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al crear el grupo: {str(e)}")
+                        for t in tutores_seleccionados:
+                            supabase.table("tutores_grupos").insert({
+                                "grupo_id": grupo_id,
+                                "tutor_id": tutores_dict[t]
+                            }).execute()
+
+                        st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
+                        st.experimental_rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al crear el grupo: {str(e)}")
+    else:
+        st.info("🔒 Solo los administradores pueden crear nuevos grupos.")
