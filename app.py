@@ -1,220 +1,144 @@
 import streamlit as st
-import os
-from supabase import create_client, Client
-from datetime import datetime
+from supabase import create_client
 
-# =======================
-# CONFIGURACIÓN PÁGINA
-# =======================
-st.set_page_config(
-    page_title="Gestor de Formación",
-    page_icon="📚",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
+# Importar páginas
+from pages import usuarios_empresas, participantes, grupos, acciones_formativas
 
-# =======================
-# CONFIGURACIÓN SUPABASE
-# =======================
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# =========================
+# Configuración de página
+# =========================
+st.set_page_config(page_title="Gestor de Formación", layout="wide")
 
-# =======================
-# SESIÓN
-# =======================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user = None
+# =========================
+# Conexión a Supabase usando secrets
+# =========================
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+
+# Cliente público (operaciones con RLS)
+supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+# Cliente admin (operaciones sin RLS, crear usuarios, etc.)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+# =========================
+# Estado de sesión
+# =========================
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+if "role" not in st.session_state:
     st.session_state.role = None
+if "user" not in st.session_state:
+    st.session_state.user = {}
+if "auth_session" not in st.session_state:
+    st.session_state.auth_session = None
 
-def logout():
-    st.session_state.logged_in = False
-    st.session_state.user = None
-    st.session_state.role = None
+# =========================
+# Funciones auxiliares
+# =========================
+def set_user_role_from_db(email: str):
+    try:
+        res = supabase_public.table("usuarios").select("*").eq("email", email).limit(1).execute()
+        if res.data:
+            row = res.data[0]
+            st.session_state.role = row.get("rol") or "alumno"
+            st.session_state.user = {
+                "auth_id": row.get("auth_id"),
+                "email": row.get("email"),
+                "nombre": row.get("nombre"),
+                "empresa_id": row.get("empresa_id")
+            }
+        else:
+            st.session_state.role = "alumno"
+            st.session_state.user = {"email": email}
+    except Exception as e:
+        st.error(f"No se pudo obtener el rol del usuario: {e}")
+        st.session_state.role = "alumno"
+        st.session_state.user = {"email": email}
+
+def do_logout():
+    try:
+        supabase_public.auth.sign_out()
+    except Exception:
+        pass
+    st.session_state.clear()
     st.experimental_rerun()
 
-# =======================
-# LOGIN
-# =======================
-if not st.session_state.logged_in:
-    # CSS para ocultar menú y centrar login
-    st.markdown("""
-    <style>
-    [data-testid="stSidebar"] {display: none;}
-    header[data-testid="stHeader"] {display: none;}
-    footer {display: none;}
-    #MainMenu {visibility: hidden;}
-    .main {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 100vh;
-    }
-    .login-container {
-        width: 100%;
-        max-width: 380px;
-        padding: 2rem;
-        background-color: white;
-        border-radius: 10px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    </style>
-    """, unsafe_allow_html=True)
+def mostrar_menu():
+    st.sidebar.title("📋 Menú principal")
 
-    # Contenedor del login
-    st.markdown('<div class="login-container">', unsafe_allow_html=True)
-    st.title("🔐 Acceso al Gestor de Formación")
+    if st.session_state.role == "admin":
+        st.sidebar.markdown("### 👥 Gestión de usuarios y empresas")
+        if st.sidebar.button("👤 Usuarios y Empresas"):
+            st.session_state.page = "usuarios_empresas"
+        if st.sidebar.button("🧑‍🎓 Participantes"):
+            st.session_state.page = "participantes"
+        if st.sidebar.button("👥 Grupos"):
+            st.session_state.page = "grupos"
+        if st.sidebar.button("📚 Acciones formativas"):
+            st.session_state.page = "acciones_formativas"
 
-    with st.form("login_form"):
-        email = st.text_input("📧 Email")
-        password = st.text_input("🔑 Contraseña", type="password")
+    if st.session_state.role in ["admin", "gestor"]:
+        st.sidebar.markdown("### 🏢 Gestión de empresa")
+        if st.sidebar.button("🏢 Mi Empresa"):
+            st.session_state.page = "mi_empresa"
+
+    st.sidebar.divider()
+    st.sidebar.subheader("📑 Gestión ISO 9001")
+    st.sidebar.caption("Sección informativa o futura implementación")
+
+    st.sidebar.divider()
+    if st.sidebar.button("🚪 Cerrar sesión"):
+        do_logout()
+
+def login_view():
+    st.title("🔐 Iniciar sesión")
+    with st.form("login_form", clear_on_submit=False):
+        email = st.text_input("Email", autocomplete="email")
+        password = st.text_input("Contraseña", type="password", autocomplete="current-password")
         submitted = st.form_submit_button("Entrar")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Footer corporativo
-    st.markdown(
-        """
-        <div style='text-align:center; margin-top: 2rem; font-size: 0.85rem; color: #666;'>
-            © 2025 Centro de Formación - Sistema de Gestión de Calidad ISO 9001
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Validación y login
     if submitted:
         if not email or not password:
-            st.error("⚠️ Por favor, introduce tu email y contraseña.")
+            st.warning("Introduce email y contraseña.")
+            return
+        try:
+            auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+            if not auth or not auth.user:
+                st.error("Credenciales inválidas.")
+                return
+            st.session_state.auth_session = auth
+            set_user_role_from_db(auth.user.email)
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Error al iniciar sesión: {e}")
+
+def route():
+    page = st.session_state.page
+    if page == "usuarios_empresas":
+        usuarios_empresas.main(supabase_admin, st.session_state)
+    elif page == "participantes":
+        participantes.main(supabase_admin, st.session_state)
+    elif page == "grupos":
+        grupos.main(supabase_admin, st.session_state)
+    elif page == "acciones_formativas":
+        acciones_formativas.main(supabase_admin, st.session_state)
+    elif page == "mi_empresa":
+        usuarios_empresas.empresas_only(supabase_public, st.session_state)
+    else:
+        st.title("🏠 Bienvenido al Gestor de Formación")
+        if st.session_state.role == "admin":
+            st.caption("Usa el menú para gestionar usuarios, participantes, grupos y acciones.")
+        elif st.session_state.role == "gestor":
+            st.caption("Gestiona tu empresa, grupos y participantes asignados.")
         else:
-            try:
-                auth_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                if auth_res.user:
-                    res = supabase.table("usuarios").select("*").eq("email", email).execute()
-                    if res.data:
-                        st.session_state.logged_in = True
-                        st.session_state.user = res.data[0]
-                        st.session_state.role = res.data[0]["rol"]
-                        st.experimental_rerun()
-                    else:
-                        st.error("❌ Usuario no registrado en la base de datos interna.")
-                else:
-                    st.error("❌ Credenciales incorrectas.")
-            except Exception as e:
-                st.error(f"Error de login: {e}")
+            st.caption("Consulta tus cursos y tu perfil.")
 
-# =======================
-# APP PRINCIPAL
-# =======================
-if st.session_state.logged_in:
-    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
-    st.sidebar.title(f"👋 Bienvenido {nombre_usuario}")
-    st.sidebar.button("Cerrar sesión", on_click=logout)
-
-    # Menú dinámico según rol
-    if st.session_state.role == "admin":
-        opciones = [
-            "👥 Usuarios y Empresas",
-            "🏢 Empresas",
-            "📚 Acciones Formativas",
-            "👨‍🏫 Grupos",
-            "🧑‍🎓 Participantes",
-            "📄 Documentos",
-            "🎓 Tutores",
-            "📋 Gestión de Alumnos",
-            "— 📏 Gestión ISO 9001 —",
-            "🚨 No Conformidades (ISO 9001)",
-            "🛠️ Acciones Correctivas (ISO 9001)",
-            "📋 Auditorías (ISO 9001)",
-            "📈 Indicadores (ISO 9001)",
-            "📊 Dashboard Calidad (ISO 9001)",
-            "🎯 Objetivos de Calidad (ISO 9001)"
-        ]
-    elif st.session_state.role == "gestor":
-        opciones = [
-            "👨‍🏫 Grupos",
-            "🧑‍🎓 Participantes",
-            "📄 Documentos",
-            "— 📏 Gestión ISO 9001 —",
-            "🚨 No Conformidades (ISO 9001)",
-            "🛠️ Acciones Correctivas (ISO 9001)",
-            "📋 Auditorías (ISO 9001)",
-            "📈 Indicadores (ISO 9001)",
-            "📊 Dashboard Calidad (ISO 9001)",
-            "🎯 Objetivos de Calidad (ISO 9001)"
-        ]
-    elif st.session_state.role == "alumno":
-        opciones = ["🎓 Mis Grupos y Diplomas"]
-
-    menu = st.sidebar.radio("📂 Menú", opciones)
-
-    # Carga de páginas
-    if menu.startswith("👥 Usuarios"):
-        from pages.usuarios_empresas import main as usuarios_empresas_page
-        usuarios_empresas_page(supabase, st.session_state)
-
-    elif menu.startswith("🏢 Empresas"):
-        from pages.empresas import main as empresas_page
-        empresas_page(supabase, st.session_state)
-
-    elif menu.startswith("📚 Acciones Formativas"):
-        from pages.acciones_formativas import main as acciones_page
-        acciones_page(supabase, st.session_state)
-
-    elif menu.startswith("👨‍🏫 Grupos"):
-        from pages.grupos import main as grupos_page
-        grupos_page(supabase, st.session_state)
-
-    elif menu.startswith("🧑‍🎓 Participantes"):
-        from pages.participantes import main as participantes_page
-        participantes_page(supabase, st.session_state)
-
-    elif menu.startswith("📄 Documentos"):
-        from pages.documentos import main as documentos_page
-        documentos_page(supabase, st.session_state)
-
-    elif menu.startswith("🎓 Tutores"):
-        from pages.tutores import main as tutores_page
-        tutores_page(supabase, st.session_state)
-
-    elif menu.startswith("📋 Gestión de Alumnos"):
-        from pages.participantes import main as participantes_page
-        participantes_page(supabase, st.session_state)
-
-    # Módulos ISO 9001
-    elif menu.startswith("🚨 No Conformidades"):
-        from pages.no_conformidades import main as nc_page
-        st.markdown("### 🚨 Módulo de No Conformidades (ISO 9001)")
-        st.caption("Registro, seguimiento y cierre de no conformidades detectadas en procesos, auditorías o inspecciones.")
-        nc_page(supabase, st.session_state)
-
-    elif menu.startswith("🛠️ Acciones Correctivas"):
-        from pages.acciones_correctivas import main as ac_page
-        st.markdown("### 🛠️ Módulo de Acciones Correctivas (ISO 9001)")
-        st.caption("Planificación, ejecución y seguimiento de acciones correctivas vinculadas a no conformidades.")
-        ac_page(supabase, st.session_state)
-
-    elif menu.startswith("📋 Auditorías"):
-        from pages.auditorias import main as auditorias_page
-        st.markdown("### 📋 Módulo de Auditorías (ISO 9001)")
-        st.caption("Planificación y registro de auditorías internas y externas, con vinculación a hallazgos y no conformidades.")
-        auditorias_page(supabase, st.session_state)
-
-    elif menu.startswith("📈 Indicadores"):
-        from pages.indicadores import main as indicadores_page
-        st.markdown("### 📈 Módulo de Indicadores de Calidad (ISO 9001)")
-        st.caption("Visualización de métricas clave de calidad: NC, acciones correctivas, auditorías y tiempos de resolución.")
-        indicadores_page(supabase, st.session_state)
-
-    elif menu.startswith("📊 Dashboard Calidad"):
-        from pages.dashboard_calidad import main as dashboard_calidad_page
-        st.markdown("### 📊 Dashboard de Calidad (ISO 9001)")
-        st.caption("Panel visual con KPIs y gráficos para el seguimiento global del sistema de gestión de calidad.")
-        dashboard_calidad_page(supabase, st.session_state)
-
-    elif menu.startswith("🎯 Objetivos de Calidad"):
-        from pages.objetivos_calidad import main as objetivos_page
-        st.markdown("### 🎯 Objetivos de Calidad (ISO 9001)")
-        st.caption("Definición, seguimiento y evaluación de objetivos anuales de calidad para el centro de formación.")
-        objetivos_page(supabase, st.session_state)
-            
+# =========================
+# Ejecución principal
+# =========================
+if not st.session_state.role:
+    login_view()
+else:
+    mostrar_menu()
+    route()
+        
