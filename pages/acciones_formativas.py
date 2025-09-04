@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 
 def main(supabase, session_state):
     st.subheader("Acciones Formativas")
@@ -16,39 +15,27 @@ def main(supabase, session_state):
         empresas_dict = {}
 
     # =========================
-    # Cargar acciones formativas existentes
+    # Mostrar acciones existentes
     # =========================
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
         df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
-
+        
         # Convertir fechas si existen
         if "fecha_inicio" in df_acciones.columns:
             df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
         if "fecha_fin" in df_acciones.columns:
             df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
-
+        
         st.dataframe(df_acciones)
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
         df_acciones = pd.DataFrame()
 
-    # =========================
-    # Filtro por año
-    # =========================
-    if not df_acciones.empty and "fecha_inicio" in df_acciones.columns:
-        años = df_acciones["fecha_inicio"].dt.year.dropna().unique().tolist()
-        años.sort(reverse=True)
-        años = ["Todos"] + [str(a) for a in años]
-        anio_filtrado = st.selectbox("Filtrar por Año", options=años)
-        if anio_filtrado != "Todos":
-            df_acciones = df_acciones[df_acciones["fecha_inicio"].dt.year == int(anio_filtrado)]
-            st.dataframe(df_acciones)
-
     st.markdown("### Crear Acción Formativa")
 
     # =========================
-    # Formulario de creación
+    # Formulario creación acción
     # =========================
     with st.form("crear_accion_formativa"):
         nombre_accion = st.text_input("Nombre de la acción *")
