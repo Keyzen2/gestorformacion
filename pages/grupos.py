@@ -144,7 +144,6 @@ if session_state.role == "admin":
 if session_state.role == "admin":
     st.markdown("### ➕ Crear Grupo")
 
-    # Bandera para evitar bucle
     if "grupo_creado" not in st.session_state:
         st.session_state.grupo_creado = False
 
@@ -164,7 +163,7 @@ if session_state.role == "admin":
                 st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
             else:
                 try:
-                    # Validar que no exista un grupo con el mismo código
+                    # Validar duplicado
                     existe = supabase.table("grupos").select("id").eq("codigo_grupo", codigo_grupo).execute()
                     if existe.data:
                         st.error(f"⚠️ Ya existe un grupo con el código '{codigo_grupo}'.")
@@ -188,10 +187,9 @@ if session_state.role == "admin":
                         st.session_state.grupo_creado = True
                         st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
 
-                        # Recargar listado
+                        # Recargar datos sin rerun
                         grupos_res = supabase.table("grupos").select("*").execute()
                         df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame()
 
                 except Exception as e:
                     st.error(f"❌ Error al crear el grupo: {str(e)}")
-
