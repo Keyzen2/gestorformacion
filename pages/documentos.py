@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from xml.etree.ElementTree import Element, SubElement, tostring
-from utils import generar_pdf
+from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo, validar_xml
 
 # =========================
 # Generadores XML FUNDAE
