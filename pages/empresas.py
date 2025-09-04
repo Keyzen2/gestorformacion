@@ -16,6 +16,27 @@ def main(supabase, session_state):
     # =========================
     empresas_res = supabase.table("empresas").select("*").execute()
     df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
+    
+# =========================
+# Panel resumen de KPIs
+# =========================
+st.markdown("### 📊 Resumen de Empresas")
+
+total_empresas = len(df_empresas)
+empresas_mes = df_empresas[
+    pd.to_datetime(df_empresas["fecha_alta"], errors="coerce").dt.month == datetime.now().month
+]
+
+total_mes = len(empresas_mes)
+
+provincia_top = df_empresas["provincia"].value_counts().idxmax() if "provincia" in df_empresas.columns else "N/D"
+ciudad_top = df_empresas["ciudad"].value_counts().idxmax() if "ciudad" in df_empresas.columns else "N/D"
+
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("🏢 Total Empresas", total_empresas)
+col2.metric("🗓️ Nuevas este mes", total_mes)
+col3.metric("📍 Provincia más frecuente", provincia_top)
+col4.metric("🌆 Ciudad más frecuente", ciudad_top)
 
     # =========================
     # Filtro y exportación
