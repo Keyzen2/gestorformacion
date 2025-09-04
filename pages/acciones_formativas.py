@@ -14,19 +14,24 @@ def main(supabase, session_state):
         st.error(f"Error al cargar empresas: {str(e)}")
         empresas_dict = {}
 
+    if not empresas_dict:
+        st.warning("No hay empresas disponibles. Crea primero una empresa.")
+        st.stop()
+
     # =========================
     # Mostrar acciones existentes
     # =========================
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
         df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
-        
+
         # Convertir fechas si existen
-        if "fecha_inicio" in df_acciones.columns:
-            df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
-        if "fecha_fin" in df_acciones.columns:
-            df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
-        
+        if not df_acciones.empty:
+            if "fecha_inicio" in df_acciones.columns:
+                df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
+            if "fecha_fin" in df_acciones.columns:
+                df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
+
         st.dataframe(df_acciones)
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
@@ -43,9 +48,9 @@ def main(supabase, session_state):
         num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
         empresa_nombre = st.selectbox(
             "Empresa",
-            options=list(empresas_dict.keys()) if empresas_dict else ["No hay empresas"]
+            options=list(empresas_dict.keys())
         )
-        empresa_id = empresas_dict.get(empresa_nombre) if empresas_dict else None
+        empresa_id = empresas_dict.get(empresa_nombre)
 
         submitted = st.form_submit_button("Crear Acción Formativa")
 
@@ -57,7 +62,7 @@ def main(supabase, session_state):
                     supabase.table("acciones_formativas").insert({
                         "nombre": nombre_accion,
                         "modalidad": modalidad,
-                        "num_horas": num_horas,
+                        "num_horas": int(num_horas),
                         "empresa_id": empresa_id
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
@@ -67,8 +72,10 @@ def main(supabase, session_state):
     # =========================
     # Filtro por empresa
     # =========================
-    if not df_acciones.empty and empresas_dict:
+    if not df_acciones.empty:
         empresa_filter = st.selectbox("Filtrar por empresa", options=["Todas"] + list(empresas_dict.keys()))
+        df_acciones_filtrado = df_acciones[df_acciones["empresa_id"].notnull()]
         if empresa_filter != "Todas":
-            df_acciones = df_acciones[df_acciones["empresa_id"] == empresas_dict[empresa_filter]]
-            st.dataframe(df_acciones)
+            df_acciones_filtrado = df_acciones_filtrado[df_acciones_filtrado["empresa_id"] == empresas_dict[empresa_filter]]
+        st.dataframe(df_acciones_filtrado)
+
