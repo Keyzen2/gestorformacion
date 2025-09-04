@@ -1,163 +1,164 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from utils import validar_dni_cif
 
 def main(supabase, session_state):
-    st.subheader("🧾 Participantes")
+    st.markdown("## 🧑‍🎓 Participantes")
+    st.caption("Gestión de participantes/alumnos y vinculación con empresas y grupos.")
+    st.divider()
 
     # =========================
-    # Cargar grupos
+    # Cargar empresas y grupos
     # =========================
-    grupos_res = supabase.table("grupos").select("id, codigo_grupo, empresa_id").execute()
-    grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos_res.data} if grupos_res.data else {}
+    try:
+        empresas_res = supabase.table("empresas").select("id,nombre").execute()
+        empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
+    except Exception as e:
+        st.error(f"⚠️ No se pudieron cargar las empresas: {e}")
+        empresas_dict = {}
 
-    # Filtrar grupos para gestor
-    if session_state.role == "gestor":
-        empresa_id_usuario = session_state.user.get("empresa_id")
-        grupos_dict = {codigo: gid for codigo, gid in grupos_dict.items()
-                       if any(g["empresa_id"] == empresa_id_usuario and g["id"] == gid for g in grupos_res.data)}
-
-    if not grupos_dict:
-        st.warning("No hay grupos disponibles.")
-        st.stop()
+    try:
+        grupos_res = supabase.table("grupos").select("id,codigo_grupo").execute()
+        grupos_dict = {g["codigo_grupo"]: g["id"] for g in (grupos_res.data or [])}
+    except Exception as e:
+        st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
+        grupos_dict = {}
 
     # =========================
     # Cargar participantes
     # =========================
-    participantes_res = supabase.table("participantes").select("*").execute()
-    df_participantes = pd.DataFrame(participantes_res.data) if participantes_res.data else pd.DataFrame()
-
-    # Filtrar participantes para gestor
-    if session_state.role == "gestor":
-        ids_grupos_permitidos = list(grupos_dict.values())
-        df_participantes = df_participantes[df_participantes["grupo_id"].isin(ids_grupos_permitidos)]
+    try:
+        part_res = supabase.table("participantes").select("*").execute()
+        df_part = pd.DataFrame(part_res.data or [])
+    except Exception as e:
+        st.error(f"⚠️ No se pudieron cargar los participantes: {e}")
+        df_part = pd.DataFrame()
 
     # =========================
-    # Mostrar listado
+    # Formulario para añadir participante
     # =========================
-    if not df_participantes.empty:
-        grupo_filter = st.selectbox("Filtrar por grupo", ["Todos"] + list(grupos_dict.keys()))
-        search_query = st.text_input("🔍 Buscar por nombre o DNI")
+    st.markdown("### ➕ Añadir Participante")
+    with st.form("crear_participante", clear_on_submit=True):
+        nombre = st.text_input("Nombre *")
+        apellidos = st.text_input("Apellidos")
+        dni = st.text_input("DNI/NIF")
+        email = st.text_input("Email *")
+        telefono = st.text_input("Teléfono")
+        empresa_sel = st.selectbox("Empresa", sorted(list(empresas_dict.keys())) if empresas_dict else [])
+        grupo_sel = st.selectbox("Grupo", sorted(list(grupos_dict.keys())) if grupos_dict else [])
+        submitted = st.form_submit_button("➕ Añadir Participante")
 
-        if grupo_filter != "Todos":
-            df_participantes = df_participantes[df_participantes["grupo_id"] == grupos_dict[grupo_filter]]
-        if search_query:
-            df_participantes = df_participantes[
-                df_participantes["nombre"].str.contains(search_query, case=False, na=False) |
-                df_participantes["dni"].str.contains(search_query, case=False, na=False)
-            ]
+    if submitted:
+        if not nombre or not email:
+            st.error("⚠️ Nombre y email son obligatorios.")
+        else:
+            try:
+                # 1. Buscar usuario en Auth
+                auth_user = None
+                try:
+                    users_list = supabase.auth.admin.list_users()
+                    for u in users_list.users:
+                        if u.email.lower() == email.lower():
+                            auth_user = u
+                            break
+                except Exception as e:
+                    st.error(f"⚠️ No se pudo consultar Auth: {e}")
+                    return
 
-        for _, row in df_participantes.iterrows():
-            with st.expander(f"{row['nombre']} ({row['dni']})"):
-                st.write(f"**Email:** {row.get('email', '')}")
-                st.write(f"**Grupo ID:** {row.get('grupo_id', '')}")
-                st.write(f"**Fecha de alta:** {row.get('created_at', '')}")
-
-                # 🔗 Vincular con usuario
-                st.markdown("#### 🔗 Vincular con usuario")
-                email_usuario = st.text_input("Email del usuario", value=row.get("email", ""), key=f"email_{row['id']}")
-                vincular = st.button("Vincular como alumno", key=f"vincular_{row['id']}")
-                if vincular:
+                # 2. Si no existe, crearlo
+                if not auth_user:
                     try:
-                        existe = supabase.table("usuarios").select("id").eq("email", email_usuario).execute()
-                        if not existe.data:
-                            supabase.table("usuarios").insert({
-                                "email": email_usuario,
-                                "nombre": row["nombre"],
-                                "rol": "alumno",
-                                "dni": row["dni"]
-                            }).execute()
-                            st.success("✅ Usuario creado y vinculado como alumno.")
-                        else:
-                            st.info("ℹ️ El usuario ya existe.")
+                        new_user = supabase.auth.admin.create_user({
+                            "email": email,
+                            "password": "Temporal1234",  # Contraseña temporal
+                            "email_confirm": True,
+                            "user_metadata": {"rol": "alumno"}
+                        })
+                        auth_id = new_user.user.id
+                        st.info(f"👤 Usuario creado en Auth con ID {auth_id}")
                     except Exception as e:
-                        st.error(f"❌ Error al vincular: {str(e)}")
+                        st.error(f"❌ No se pudo crear el usuario en Auth: {e}")
+                        return
+                else:
+                    auth_id = auth_user.id
+                    st.info(f"👤 Usuario ya existente en Auth con ID {auth_id}")
 
-                # 📤 Subir diploma al bucket 'documentos'
-                st.markdown("#### 📤 Subir diploma")
-                grupo_id = row["grupo_id"]
-                archivo = st.file_uploader("Selecciona el diploma PDF", type=["pdf"], key=f"diploma_{row['id']}")
-                subir = st.button("Subir diploma", key=f"subir_{row['id']}")
-                if subir and archivo:
-                    try:
-                        nombre_archivo = f"diplomas/{row['id']}_{grupo_id}.pdf"
-                        contenido = archivo.read()
-
-                        # Subir al bucket 'documentos'
-                        supabase.storage.from_("documentos").upload(nombre_archivo, contenido)
-
-                        # Obtener URL pública
-                        url = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
-
-                        # Guardar en tabla diplomas
-                        supabase.table("diplomas").insert({
-                            "participante_id": row["id"],
-                            "grupo_id": grupo_id,
-                            "url": url,
-                            "fecha_subida": datetime.utcnow().isoformat()
+                # 3. Insertar en tabla usuarios si no existe
+                try:
+                    existe_usuario = supabase.table("usuarios").select("id").eq("email", email).execute()
+                    if not existe_usuario.data:
+                        supabase.table("usuarios").insert({
+                            "auth_id": auth_id,
+                            "email": email,
+                            "rol": "alumno",
+                            "dni": dni,
+                            "nombre": nombre
                         }).execute()
+                        st.success("✅ Usuario añadido a la tabla 'usuarios'.")
+                except Exception as e:
+                    st.error(f"❌ Error al insertar en usuarios: {e}")
 
-                        st.success("✅ Diploma subido correctamente.")
-                    except Exception as e:
-                        st.error(f"❌ Error al subir diploma: {str(e)}")
+                # 4. Insertar en participantes
+                try:
+                    supabase.table("participantes").insert({
+                        "nombre": nombre,
+                        "apellidos": apellidos,
+                        "dni": dni,
+                        "email": email,
+                        "telefono": telefono,
+                        "empresa_id": empresas_dict.get(empresa_sel),
+                        "grupo_id": grupos_dict.get(grupo_sel)
+                    }).execute()
+                    st.success(f"✅ Participante '{nombre}' añadido correctamente.")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al insertar en participantes: {e}")
 
-                # 📁 Ver diplomas existentes
-                diplomas = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute().data
-                if diplomas:
-                    st.markdown("#### 📁 Diplomas disponibles")
-                    for d in diplomas:
-                        st.markdown(f"📥 [Descargar diploma del grupo {d['grupo_id']}]({d['url']})")
-                else:
-                    st.info("ℹ️ No hay diplomas registrados para este participante.")
+            except Exception as e:
+                st.error(f"❌ Error general al vincular: {e}")
+
+    st.divider()
 
     # =========================
-    # Crear nuevo participante (solo admin)
+    # Listado y edición
     # =========================
-    if session_state.role == "admin":
-        st.markdown("### ➕ Crear Participante")
+    if not df_part.empty:
+        for _, row in df_part.iterrows():
+            with st.expander(f"{row.get('nombre','')} {row.get('apellidos','')}"):
+                st.write(row)
+                with st.form(f"edit_part_{row['id']}", clear_on_submit=True):
+                    nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
+                    nuevos_apellidos = st.text_input("Apellidos", value=row.get("apellidos", ""))
+                    nuevo_email = st.text_input("Email", value=row.get("email", ""))
+                    guardar = st.form_submit_button("💾 Guardar cambios")
 
-        if "participante_creado" not in st.session_state:
-            st.session_state.participante_creado = False
-
-        with st.form("crear_participante", clear_on_submit=True):
-            nombre = st.text_input("Nombre *")
-            dni = st.text_input("DNI/NIE *")
-            grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
-            submitted = st.form_submit_button("Crear Participante")
-
-            if submitted and not st.session_state.participante_creado:
-                if not nombre or not dni or not grupo_nombre:
-                    st.error("⚠️ Todos los campos son obligatorios.")
-                elif not validar_dni_cif(dni):
-                    st.error("⚠️ El DNI/NIE no es válido.")
-                else:
+                if guardar:
                     try:
-                        existe = supabase.table("participantes") \
-                            .select("id") \
-                            .eq("nif", dni) \
-                            .eq("grupo_id", grupos_dict[grupo_nombre]) \
-                            .execute()
+                        # Si el email ha cambiado, actualizar en Auth y en usuarios
+                        if nuevo_email != row.get("email", ""):
+                            # Buscar auth_id en usuarios
+                            usuario_res = supabase.table("usuarios").select("auth_id").eq("email", row.get("email", "")).execute()
+                            if usuario_res.data:
+                                auth_id = usuario_res.data[0]["auth_id"]
+                                # Actualizar en Auth
+                                try:
+                                    supabase.auth.admin.update_user_by_id(auth_id, {"email": nuevo_email})
+                                    st.info("📧 Email actualizado en Auth.")
+                                except Exception as e:
+                                    st.error(f"❌ No se pudo actualizar el email en Auth: {e}")
+                                # Actualizar en usuarios
+                                try:
+                                    supabase.table("usuarios").update({"email": nuevo_email}).eq("auth_id", auth_id).execute()
+                                    st.info("📧 Email actualizado en tabla 'usuarios'.")
+                                except Exception as e:
+                                    st.error(f"❌ No se pudo actualizar el email en 'usuarios': {e}")
 
-                        if existe.data:
-                            st.error(f"⚠️ Ya existe un participante con el DNI/NIF '{dni}' en este grupo.")
-                        else:
-                            supabase.table("participantes").insert({
-                                "nombre": nombre,
-                                "nif": dni,
-                                "dni": dni,
-                                "grupo_id": grupos_dict[grupo_nombre]
-                            }).execute()
-
-                            st.session_state.participante_creado = True
-                            st.success(f"✅ Participante '{nombre}' creado correctamente.")
-
-                            participantes_res = supabase.table("participantes").select("*").execute()
-                            df_participantes = pd.DataFrame(participantes_res.data) if participantes_res.data else pd.DataFrame()
-                            st.dataframe(df_participantes)
-
+                        # Actualizar en participantes
+                        supabase.table("participantes").update({
+                            "nombre": nuevo_nombre,
+                            "apellidos": nuevos_apellidos,
+                            "email": nuevo_email
+                        }).eq("id", row["id"]).execute()
+                        st.success("✅ Cambios guardados.")
+                        st.experimental_rerun()
                     except Exception as e:
-                        st.error(f"❌ Error al crear el participante: {str(e)}")
-    else:
-        st.info("🔒 Solo los administradores pueden dar de alta participantes.")
-        
+                        st.error(f"❌ Error al actualizar: {e}")
