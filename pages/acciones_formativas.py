@@ -15,16 +15,20 @@ def main(supabase, session_state):
         empresas_dict = {}
 
     # =========================
-    # Mostrar acciones existentes
+    # Cargar acciones existentes
     # =========================
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
-        df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
-        if not df_acciones.empty:
-            st.dataframe(df_acciones)
+        if acciones_res.data:
+            df_acciones = pd.DataFrame(acciones_res.data)
+        else:
+            # Crear DataFrame vacío con columnas esperadas
+            df_acciones = pd.DataFrame(columns=["id", "nombre", "modalidad", "num_horas", "empresa_id"])
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
-        df_acciones = pd.DataFrame()
+        df_acciones = pd.DataFrame(columns=["id", "nombre", "modalidad", "num_horas", "empresa_id"])
+
+    st.dataframe(df_acciones)
 
     # =========================
     # Crear acción formativa
@@ -54,16 +58,11 @@ def main(supabase, session_state):
                         "empresa_id": empresa_id
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
-                    # Actualizar tabla en pantalla
-                    acciones_res = supabase.table("acciones_formativas").select("*").execute()
-                    df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
-                    if not df_acciones.empty:
-                        st.dataframe(df_acciones)
                 except Exception as e:
                     st.error(f"❌ Error al crear la acción formativa: {str(e)}")
 
     # =========================
-    # Filtrar por empresa
+    # Filtro por empresa
     # =========================
     if not df_acciones.empty and empresas_dict:
         empresa_filter = st.selectbox("Filtrar por empresa", options=["Todas"] + list(empresas_dict.keys()))
