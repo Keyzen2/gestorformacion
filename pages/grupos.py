@@ -122,15 +122,20 @@ def main(supabase, session_state):
                 # Eliminar grupo (solo admin)
 if session_state.role == "admin":
     with st.form(f"delete_form_{row['id']}"):
-        confirmar = st.checkbox(f"Confirmar eliminación de '{row['codigo_grupo']}'")
-        eliminar = st.form_submit_button("🗑️ Eliminar")
-        if eliminar and confirmar:
-            try:
-                supabase.table("grupos").delete().eq("id", row["id"]).execute()
-                st.success("✅ Grupo eliminado.")
-                st.experimental_rerun()
-            except Exception as e:
-                st.error(f"❌ Error al eliminar: {str(e)}")
+        st.warning(f"Vas a eliminar el grupo '{row['codigo_grupo']}'. Esta acción no se puede deshacer.")
+        confirmar = st.checkbox("✅ Confirmo que quiero eliminar este grupo")
+        eliminar = st.form_submit_button("🗑️ Eliminar definitivamente")
+
+        if eliminar:
+            if confirmar:
+                try:
+                    supabase.table("grupos").delete().eq("id", row["id"]).execute()
+                    st.success("✅ Grupo eliminado.")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al eliminar: {str(e)}")
+            else:
+                st.error("⚠️ Debes marcar la casilla de confirmación antes de eliminar.")
 
 
     # =========================
