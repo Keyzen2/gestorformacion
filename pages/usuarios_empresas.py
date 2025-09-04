@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("👥 Usuarios y Empresas")
@@ -25,10 +26,22 @@ def main(supabase, session_state):
                 st.info("No hay empresas registradas")
 
     # -----------------------
+    # CRUD de usuarios (solo admin)
+    # -----------------------
+    if session_state.role == "admin":
+        crud_tabla(
+            supabase,
+            nombre_tabla="usuarios",
+            campos_visibles=["nombre", "email", "rol", "empresa_id"],  # empresa_id → nombre
+            campos_editables=["nombre", "email", "rol", "empresa_id"]
+        )
+    else:
+        st.warning("🔒 Solo los administradores pueden gestionar usuarios.")
+
+    # -----------------------
     # Crear Usuario (solo admin)
     # -----------------------
     if session_state.role != "admin":
-        st.warning("🔒 Solo los administradores pueden crear usuarios.")
         return
 
     st.markdown("### ➕ Crear Usuario")
