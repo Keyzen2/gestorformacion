@@ -26,7 +26,7 @@ def main(supabase, session_state):
                 st.info("No hay empresas registradas")
 
     # -----------------------
-    # Crear Usuario (solo admin)
+    # Crear Usuario (admin, gestor, alumno)
     # -----------------------
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden crear usuarios.")
@@ -41,9 +41,12 @@ def main(supabase, session_state):
         email_new = st.text_input("Email *")
         nombre_new = st.text_input("Nombre *")
         password_new = st.text_input("Contraseña *", type="password")
-        rol_new = st.selectbox("Rol", ["admin", "gestor"])
+        rol_new = st.selectbox("Rol", ["admin", "gestor", "alumno"])
 
         empresa_id = None
+        grupo_id = None
+
+        # Si es gestor, pedir empresa
         if rol_new == "gestor":
             empresas_res = supabase.table("empresas").select("id, nombre").execute()
             empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
@@ -54,6 +57,15 @@ def main(supabase, session_state):
                 st.warning("⚠️ No hay empresas creadas. Debes crear una antes de dar de alta un gestor.")
                 st.stop()
 
+        # Si es alumno, pedir grupo opcional
+        if rol_new == "alumno":
+            grupos_res = supabase.table("grupos").select("id, codigo_grupo").execute()
+            grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos_res.data} if grupos_res.data else {}
+            if grupos_dict:
+                grupo_nombre = st.selectbox("Grupo asignado (opcional)", options=["-- Ninguno --"] + list(grupos_dict.keys()))
+                if grupo_nombre != "-- Ninguno --":
+                    grupo_id = grupos_dict.get(grupo_nombre)
+
         submitted_user = st.form_submit_button("Crear Usuario")
 
         if submitted_user and not st.session_state.usuario_creado:
@@ -63,10 +75,12 @@ def main(supabase, session_state):
                 st.error("⚠️ Debes asignar una empresa al gestor")
             else:
                 try:
+                    # Comprobar si ya existe en usuarios
                     existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
                     if existe.data:
                         st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
                     else:
+                        # Crear en Auth
                         auth_res = supabase.auth.sign_up({
                             "email": email_new,
                             "password": password_new
@@ -75,6 +89,7 @@ def main(supabase, session_state):
                             st.error("❌ Error al crear el usuario en Auth.")
                             return
 
+                        # Insertar en tabla usuarios
                         insert_data = {
                             "auth_id": auth_res.user.id,
                             "email": email_new,
@@ -85,6 +100,17 @@ def main(supabase, session_state):
                             insert_data["empresa_id"] = empresa_id
 
                         supabase.table("usuarios").insert(insert_data).execute()
+
+                        # Si es alumno y se seleccionó grupo, crear también en participantes
+                        if rol_new == "alumno":
+                            participante_data = {
+                                "nombre": nombre_new,
+                                "email": email_new
+                            }
+                            if grupo_id:
+                                participante_data["grupo_id"] = grupo_id
+                            supabase.table("participantes").insert(participante_data).execute()
+
                         st.session_state.usuario_creado = True
                         st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
 
