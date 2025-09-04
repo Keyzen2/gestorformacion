@@ -120,15 +120,18 @@ def main(supabase, session_state):
                                     st.error(f"❌ Error al actualizar: {str(e)}")
 
                 # Eliminar grupo (solo admin)
-                if session_state.role == "admin" and col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
-                    confirmar = st.checkbox(f"Confirmar eliminación de '{row['codigo_grupo']}'", key=f"confirm_{row['id']}")
-                    if confirmar:
-                        try:
-                            supabase.table("grupos").delete().eq("id", row["id"]).execute()
-                            st.success("✅ Grupo eliminado.")
-                            st.experimental_rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al eliminar: {str(e)}")
+if session_state.role == "admin":
+    with st.form(f"delete_form_{row['id']}"):
+        confirmar = st.checkbox(f"Confirmar eliminación de '{row['codigo_grupo']}'")
+        eliminar = st.form_submit_button("🗑️ Eliminar")
+        if eliminar and confirmar:
+            try:
+                supabase.table("grupos").delete().eq("id", row["id"]).execute()
+                st.success("✅ Grupo eliminado.")
+                st.experimental_rerun()
+            except Exception as e:
+                st.error(f"❌ Error al eliminar: {str(e)}")
+
 
     # =========================
 # Crear nuevo grupo (solo admin)
