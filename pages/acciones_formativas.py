@@ -5,6 +5,16 @@ def main(supabase, session_state):
     st.subheader("📚 Acciones Formativas")
 
     # =========================
+    # Cargar catálogo de áreas profesionales
+    # =========================
+    try:
+        areas_res = supabase.table("areas_profesionales").select("*").order("familia", desc=False).execute()
+        areas_dict = {f"{a['codigo']} - {a['nombre']}": a['codigo'] for a in areas_res.data} if areas_res.data else {}
+    except Exception as e:
+        st.error(f"Error al cargar áreas profesionales: {str(e)}")
+        areas_dict = {}
+
+    # =========================
     # Cargar acciones formativas
     # =========================
     try:
@@ -43,7 +53,7 @@ def main(supabase, session_state):
     with st.form("crear_accion_formativa"):
         codigo_accion = st.text_input("Código de la acción *")
         nombre_accion = st.text_input("Nombre de la acción *")
-        area_profesional = st.text_input("Área profesional")
+        area_sel = st.selectbox("Área profesional", list(areas_dict.keys()) if areas_dict else [])
         sector = st.text_input("Sector")
         objetivos = st.text_area("Objetivos")
         contenidos = st.text_area("Contenidos")
@@ -63,7 +73,8 @@ def main(supabase, session_state):
                     supabase.table("acciones_formativas").insert({
                         "codigo_accion": codigo_accion,
                         "nombre": nombre_accion,
-                        "area_profesional": area_profesional,
+                        "cod_area_profesional": areas_dict.get(area_sel, ""),
+                        "area_profesional": area_sel.split(" - ", 1)[1] if area_sel else "",
                         "sector": sector,
                         "objetivos": objetivos,
                         "contenidos": contenidos,
@@ -101,7 +112,9 @@ def main(supabase, session_state):
                     with st.form(f"edit_form_{row['id']}"):
                         nuevo_codigo = st.text_input("Código de la acción", value=row["codigo_accion"])
                         nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
-                        nueva_area = st.text_input("Área profesional", value=row.get("area_profesional", ""))
+                        # Preseleccionar área actual si existe
+                        area_actual_key = next((k for k, v in areas_dict.items() if v == row.get("cod_area_profesional")), "")
+                        nueva_area_sel = st.selectbox("Área profesional", list(areas_dict.keys()), index=list(areas_dict.keys()).index(area_actual_key) if area_actual_key in areas_dict else 0)
                         nuevo_sector = st.text_input("Sector", value=row.get("sector", ""))
                         nuevos_objetivos = st.text_area("Objetivos", value=row.get("objetivos", ""))
                         nuevos_contenidos = st.text_area("Contenidos", value=row.get("contenidos", ""))
@@ -117,7 +130,8 @@ def main(supabase, session_state):
                                 supabase.table("acciones_formativas").update({
                                     "codigo_accion": nuevo_codigo,
                                     "nombre": nuevo_nombre,
-                                    "area_profesional": nueva_area,
+                                    "cod_area_profesional": areas_dict.get(nueva_area_sel, ""),
+                                    "area_profesional": nueva_area_sel.split(" - ", 1)[1] if nueva_area_sel else "",
                                     "sector": nuevo_sector,
                                     "objetivos": nuevos_objetivos,
                                     "contenidos": nuevos_contenidos,
