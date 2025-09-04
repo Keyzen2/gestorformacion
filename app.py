@@ -178,7 +178,15 @@ if st.session_state.get("logged_in"):
 
     # Menú dinámico según rol
     if st.session_state.role == "admin":
-        opciones = ["Usuarios y Empresas", "Acciones Formativas", "Grupos", "Participantes", "Documentos", "Tutores"]
+        opciones = [
+            "Usuarios y Empresas",
+            "Empresas",  # 🔹 Nueva opción
+            "Acciones Formativas",
+            "Grupos",
+            "Participantes",
+            "Documentos",
+            "Tutores"
+        ]
     elif st.session_state.role == "gestor":
         opciones = ["Grupos", "Participantes", "Documentos"]
 
@@ -189,6 +197,9 @@ if st.session_state.get("logged_in"):
         if menu == "Usuarios y Empresas":
             from pages.usuarios_empresas import main as usuarios_empresas_page
             usuarios_empresas_page(supabase, st.session_state)
+        elif menu == "Empresas":  # 🔹 Nuevo bloque
+            from pages.empresas import main as empresas_page
+            empresas_page(supabase, st.session_state)
         elif menu == "Acciones Formativas":
             from pages.acciones_formativas import main as acciones_page
             acciones_page(supabase, st.session_state)
