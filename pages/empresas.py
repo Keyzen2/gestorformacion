@@ -7,7 +7,6 @@ import io
 def main(supabase, session_state):
     st.subheader("🏢 Empresas")
 
-    # Solo admin puede gestionar empresas
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden gestionar empresas.")
         st.stop()
@@ -19,49 +18,40 @@ def main(supabase, session_state):
     df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
 
     # =========================
-    # Filtros
+    # Filtro y exportación
     # =========================
+    search_query = st.text_input("🔍 Buscar por nombre o CIF")
+    if search_query:
+        df_empresas = df_empresas[
+            df_empresas["nombre"].str.contains(search_query, case=False, na=False) |
+            df_empresas["cif"].str.contains(search_query, case=False, na=False)
+        ]
+
     if not df_empresas.empty:
-        search_query = st.text_input("🔍 Buscar por nombre o CIF")
-        if search_query:
-            df_empresas = df_empresas[
-                df_empresas["nombre"].str.contains(search_query, case=False, na=False) |
-                df_empresas["cif"].str.contains(search_query, case=False, na=False)
-            ]
-
-        # =========================
-        # Exportar listado
-        # =========================
-        st.markdown("### 📤 Exportar listado de empresas")
         col_csv, col_excel = st.columns(2)
-
         with col_csv:
             st.download_button(
-                label="⬇️ Descargar CSV",
+                "⬇️ Descargar CSV",
                 data=df_empresas.to_csv(index=False).encode("utf-8"),
-                file_name="empresas_filtradas.csv",
+                file_name="empresas.csv",
                 mime="text/csv"
             )
-
         with col_excel:
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_empresas.to_excel(writer, index=False, sheet_name='Empresas')
                 writer.save()
-                processed_data = output.getvalue()
-
-            st.download_button(
-                label="⬇️ Descargar Excel",
-                data=processed_data,
-                file_name="empresas_filtradas.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+                st.download_button(
+                    "⬇️ Descargar Excel",
+                    data=output.getvalue(),
+                    file_name="empresas.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
         # =========================
         # Estadísticas visuales
         # =========================
-        st.markdown("### 📈 Estadísticas de Empresas")
-
+        st.markdown("### 📈 Estadísticas")
         if "provincia" in df_empresas.columns:
             prov_count = df_empresas["provincia"].value_counts().reset_index()
             prov_count.columns = ["Provincia", "Total"]
@@ -84,7 +74,7 @@ def main(supabase, session_state):
         # =========================
         # Paginación
         # =========================
-        page_size = st.selectbox("Registros por página", [5, 10, 20, 50], index=1)
+        page_size = st.selectbox("Registros por página", [5, 10, 20], index=1)
         total_rows = len(df_empresas)
         total_pages = (total_rows - 1) // page_size + 1
         if "page_empresas" not in st.session_state:
@@ -118,10 +108,7 @@ def main(supabase, session_state):
 
                 col1, col2 = st.columns(2)
 
-                # Editar empresa
-                if f"editado_{row['id']}" not in st.session_state:
-                    st.session_state[f"editado_{row['id']}"] = False
-
+                # ✏️ Editar empresa
                 if col1.button("✏️ Editar", key=f"edit_{row['id']}"):
                     with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
                         nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
@@ -136,7 +123,7 @@ def main(supabase, session_state):
                         nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
 
                         guardar = st.form_submit_button("Guardar cambios")
-                        if guardar and not st.session_state[f"editado_{row['id']}"]:
+                        if guardar:
                             try:
                                 supabase.table("empresas").update({
                                     "nombre": nuevo_nombre,
@@ -150,28 +137,23 @@ def main(supabase, session_state):
                                     "provincia": nueva_provincia,
                                     "codigo_postal": nuevo_cp
                                 }).eq("id", row["id"]).execute()
-
-                                st.session_state[f"editado_{row['id']}"] = True
                                 st.success("✅ Cambios guardados correctamente.")
                             except Exception as e:
                                 st.error(f"❌ Error al actualizar: {str(e)}")
 
-                # Eliminar empresa
-                with st.form(f"delete_form_{row['id']}"):
-                    st.warning(f"Vas a eliminar la empresa '{row['nombre']}'. Esta acción no se puede deshacer.")
-                    confirmar = st.checkbox("✅ Confirmo que quiero eliminar esta empresa")
-                    eliminar = st.form_submit_button("🗑️ Eliminar definitivamente")
-
-                    if eliminar:
-                        if confirmar:
+                # 🗑️ Eliminar empresa
+                with col2:
+                    with st.form(f"delete_form_{row['id']}"):
+                        st.warning(f"¿Eliminar empresa '{row['nombre']}'? Esta acción no se puede deshacer.")
+                        confirmar = st.checkbox("Confirmo la eliminación")
+                        eliminar = st.form_submit_button("🗑️ Eliminar")
+                        if eliminar and confirmar:
                             try:
                                 supabase.table("empresas").delete().eq("id", row["id"]).execute()
                                 st.success("✅ Empresa eliminada.")
                                 st.experimental_rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al eliminar: {str(e)}")
-                        else:
-                            st.error("⚠️ Debes marcar la casilla de confirmación antes de eliminar.")
     else:
         st.info("ℹ️ No hay empresas registradas.")
 
@@ -179,13 +161,12 @@ def main(supabase, session_state):
     # Crear nueva empresa
     # =========================
     st.markdown("### ➕ Crear Empresa")
-
     if "empresa_creada" not in st.session_state:
         st.session_state.empresa_creada = False
 
     with st.form("crear_empresa", clear_on_submit=True):
         nombre = st.text_input("Nombre *")
-                cif = st.text_input("CIF *")
+        cif = st.text_input("CIF *")
         direccion = st.text_input("Dirección")
         telefono = st.text_input("Teléfono")
         email = st.text_input("Email")
@@ -196,18 +177,19 @@ def main(supabase, session_state):
         codigo_postal = st.text_input("Código Postal")
 
         submitted = st.form_submit_button("Crear Empresa")
-
         if submitted and not st.session_state.empresa_creada:
+            if not nombre
+                    if submitted and not st.session_state.empresa_creada:
             if not nombre or not cif:
-                st.error("⚠️ Nombre y CIF son obligatorios.")
+                st.error("⚠️ Los campos 'Nombre' y 'CIF' son obligatorios.")
             else:
-                # Verificar si ya existe una empresa con ese CIF
-                existe = supabase.table("empresas").select("id").eq("cif", cif).execute()
-                if existe.data:
-                    st.error(f"⚠️ Ya existe una empresa con el CIF '{cif}'.")
-                else:
-                    try:
-                        nueva_empresa = {
+                try:
+                    # Verificar si ya existe una empresa con ese CIF
+                    existe = supabase.table("empresas").select("id").eq("cif", cif).execute()
+                    if existe.data:
+                        st.error(f"⚠️ Ya existe una empresa con el CIF '{cif}'.")
+                    else:
+                        supabase.table("empresas").insert({
                             "nombre": nombre,
                             "cif": cif,
                             "direccion": direccion,
@@ -219,16 +201,14 @@ def main(supabase, session_state):
                             "provincia": provincia,
                             "codigo_postal": codigo_postal,
                             "fecha_alta": datetime.utcnow().isoformat()
-                        }
-                        supabase.table("empresas").insert(nueva_empresa).execute()
+                        }).execute()
+
                         st.session_state.empresa_creada = True
                         st.success(f"✅ Empresa '{nombre}' creada correctamente.")
 
-                        # Recargar datos para que aparezca la nueva empresa
+                        # Recargar datos
                         empresas_res = supabase.table("empresas").select("*").execute()
                         df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
-
-                    except Exception as e:
-                        st.error(f"❌ Error al crear la empresa: {str(e)}")
-                        
-                                
+                except Exception as e:
+                    st.error(f"❌ Error al crear la empresa: {str(e)}")
+                    
