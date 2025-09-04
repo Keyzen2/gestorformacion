@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("🏢 Empresas")
@@ -11,27 +12,39 @@ def main(supabase, session_state):
         st.stop()
 
     # =========================
-    # Cargar empresas
+    # Búsqueda previa (opcional)
     # =========================
-    empresas_res = supabase.table("empresas").select("*").execute()
-    df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
+    search_query = st.text_input("🔍 Buscar por nombre o CIF")
 
-    # =========================
-    # Listado
-    # =========================
-    if not df_empresas.empty:
-        search_query = st.text_input("🔍 Buscar por nombre o CIF")
-        if search_query:
+    # Si quieres filtrar antes de pasar al CRUD
+    if search_query:
+        empresas_res = supabase.table("empresas").select("*").execute()
+        df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
+        if not df_empresas.empty:
             df_empresas = df_empresas[
                 df_empresas["nombre"].str.contains(search_query, case=False, na=False) |
                 df_empresas["cif"].str.contains(search_query, case=False, na=False)
             ]
-        st.dataframe(df_empresas)
-    else:
-        st.info("ℹ️ No hay empresas registradas.")
+            st.dataframe(df_empresas)
+        else:
+            st.info("ℹ️ No hay empresas registradas con ese criterio.")
 
     # =========================
-    # Crear nueva empresa
+    # CRUD unificado
+    # =========================
+    crud_tabla(
+        supabase,
+        nombre_tabla="empresas",
+        campos_visibles=["nombre", "cif", "telefono", "email", "ciudad", "provincia"],
+        campos_editables=[
+            "nombre", "cif", "direccion", "telefono", "email",
+            "representante_nombre", "representante_dni",
+            "ciudad", "provincia", "codigo_postal"
+        ]
+    )
+
+    # =========================
+    # Crear nueva empresa (manteniendo tu validación)
     # =========================
     st.markdown("### ➕ Crear Empresa")
     with st.form("crear_empresa"):
@@ -71,3 +84,4 @@ def main(supabase, session_state):
                     st.experimental_rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear la empresa: {str(e)}")
+
