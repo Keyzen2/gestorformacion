@@ -9,6 +9,41 @@ from datetime import datetime
 st.set_page_config(page_title="Gestor de Formación", page_icon="📚", layout="wide")
 
 # =======================
+# CSS PERSONALIZADO
+# =======================
+st.markdown("""
+<style>
+/* Botones más redondeados */
+.stButton>button {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+/* Métricas con sombra ligera */
+[data-testid="stMetricValue"] {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* Sidebar más ancho y con título destacado */
+section[data-testid="stSidebar"] {
+    width: 280px !important;
+}
+section[data-testid="stSidebar"] h1 {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #0056b3;
+}
+
+/* Tablas con bordes suaves */
+.stDataFrame, .stTable {
+    border-radius: 6px;
+    overflow: hidden;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =======================
 # CONFIGURACIÓN SUPABASE
 # =======================
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
