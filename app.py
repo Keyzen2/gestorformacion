@@ -212,8 +212,7 @@ if st.session_state.logged_in:
         st.caption("Panel visual con KPIs y gráficos para el seguimiento global del sistema de gestión de calidad.")
         dashboard_calidad_page(supabase, st.session_state)
 
-    elif menu.startswith
-        elif menu.startswith("🎯 Objetivos de Calidad"):
+    elif menu.startswith("🎯 Objetivos de Calidad"):
         from pages.objetivos_calidad import main as objetivos_page
         st.markdown("### 🎯 Objetivos de Calidad (ISO 9001)")
         st.caption("Definición, seguimiento y evaluación de objetivos anuales de calidad para el centro de formación.")
