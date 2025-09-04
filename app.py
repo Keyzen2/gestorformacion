@@ -10,32 +10,8 @@ st.set_page_config(
     page_title="Gestor de Formación",
     page_icon="📚",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Oculta sidebar al cargar
+    initial_sidebar_state="collapsed"
 )
-
-# =======================
-# CSS PERSONALIZADO
-# =======================
-st.markdown("""
-<style>
-/* Centrar login */
-.main > div {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.login-container {
-    max-width: 400px;
-    padding: 2rem;
-    background-color: white;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-/* Ocultar menú hamburguesa y footer antes de login */
-header[data-testid="stHeader"] {visibility: hidden;}
-footer {visibility: hidden;}
-</style>
-""", unsafe_allow_html=True)
 
 # =======================
 # CONFIGURACIÓN SUPABASE
@@ -62,32 +38,70 @@ def logout():
 # LOGIN
 # =======================
 if not st.session_state.logged_in:
-    with st.container():
-        st.markdown('<div class="login-container">', unsafe_allow_html=True)
-        st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/ISO_9001.svg/1200px-ISO_9001.svg.png", width=100)
-        st.title("🔐 Acceso al Gestor de Formación")
-        with st.form("login_form"):
-            email = st.text_input("📧 Email")
-            password = st.text_input("🔑 Contraseña", type="password")
-            submitted = st.form_submit_button("Entrar")
-        st.markdown('</div>', unsafe_allow_html=True)
+    # CSS para ocultar menú y centrar login
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] {display: none;}
+    header[data-testid="stHeader"] {display: none;}
+    footer {display: none;}
+    #MainMenu {visibility: hidden;}
+    .main {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+    .login-container {
+        width: 100%;
+        max-width: 380px;
+        padding: 2rem;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
+    # Contenedor del login
+    st.markdown('<div class="login-container">', unsafe_allow_html=True)
+    st.title("🔐 Acceso al Gestor de Formación")
+
+    with st.form("login_form"):
+        email = st.text_input("📧 Email")
+        password = st.text_input("🔑 Contraseña", type="password")
+        submitted = st.form_submit_button("Entrar")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Footer corporativo
+    st.markdown(
+        """
+        <div style='text-align:center; margin-top: 2rem; font-size: 0.85rem; color: #666;'>
+            © 2025 Centro de Formación - Sistema de Gestión de Calidad ISO 9001
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Validación y login
     if submitted:
-        try:
-            auth_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if auth_res.user:
-                res = supabase.table("usuarios").select("*").eq("email", email).execute()
-                if res.data:
-                    st.session_state.logged_in = True
-                    st.session_state.user = res.data[0]
-                    st.session_state.role = res.data[0]["rol"]
-                    st.experimental_rerun()
+        if not email or not password:
+            st.error("⚠️ Por favor, introduce tu email y contraseña.")
+        else:
+            try:
+                auth_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                if auth_res.user:
+                    res = supabase.table("usuarios").select("*").eq("email", email).execute()
+                    if res.data:
+                        st.session_state.logged_in = True
+                        st.session_state.user = res.data[0]
+                        st.session_state.role = res.data[0]["rol"]
+                        st.experimental_rerun()
+                    else:
+                        st.error("❌ Usuario no registrado en la base de datos interna.")
                 else:
-                    st.error("Usuario no registrado en la tabla interna.")
-            else:
-                st.error("Credenciales incorrectas.")
-        except Exception as e:
-            st.error(f"Error de login: {e}")
+                    st.error("❌ Credenciales incorrectas.")
+            except Exception as e:
+                st.error(f"Error de login: {e}")
 
 # =======================
 # APP PRINCIPAL
@@ -167,9 +181,7 @@ if st.session_state.logged_in:
         from pages.participantes import main as participantes_page
         participantes_page(supabase, st.session_state)
 
-    # =======================
     # Módulos ISO 9001
-    # =======================
     elif menu.startswith("🚨 No Conformidades"):
         from pages.no_conformidades import main as nc_page
         st.markdown("### 🚨 Módulo de No Conformidades (ISO 9001)")
@@ -200,8 +212,10 @@ if st.session_state.logged_in:
         st.caption("Panel visual con KPIs y gráficos para el seguimiento global del sistema de gestión de calidad.")
         dashboard_calidad_page(supabase, st.session_state)
 
-    elif menu.startswith("🎯 Objetivos de Calidad"):
+    elif menu.startswith
+        elif menu.startswith("🎯 Objetivos de Calidad"):
         from pages.objetivos_calidad import main as objetivos_page
         st.markdown("### 🎯 Objetivos de Calidad (ISO 9001)")
         st.caption("Definición, seguimiento y evaluación de objetivos anuales de calidad para el centro de formación.")
         objetivos_page(supabase, st.session_state)
+            
