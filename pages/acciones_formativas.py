@@ -44,6 +44,9 @@ def main(supabase, session_state):
         codigo_accion = st.text_input("Código de la acción *")
         nombre_accion = st.text_input("Nombre de la acción *")
         area_profesional = st.text_input("Área profesional")
+        sector = st.text_input("Sector")
+        objetivos = st.text_area("Objetivos")
+        contenidos = st.text_area("Contenidos")
         nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"])
         modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
         num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
@@ -61,6 +64,9 @@ def main(supabase, session_state):
                         "codigo_accion": codigo_accion,
                         "nombre": nombre_accion,
                         "area_profesional": area_profesional,
+                        "sector": sector,
+                        "objetivos": objetivos,
+                        "contenidos": contenidos,
                         "nivel": nivel,
                         "modalidad": modalidad,
                         "num_horas": int(num_horas),
@@ -80,6 +86,9 @@ def main(supabase, session_state):
             with st.expander(f"{row['nombre']} ({row['modalidad']})"):
                 st.write(f"**Código:** {row.get('codigo_accion', '')}")
                 st.write(f"**Área profesional:** {row.get('area_profesional', '')}")
+                st.write(f"**Sector:** {row.get('sector', '')}")
+                st.write(f"**Objetivos:** {row.get('objetivos', '')}")
+                st.write(f"**Contenidos:** {row.get('contenidos', '')}")
                 st.write(f"**Nivel:** {row.get('nivel', '')}")
                 st.write(f"**Horas:** {row.get('num_horas', '')}")
                 st.write(f"**Certificado profesionalidad:** {'Sí' if row.get('certificado_profesionalidad') else 'No'}")
@@ -93,6 +102,9 @@ def main(supabase, session_state):
                         nuevo_codigo = st.text_input("Código de la acción", value=row["codigo_accion"])
                         nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
                         nueva_area = st.text_input("Área profesional", value=row.get("area_profesional", ""))
+                        nuevo_sector = st.text_input("Sector", value=row.get("sector", ""))
+                        nuevos_objetivos = st.text_area("Objetivos", value=row.get("objetivos", ""))
+                        nuevos_contenidos = st.text_area("Contenidos", value=row.get("contenidos", ""))
                         nuevo_nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"], index=["Básico", "Intermedio", "Avanzado"].index(row.get("nivel", "Básico")))
                         nueva_modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"], index=["Presencial", "Online", "Mixta"].index(row["modalidad"]))
                         nuevas_horas = st.number_input("Número de horas", min_value=1, value=int(row.get("num_horas", 1)), step=1)
@@ -106,6 +118,9 @@ def main(supabase, session_state):
                                     "codigo_accion": nuevo_codigo,
                                     "nombre": nuevo_nombre,
                                     "area_profesional": nueva_area,
+                                    "sector": nuevo_sector,
+                                    "objetivos": nuevos_objetivos,
+                                    "contenidos": nuevos_contenidos,
                                     "nivel": nuevo_nivel,
                                     "modalidad": nueva_modalidad,
                                     "num_horas": int(nuevas_horas),
