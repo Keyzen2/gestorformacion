@@ -61,7 +61,7 @@ if session_state.role == "admin":
 
     with st.form("crear_participante", clear_on_submit=True):
         nombre = st.text_input("Nombre *")
-        dni = st.text_input("DNI/NIE/CIF *")
+        dni = st.text_input("DNI/NIE *")
         grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
         submitted = st.form_submit_button("Crear Participante")
 
@@ -69,7 +69,7 @@ if session_state.role == "admin":
             if not nombre or not dni or not grupo_nombre:
                 st.error("⚠️ Todos los campos son obligatorios.")
             elif not validar_dni_cif(dni):
-                st.error("⚠️ El DNI/NIE/CIF no es válido.")
+                st.error("⚠️ El DNI/NIE no es válido.")
             else:
                 try:
                     # Validar que no exista un participante con el mismo DNI/NIF en el mismo grupo
