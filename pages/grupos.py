@@ -144,6 +144,7 @@ if session_state.role == "admin":
 if session_state.role == "admin":
     st.markdown("### ➕ Crear Grupo")
 
+    # Bandera para evitar bucle
     if "grupo_creado" not in st.session_state:
         st.session_state.grupo_creado = False
 
@@ -193,3 +194,4 @@ if session_state.role == "admin":
 
                 except Exception as e:
                     st.error(f"❌ Error al crear el grupo: {str(e)}")
+
