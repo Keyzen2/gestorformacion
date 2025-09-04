@@ -26,83 +26,77 @@ def main(supabase, session_state):
                 st.info("No hay empresas registradas")
 
     # -----------------------
-# Crear Usuario (solo admin)
-# -----------------------
-if session_state.role != "admin":
-    st.warning("🔒 Solo los administradores pueden crear usuarios.")
-    return
+    # Crear Usuario (solo admin)
+    # -----------------------
+    if session_state.role != "admin":
+        st.warning("🔒 Solo los administradores pueden crear usuarios.")
+        return
 
-st.markdown("### ➕ Crear Usuario")
+    st.markdown("### ➕ Crear Usuario")
 
-# Inicializar bandera en session_state
-if "usuario_creado" not in st.session_state:
-    st.session_state.usuario_creado = False
+    if "usuario_creado" not in st.session_state:
+        st.session_state.usuario_creado = False
 
-with st.form("crear_usuario", clear_on_submit=True):
-    email_new = st.text_input("Email *")
-    nombre_new = st.text_input("Nombre *")
-    password_new = st.text_input("Contraseña *", type="password")
-    rol_new = st.selectbox("Rol", ["admin", "gestor"])
+    with st.form("crear_usuario", clear_on_submit=True):
+        email_new = st.text_input("Email *")
+        nombre_new = st.text_input("Nombre *")
+        password_new = st.text_input("Contraseña *", type="password")
+        rol_new = st.selectbox("Rol", ["admin", "gestor"])
 
-    empresa_id = None
-    if rol_new == "gestor":
-        empresas_res = supabase.table("empresas").select("id, nombre").execute()
-        empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
-        if empresas_dict:
-            empresa_nombre = st.selectbox("Empresa asignada *", options=list(empresas_dict.keys()))
-            empresa_id = empresas_dict.get(empresa_nombre)
-        else:
-            st.warning("⚠️ No hay empresas creadas. Debes crear una antes de dar de alta un gestor.")
-            st.stop()
+        empresa_id = None
+        if rol_new == "gestor":
+            empresas_res = supabase.table("empresas").select("id, nombre").execute()
+            empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
+            if empresas_dict:
+                empresa_nombre = st.selectbox("Empresa asignada *", options=list(empresas_dict.keys()))
+                empresa_id = empresas_dict.get(empresa_nombre)
+            else:
+                st.warning("⚠️ No hay empresas creadas. Debes crear una antes de dar de alta un gestor.")
+                st.stop()
 
-    submitted_user = st.form_submit_button("Crear Usuario")
+        submitted_user = st.form_submit_button("Crear Usuario")
 
-    if submitted_user and not st.session_state.usuario_creado:
-        if not email_new or not nombre_new or not password_new:
-            st.error("⚠️ Todos los campos son obligatorios")
-        elif rol_new == "gestor" and not empresa_id:
-            st.error("⚠️ Debes asignar una empresa al gestor")
-        else:
-            try:
-                # Verificar si ya existe un usuario con ese email
-                existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
-                if existe.data:
-                    st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
-                else:
-                    # Crear usuario en Supabase Auth
-                    auth_res = supabase.auth.sign_up({
-                        "email": email_new,
-                        "password": password_new
-                    })
-                    if not auth_res.user:
-                        st.error("❌ Error al crear el usuario en Auth.")
-                        return
+        if submitted_user and not st.session_state.usuario_creado:
+            if not email_new or not nombre_new or not password_new:
+                st.error("⚠️ Todos los campos son obligatorios")
+            elif rol_new == "gestor" and not empresa_id:
+                st.error("⚠️ Debes asignar una empresa al gestor")
+            else:
+                try:
+                    existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
+                    if existe.data:
+                        st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
+                    else:
+                        auth_res = supabase.auth.sign_up({
+                            "email": email_new,
+                            "password": password_new
+                        })
+                        if not auth_res.user:
+                            st.error("❌ Error al crear el usuario en Auth.")
+                            return
 
-                    # Insertar en tabla interna
-                    insert_data = {
-                        "auth_id": auth_res.user.id,
-                        "email": email_new,
-                        "nombre": nombre_new,
-                        "rol": rol_new
-                    }
-                    if empresa_id:
-                        insert_data["empresa_id"] = empresa_id
+                        insert_data = {
+                            "auth_id": auth_res.user.id,
+                            "email": email_new,
+                            "nombre": nombre_new,
+                            "rol": rol_new
+                        }
+                        if empresa_id:
+                            insert_data["empresa_id"] = empresa_id
 
-                    supabase.table("usuarios").insert(insert_data).execute()
-                    st.session_state.usuario_creado = True
-                    st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
+                        supabase.table("usuarios").insert(insert_data).execute()
+                        st.session_state.usuario_creado = True
+                        st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
 
-                    # Recargar listado de usuarios si quieres mostrarlo actualizado
-                    usuarios = supabase.table("usuarios").select("*").execute().data
-                    if usuarios:
-                        st.dataframe(pd.DataFrame(usuarios))
+                        usuarios = supabase.table("usuarios").select("*").execute().data
+                        if usuarios:
+                            st.dataframe(pd.DataFrame(usuarios))
 
-            except Exception as e:
-                st.error(f"❌ Error al crear el usuario: {e}")
-
+                except Exception as e:
+                    st.error(f"❌ Error al crear el usuario: {e}")
 
 # -----------------------
-# Solo ver empresa para gestores
+# Función auxiliar para gestores
 # -----------------------
 def empresas_only(supabase, session_state):
     st.subheader("🏢 Mi Empresa")
@@ -116,4 +110,4 @@ def empresas_only(supabase, session_state):
         st.dataframe(pd.DataFrame(empresa_res.data))
     else:
         st.info("No hay datos de empresa")
-
+        
