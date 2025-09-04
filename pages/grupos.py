@@ -31,6 +31,11 @@ def main(supabase, session_state):
     grupos_res = supabase.table("grupos").select("*").execute()
     df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame()
 
+    # Filtrar por empresa del gestor
+    if session_state.role == "gestor":
+        empresa_id_usuario = session_state.user.get("empresa_id")
+        df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id_usuario]
+
     # =========================
     # Filtros y búsqueda
     # =========================
@@ -75,8 +80,8 @@ def main(supabase, session_state):
 
                 col1, col2 = st.columns(2)
 
-                # Editar grupo
-                if col1.button("✏️ Editar", key=f"edit_{row['id']}"):
+                # Editar grupo (solo admin)
+                if session_state.role == "admin" and col1.button("✏️ Editar", key=f"edit_{row['id']}"):
                     with st.form(f"edit_form_{row['id']}"):
                         nuevo_codigo = st.text_input("Código Grupo", value=row["codigo_grupo"])
                         nueva_empresa = st.selectbox("Empresa", list(empresas_dict.keys()),
@@ -114,8 +119,8 @@ def main(supabase, session_state):
                                 except Exception as e:
                                     st.error(f"❌ Error al actualizar: {str(e)}")
 
-                # Eliminar grupo
-                if col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
+                # Eliminar grupo (solo admin)
+                if session_state.role == "admin" and col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
                     confirmar = st.checkbox(f"Confirmar eliminación de '{row['codigo_grupo']}'", key=f"confirm_{row['id']}")
                     if confirmar:
                         try:
