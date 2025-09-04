@@ -14,12 +14,16 @@ def main(supabase, session_state):
     # Filtrar grupos para gestor
     if session_state.role == "gestor":
         empresa_id_usuario = session_state.user.get("empresa_id")
-        grupos_dict = {codigo: gid for codigo, gid in grupos_dict.items()
-                       if any(g["empresa_id"] == empresa_id_usuario and g["id"] == gid for g in grupos_res.data)}
+        grupos_dict = {
+            codigo: gid for codigo, gid in grupos_dict.items()
+            if any(g["empresa_id"] == empresa_id_usuario and g["id"] == gid for g in grupos_res.data)
+        }
 
+    # Si no hay grupos
     if not grupos_dict:
-        st.warning("No hay grupos disponibles.")
-        st.stop()
+        st.warning("⚠️ No hay grupos disponibles.")
+        if session_state.role != "admin":
+            st.stop()  # Solo bloquea a gestores
 
     # =========================
     # Cargar participantes
@@ -57,24 +61,34 @@ def main(supabase, session_state):
         with st.form("crear_participante"):
             nombre = st.text_input("Nombre *")
             dni = st.text_input("DNI/NIE/CIF *")
-            grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
+
+            if grupos_dict:
+                grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
+            else:
+                grupo_nombre = None
+                st.info("ℹ️ No hay grupos creados. Podrás asociar este participante a un grupo más adelante.")
+
             submitted = st.form_submit_button("Crear Participante")
 
             if submitted:
-                if not nombre or not dni or not grupo_nombre:
-                    st.error("⚠️ Todos los campos son obligatorios.")
+                if not nombre or not dni:
+                    st.error("⚠️ Nombre y DNI son obligatorios.")
                 elif not validar_dni_cif(dni):
                     st.error("⚠️ El DNI/NIE/CIF no es válido.")
                 else:
                     try:
-                        supabase.table("participantes").insert({
+                        nuevo_participante = {
                             "nombre": nombre,
-                            "dni": dni,
-                            "grupo_id": grupos_dict[grupo_nombre]
-                        }).execute()
+                            "dni": dni
+                        }
+                        if grupo_nombre:
+                            nuevo_participante["grupo_id"] = grupos_dict[grupo_nombre]
+
+                        supabase.table("participantes").insert(nuevo_participante).execute()
                         st.success(f"✅ Participante '{nombre}' creado correctamente.")
                         st.experimental_rerun()
                     except Exception as e:
                         st.error(f"❌ Error al crear el participante: {str(e)}")
     else:
         st.info("🔒 Solo los administradores pueden dar de alta participantes.")
+
