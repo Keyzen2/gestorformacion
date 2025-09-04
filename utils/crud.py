@@ -25,10 +25,19 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
         with st.form("form_editar"):
             nuevos_valores = {}
             for campo in campos_editables:
-                nuevos_valores[campo] = st.text_input(
-                    campo.replace("_", " ").title(),
-                    value=registro.get(campo, "")
-                )
+                if campo == "empresa_id":
+                    opciones_fk = obtener_opciones_fk(supabase, "empresas", "nombre")
+                    seleccion_fk = st.selectbox(
+                        "Empresa",
+                        options=[""] + list(opciones_fk.keys()),
+                        index=(list(opciones_fk.keys()).index(registro.get("empresa_id", "")) + 1) if registro.get("empresa_id", "") in opciones_fk else 0
+                    )
+                    nuevos_valores[campo] = opciones_fk.get(seleccion_fk) if seleccion_fk else None
+                else:
+                    nuevos_valores[campo] = st.text_input(
+                        campo.replace("_", " ").title(),
+                        value=registro.get(campo, "")
+                    )
 
             col1, col2 = st.columns(2)
             with col1:
@@ -43,7 +52,8 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
             with col2:
                 if st.form_submit_button("🗑️ Eliminar registro"):
                     confirmar = st.checkbox("Confirmar eliminación")
-                    if confirmar:
+                    confirmar_doble = st.text_input("Escribe ELIMINAR para confirmar")
+                    if confirmar and confirmar_doble.upper() == "ELIMINAR":
                         try:
                             supabase.table(nombre_tabla).delete().eq("id", registro["id"]).execute()
                             st.success("✅ Registro eliminado correctamente.")
@@ -55,7 +65,12 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
     with st.form("form_nuevo"):
         nuevo = {}
         for campo in campos_editables:
-            nuevo[campo] = st.text_input(campo.replace("_", " ").title())
+            if campo == "empresa_id":
+                opciones_fk = obtener_opciones_fk(supabase, "empresas", "nombre")
+                seleccion_fk = st.selectbox("Empresa", options=[""] + list(opciones_fk.keys()))
+                nuevo[campo] = opciones_fk.get(seleccion_fk) if seleccion_fk else None
+            else:
+                nuevo[campo] = st.text_input(campo.replace("_", " ").title())
 
         if st.form_submit_button("✅ Crear"):
             try:
@@ -65,22 +80,25 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
             except Exception as e:
                 st.error(f"❌ No se pudo crear el registro: {e}")
 
-def mapear_relaciones(supabase, datos):
-    tablas_relacion = {
-        "empresa_id": ("empresas", "nombre"),
-        "accion_formativa_id": ("acciones_formativas", "nombre"),
-        "grupo_id": ("grupos", "codigo_grupo")
-    }
 
-    for campo_id, (tabla, campo_nombre) in tablas_relacion.items():
-        ids = list({fila[campo_id] for fila in datos if campo_id in fila and fila[campo_id]})
-        if ids:
-            try:
-                registros = supabase.table(tabla).select("id", campo_nombre).in_("id", ids).execute().data
-                mapa = {r["id"]: r[campo_nombre] for r in registros}
-                for fila in datos:
-                    if campo_id in fila and fila[campo_id] in mapa:
-                        fila[campo_id] = mapa[fila[campo_id]]
-            except:
-                pass
+def mapear_relaciones(supabase, datos):
+    # Solo mapeamos empresa_id → nombre
+    ids = list({fila["empresa_id"] for fila in datos if "empresa_id" in fila and fila["empresa_id"]})
+    if ids:
+        try:
+            registros = supabase.table("empresas").select("id", "nombre").in_("id", ids).execute().data
+            mapa = {r["id"]: r["nombre"] for r in registros}
+            for fila in datos:
+                if "empresa_id" in fila and fila["empresa_id"] in mapa:
+                    fila["empresa_id"] = mapa[fila["empresa_id"]]
+        except:
+            pass
     return datos
+
+
+def obtener_opciones_fk(supabase, tabla, campo_nombre):
+    try:
+        registros = supabase.table(tabla).select("id", campo_nombre).execute().data
+        return {r[campo_nombre]: r["id"] for r in registros}
+    except:
+        return {}
