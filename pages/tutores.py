@@ -1,37 +1,15 @@
 import streamlit as st
 import pandas as pd
-from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("Tutores")
 
-    # =========================
-    # CRUD unificado para tutores
-    # =========================
-    crud_tabla(
-        supabase,
-        nombre_tabla="tutores",
-        campos_visibles=["nombre", "apellidos", "email", "telefono", "tipo_tutor"],
-        campos_editables=[
-            "nombre", "apellidos", "email", "telefono", "nif",
-            "tipo_tutor", "direccion", "ciudad", "provincia", "codigo_postal"
-        ]
-    )
-
-    # =========================
-    # Mostrar tutores existentes (vista rápida)
-    # =========================
+    # Mostrar tutores existentes
     tutores_res = supabase.table("tutores").select("*").execute().data
     df_tutores = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
-    if not df_tutores.empty:
-        st.dataframe(df_tutores)
-    else:
-        st.info("ℹ️ No hay tutores registrados.")
+    st.dataframe(df_tutores)
 
-    # =========================
-    # Crear nuevo tutor (manteniendo tu validación)
-    # =========================
-    st.markdown("### ➕ Crear Tutor")
+    st.markdown("### Crear Tutor")
     with st.form("crear_tutor"):
         nombre = st.text_input("Nombre *")
         apellidos = st.text_input("Apellidos *")
@@ -64,7 +42,7 @@ def main(supabase, session_state):
                         "codigo_postal": cod_postal
                     }).execute()
                     st.success(f"✅ Tutor '{nombre} {apellidos}' creado correctamente.")
-                    st.experimental_rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear el tutor: {str(e)}")
+
 
