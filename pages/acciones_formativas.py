@@ -9,9 +9,9 @@ def main(supabase, session_state):
     # =========================
     try:
         areas_res = supabase.table("areas_profesionales").select("*").order("familia", desc=False).execute()
-        areas_dict = {f"{a['codigo']} - {a['nombre']}": a['codigo'] for a in areas_res.data} if areas_res.data else {}
+        areas_dict = {f"{a.get('codigo','')} - {a.get('nombre','')}": a.get('codigo','') for a in (areas_res.data or [])}
     except Exception as e:
-        st.error(f"Error al cargar áreas profesionales: {str(e)}")
+        st.error(f"⚠️ No se pudieron cargar las áreas profesionales: {e}")
         areas_dict = {}
 
     # =========================
@@ -19,9 +19,9 @@ def main(supabase, session_state):
     # =========================
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
-        df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+        df_acciones = pd.DataFrame(acciones_res.data or [])
     except Exception as e:
-        st.error(f"Error al cargar acciones formativas: {str(e)}")
+        st.error(f"⚠️ No se pudieron cargar las acciones formativas: {e}")
         df_acciones = pd.DataFrame()
 
     # =========================
@@ -40,6 +40,9 @@ def main(supabase, session_state):
         search_query = st.text_input("🔍 Buscar por nombre, código o área profesional")
         if search_query:
             sq = search_query.lower()
+            for col in ["nombre", "codigo_accion", "area_profesional"]:
+                if col not in df_acciones.columns:
+                    df_acciones[col] = ""
             df_acciones = df_acciones[
                 df_acciones["nombre"].str.lower().str.contains(sq) |
                 df_acciones["codigo_accion"].str.lower().str.contains(sq) |
@@ -94,23 +97,16 @@ def main(supabase, session_state):
                 st.experimental_rerun()
 
             except Exception as e:
-                st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+                st.error(f"❌ Error al crear la acción formativa: {e}")
 
     # =========================
     # Mostrar listado con edición/eliminación
     # =========================
     if not df_acciones.empty:
         for _, row in df_acciones.iterrows():
-            with st.expander(f"{row['nombre']} ({row['modalidad']})"):
-                st.write(f"**Código:** {row.get('codigo_accion', '')}")
-                st.write(f"**Área profesional:** {row.get('area_profesional', '')}")
-                st.write(f"**Sector:** {row.get('sector', '')}")
-                st.write(f"**Objetivos:** {row.get('objetivos', '')}")
-                st.write(f"**Contenidos:** {row.get('contenidos', '')}")
-                st.write(f"**Nivel:** {row.get('nivel', '')}")
-                st.write(f"**Horas:** {row.get('num_horas', '')}")
-                st.write(f"**Certificado profesionalidad:** {'Sí' if row.get('certificado_profesionalidad') else 'No'}")
-                st.write(f"**Observaciones:** {row.get('observaciones', '')}")
+            with st.expander(f"{row.get('nombre','')} ({row.get('modalidad','')})"):
+                for campo in ["codigo_accion", "area_profesional", "sector", "objetivos", "contenidos", "nivel", "num_horas", "certificado_profesionalidad", "observaciones"]:
+                    st.write(f"**{campo.replace('_',' ').capitalize()}:** {row.get(campo, '')}")
 
                 col1, col2 = st.columns(2)
 
@@ -119,8 +115,8 @@ def main(supabase, session_state):
 
                 with col1:
                     with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
-                        nuevo_codigo = st.text_input("Código de la acción", value=row["codigo_accion"])
-                        nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
+                        nuevo_codigo = st.text_input("Código de la acción", value=row.get("codigo_accion", ""))
+                        nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
                         area_actual_key = next((k for k, v in areas_dict.items() if v == row.get("cod_area_profesional")), "")
                         nueva_area_sel = st.selectbox(
                             "Área profesional",
@@ -138,7 +134,7 @@ def main(supabase, session_state):
                         nueva_modalidad = st.selectbox(
                             "Modalidad",
                             ["Presencial", "Online", "Mixta"],
-                            index=["Presencial", "Online", "Mixta"].index(row["modalidad"])
+                            index=["Presencial", "Online", "Mixta"].index(row.get("modalidad", "Presencial"))
                         )
                         nuevas_horas = st.number_input("Número de horas", min_value=1, value=int(row.get("num_horas", 1)), step=1)
                         nuevo_certificado = st.checkbox("¿Certificado de profesionalidad?", value=row.get("certificado_profesionalidad", False))
@@ -168,15 +164,14 @@ def main(supabase, session_state):
                             st.experimental_rerun()
 
                         except Exception as e:
-                            st.error(f"❌ Error al actualizar: {str(e)}")
+                            st.error(f"❌ Error al actualizar: {e}")
 
-                 with col2:
+                with col2:
                     if st.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
                         try:
                             supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
                             st.success("✅ Acción formativa eliminada correctamente.")
                             st.experimental_rerun()
                         except Exception as e:
-                            st.error(f"❌ Error al eliminar: {str(e)}")
-
-                        
+                            st.error(f"❌ Error al eliminar: {e}")
+                            
