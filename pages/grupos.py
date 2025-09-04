@@ -29,12 +29,19 @@ def main(supabase, session_state):
     # Cargar grupos
     # =========================
     grupos_res = supabase.table("grupos").select("*").execute()
-    df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame()
+    df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame(columns=["empresa_id"])
 
     # Filtrar por empresa del gestor
     if session_state.role == "gestor":
         empresa_id_usuario = session_state.user.get("empresa_id")
-        df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id_usuario]
+        if "empresa_id" in df_grupos.columns and not df_grupos.empty:
+            df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id_usuario]
+            if df_grupos.empty:
+                st.warning("⚠️ No tienes grupos asignados todavía.")
+                st.stop()
+        else:
+            st.warning("⚠️ No tienes grupos asignados todavía.")
+            st.stop()
 
     # =========================
     # Filtros y búsqueda
