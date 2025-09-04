@@ -3,23 +3,46 @@ import pandas as pd
 from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo
 
 def main(supabase, session_state):
-    st.subheader("Documentos")
+    st.subheader("📄 Documentos")
 
-    # Selección de acción formativa
-    acciones_res = supabase.table("acciones_formativas").select("id, nombre").execute()
+    # =========================
+    # Cargar acciones formativas
+    # =========================
+    if session_state.role == "gestor":
+        # Filtrar acciones formativas por empresa del gestor
+        empresa_id_usuario = session_state.user.get("empresa_id")
+
+        # Obtener solo acciones formativas de grupos de su empresa
+        grupos_empresa = supabase.table("grupos").select("accion_formativa_id").eq("empresa_id", empresa_id_usuario).execute()
+        ids_acciones_permitidas = list({g["accion_formativa_id"] for g in grupos_empresa.data})
+
+        acciones_res = supabase.table("acciones_formativas").select("id, nombre").in_("id", ids_acciones_permitidas).execute()
+    else:
+        acciones_res = supabase.table("acciones_formativas").select("id, nombre").execute()
+
     acciones_dict = {a["nombre"]: a["id"] for a in acciones_res.data} if acciones_res.data else {}
     accion_nombre = st.selectbox("Selecciona Acción Formativa", options=list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
     accion_id = acciones_dict.get(accion_nombre) if acciones_dict else None
 
-    # Obtener grupos asociados a la acción
+    # =========================
+    # Cargar grupos asociados a la acción
+    # =========================
     grupos_dict = {}
     if accion_id:
-        grupos_res = supabase.table("grupos").select("id, codigo_grupo").eq("accion_formativa_id", accion_id).execute()
+        if session_state.role == "gestor":
+            empresa_id_usuario = session_state.user.get("empresa_id")
+            grupos_res = supabase.table("grupos").select("id, codigo_grupo").eq("accion_formativa_id", accion_id).eq("empresa_id", empresa_id_usuario).execute()
+        else:
+            grupos_res = supabase.table("grupos").select("id, codigo_grupo").eq("accion_formativa_id", accion_id).execute()
+
         grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos_res.data} if grupos_res.data else {}
 
     grupo_nombre = st.selectbox("Selecciona Grupo", options=list(grupos_dict.keys()) if grupos_dict else ["No hay grupos"])
     grupo_id = grupos_dict.get(grupo_nombre) if grupos_dict else None
 
+    # =========================
+    # Generación de documentos
+    # =========================
     if accion_id:
         if st.button("Generar PDF"):
             pdf_buffer = generar_pdf(f"{accion_nombre}.pdf", contenido=f"PDF de {accion_nombre}")
@@ -37,3 +60,4 @@ def main(supabase, session_state):
             if st.button("Generar XML de Finalización de Grupo"):
                 xml_string = generar_xml_finalizacion_grupo(grupo_id)
                 st.download_button("Descargar XML Finalización Grupo", xml_string, file_name=f"{grupo_nombre}_finalizacion_grupo.xml")
+
