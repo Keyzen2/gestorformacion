@@ -131,26 +131,36 @@ def main(supabase, session_state):
                             st.error(f"❌ Error al eliminar: {str(e)}")
 
     # =========================
-    # Crear nuevo grupo (solo admin)
-    # =========================
-    if session_state.role == "admin":
-        st.markdown("### ➕ Crear Grupo")
-        with st.form("crear_grupo"):
-            empresa_nombre = st.selectbox("Empresa", list(empresas_dict.keys()))
-            accion_nombre = st.selectbox("Acción Formativa", list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
-            tutores_seleccionados = st.multiselect("Selecciona Tutores", list(tutores_dict.keys()))
-            codigo_grupo = st.text_input("Código Grupo *")
-            fecha_inicio = st.date_input("Fecha Inicio")
-            fecha_fin = st.date_input("Fecha Fin")
-            submitted = st.form_submit_button("Crear Grupo")
+# Crear nuevo grupo (solo admin)
+# =========================
+if session_state.role == "admin":
+    st.markdown("### ➕ Crear Grupo")
 
-            if submitted:
-                if not codigo_grupo or not empresa_nombre or not accion_nombre:
-                    st.error("⚠️ Código, empresa y acción formativa son obligatorios.")
-                elif fecha_fin < fecha_inicio:
-                    st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
-                else:
-                    try:
+    # Bandera para evitar bucle
+    if "grupo_creado" not in st.session_state:
+        st.session_state.grupo_creado = False
+
+    with st.form("crear_grupo", clear_on_submit=True):
+        empresa_nombre = st.selectbox("Empresa", list(empresas_dict.keys()))
+        accion_nombre = st.selectbox("Acción Formativa", list(acciones_dict.keys()) if acciones_dict else ["No hay acciones"])
+        tutores_seleccionados = st.multiselect("Selecciona Tutores", list(tutores_dict.keys()))
+        codigo_grupo = st.text_input("Código Grupo *")
+        fecha_inicio = st.date_input("Fecha Inicio")
+        fecha_fin = st.date_input("Fecha Fin")
+        submitted = st.form_submit_button("Crear Grupo")
+
+        if submitted and not st.session_state.grupo_creado:
+            if not codigo_grupo or not empresa_nombre or not accion_nombre:
+                st.error("⚠️ Código, empresa y acción formativa son obligatorios.")
+            elif fecha_fin < fecha_inicio:
+                st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
+            else:
+                try:
+                    # Validar que no exista un grupo con el mismo código
+                    existe = supabase.table("grupos").select("id").eq("codigo_grupo", codigo_grupo).execute()
+                    if existe.data:
+                        st.error(f"⚠️ Ya existe un grupo con el código '{codigo_grupo}'.")
+                    else:
                         result = supabase.table("grupos").insert({
                             "codigo_grupo": codigo_grupo,
                             "fecha_inicio": fecha_inicio.isoformat(),
@@ -158,6 +168,7 @@ def main(supabase, session_state):
                             "empresa_id": empresas_dict[empresa_nombre],
                             "accion_formativa_id": acciones_dict[accion_nombre]
                         }).execute()
+
                         grupo_id = result.data[0]["id"]
 
                         for t in tutores_seleccionados:
@@ -166,9 +177,13 @@ def main(supabase, session_state):
                                 "tutor_id": tutores_dict[t]
                             }).execute()
 
+                        st.session_state.grupo_creado = True
                         st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
-                        st.experimental_rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al crear el grupo: {str(e)}")
-    else:
-        st.info("🔒 Solo los administradores pueden crear nuevos grupos.")
+
+                        # Recargar listado
+                        grupos_res = supabase.table("grupos").select("*").execute()
+                        df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame()
+
+                except Exception as e:
+                    st.error(f"❌ Error al crear el grupo: {str(e)}")
+
