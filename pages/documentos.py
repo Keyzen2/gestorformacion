@@ -12,27 +12,31 @@ def generar_xml_accion_formativa(supabase, accion_id):
 
     root = Element("ACCIONES_FORMATIVAS")
     accion_tag = SubElement(root, "ACCION_FORMATIVA")
-    SubElement(accion_tag, "CODIGO_ACCION").text = str(accion.get("id", ""))
+    # Usamos el código de acción que guardas en la tabla, no el id interno
+    SubElement(accion_tag, "CODIGO_ACCION").text = accion.get("codigo_accion", "")
     SubElement(accion_tag, "NOMBRE_ACCION").text = accion.get("nombre", "")
+    # Aquí el cambio clave: código oficial del área profesional
     SubElement(accion_tag, "CODIGO_AREA_PROFESIONAL").text = accion.get("cod_area_profesional", "")
     SubElement(accion_tag, "SECTOR").text = accion.get("sector", "")
     SubElement(accion_tag, "OBJETIVOS").text = accion.get("objetivos", "")
     SubElement(accion_tag, "CONTENIDOS").text = accion.get("contenidos", "")
     SubElement(accion_tag, "MODALIDAD").text = accion.get("modalidad", "")
     SubElement(accion_tag, "NIVEL").text = accion.get("nivel", "")
-    SubElement(accion_tag, "DURACION").text = str(accion.get("duracion_horas", ""))
-    SubElement(accion_tag, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado", "").lower() == "sí" else "N"
+    # Ajuste: usamos num_horas que es como lo guardas en acciones_formativas.py
+    SubElement(accion_tag, "DURACION").text = str(accion.get("num_horas", ""))
+    # Ajuste: usamos certificado_profesionalidad (booleano) para generar S/N
+    SubElement(accion_tag, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado_profesionalidad") else "N"
 
     return tostring(root, encoding="utf-8", xml_declaration=True)
 
 def generar_xml_inicio_grupo(supabase, grupo_id):
     grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
-    accion = supabase.table("acciones_formativas").select("nombre").eq("id", grupo["accion_formativa_id"]).execute().data[0]
+    accion = supabase.table("acciones_formativas").select("nombre, codigo_accion").eq("id", grupo["accion_formativa_id"]).execute().data[0]
 
     root = Element("INICIO_GRUPOS")
     grupo_tag = SubElement(root, "GRUPO")
     SubElement(grupo_tag, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    SubElement(grupo_tag, "CODIGO_ACCION").text = str(grupo.get("accion_formativa_id", ""))
+    SubElement(grupo_tag, "CODIGO_ACCION").text = accion.get("codigo_accion", "")
     SubElement(grupo_tag, "NOMBRE_ACCION").text = accion.get("nombre", "")
     SubElement(grupo_tag, "FECHA_INICIO").text = str(grupo.get("fecha_inicio", ""))
     SubElement(grupo_tag, "FECHA_FIN").text = str(grupo.get("fecha_fin", ""))
@@ -46,12 +50,12 @@ def generar_xml_inicio_grupo(supabase, grupo_id):
 
 def generar_xml_finalizacion_grupo(supabase, grupo_id):
     grupo = supabase.table("grupos").select("*").eq("id", grupo_id).execute().data[0]
-    accion = supabase.table("acciones_formativas").select("nombre").eq("id", grupo["accion_formativa_id"]).execute().data[0]
+    accion = supabase.table("acciones_formativas").select("nombre, codigo_accion").eq("id", grupo["accion_formativa_id"]).execute().data[0]
 
     root = Element("FINALIZACION_GRUPOS")
     grupo_tag = SubElement(root, "GRUPO")
     SubElement(grupo_tag, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    SubElement(grupo_tag, "CODIGO_ACCION").text = str(grupo.get("accion_formativa_id", ""))
+    SubElement(grupo_tag, "CODIGO_ACCION").text = accion.get("codigo_accion", "")
     SubElement(grupo_tag, "NOMBRE_ACCION").text = accion.get("nombre", "")
     SubElement(grupo_tag, "FECHA_FIN").text = str(grupo.get("fecha_fin", ""))
     SubElement(grupo_tag, "PARTICIPANTES_FINALIZADOS").text = str(grupo.get("n_participantes_finalizados", ""))
