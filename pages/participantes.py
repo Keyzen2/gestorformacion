@@ -72,19 +72,20 @@ if session_state.role == "admin":
                 st.error("⚠️ El DNI/NIE/CIF no es válido.")
             else:
                 try:
-                    # Validar que no exista un participante con el mismo DNI en el mismo grupo
+                    # Validar que no exista un participante con el mismo DNI/NIF en el mismo grupo
                     existe = supabase.table("participantes") \
                         .select("id") \
-                        .eq("dni", dni) \
+                        .eq("nif", dni) \
                         .eq("grupo_id", grupos_dict[grupo_nombre]) \
                         .execute()
 
                     if existe.data:
-                        st.error(f"⚠️ Ya existe un participante con el DNI '{dni}' en este grupo.")
+                        st.error(f"⚠️ Ya existe un participante con el DNI/NIF '{dni}' en este grupo.")
                     else:
                         supabase.table("participantes").insert({
                             "nombre": nombre,
-                            "dni": dni,
+                            "nif": dni,  # Obligatorio en la tabla
+                            "dni": dni,  # Opcional, pero lo guardamos igual
                             "grupo_id": grupos_dict[grupo_nombre]
                         }).execute()
 
@@ -100,5 +101,6 @@ if session_state.role == "admin":
                     st.error(f"❌ Error al crear el participante: {str(e)}")
 else:
     st.info("🔒 Solo los administradores pueden dar de alta participantes.")
+
 
 
