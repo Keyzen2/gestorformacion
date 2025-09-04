@@ -25,7 +25,6 @@ def main(supabase, session_state):
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
         df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
 
-        # Convertir fechas si existen
         if not df_acciones.empty:
             if "fecha_inicio" in df_acciones.columns:
                 df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
@@ -46,10 +45,7 @@ def main(supabase, session_state):
         nombre_accion = st.text_input("Nombre de la acción *")
         modalidad = st.selectbox("Modalidad", options=["Presencial", "Online", "Mixta"])
         num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
-        empresa_nombre = st.selectbox(
-            "Empresa",
-            options=list(empresas_dict.keys())
-        )
+        empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()))
         empresa_id = empresas_dict.get(empresa_nombre)
 
         submitted = st.form_submit_button("Crear Acción Formativa")
@@ -66,6 +62,7 @@ def main(supabase, session_state):
                         "empresa_id": empresa_id
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
+                    st.experimental_rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear la acción formativa: {str(e)}")
 
@@ -78,4 +75,5 @@ def main(supabase, session_state):
         if empresa_filter != "Todas":
             df_acciones_filtrado = df_acciones_filtrado[df_acciones_filtrado["empresa_id"] == empresas_dict[empresa_filter]]
         st.dataframe(df_acciones_filtrado)
+
 
