@@ -3,16 +3,17 @@ import pandas as pd
 from datetime import datetime
 
 def main(supabase, session_state):
-    st.subheader("🚨 No Conformidades")
+    st.subheader("🚨 No Conformidades (ISO 9001)")
+    st.caption("Registro, seguimiento y cierre de no conformidades detectadas en procesos, auditorías o inspecciones.")
 
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
         st.stop()
 
     # =========================
-    # Cargar datos
+    # Cargar datos desde la vista
     # =========================
-    nc_res = supabase.table("no_conformidades").select("*").execute()
+    nc_res = supabase.table("no_conformidades_app").select("*").execute()
     df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
 
     # =========================
@@ -115,10 +116,9 @@ def main(supabase, session_state):
             supabase.table("no_conformidades").insert({
                 "descripcion": descripcion,
                 "responsable": responsable,
-                "fecha": fecha.isoformat(),
+                "fecha_detectada": fecha.isoformat(),
                 "estado": estado,
                 "acciones": acciones
             }).execute()
             st.success("✅ No conformidad registrada.")
             st.experimental_rerun()
-                      
