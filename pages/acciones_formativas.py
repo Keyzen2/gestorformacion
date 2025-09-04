@@ -7,26 +7,24 @@ def main(supabase, session_state):
     # =========================
     # Cargar empresas
     # =========================
+    empresas_dict = {}
     try:
         empresas_res = supabase.table("empresas").select("id, nombre").execute()
-        empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
+        if empresas_res.data:
+            empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data}
     except Exception as e:
         st.error(f"Error al cargar empresas: {str(e)}")
-        empresas_dict = {}
 
     # =========================
     # Cargar acciones existentes
     # =========================
+    df_acciones = pd.DataFrame(columns=["id", "nombre", "modalidad", "num_horas", "empresa_id"])
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
         if acciones_res.data:
             df_acciones = pd.DataFrame(acciones_res.data)
-        else:
-            # Crear DataFrame vacío con columnas esperadas
-            df_acciones = pd.DataFrame(columns=["id", "nombre", "modalidad", "num_horas", "empresa_id"])
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
-        df_acciones = pd.DataFrame(columns=["id", "nombre", "modalidad", "num_horas", "empresa_id"])
 
     st.dataframe(df_acciones)
 
