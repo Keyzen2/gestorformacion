@@ -2,14 +2,19 @@ import streamlit as st
 import pandas as pd
 
 def main(supabase, session_state):
-    st.subheader("Tutores")
+    st.subheader("👨‍🏫 Tutores")
 
-    # Mostrar tutores existentes
+    # =========================
+    # Listado de tutores
+    # =========================
     tutores_res = supabase.table("tutores").select("*").execute().data
     df_tutores = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
     st.dataframe(df_tutores)
 
-    st.markdown("### Crear Tutor")
+    # =========================
+    # Crear nuevo tutor
+    # =========================
+    st.markdown("### ➕ Crear Tutor")
     with st.form("crear_tutor"):
         nombre = st.text_input("Nombre *")
         apellidos = st.text_input("Apellidos *")
@@ -20,7 +25,7 @@ def main(supabase, session_state):
         direccion = st.text_input("Dirección")
         ciudad = st.text_input("Ciudad")
         provincia = st.text_input("Provincia")
-        cod_postal = st.text_input("Código Postal")
+        codigo_postal = st.text_input("Código Postal")
 
         submitted = st.form_submit_button("Guardar Tutor")
 
@@ -39,10 +44,10 @@ def main(supabase, session_state):
                         "direccion": direccion,
                         "ciudad": ciudad,
                         "provincia": provincia,
-                        "codigo_postal": cod_postal
+                        "codigo_postal": codigo_postal
                     }).execute()
                     st.success(f"✅ Tutor '{nombre} {apellidos}' creado correctamente.")
+                    st.experimental_rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear el tutor: {str(e)}")
-
 
