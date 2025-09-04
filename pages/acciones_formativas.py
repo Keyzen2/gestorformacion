@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("📚 Acciones Formativas")
@@ -19,7 +20,7 @@ def main(supabase, session_state):
         st.stop()
 
     # =========================
-    # Cargar acciones
+    # Cargar acciones (vista rápida)
     # =========================
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").execute()
@@ -32,6 +33,16 @@ def main(supabase, session_state):
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
         df_acciones = pd.DataFrame()
+
+    # =========================
+    # CRUD unificado para edición/eliminación
+    # =========================
+    crud_tabla(
+        supabase,
+        nombre_tabla="acciones_formativas",
+        campos_visibles=["nombre", "modalidad", "num_horas", "empresa_id", "fecha_inicio", "fecha_fin"],
+        campos_editables=["nombre", "modalidad", "num_horas", "empresa_id", "fecha_inicio", "fecha_fin"]
+    )
 
     # =========================
     # Crear nueva acción
@@ -69,7 +80,7 @@ def main(supabase, session_state):
                     st.error(f"❌ Error al crear la acción formativa: {str(e)}")
 
     # =========================
-    # Filtro + búsqueda
+    # Filtro + búsqueda (vista rápida)
     # =========================
     if not df_acciones.empty:
         empresa_filter = st.selectbox("Filtrar por empresa", options=["Todas"] + list(empresas_dict.keys()))
@@ -86,9 +97,7 @@ def main(supabase, session_state):
                 df_filtrado["modalidad"].str.lower().str.contains(sq)
             ]
 
-        # =========================
         # Paginación
-        # =========================
         page_size = st.selectbox("Registros por página", [5, 10, 20, 50], index=1)
         total_rows = len(df_filtrado)
         total_pages = (total_rows - 1) // page_size + 1
@@ -108,54 +117,10 @@ def main(supabase, session_state):
         end_idx = start_idx + page_size
         st.write(f"Página {st.session_state.page_number} de {total_pages}")
 
-        # =========================
-        # Mostrar registros con edición/eliminación
-        # =========================
+        # Vista rápida
         for _, row in df_filtrado.iloc[start_idx:end_idx].iterrows():
             with st.expander(f"{row['nombre']} ({row['modalidad']})"):
                 st.write(f"**Horas:** {row.get('num_horas', '')}")
                 st.write(f"**Fecha inicio:** {row.get('fecha_inicio', '')}")
                 st.write(f"**Fecha fin:** {row.get('fecha_fin', '')}")
-
-                col1, col2 = st.columns(2)
-
-                # Botón editar
-                if col1.button("✏️ Editar", key=f"edit_{row['id']}"):
-                    with st.form(f"edit_form_{row['id']}"):
-                        nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
-                        nueva_modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"], index=["Presencial", "Online", "Mixta"].index(row["modalidad"]) if row["modalidad"] in ["Presencial", "Online", "Mixta"] else 0)
-                        nuevas_horas = st.number_input("Número de horas", min_value=1, value=int(row.get("num_horas", 1)), step=1)
-                        nueva_fecha_inicio = st.date_input("Fecha de inicio", value=pd.to_datetime(row["fecha_inicio"], dayfirst=True) if row["fecha_inicio"] else None)
-                        nueva_fecha_fin = st.date_input("Fecha de fin", value=pd.to_datetime(row["fecha_fin"], dayfirst=True) if row["fecha_fin"] else None)
-                        nueva_empresa = st.selectbox("Empresa", list(empresas_dict.keys()), index=list(empresas_dict.keys()).index(next((k for k,v in empresas_dict.items() if v == row["empresa_id"]), list(empresas_dict.keys())[0])))
-
-                        guardar_cambios = st.form_submit_button("Guardar cambios")
-                        if guardar_cambios:
-                            if nueva_fecha_fin <= nueva_fecha_inicio:
-                                st.error("⚠️ La fecha de fin debe ser posterior a la fecha de inicio.")
-                            else:
-                                try:
-                                    supabase.table("acciones_formativas").update({
-                                        "nombre": nuevo_nombre,
-                                        "modalidad": nueva_modalidad,
-                                        "num_horas": int(nuevas_horas),
-                                        "empresa_id": empresas_dict[nueva_empresa],
-                                        "fecha_inicio": nueva_fecha_inicio.isoformat(),
-                                        "fecha_fin": nueva_fecha_fin.isoformat()
-                                    }).eq("id", row["id"]).execute()
-                                    st.success("✅ Cambios guardados correctamente.")
-                                    st.experimental_rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al actualizar: {str(e)}")
-
-                # Botón eliminar
-                if col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
-                    confirmar = st.checkbox(f"Confirmar eliminación de '{row['nombre']}'", key=f"confirm_{row['id']}")
-                    if confirmar:
-                        try:
-                            supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
-                            st.success("✅ Acción formativa eliminada.")
-                            st.experimental_rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al eliminar: {str(e)}")
 
