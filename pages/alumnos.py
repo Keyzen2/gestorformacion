@@ -9,13 +9,25 @@ def main(supabase, session_state):
         st.warning("🔒 Solo los participantes pueden acceder a esta vista.")
         st.stop()
 
-    participante_id = session_state.user.get("id")
-    if not participante_id:
-        st.error("❌ No se ha encontrado tu identificador como participante.")
+    # Obtener email del usuario logueado
+    email_usuario = session_state.user.get("email")
+    if not email_usuario:
+        st.error("❌ No se ha encontrado tu email de usuario.")
         st.stop()
 
+    # Buscar participante vinculado
+    res = supabase.table("participantes").select("id, nombre").eq("email", email_usuario).execute()
+    if not res.data:
+        st.error("❌ No se ha encontrado tu registro como participante.")
+        st.stop()
+
+    participante_id = res.data[0]["id"]
+    nombre_participante = res.data[0]["nombre"]
+
+    st.markdown(f"👋 Hola, **{nombre_participante}**. Aquí están tus grupos y diplomas disponibles.")
+
     # =========================
-    # Cargar grupos del participante
+    # Buscar grupos del participante
     # =========================
     grupos_res = supabase.table("participantes").select("grupo_id").eq("id", participante_id).execute()
     grupo_ids = [g["grupo_id"] for g in grupos_res.data] if grupos_res.data else []
@@ -38,10 +50,10 @@ def main(supabase, session_state):
         st.write(f"**Fechas:** {grupo.get('fecha_inicio', '')} → {grupo.get('fecha_fin', '')}")
         st.write(f"**Empresa:** {grupo.get('empresa_id', '')}")
 
-        # Buscar diploma
+        # Buscar diploma real
         diploma = supabase.table("diplomas").select("*").eq("grupo_id", gid).eq("participante_id", participante_id).execute().data
         if diploma:
             st.markdown(f"📥 [Descargar diploma]({diploma[0]['url']})")
         else:
             st.info("⏳ Diploma aún no disponible para este grupo.")
-          
+            
