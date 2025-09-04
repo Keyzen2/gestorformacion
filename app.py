@@ -20,52 +20,23 @@ st.set_page_config(
     layout="wide"
 )
 
-# Estilos CSS personalizados
+# =======================
+# ESTILOS PERSONALIZADOS
+# =======================
 st.markdown("""
     <style>
-    .main {
-        background-color: #f9f9f9;
-        padding: 0;
-    }
-    .title {
-        font-size: 2.2rem;
-        font-weight: bold;
-        text-align: center;
-        margin-top: 0.5rem;
-        color: #222;
-    }
-    .subtitle {
-        font-size: 1.1rem;
-        text-align: center;
-        color: #555;
-        margin-bottom: 1.5rem;
-    }
-    .feature-title {
-        font-size: 1rem;
-        font-weight: bold;
-        color: #333;
-        margin-top: 0.5rem;
-        text-align: center;
-    }
-    .feature-desc {
-        font-size: 0.9rem;
-        color: #555;
-        text-align: center;
-    }
+    .main { background-color: #f9f9f9; padding: 0; }
+    .title { font-size: 2.2rem; font-weight: bold; text-align: center; margin-top: 0.5rem; color: #222; }
+    .subtitle { font-size: 1.1rem; text-align: center; color: #555; margin-bottom: 1.5rem; }
+    .feature-title { font-size: 1rem; font-weight: bold; color: #333; margin-top: 0.5rem; text-align: center; }
+    .feature-desc { font-size: 0.9rem; color: #555; text-align: center; }
     .stButton>button {
-        display: block;
-        margin: 0 auto;
-        background-color: #4CAF50;
-        color: white;
-        padding: 0.6rem 1.5rem;
-        font-size: 1rem;
-        border-radius: 8px;
-        border: none;
-        cursor: pointer;
+        display: block; margin: 0 auto;
+        background-color: #4CAF50; color: white;
+        padding: 0.6rem 1.5rem; font-size: 1rem;
+        border-radius: 8px; border: none; cursor: pointer;
     }
-    .stButton>button:hover {
-        background-color: #45a049;
-    }
+    .stButton>button:hover { background-color: #45a049; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -98,7 +69,6 @@ def logout():
 # LOGIN + LANDING
 # =======================
 if not st.session_state.logged_in:
-    # Menú lateral informativo antes del login
     st.sidebar.title("ℹ️ Información de la App")
     st.sidebar.markdown("""
     **Usuarios y Empresas**  
@@ -120,17 +90,16 @@ if not st.session_state.logged_in:
     Gestiona tutores internos y externos.
     """)
 
-    # Contenido centrado
     col_central = st.container()
     with col_central:
         st.markdown('<div class="title">Bienvenido al Gestor de Formación</div>', unsafe_allow_html=True)
         st.markdown('<div class="subtitle">Gestiona usuarios, cursos, grupos y documentos de forma profesional</div>', unsafe_allow_html=True)
 
-        # Formulario de login
         with st.form("login_form"):
             email = st.text_input("Usuario (email/CIF)")
             password = st.text_input("Contraseña", type="password")
             submitted = st.form_submit_button("Entrar")
+
         if submitted:
             try:
                 auth_res = supabase.auth.sign_in_with_password({"email": email, "password": password})
@@ -148,7 +117,6 @@ if not st.session_state.logged_in:
             except Exception as e:
                 st.error(f"Error de login: {e}")
 
-        # Ventajas en columnas centradas
         st.markdown("---")
         st.markdown("### Ventajas de nuestra plataforma")
         col1, col2, col3 = st.columns(3)
@@ -180,15 +148,18 @@ if st.session_state.get("logged_in"):
     if st.session_state.role == "admin":
         opciones = [
             "Usuarios y Empresas",
-            "Empresas",  # 🔹 Nueva opción
+            "Empresas",
             "Acciones Formativas",
             "Grupos",
             "Participantes",
             "Documentos",
-            "Tutores"
+            "Tutores",
+            "Gestión de Alumnos"
         ]
     elif st.session_state.role == "gestor":
         opciones = ["Grupos", "Participantes", "Documentos"]
+    elif st.session_state.role == "alumno":
+        opciones = ["Mis Grupos y Diplomas"]
 
     menu = st.sidebar.radio("Menú", opciones)
 
@@ -197,7 +168,7 @@ if st.session_state.get("logged_in"):
         if menu == "Usuarios y Empresas":
             from pages.usuarios_empresas import main as usuarios_empresas_page
             usuarios_empresas_page(supabase, st.session_state)
-        elif menu == "Empresas":  # 🔹 Nuevo bloque
+        elif menu == "Empresas":
             from pages.empresas import main as empresas_page
             empresas_page(supabase, st.session_state)
         elif menu == "Acciones Formativas":
@@ -215,6 +186,9 @@ if st.session_state.get("logged_in"):
         elif menu == "Tutores":
             from pages.tutores import main as tutores_page
             tutores_page(supabase, st.session_state)
+        elif menu == "Gestión de Alumnos":
+            from pages.participantes import main as participantes_page
+            participantes_page(supabase, st.session_state)
 
     elif st.session_state.role == "gestor":
         if menu == "Grupos":
@@ -226,5 +200,10 @@ if st.session_state.get("logged_in"):
         elif menu == "Documentos":
             from pages.documentos import main as documentos_page
             documentos_page(supabase, st.session_state)
+
+    elif st.session_state.role == "alumno":
+        if menu == "Mis Grupos y Diplomas":
+            from pages.alumno import main as alumno_page
+            alumno_page(supabase, st.session_state)
 
 
