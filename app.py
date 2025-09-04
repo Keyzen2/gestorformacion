@@ -1,5 +1,9 @@
+import sys, os
 import streamlit as st
 from supabase import create_client
+
+# 🔹 Forzar inclusión de la carpeta raíz en el path de Python
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Importar páginas
 from pages import usuarios_empresas, participantes, grupos, acciones_formativas
