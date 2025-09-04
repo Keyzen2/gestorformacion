@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("👥 Grupos")
@@ -30,30 +29,12 @@ def main(supabase, session_state):
     # Cargar grupos
     # =========================
     grupos_res = supabase.table("grupos").select("*").execute()
-    df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame(columns=["empresa_id"])
+    df_grupos = pd.DataFrame(grupos_res.data) if grupos_res.data else pd.DataFrame()
 
     # Filtrar por empresa del gestor
     if session_state.role == "gestor":
         empresa_id_usuario = session_state.user.get("empresa_id")
-        if "empresa_id" in df_grupos.columns and not df_grupos.empty:
-            df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id_usuario]
-            if df_grupos.empty:
-                st.warning("⚠️ No tienes grupos asignados todavía.")
-                st.stop()
-        else:
-            st.warning("⚠️ No tienes grupos asignados todavía.")
-            st.stop()
-
-    # =========================
-    # CRUD unificado para grupos (solo admin)
-    # =========================
-    if session_state.role == "admin":
-        crud_tabla(
-            supabase,
-            nombre_tabla="grupos",
-            campos_visibles=["codigo_grupo", "empresa_id", "accion_formativa_id", "fecha_inicio", "fecha_fin"],
-            campos_editables=["codigo_grupo", "empresa_id", "accion_formativa_id", "fecha_inicio", "fecha_fin"]
-        )
+        df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id_usuario]
 
     # =========================
     # Filtros y búsqueda
@@ -89,13 +70,65 @@ def main(supabase, session_state):
         end_idx = start_idx + page_size
         st.write(f"Página {st.session_state.page_number} de {total_pages}")
 
-        # Mostrar grupos (vista rápida)
+        # Mostrar grupos
         for _, row in df_grupos.iloc[start_idx:end_idx].iterrows():
             with st.expander(f"{row['codigo_grupo']}"):
                 st.write(f"**Empresa:** {next((k for k,v in empresas_dict.items() if v == row['empresa_id']), '')}")
                 st.write(f"**Acción formativa:** {next((k for k,v in acciones_dict.items() if v == row['accion_formativa_id']), '')}")
                 st.write(f"**Fecha inicio:** {row.get('fecha_inicio', '')}")
                 st.write(f"**Fecha fin:** {row.get('fecha_fin', '')}")
+
+                col1, col2 = st.columns(2)
+
+                # Editar grupo (solo admin)
+                if session_state.role == "admin" and col1.button("✏️ Editar", key=f"edit_{row['id']}"):
+                    with st.form(f"edit_form_{row['id']}"):
+                        nuevo_codigo = st.text_input("Código Grupo", value=row["codigo_grupo"])
+                        nueva_empresa = st.selectbox("Empresa", list(empresas_dict.keys()),
+                                                     index=list(empresas_dict.keys()).index(next((k for k,v in empresas_dict.items() if v == row["empresa_id"]), list(empresas_dict.keys())[0])))
+                        nueva_accion = st.selectbox("Acción Formativa", list(acciones_dict.keys()),
+                                                    index=list(acciones_dict.keys()).index(next((k for k,v in acciones_dict.items() if v == row["accion_formativa_id"]), list(acciones_dict.keys())[0])))
+                        nueva_fecha_inicio = st.date_input("Fecha Inicio", pd.to_datetime(row["fecha_inicio"], errors="coerce") if row["fecha_inicio"] else None)
+                        nueva_fecha_fin = st.date_input("Fecha Fin", pd.to_datetime(row["fecha_fin"], errors="coerce") if row["fecha_fin"] else None)
+                        nuevos_tutores = st.multiselect("Tutores", list(tutores_dict.keys()))
+
+                        guardar = st.form_submit_button("Guardar cambios")
+                        if guardar:
+                            if nueva_fecha_fin < nueva_fecha_inicio:
+                                st.error("⚠️ La fecha de fin no puede ser anterior a la de inicio.")
+                            else:
+                                try:
+                                    supabase.table("grupos").update({
+                                        "codigo_grupo": nuevo_codigo,
+                                        "empresa_id": empresas_dict[nueva_empresa],
+                                        "accion_formativa_id": acciones_dict[nueva_accion],
+                                        "fecha_inicio": nueva_fecha_inicio.isoformat(),
+                                        "fecha_fin": nueva_fecha_fin.isoformat()
+                                    }).eq("id", row["id"]).execute()
+
+                                    # Actualizar tutores
+                                    supabase.table("tutores_grupos").delete().eq("grupo_id", row["id"]).execute()
+                                    for t in nuevos_tutores:
+                                        supabase.table("tutores_grupos").insert({
+                                            "grupo_id": row["id"],
+                                            "tutor_id": tutores_dict[t]
+                                        }).execute()
+
+                                    st.success("✅ Grupo actualizado correctamente.")
+                                    st.experimental_rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al actualizar: {str(e)}")
+
+                # Eliminar grupo (solo admin)
+                if session_state.role == "admin" and col2.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
+                    confirmar = st.checkbox(f"Confirmar eliminación de '{row['codigo_grupo']}'", key=f"confirm_{row['id']}")
+                    if confirmar:
+                        try:
+                            supabase.table("grupos").delete().eq("id", row["id"]).execute()
+                            st.success("✅ Grupo eliminado.")
+                            st.experimental_rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {str(e)}")
 
     # =========================
     # Crear nuevo grupo (solo admin)
