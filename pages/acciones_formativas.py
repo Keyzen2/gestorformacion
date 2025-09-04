@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-def main(supabase, session_state):
+def acciones_page(supabase, session_state):
     st.subheader("Acciones Formativas")
 
     # =========================
