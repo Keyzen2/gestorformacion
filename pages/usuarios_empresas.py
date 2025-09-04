@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from services.alumnos import alta_alumno
 
 def main(supabase, session_state):
     st.subheader("👥 Usuarios y Empresas")
@@ -26,7 +27,7 @@ def main(supabase, session_state):
                 st.info("No hay empresas registradas")
 
     # -----------------------
-    # Crear Usuario (admin, gestor, alumno)
+    # Crear Usuario
     # -----------------------
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden crear usuarios.")
@@ -46,7 +47,6 @@ def main(supabase, session_state):
         empresa_id = None
         grupo_id = None
 
-        # Si es gestor, pedir empresa
         if rol_new == "gestor":
             empresas_res = supabase.table("empresas").select("id, nombre").execute()
             empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
@@ -57,7 +57,6 @@ def main(supabase, session_state):
                 st.warning("⚠️ No hay empresas creadas. Debes crear una antes de dar de alta un gestor.")
                 st.stop()
 
-        # Si es alumno, pedir grupo opcional
         if rol_new == "alumno":
             grupos_res = supabase.table("grupos").select("id, codigo_grupo").execute()
             grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos_res.data} if grupos_res.data else {}
@@ -75,45 +74,43 @@ def main(supabase, session_state):
                 st.error("⚠️ Debes asignar una empresa al gestor")
             else:
                 try:
-                    # Comprobar si ya existe en usuarios
-                    existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
-                    if existe.data:
-                        st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
+                    if rol_new == "alumno":
+                        creado = alta_alumno(
+                            supabase,
+                            email=email_new,
+                            password=password_new,
+                            nombre=nombre_new,
+                            grupo_id=grupo_id
+                        )
+                        if creado:
+                            st.session_state.usuario_creado = True
                     else:
-                        # Crear en Auth
-                        auth_res = supabase.auth.sign_up({
-                            "email": email_new,
-                            "password": password_new
-                        })
-                        if not auth_res.user:
-                            st.error("❌ Error al crear el usuario en Auth.")
-                            return
+                        existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
+                        if existe.data:
+                            st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
+                        else:
+                            auth_res = supabase.auth.sign_up({
+                                "email": email_new,
+                                "password": password_new
+                            })
+                            if not auth_res.user:
+                                st.error("❌ Error al crear el usuario en Auth.")
+                                return
 
-                        # Insertar en tabla usuarios
-                        insert_data = {
-                            "auth_id": auth_res.user.id,
-                            "email": email_new,
-                            "nombre": nombre_new,
-                            "rol": rol_new
-                        }
-                        if empresa_id:
-                            insert_data["empresa_id"] = empresa_id
-
-                        supabase.table("usuarios").insert(insert_data).execute()
-
-                        # Si es alumno y se seleccionó grupo, crear también en participantes
-                        if rol_new == "alumno":
-                            participante_data = {
+                            insert_data = {
+                                "auth_id": auth_res.user.id,
+                                "email": email_new,
                                 "nombre": nombre_new,
-                                "email": email_new
+                                "rol": rol_new
                             }
-                            if grupo_id:
-                                participante_data["grupo_id"] = grupo_id
-                            supabase.table("participantes").insert(participante_data).execute()
+                            if empresa_id:
+                                insert_data["empresa_id"] = empresa_id
 
-                        st.session_state.usuario_creado = True
-                        st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
+                            supabase.table("usuarios").insert(insert_data).execute()
+                            st.session_state.usuario_creado = True
+                            st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
 
+                    if st.session_state.usuario_creado:
                         usuarios = supabase.table("usuarios").select("*").execute().data
                         if usuarios:
                             st.dataframe(pd.DataFrame(usuarios))
