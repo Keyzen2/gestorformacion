@@ -48,7 +48,6 @@ def main(supabase, session_state):
                 df_participantes["dni"].str.contains(search_query, case=False, na=False)
             ]
 
-        # Vista expandida por participante
         for _, row in df_participantes.iterrows():
             with st.expander(f"{row['nombre']} ({row['dni']})"):
                 st.write(f"**Email:** {row.get('email', '')}")
@@ -75,7 +74,7 @@ def main(supabase, session_state):
                     except Exception as e:
                         st.error(f"❌ Error al vincular: {str(e)}")
 
-                # 📤 Subir diploma
+                # 📤 Subir diploma al bucket 'documentos'
                 st.markdown("#### 📤 Subir diploma")
                 grupo_id = row["grupo_id"]
                 archivo = st.file_uploader("Selecciona el diploma PDF", type=["pdf"], key=f"diploma_{row['id']}")
@@ -83,15 +82,22 @@ def main(supabase, session_state):
                 if subir and archivo:
                     try:
                         nombre_archivo = f"diplomas/{row['id']}_{grupo_id}.pdf"
-                        # Simulación de URL (debes integrar con Supabase Storage si lo usas)
-                        url = f"https://tudominio.supabase.co/storage/v1/object/public/{nombre_archivo}"
+                        contenido = archivo.read()
 
+                        # Subir al bucket 'documentos'
+                        supabase.storage.from_("documentos").upload(nombre_archivo, contenido)
+
+                        # Obtener URL pública
+                        url = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
+
+                        # Guardar en tabla diplomas
                         supabase.table("diplomas").insert({
                             "participante_id": row["id"],
                             "grupo_id": grupo_id,
                             "url": url,
                             "fecha_subida": datetime.utcnow().isoformat()
                         }).execute()
+
                         st.success("✅ Diploma subido correctamente.")
                     except Exception as e:
                         st.error(f"❌ Error al subir diploma: {str(e)}")
