@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def main(supabase, session_state):
-    st.subheader("Acciones Formativas")
+    st.subheader("📚 Acciones Formativas")
 
     # =========================
     # Cargar empresas
@@ -26,17 +26,16 @@ def main(supabase, session_state):
         df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
 
         if not df_acciones.empty:
-            if "fecha_inicio" in df_acciones.columns:
-                df_acciones["fecha_inicio"] = pd.to_datetime(df_acciones["fecha_inicio"], errors="coerce")
-            if "fecha_fin" in df_acciones.columns:
-                df_acciones["fecha_fin"] = pd.to_datetime(df_acciones["fecha_fin"], errors="coerce")
+            for col in ["fecha_inicio", "fecha_fin"]:
+                if col in df_acciones.columns:
+                    df_acciones[col] = pd.to_datetime(df_acciones[col], errors="coerce").dt.strftime("%d/%m/%Y")
 
         st.dataframe(df_acciones)
     except Exception as e:
         st.error(f"Error al cargar acciones formativas: {str(e)}")
         df_acciones = pd.DataFrame()
 
-    st.markdown("### Crear Acción Formativa")
+    st.markdown("### ➕ Crear Acción Formativa")
 
     # =========================
     # Formulario creación acción
@@ -45,6 +44,8 @@ def main(supabase, session_state):
         nombre_accion = st.text_input("Nombre de la acción *")
         modalidad = st.selectbox("Modalidad", options=["Presencial", "Online", "Mixta"])
         num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
+        fecha_inicio = st.date_input("Fecha de inicio *")
+        fecha_fin = st.date_input("Fecha de fin *")
         empresa_nombre = st.selectbox("Empresa", options=list(empresas_dict.keys()))
         empresa_id = empresas_dict.get(empresa_nombre)
 
@@ -53,13 +54,17 @@ def main(supabase, session_state):
         if submitted:
             if not nombre_accion or not empresa_id:
                 st.error("⚠️ Nombre y empresa son obligatorios.")
+            elif fecha_fin <= fecha_inicio:
+                st.error("⚠️ La fecha de fin debe ser posterior a la fecha de inicio.")
             else:
                 try:
                     supabase.table("acciones_formativas").insert({
                         "nombre": nombre_accion,
                         "modalidad": modalidad,
                         "num_horas": int(num_horas),
-                        "empresa_id": empresa_id
+                        "empresa_id": empresa_id,
+                        "fecha_inicio": fecha_inicio.isoformat(),
+                        "fecha_fin": fecha_fin.isoformat()
                     }).execute()
                     st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
                     st.experimental_rerun()
@@ -75,5 +80,6 @@ def main(supabase, session_state):
         if empresa_filter != "Todas":
             df_acciones_filtrado = df_acciones_filtrado[df_acciones_filtrado["empresa_id"] == empresas_dict[empresa_filter]]
         st.dataframe(df_acciones_filtrado)
+
 
 
