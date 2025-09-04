@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from utils import validar_dni_cif
+from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("🧾 Participantes")
@@ -26,7 +27,19 @@ def main(supabase, session_state):
             st.stop()  # Solo bloquea a gestores
 
     # =========================
-    # Cargar participantes
+    # CRUD unificado para participantes
+    # =========================
+    # Solo admin puede editar/eliminar
+    if session_state.role == "admin":
+        crud_tabla(
+            supabase,
+            nombre_tabla="participantes",
+            campos_visibles=["nombre", "dni", "grupo_id"],  # grupo_id → código de grupo
+            campos_editables=["nombre", "dni", "grupo_id"]
+        )
+
+    # =========================
+    # Cargar participantes para listado filtrado
     # =========================
     participantes_res = supabase.table("participantes").select("*").execute()
     df_participantes = pd.DataFrame(participantes_res.data) if participantes_res.data else pd.DataFrame()
@@ -37,7 +50,7 @@ def main(supabase, session_state):
         df_participantes = df_participantes[df_participantes["grupo_id"].isin(ids_grupos_permitidos)]
 
     # =========================
-    # Mostrar listado
+    # Mostrar listado filtrable
     # =========================
     if not df_participantes.empty:
         grupo_filter = st.selectbox("Filtrar por grupo", ["Todos"] + list(grupos_dict.keys()))
