@@ -3,7 +3,6 @@ import streamlit as st
 def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
     st.header(f"📋 Gestión de {nombre_tabla.replace('_', ' ').title()}")
 
-    # Obtener datos
     try:
         datos = supabase.table(nombre_tabla).select("*").execute().data
     except Exception as e:
@@ -14,13 +13,10 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
         st.info("ℹ️ No hay registros disponibles.")
         return
 
-    # Mapeo de IDs a nombres para relaciones
     datos = mapear_relaciones(supabase, datos)
 
-    # Mostrar tabla
     st.dataframe([{k: fila.get(k) for k in campos_visibles} for fila in datos])
 
-    # Selección de registro para editar
     opciones = {f"{fila[campos_visibles[0]]}": fila for fila in datos}
     seleccion = st.selectbox("Selecciona un registro para editar:", [""] + list(opciones.keys()))
 
@@ -46,7 +42,8 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
 
             with col2:
                 if st.form_submit_button("🗑️ Eliminar registro"):
-                    if st.confirm("⚠️ ¿Seguro que quieres eliminar este registro? Esta acción no se puede deshacer."):
+                    confirmar = st.checkbox("Confirmar eliminación")
+                    if confirmar:
                         try:
                             supabase.table(nombre_tabla).delete().eq("id", registro["id"]).execute()
                             st.success("✅ Registro eliminado correctamente.")
@@ -54,7 +51,6 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
                         except Exception as e:
                             st.error(f"❌ No se pudo eliminar el registro: {e}")
 
-    # Formulario para añadir nuevo registro
     st.subheader("➕ Añadir nuevo registro")
     with st.form("form_nuevo"):
         nuevo = {}
@@ -69,11 +65,7 @@ def crud_tabla(supabase, nombre_tabla, campos_visibles, campos_editables):
             except Exception as e:
                 st.error(f"❌ No se pudo crear el registro: {e}")
 
-
 def mapear_relaciones(supabase, datos):
-    """
-    Convierte IDs en nombres para mostrar al usuario.
-    """
     tablas_relacion = {
         "empresa_id": ("empresas", "nombre"),
         "accion_formativa_id": ("acciones_formativas", "nombre"),
