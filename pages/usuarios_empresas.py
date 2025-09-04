@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from utils.crud import crud_tabla
 
 def main(supabase, session_state):
     st.subheader("👥 Usuarios y Empresas")
@@ -9,6 +8,7 @@ def main(supabase, session_state):
     # Ver usuarios y empresas
     # -----------------------
     col1, col2 = st.columns(2)
+
     with col1:
         if st.button("📋 Ver Usuarios"):
             usuarios = supabase.table("usuarios").select("*").execute().data
@@ -26,22 +26,10 @@ def main(supabase, session_state):
                 st.info("No hay empresas registradas")
 
     # -----------------------
-    # CRUD de usuarios (solo admin)
-    # -----------------------
-    if session_state.role == "admin":
-        crud_tabla(
-            supabase,
-            nombre_tabla="usuarios",
-            campos_visibles=["nombre", "email", "rol", "empresa_id"],  # empresa_id → nombre
-            campos_editables=["nombre", "email", "rol", "empresa_id"]
-        )
-    else:
-        st.warning("🔒 Solo los administradores pueden gestionar usuarios.")
-
-    # -----------------------
     # Crear Usuario (solo admin)
     # -----------------------
     if session_state.role != "admin":
+        st.warning("🔒 Solo los administradores pueden crear usuarios.")
         return
 
     st.markdown("### ➕ Crear Usuario")
@@ -63,6 +51,7 @@ def main(supabase, session_state):
                 st.stop()
 
         submitted_user = st.form_submit_button("Crear Usuario")
+
         if submitted_user:
             if not email_new or not nombre_new or not password_new:
                 st.error("⚠️ Todos los campos son obligatorios")
@@ -104,8 +93,10 @@ def empresas_only(supabase, session_state):
     if not empresa_id:
         st.info("No tienes empresa asignada")
         return
+
     empresa_res = supabase.table("empresas").select("*").eq("id", empresa_id).execute()
     if empresa_res.data:
         st.dataframe(pd.DataFrame(empresa_res.data))
     else:
         st.info("No hay datos de empresa")
+
