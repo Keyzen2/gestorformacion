@@ -47,47 +47,59 @@ def main(supabase, session_state):
             ]
 
     # =========================
-    # Crear nueva acción formativa
-    # =========================
-    st.markdown("### ➕ Crear Acción Formativa")
-    with st.form("crear_accion_formativa"):
-        codigo_accion = st.text_input("Código de la acción *")
-        nombre_accion = st.text_input("Nombre de la acción *")
-        area_sel = st.selectbox("Área profesional", list(areas_dict.keys()) if areas_dict else [])
-        sector = st.text_input("Sector")
-        objetivos = st.text_area("Objetivos")
-        contenidos = st.text_area("Contenidos")
-        nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"])
-        modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
-        num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
-        certificado_profesionalidad = st.checkbox("¿Certificado de profesionalidad?")
-        observaciones = st.text_area("Observaciones")
+# Crear nueva acción formativa (versión sin bucle)
+# =========================
+st.markdown("### ➕ Crear Acción Formativa")
 
-        submitted = st.form_submit_button("Crear Acción Formativa")
+# Inicializar bandera en session_state
+if "accion_creada" not in st.session_state:
+    st.session_state.accion_creada = False
 
-        if submitted:
-            if not codigo_accion or not nombre_accion:
-                st.error("⚠️ Código y nombre son obligatorios.")
-            else:
-                try:
-                    supabase.table("acciones_formativas").insert({
-                        "codigo_accion": codigo_accion,
-                        "nombre": nombre_accion,
-                        "cod_area_profesional": areas_dict.get(area_sel, ""),
-                        "area_profesional": area_sel.split(" - ", 1)[1] if area_sel else "",
-                        "sector": sector,
-                        "objetivos": objetivos,
-                        "contenidos": contenidos,
-                        "nivel": nivel,
-                        "modalidad": modalidad,
-                        "num_horas": int(num_horas),
-                        "certificado_profesionalidad": certificado_profesionalidad,
-                        "observaciones": observaciones
-                    }).execute()
-                    st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
-                    st.experimental_rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+with st.form("crear_accion_formativa", clear_on_submit=True):
+    codigo_accion = st.text_input("Código de la acción *")
+    nombre_accion = st.text_input("Nombre de la acción *")
+    area_sel = st.selectbox("Área profesional", list(areas_dict.keys()) if areas_dict else [])
+    sector = st.text_input("Sector")
+    objetivos = st.text_area("Objetivos")
+    contenidos = st.text_area("Contenidos")
+    nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"])
+    modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
+    num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
+    certificado_profesionalidad = st.checkbox("¿Certificado de profesionalidad?")
+    observaciones = st.text_area("Observaciones")
+
+    submitted = st.form_submit_button("Crear Acción Formativa")
+
+    if submitted and not st.session_state.accion_creada:
+        if not codigo_accion or not nombre_accion:
+            st.error("⚠️ Código y nombre son obligatorios.")
+        else:
+            try:
+                supabase.table("acciones_formativas").insert({
+                    "codigo_accion": codigo_accion,
+                    "nombre": nombre_accion,
+                    "cod_area_profesional": areas_dict.get(area_sel, ""),
+                    "area_profesional": area_sel.split(" - ", 1)[1] if " - " in area_sel else area_sel,
+                    "sector": sector,
+                    "objetivos": objetivos,
+                    "contenidos": contenidos,
+                    "nivel": nivel,
+                    "modalidad": modalidad,
+                    "num_horas": int(num_horas),
+                    "certificado_profesionalidad": certificado_profesionalidad,
+                    "observaciones": observaciones
+                }).execute()
+
+                st.session_state.accion_creada = True
+                st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
+
+                # Recargar datos para que aparezca la nueva acción
+                acciones_res = supabase.table("acciones_formativas").select("*").execute()
+                df_acciones = pd.DataFrame(acciones_res.data) if acciones_res.data else pd.DataFrame()
+
+            except Exception as e:
+                st.error(f"❌ Error al crear la acción formativa: {str(e)}")
+
 
     # =========================
     # Mostrar listado con edición/eliminación
