@@ -50,32 +50,55 @@ def main(supabase, session_state):
         st.dataframe(df_participantes)
 
     # =========================
-    # Crear nuevo participante (solo admin)
-    # =========================
-    if session_state.role == "admin":
-        st.markdown("### ➕ Crear Participante")
-        with st.form("crear_participante"):
-            nombre = st.text_input("Nombre *")
-            dni = st.text_input("DNI/NIE/CIF *")
-            grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
-            submitted = st.form_submit_button("Crear Participante")
+# Crear nuevo participante (solo admin)
+# =========================
+if session_state.role == "admin":
+    st.markdown("### ➕ Crear Participante")
 
-            if submitted:
-                if not nombre or not dni or not grupo_nombre:
-                    st.error("⚠️ Todos los campos son obligatorios.")
-                elif not validar_dni_cif(dni):
-                    st.error("⚠️ El DNI/NIE/CIF no es válido.")
-                else:
-                    try:
+    # Inicializar bandera en session_state
+    if "participante_creado" not in st.session_state:
+        st.session_state.participante_creado = False
+
+    with st.form("crear_participante", clear_on_submit=True):
+        nombre = st.text_input("Nombre *")
+        dni = st.text_input("DNI/NIE/CIF *")
+        grupo_nombre = st.selectbox("Grupo", list(grupos_dict.keys()))
+        submitted = st.form_submit_button("Crear Participante")
+
+        if submitted and not st.session_state.participante_creado:
+            if not nombre or not dni or not grupo_nombre:
+                st.error("⚠️ Todos los campos son obligatorios.")
+            elif not validar_dni_cif(dni):
+                st.error("⚠️ El DNI/NIE/CIF no es válido.")
+            else:
+                try:
+                    # Validar que no exista un participante con el mismo DNI en el mismo grupo
+                    existe = supabase.table("participantes") \
+                        .select("id") \
+                        .eq("dni", dni) \
+                        .eq("grupo_id", grupos_dict[grupo_nombre]) \
+                        .execute()
+
+                    if existe.data:
+                        st.error(f"⚠️ Ya existe un participante con el DNI '{dni}' en este grupo.")
+                    else:
                         supabase.table("participantes").insert({
                             "nombre": nombre,
                             "dni": dni,
                             "grupo_id": grupos_dict[grupo_nombre]
                         }).execute()
+
+                        st.session_state.participante_creado = True
                         st.success(f"✅ Participante '{nombre}' creado correctamente.")
-                        st.experimental_rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al crear el participante: {str(e)}")
-    else:
-        st.info("🔒 Solo los administradores pueden dar de alta participantes.")
+
+                        # Recargar listado de participantes
+                        participantes_res = supabase.table("participantes").select("*").execute()
+                        df_participantes = pd.DataFrame(participantes_res.data) if participantes_res.data else pd.DataFrame()
+                        st.dataframe(df_participantes)
+
+                except Exception as e:
+                    st.error(f"❌ Error al crear el participante: {str(e)}")
+else:
+    st.info("🔒 Solo los administradores pueden dar de alta participantes.")
+
 
