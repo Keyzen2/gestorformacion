@@ -199,10 +199,14 @@ def route():
                 st.session_state.page = page_key
 
         empresa_id = st.session_state.user.get("empresa_id")
-        empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa_res = supabase_admin.table("empresas").select(
+            "iso_activo", "iso_inicio", "iso_fin",
+            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
+        ).eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
         hoy = datetime.today().date()
 
+        # --- ISO ---
         iso_permitido = (
             empresa.get("iso_activo") and
             (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
@@ -211,18 +215,16 @@ def route():
 
         if iso_permitido:
             st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
             for label, page_key in menu_iso.items():
                 if st.sidebar.button(label):
                     st.session_state.page = page_key
 
-        rgpd_res = supabase_admin.table("rgpd_empresas").select("rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("empresa_id", empresa_id).execute()
-        rgpd = rgpd_res.data[0] if rgpd_res.data else {}
-
+        # --- RGPD ---
         rgpd_permitido = (
-            rgpd.get("rgpd_activo") and
-            (rgpd.get("rgpd_inicio") is None or pd.to_datetime(rgpd["rgpd_inicio"]).date() <= hoy) and
-            (rgpd.get("rgpd_fin") is None or pd.to_datetime(rgpd["rgpd_fin"]).date() >= hoy)
+            empresa.get("rgpd_activo") and
+            (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and
+            (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
         )
 
         if rgpd_permitido:
@@ -349,4 +351,3 @@ else:
                 st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
-    
