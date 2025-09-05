@@ -100,6 +100,16 @@ def route():
     if st.sidebar.button("🚪 Cerrar sesión"):
         do_logout()
 
+    # ✅ Mover definición de menu_iso aquí para que esté disponible para todos los roles
+    menu_iso = {
+        "No Conformidades": "no_conformidades",
+        "Acciones Correctivas": "acciones_correctivas",
+        "Auditorías": "auditorias",
+        "Indicadores": "indicadores",
+        "Dashboard Calidad": "dashboard_calidad",
+        "Objetivos de Calidad": "objetivos_calidad"
+    }
+
     if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
@@ -118,14 +128,6 @@ def route():
 
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-        menu_iso = {
-            "No Conformidades": "no_conformidades",
-            "Acciones Correctivas": "acciones_correctivas",
-            "Auditorías": "auditorias",
-            "Indicadores": "indicadores",
-            "Dashboard Calidad": "dashboard_calidad",
-            "Objetivos de Calidad": "objetivos_calidad"
-        }
         for label, page_key in menu_iso.items():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
@@ -204,11 +206,3 @@ def route():
             st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page}': {e}")
-
-# =========================
-# Ejecución principal
-# =========================
-if not st.session_state.role:
-    login_view()
-else:
-    route()
