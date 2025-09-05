@@ -266,6 +266,7 @@ def route():
                 "Oportunidades": "crm_oportunidades",
                 "Tareas y Seguimiento": "crm_tareas",
                 "Comunicaciones": "crm_comunicaciones",
+                "Estadísticas": "crm_estadisticas",
                 "Campañas": "crm_campanas"
             }
             for label, page_key in crm_menu.items():
@@ -377,6 +378,9 @@ else:
         elif page == "crm_comunicaciones":
             from pages.crm_comunicaciones import main as crm_comunicaciones_page
             crm_comunicaciones_page(supabase_admin, st.session_state)
+        elif page == "crm_estadisticas":
+            from pages.crm_estadisticas import main as crm_estadisticas_page
+            crm_estadisticas_page(supabase_admin, st.session_state)
         elif page == "crm_campanas":
             from pages.crm_campanas import main as crm_campanas_page
             crm_campanas_page(supabase_admin, st.session_state)
