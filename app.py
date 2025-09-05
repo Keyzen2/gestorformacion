@@ -20,14 +20,19 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-if "page" not in st.session_state:
-    st.session_state.page = "home"
-if "role" not in st.session_state:
-    st.session_state.role = None
-if "user" not in st.session_state:
-    st.session_state.user = {}
-if "auth_session" not in st.session_state:
-    st.session_state.auth_session = None
+# Estado inicial
+for key, default in {
+    "page": "home",
+    "role": None,
+    "user": {},
+    "auth_session": None
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+# =========================
+# Funciones auxiliares
+# =========================
 
 def set_user_role_from_db(email: str):
     try:
@@ -143,7 +148,8 @@ def route():
             margin-top: 2em;
         }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
+
     st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
 
     if st.sidebar.button("🚪 Cerrar sesión"):
@@ -213,7 +219,7 @@ def route():
         rgpd_res = supabase_admin.table("rgpd_empresas").select("rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("empresa_id", empresa_id).execute()
         rgpd = rgpd_res.data[0] if rgpd_res.data else {}
 
-        rgpd_permitido = (
+            rgpd_permitido = (
             rgpd.get("rgpd_activo") and
             (rgpd.get("rgpd_inicio") is None or pd.to_datetime(rgpd["rgpd_inicio"]).date() <= hoy) and
             (rgpd.get("rgpd_fin") is None or pd.to_datetime(rgpd["rgpd_fin"]).date() >= hoy)
@@ -322,11 +328,3 @@ else:
                 st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
-
-# =========================
-# Ejecución principal
-# =========================
-if not st.session_state.role:
-    login_view()
-else:
-    route()
