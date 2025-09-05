@@ -46,6 +46,11 @@ def set_user_role_from_db(email: str):
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
+            # Si es comercial, buscar su id en la tabla comerciales
+            if st.session_state.role == "comercial":
+                com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
+                if com_res.data:
+                    st.session_state.user["comercial_id"] = com_res.data[0]["id"]
         else:
             st.session_state.role = "alumno"
             st.session_state.user = {"email": email}
@@ -60,7 +65,7 @@ def do_logout():
     except Exception:
         pass
     st.session_state.clear()
-    st.rerun()
+    st.experimental_rerun()
 
 def login_view():
     st.markdown("""
@@ -89,7 +94,6 @@ def login_view():
         <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
         <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
         <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
-        <div class="module-card"><h4>📈 CRM</h4><p>Gestión de clientes, oportunidades y comunicaciones.</p></div>
     """, unsafe_allow_html=True)
 
     st.markdown("### 🔐 Iniciar sesión")
@@ -111,46 +115,15 @@ def login_view():
                 else:
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.rerun()
+                    st.experimental_rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
 
+# =========================
+# Sidebar y navegación
+# =========================
 def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
-    st.markdown("""
-    <style>
-        .sidebar .sidebar-content {
-            background-color: #f5f5f5;
-        }
-        .sidebar .sidebar-content h3, h4 {
-            font-family: 'Roboto', sans-serif;
-            color: #202124;
-            margin-bottom: 0.5em;
-        }
-        .sidebar .sidebar-content button {
-            background-color: #ffffff;
-            color: #202124;
-            border: 1px solid #dadce0;
-            border-radius: 6px;
-            padding: 0.5em 1em;
-            margin-bottom: 0.5em;
-            font-size: 14px;
-            text-align: left;
-            transition: all 0.2s ease;
-        }
-        .sidebar .sidebar-content button:hover {
-            background-color: #e8f0fe;
-            border-color: #4285f4;
-            color: #1a73e8;
-        }
-        .sidebar .sidebar-content .caption {
-            font-size: 12px;
-            color: #5f6368;
-            margin-top: 2em;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
     st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
 
     if st.sidebar.button("🚪 Cerrar sesión"):
@@ -202,7 +175,8 @@ def route():
         empresa_id = st.session_state.user.get("empresa_id")
         empresa_res = supabase_admin.table("empresas").select(
             "iso_activo", "iso_inicio", "iso_fin",
-            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
+            "rgpd_activo", "rgpd_inicio", "rgpd_fin",
+            "crm_activo", "crm_inicio", "crm_fin"
         ).eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
         hoy = datetime.today().date()
@@ -213,7 +187,6 @@ def route():
             (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
             (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
         )
-
         if iso_permitido:
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 📏 Gestión ISO 9001")
@@ -227,7 +200,6 @@ def route():
             (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and
             (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
         )
-
         if rgpd_permitido:
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 🛡️ Gestión RGPD")
@@ -247,16 +219,11 @@ def route():
                     st.session_state.page = page_key
 
         # --- CRM ---
-        crm_res = supabase_admin.table("crm_empresas").select(
-            "crm_activo", "crm_inicio", "crm_fin" ).eq("empresa_id", empresa_id).execute()
-        crm = crm_res.data[0] if crm_res.data else {}
-
         crm_permitido = (
-            crm.get("crm_activo") and
-            (crm.get("crm_inicio") is None or pd.to_datetime(crm["crm_inicio"]).date() <= hoy) and
-            (crm.get("crm_fin") is None or pd.to_datetime(crm["crm_fin"]).date() >= hoy)
+            empresa.get("crm_activo") and
+            (empresa.get("crm_inicio") is None or pd.to_datetime(empresa["crm_inicio"]).date() <= hoy) and
+            (empresa.get("crm_fin") is None or pd.to_datetime(empresa["crm_fin"]).date() >= hoy)
         )
-
         if crm_permitido:
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 📈 Gestión CRM")
@@ -266,12 +233,26 @@ def route():
                 "Oportunidades": "crm_oportunidades",
                 "Tareas y Seguimiento": "crm_tareas",
                 "Comunicaciones": "crm_comunicaciones",
-                "Estadísticas": "crm_estadisticas",
                 "Campañas": "crm_campanas"
             }
             for label, page_key in crm_menu.items():
                 if st.sidebar.button(label):
                     st.session_state.page = page_key
+
+    # --- Comercial ---
+    elif st.session_state.role == "comercial":
+        st.sidebar.markdown("#### 📈 Módulo CRM")
+        crm_menu = {
+            "Panel CRM": "crm_panel",
+            "Mis Clientes": "crm_clientes",
+            "Mis Oportunidades": "crm_oportunidades",
+            "Mis Tareas": "crm_tareas",
+            "Mis Comunicaciones": "crm_comunicaciones",
+            "Mis Estadísticas": "crm_estadisticas"
+        }
+        for label, page_key in crm_menu.items():
+            if st.sidebar.button(label):
+                st.session_state.page = page_key
 
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
@@ -398,6 +379,9 @@ else:
             elif rol == "alumno":
                 st.title("🎓 Área del Alumno")
                 st.caption("Consulta tus grupos, diplomas y seguimiento formativo.")
+            elif rol == "comercial":
+                st.title("📈 Módulo CRM")
+                st.caption("Gestiona tus clientes, oportunidades y tareas asignadas.")
             else:
                 st.title("🏠 Bienvenido al Gestor de Formación")
                 st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
