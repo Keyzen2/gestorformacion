@@ -99,26 +99,27 @@ def main(supabase, session_state):
     # Añadir nuevo objetivo
     # =========================
     st.markdown("### ➕ Añadir nuevo objetivo")
-    with st.form("form_obj", clear_on_submit=True):
-        nombre = st.text_input("Nombre del objetivo *")
-        meta = st.text_input("Meta (ej: ≥ 90%) *")
-        responsable = st.text_input("Responsable")
-        fuente_datos = st.text_input("Fuente de datos")
-        frecuencia = st.selectbox("Frecuencia", ["Mensual", "Trimestral", "Semestral", "Anual"])
-        ano = st.number_input("Año", value=datetime.today().year, step=1)
-        submitted = st.form_submit_button("Guardar")
-        if submitted:
-            objetivo_data = {
-                "nombre": nombre,
-                "meta": meta,
-                "responsable": responsable,
-                "fuente_datos": fuente_datos,
-                "frecuencia": frecuencia,
-                "ano": ano
-            }
-            if session_state.role == "gestor":
-                objetivo_data["empresa_id"] = empresa_id
-            supabase.table("objetivos_calidad").insert(objetivo_data).execute()
-            st.success("✅ Objetivo añadido.")
-            st.experimental_rerun()
+    if session_state.role in ["admin", "gestor"]:
+        with st.form("form_obj", clear_on_submit=True):
+            nombre = st.text_input("Nombre del objetivo *")
+            meta = st.text_input("Meta (ej: ≥ 90%) *")
+            responsable = st.text_input("Responsable")
+            fuente_datos = st.text_input("Fuente de datos")
+            frecuencia = st.selectbox("Frecuencia", ["Mensual", "Trimestral", "Semestral", "Anual"])
+            ano = st.number_input("Año", value=datetime.today().year, step=1)
+            submitted = st.form_submit_button("Guardar")
+            if submitted:
+                objetivo_data = {
+                    "nombre": nombre,
+                    "meta": meta,
+                    "responsable": responsable,
+                    "fuente_datos": fuente_datos,
+                    "frecuencia": frecuencia,
+                    "ano": ano
+                }
+                if session_state.role == "gestor":
+                    objetivo_data["empresa_id"] = empresa_id
+                supabase.table("objetivos_calidad").insert(objetivo_data).execute()
+                st.success("✅ Objetivo añadido.")
+                st.experimental_rerun()
       
