@@ -1,10 +1,16 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 def main(supabase, session_state):
     st.markdown("## 👨‍🏫 Grupos")
     st.caption("Gestión de grupos de formación y su vinculación con empresas y acciones formativas.")
     st.divider()
+
+    # 🔒 Protección por rol
+    if session_state.role not in ["admin", "gestor"]:
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
+        st.stop()
 
     try:
         empresas_res = supabase.table("empresas").select("id,nombre").execute()
@@ -21,7 +27,11 @@ def main(supabase, session_state):
         acciones_dict = {}
 
     try:
-        grupos_res = supabase.table("grupos").select("*").execute()
+        if session_state.role == "gestor":
+            empresa_id = session_state.user.get("empresa_id")
+            grupos_res = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute()
+        else:
+            grupos_res = supabase.table("grupos").select("*").execute()
         df_grupos = pd.DataFrame(grupos_res.data or [])
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
@@ -46,41 +56,43 @@ def main(supabase, session_state):
             ]
     st.divider()
 
-    st.markdown("### ➕ Crear Grupo")
-    with st.form("crear_grupo", clear_on_submit=True):
-        codigo_grupo = st.text_input("Código del grupo *")
-        empresa_sel = st.selectbox("Empresa", sorted(list(empresas_dict.keys())) if empresas_dict else [])
-        accion_sel = st.selectbox("Acción formativa", sorted(list(acciones_dict.keys())) if acciones_dict else [])
-        fecha_inicio = st.date_input("Fecha inicio")
-        fecha_fin = st.date_input("Fecha fin")
-        localidad = st.text_input("Localidad")
-        provincia = st.text_input("Provincia")
-        cp = st.text_input("Código postal")
-        n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
-        observaciones = st.text_area("Observaciones")
-        submitted_new = st.form_submit_button("➕ Crear Grupo")
+    # Solo el admin puede crear grupos
+    if session_state.role == "admin":
+        st.markdown("### ➕ Crear Grupo")
+        with st.form("crear_grupo", clear_on_submit=True):
+            codigo_grupo = st.text_input("Código del grupo *")
+            empresa_sel = st.selectbox("Empresa", sorted(list(empresas_dict.keys())) if empresas_dict else [])
+            accion_sel = st.selectbox("Acción formativa", sorted(list(acciones_dict.keys())) if acciones_dict else [])
+            fecha_inicio = st.date_input("Fecha inicio")
+            fecha_fin = st.date_input("Fecha fin")
+            localidad = st.text_input("Localidad")
+            provincia = st.text_input("Provincia")
+            cp = st.text_input("Código postal")
+            n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
+            observaciones = st.text_area("Observaciones")
+            submitted_new = st.form_submit_button("➕ Crear Grupo")
 
-    if submitted_new:
-        if not codigo_grupo:
-            st.error("⚠️ El código del grupo es obligatorio.")
-        else:
-            try:
-                supabase.table("grupos").insert({
-                    "codigo_grupo": codigo_grupo,
-                    "empresa_id": empresas_dict.get(empresa_sel),
-                    "accion_formativa_id": acciones_dict.get(accion_sel),
-                    "fecha_inicio": fecha_inicio.isoformat() if fecha_inicio else None,
-                    "fecha_fin": fecha_fin.isoformat() if fecha_fin else None,
-                    "localidad": localidad,
-                    "provincia": provincia,
-                    "cp": cp,
-                    "n_participantes_previstos": int(n_previstos),
-                    "observaciones": observaciones
-                }).execute()
-                st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
-                st.experimental_rerun()
-            except Exception as e:
-                st.error(f"❌ Error al crear el grupo: {e}")
+        if submitted_new:
+            if not codigo_grupo:
+                st.error("⚠️ El código del grupo es obligatorio.")
+            else:
+                try:
+                    supabase.table("grupos").insert({
+                        "codigo_grupo": codigo_grupo,
+                        "empresa_id": empresas_dict.get(empresa_sel),
+                        "accion_formativa_id": acciones_dict.get(accion_sel),
+                        "fecha_inicio": fecha_inicio.isoformat() if fecha_inicio else None,
+                        "fecha_fin": fecha_fin.isoformat() if fecha_fin else None,
+                        "localidad": localidad,
+                        "provincia": provincia,
+                        "cp": cp,
+                        "n_participantes_previstos": int(n_previstos),
+                        "observaciones": observaciones
+                    }).execute()
+                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al crear el grupo: {e}")
 
     st.divider()
 
@@ -96,46 +108,47 @@ def main(supabase, session_state):
                 st.write(f"**Participantes previstos:** {row.get('n_participantes_previstos','')}")
                 st.write(f"**Observaciones:** {row.get('observaciones','')}")
 
-                col1, col2 = st.columns(2)
+                if session_state.role == "admin":
+                    col1, col2 = st.columns(2)
 
-                if f"edit_done_{row['id']}" not in st.session_state:
-                    st.session_state[f"edit_done_{row['id']}"] = False
+                    if f"edit_done_{row['id']}" not in st.session_state:
+                        st.session_state[f"edit_done_{row['id']}"] = False
 
-                with col1:
-                    with st.form(f"edit_grupo_{row['id']}", clear_on_submit=True):
-                        nuevo_codigo = st.text_input("Código del grupo", value=row.get("codigo_grupo",""))
-                        nueva_empresa = st.selectbox(
-                            "Empresa",
-                            sorted(list(empresas_dict.keys())),
-                            index=sorted(list(empresas_dict.keys())).index(row.get("empresa_nombre","")) if row.get("empresa_nombre","") in empresas_dict else 0
-                        )
-                        nueva_accion = st.selectbox(
-                            "Acción formativa",
-                            sorted(list(acciones_dict.keys())),
-                            index=sorted(list(acciones_dict.keys())).index(row.get("accion_formativa_nombre","")) if row.get("accion_formativa_nombre","") in acciones_dict else 0
-                        )
-                        guardar = st.form_submit_button("💾 Guardar cambios")
+                    with col1:
+                        with st.form(f"edit_grupo_{row['id']}", clear_on_submit=True):
+                            nuevo_codigo = st.text_input("Código del grupo", value=row.get("codigo_grupo",""))
+                            nueva_empresa = st.selectbox(
+                                "Empresa",
+                                sorted(list(empresas_dict.keys())),
+                                index=sorted(list(empresas_dict.keys())).index(row.get("empresa_nombre","")) if row.get("empresa_nombre","") in empresas_dict else 0
+                            )
+                            nueva_accion = st.selectbox(
+                                "Acción formativa",
+                                sorted(list(acciones_dict.keys())),
+                                index=sorted(list(acciones_dict.keys())).index(row.get("accion_formativa_nombre","")) if row.get("accion_formativa_nombre","") in acciones_dict else 0
+                            )
+                            guardar = st.form_submit_button("💾 Guardar cambios")
 
-                    if guardar and not st.session_state[f"edit_done_{row['id']}"]:
-                        try:
-                            supabase.table("grupos").update({
-                                "codigo_grupo": nuevo_codigo,
-                                "empresa_id": empresas_dict.get(nueva_empresa),
-                                "accion_formativa_id": acciones_dict.get(nueva_accion)
-                            }).eq("id", row["id"]).execute()
-                            st.session_state[f"edit_done_{row['id']}"] = True
-                            st.success("✅ Cambios guardados correctamente.")
-                            st.experimental_rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al actualizar: {e}")
+                        if guardar and not st.session_state[f"edit_done_{row['id']}"]:
+                            try:
+                                supabase.table("grupos").update({
+                                    "codigo_grupo": nuevo_codigo,
+                                    "empresa_id": empresas_dict.get(nueva_empresa),
+                                    "accion_formativa_id": acciones_dict.get(nueva_accion)
+                                }).eq("id", row["id"]).execute()
+                                st.session_state[f"edit_done_{row['id']}"] = True
+                                st.success("✅ Cambios guardados correctamente.")
+                                st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar: {e}")
 
-                with col2:
-                    confirmar = st.checkbox("Confirmar eliminación", key=f"confirm_{row['id']}")
-                    if st.button("🗑️ Eliminar", key=f"delete_{row['id']}") and confirmar:
-                        try:
-                            supabase.table("grupos").delete().eq("id", row["id"]).execute()
-                            st.success("✅ Grupo eliminado correctamente.")
-                            st.experimental_rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al eliminar: {e}")
+                    with col2:
+                        confirmar = st.checkbox("Confirmar eliminación", key=f"confirm_{row['id']}")
+                        if st.button("🗑️ Eliminar", key=f"delete_{row['id']}") and confirmar:
+                            try:
+                                supabase.table("grupos").delete().eq("id", row["id"]).execute()
+                                st.success("✅ Grupo eliminado correctamente.")
+                                st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al eliminar: {e}")
                             
