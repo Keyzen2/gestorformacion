@@ -92,7 +92,7 @@ def main(supabase, session_state):
                                 seguimiento_data["empresa_id"] = empresa_id
                             supabase.table("seguimiento_objetivos").insert(seguimiento_data).execute()
                             st.success("✅ Avance registrado.")
-                            st.experimental_rerun()
+                            st.rerun()
 
             st.divider()
     else:
@@ -128,5 +128,5 @@ def main(supabase, session_state):
                         objetivo_data["empresa_id"] = empresa_id
                     supabase.table("objetivos_calidad").insert(objetivo_data).execute()
                     st.success("✅ Objetivo añadido.")
-                    st.experimental_rerun()
+                    st.rerun()
       
