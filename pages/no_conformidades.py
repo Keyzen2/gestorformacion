@@ -91,7 +91,12 @@ def main(supabase, session_state):
                 st.write(f"**Estado:** {row.get('estado', '')}")
                 st.write(f"**Acciones tomadas:** {row.get('acciones', '')}")
 
-                if session_state.role == "admin":
+                puede_editar = (
+                    session_state.role == "admin" or
+                    (session_state.role == "gestor" and row.get("empresa_id") == session_state.user.get("empresa_id"))
+                )
+
+                if puede_editar:
                     col1, col2 = st.columns(2)
 
                     with col1:
@@ -103,14 +108,17 @@ def main(supabase, session_state):
 
                             guardar = st.form_submit_button("Guardar cambios")
                             if guardar:
-                                supabase.table("no_conformidades").update({
-                                    "descripcion": nueva_desc,
-                                    "responsable": nuevo_resp,
-                                    "estado": nuevo_estado,
-                                    "acciones": nuevas_acciones
-                                }).eq("id", row["id"]).execute()
-                                st.success("✅ Cambios guardados.")
-                                st.experimental_rerun()
+                                if not nueva_desc.strip() or not nuevo_resp.strip() or not nuevas_acciones.strip():
+                                    st.warning("⚠️ Todos los campos son obligatorios.")
+                                else:
+                                    supabase.table("no_conformidades").update({
+                                        "descripcion": nueva_desc,
+                                        "responsable": nuevo_resp,
+                                        "estado": nuevo_estado,
+                                        "acciones": nuevas_acciones
+                                    }).eq("id", row["id"]).execute()
+                                    st.success("✅ Cambios guardados.")
+                                    st.rerun()
 
                     with col2:
                         with st.form(f"delete_nc_{row['id']}"):
@@ -120,33 +128,36 @@ def main(supabase, session_state):
                             if eliminar and confirmar:
                                 supabase.table("no_conformidades").delete().eq("id", row["id"]).execute()
                                 st.success("✅ Eliminada.")
-                                st.experimental_rerun()
+                                st.rerun()
     else:
         st.info("ℹ️ No hay no conformidades registradas.")
 
     # =========================
-    # Alta (admin y gestor)
+    # Alta (admin y gestor) con validación
     # =========================
     if session_state.role in ["admin", "gestor"]:
         st.markdown("### ➕ Registrar No Conformidad")
         with st.form("form_nc", clear_on_submit=True):
             descripcion = st.text_area("Descripción *")
-            responsable = st.text_input("Responsable")
+            responsable = st.text_input("Responsable *")
             fecha = st.date_input("Fecha detección", datetime.today())
             estado = st.selectbox("Estado", ["Abierta", "En curso", "Cerrada"])
-            acciones = st.text_area("Acciones tomadas")
+            acciones = st.text_area("Acciones tomadas *")
             submitted = st.form_submit_button("Guardar")
 
             if submitted:
-                data = {
-                    "descripcion": descripcion,
-                    "responsable": responsable,
-                    "fecha_detectada": fecha.isoformat(),
-                    "estado": estado,
-                    "acciones": acciones
-                }
-                if session_state.role == "gestor":
-                    data["empresa_id"] = session_state.user.get("empresa_id")
-                supabase.table("no_conformidades").insert(data).execute()
-                st.success("✅ No conformidad registrada.")
-                st.experimental_rerun()
+                if not descripcion.strip() or not responsable.strip() or not acciones.strip():
+                    st.warning("⚠️ Todos los campos son obligatorios.")
+                else:
+                    data = {
+                        "descripcion": descripcion,
+                        "responsable": responsable,
+                        "fecha_detectada": fecha.isoformat(),
+                        "estado": estado,
+                        "acciones": acciones
+                    }
+                    if session_state.role == "gestor":
+                        data["empresa_id"] = session_state.user.get("empresa_id")
+                    supabase.table("no_conformidades").insert(data).execute()
+                    st.success("✅ No conformidad registrada.")
+                    st.rerun()
