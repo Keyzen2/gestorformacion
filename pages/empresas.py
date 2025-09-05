@@ -104,7 +104,6 @@ def main(supabase, session_state):
                                 iso_inicio, iso_fin = None, None
 
                             st.markdown("#### 🛡️ Configuración RGPD")
-                            # --- siempre mostramos fechas ---
                             rgpd_inicio = st.date_input(
                                 "Fecha de inicio RGPD",
                                 value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date()
@@ -116,7 +115,6 @@ def main(supabase, session_state):
                                 if row.get("rgpd_fin") else None
                             )
 
-                            # --- auto desactivar si fecha fin ya pasó ---
                             rgpd_activo_valor = row.get("rgpd_activo", False)
                             if rgpd_fin and rgpd_fin <= datetime.today().date():
                                 rgpd_activo_valor = False
@@ -130,6 +128,7 @@ def main(supabase, session_state):
 
                             if guardar and not st.session_state[f"empresa_editada_{row['id']}"]:
                                 try:
+                                    # Actualizamos empresa
                                     supabase.table("empresas").update({
                                         "nombre": nuevo_nombre,
                                         "cif": nuevo_cif,
@@ -148,6 +147,19 @@ def main(supabase, session_state):
                                         "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
                                         "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                                     }).eq("id", row["id"]).execute()
+
+                                    # Crear registro en rgpd_empresas si activamos RGPD y no existe
+                                    if rgpd_activo:
+                                        existe_rgpd = supabase.table("rgpd_empresas").select("id").eq("empresa_id", row["id"]).execute()
+                                        if not existe_rgpd.data:
+                                            supabase.table("rgpd_empresas").insert({
+                                                "empresa_id": row["id"],
+                                                "rgpd_activo": True,
+                                                "rgpd_inicio": rgpd_inicio.isoformat(),
+                                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+                                                "created_at": datetime.utcnow().isoformat()
+                                            }).execute()
+
                                     st.session_state[f"empresa_editada_{row['id']}"] = True
                                     st.success("✅ Cambios guardados correctamente.")
                                     st.rerun()
@@ -203,9 +215,7 @@ def main(supabase, session_state):
             st.markdown("#### 🛡️ Configuración RGPD")
             rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
             rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=None)
-
             rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
-            # auto desactivar si fecha fin ya pasó
             if rgpd_fin and rgpd_fin <= datetime.today().date():
                 rgpd_activo = False
 
@@ -219,7 +229,7 @@ def main(supabase, session_state):
                         if existe.data:
                             st.error(f"⚠️ Ya existe una empresa con el CIF '{cif}'.")
                         else:
-                            supabase.table("empresas").insert({
+                            empresa_res = supabase.table("empresas").insert({
                                 "nombre": nombre,
                                 "cif": cif,
                                 "direccion": direccion,
@@ -238,6 +248,16 @@ def main(supabase, session_state):
                                 "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
                                 "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                             }).execute()
+
+                            # Insert RGPD empresa si activado
+                            if rgpd_activo:
+                                supabase.table("rgpd_empresas").insert({
+                                    "empresa_id": empresa_res.data[0]["id"],
+                                    "rgpd_activo": True,
+                                    "rgpd_inicio": rgpd_inicio.isoformat(),
+                                    "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+                                    "created_at": datetime.utcnow().isoformat()
+                                }).execute()
 
                             st.session_state.empresa_creada = True
                             st.success(f"✅ Empresa '{nombre}' creada correctamente.")
