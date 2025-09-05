@@ -136,6 +136,39 @@ def route():
     }
 
     if st.session_state.role == "admin":
+        st.markdown("""
+    <style>
+        .sidebar .sidebar-content {
+            background-color: #f5f5f5;
+        }
+        .sidebar .sidebar-content h3, h4 {
+            font-family: 'Roboto', sans-serif;
+            color: #202124;
+            margin-bottom: 0.5em;
+        }
+        .sidebar .sidebar-content button {
+            background-color: #ffffff;
+            color: #202124;
+            border: 1px solid #dadce0;
+            border-radius: 6px;
+            padding: 0.5em 1em;
+            margin-bottom: 0.5em;
+            font-size: 14px;
+            text-align: left;
+            transition: all 0.2s ease;
+        }
+        .sidebar .sidebar-content button:hover {
+            background-color: #e8f0fe;
+            border-color: #4285f4;
+            color: #1a73e8;
+        }
+        .sidebar .sidebar-content .caption {
+            font-size: 12px;
+            color: #5f6368;
+            margin-top: 2em;
+        }
+    </style>
+""", unsafe_allow_html=True)
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
             "Panel de Alertas": "panel_admin",
