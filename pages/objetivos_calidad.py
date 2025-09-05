@@ -5,19 +5,42 @@ from datetime import datetime
 def main(supabase, session_state):
     st.subheader("🎯 Objetivos de Calidad (ISO 9001)")
     st.caption("Definición, seguimiento y evaluación de objetivos anuales de calidad para el centro de formación.")
+    st.divider()
 
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
+    # 🔒 Protección por rol y módulo ISO activo
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        empresa_res = supabase.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if not iso_permitido:
+            st.warning("🔒 Tu empresa no tiene activado el módulo ISO 9001.")
+            st.stop()
+
+    elif session_state.role != "admin":
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
     # =========================
     # Cargar datos
     # =========================
-    obj_res = supabase.table("objetivos_calidad").select("*").execute()
-    df_obj = pd.DataFrame(obj_res.data) if obj_res.data else pd.DataFrame()
-
-    seg_res = supabase.table("seguimiento_objetivos").select("*").execute()
-    df_seg = pd.DataFrame(seg_res.data) if seg_res.data else pd.DataFrame()
+    try:
+        if session_state.role == "gestor":
+            df_obj = pd.DataFrame(supabase.table("objetivos_calidad").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_seg = pd.DataFrame(supabase.table("seguimiento_objetivos").select("*").eq("empresa_id", empresa_id).execute().data or [])
+        else:
+            df_obj = pd.DataFrame(supabase.table("objetivos_calidad").select("*").execute().data or [])
+            df_seg = pd.DataFrame(supabase.table("seguimiento_objetivos").select("*").execute().data or [])
+    except Exception as e:
+        st.error(f"❌ Error al cargar los datos: {e}")
+        return
 
     # =========================
     # Mostrar objetivos
@@ -27,8 +50,7 @@ def main(supabase, session_state):
         for _, row in df_obj.iterrows():
             st.markdown(f"**{row['nombre']}** — Meta: {row['meta']} — Responsable: {row.get('responsable','')}")
             st.caption(f"Fuente: {row.get('fuente_datos','')} | Frecuencia: {row.get('frecuencia','')} | Año: {row.get('ano','')}")
-            
-            # Mostrar seguimiento
+
             segs = df_seg[df_seg["objetivo_id"] == row["id"]]
             if not segs.empty:
                 ultimo_valor = segs.sort_values("fecha", ascending=False).iloc[0]
@@ -58,11 +80,14 @@ def main(supabase, session_state):
                     observaciones = st.text_area("Observaciones")
                     submitted = st.form_submit_button("Guardar")
                     if submitted:
-                        supabase.table("seguimiento_objetivos").insert({
+                        seguimiento_data = {
                             "objetivo_id": row["id"],
                             "valor_real": valor_real,
                             "observaciones": observaciones
-                        }).execute()
+                        }
+                        if session_state.role == "gestor":
+                            seguimiento_data["empresa_id"] = empresa_id
+                        supabase.table("seguimiento_objetivos").insert(seguimiento_data).execute()
                         st.success("✅ Avance registrado.")
                         st.experimental_rerun()
 
@@ -83,14 +108,17 @@ def main(supabase, session_state):
         ano = st.number_input("Año", value=datetime.today().year, step=1)
         submitted = st.form_submit_button("Guardar")
         if submitted:
-            supabase.table("objetivos_calidad").insert({
+            objetivo_data = {
                 "nombre": nombre,
                 "meta": meta,
                 "responsable": responsable,
                 "fuente_datos": fuente_datos,
                 "frecuencia": frecuencia,
                 "ano": ano
-            }).execute()
+            }
+            if session_state.role == "gestor":
+                objetivo_data["empresa_id"] = empresa_id
+            supabase.table("objetivos_calidad").insert(objetivo_data).execute()
             st.success("✅ Objetivo añadido.")
             st.experimental_rerun()
       
