@@ -219,7 +219,7 @@ def route():
         rgpd_res = supabase_admin.table("rgpd_empresas").select("rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("empresa_id", empresa_id).execute()
         rgpd = rgpd_res.data[0] if rgpd_res.data else {}
 
-            rgpd_permitido = (
+        rgpd_permitido = (
             rgpd.get("rgpd_activo") and
             (rgpd.get("rgpd_inicio") is None or pd.to_datetime(rgpd["rgpd_inicio"]).date() <= hoy) and
             (rgpd.get("rgpd_fin") is None or pd.to_datetime(rgpd["rgpd_fin"]).date() >= hoy)
