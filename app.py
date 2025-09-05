@@ -150,10 +150,13 @@ def route():
         empresa = empresa_res.data[0] if empresa_res.data else {}
         hoy = datetime.today().date()
 
+        iso_inicio = safe_parse_date(empresa.get("iso_inicio"))
+        iso_fin = safe_parse_date(empresa.get("iso_fin"))
+
         iso_permitido = (
             empresa.get("iso_activo") and
-            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
-            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+            (iso_inicio is None or iso_inicio <= hoy) and
+            (iso_fin is None or iso_fin >= hoy)
         )
 
         if iso_permitido:
