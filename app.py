@@ -222,69 +222,73 @@ def route():
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · Streamlit + Supabase")
 
+# =========================
+# Ejecución principal
+# =========================
 if not st.session_state.role:
     login_view()
 else:
     route()
     page = st.session_state.get("page", None)
-    
-try:
-    if page == "usuarios_empresas":
-        from pages.usuarios_empresas import main as usuarios_empresas_page
-        usuarios_empresas_page(supabase_admin, st.session_state)
-    elif page == "panel_admin":
-        from pages.panel_admin import main as panel_admin_page
-        panel_admin_page(supabase_admin, st.session_state)
-    elif page == "empresas":
-        from pages.empresas import main as empresas_page
-        empresas_page(supabase_admin, st.session_state)
-    elif page == "acciones_formativas":
-        from pages.acciones_formativas import main as acciones_page
-        acciones_page(supabase_admin, st.session_state)
-    elif page == "grupos":
-        from pages.grupos import main as grupos_page
-        grupos_page(supabase_admin, st.session_state)
-    elif page == "participantes":
-        from pages.participantes import main as participantes_page
-        participantes_page(supabase_admin, st.session_state)
-    elif page == "documentos":
-        from pages.documentos import main as documentos_page
-        documentos_page(supabase_admin, st.session_state)
-    elif page == "rgpd_panel":
-        from pages.rgpd_panel import main as rgpd_panel_page
-        rgpd_panel_page(supabase_admin, st.session_state)
-    elif page == "rgpd_inicio":
-        from pages.rgpd_inicio import main as rgpd_inicio_page
-        rgpd_inicio_page(supabase_admin, st.session_state)
-    elif page == "rgpd_tratamientos":
-        from pages.rgpd_tratamientos import main as rgpd_tratamientos_page
-        rgpd_tratamientos_page(supabase_admin, st.session_state)
-    elif page == "rgpd_consentimientos":
-        from pages.rgpd_consentimientos import main as rgpd_consentimientos_page
-        rgpd_consentimientos_page(supabase_admin, st.session_state)
-    elif page == "rgpd_encargados":
-        from pages.rgpd_encargados import main as rgpd_encargados_page
-        rgpd_encargados_page(supabase_admin, st.session_state)
-    elif page == "rgpd_derechos":
-        from pages.rgpd_derechos import main as rgpd_derechos_page
-        rgpd_derechos_page(supabase_admin, st.session_state)
-    elif page == "rgpd_evaluacion":
-        from pages.rgpd_evaluacion import main as rgpd_evaluacion_page
-        rgpd_evaluacion_page(supabase_admin, st.session_state)
-    elif page == "rgpd_medidas":
-        from pages.rgpd_medidas import main as rgpd_medidas_page
-        rgpd_medidas_page(supabase_admin, st.session_state)
-    elif page == "rgpd_incidencias":
-        from pages.rgpd_incidencias import main as rgpd_incidencias_page
-        rgpd_incidencias_page(supabase_admin, st.session_state)
-    elif page == "mis_grupos":
-        from pages.mis_grupos import main as mis_grupos_page
-        mis_grupos_page(supabase_public, st.session_state)
-    else:
-        st.title("🏠 Bienvenido al Gestor de Formación")
-        st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
-except Exception as e:
+
+    try:
+        if page == "usuarios_empresas":
+            from pages.usuarios_empresas import main as usuarios_empresas_page
+            usuarios_empresas_page(supabase_admin, st.session_state)
+        elif page == "panel_admin":
+            from pages.panel_admin import main as panel_admin_page
+            panel_admin_page(supabase_admin, st.session_state)
+        elif page == "empresas":
+            from pages.empresas import main as empresas_page
+            empresas_page(supabase_admin, st.session_state)
+        elif page == "acciones_formativas":
+            from pages.acciones_formativas import main as acciones_page
+            acciones_page(supabase_admin, st.session_state)
+        elif page == "grupos":
+            from pages.grupos import main as grupos_page
+            grupos_page(supabase_admin, st.session_state)
+        elif page == "participantes":
+            from pages.participantes import main as participantes_page
+            participantes_page(supabase_admin, st.session_state)
+        elif page == "documentos":
+            from pages.documentos import main as documentos_page
+            documentos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_panel":
+            from pages.rgpd_panel import main as rgpd_panel_page
+            rgpd_panel_page(supabase_admin, st.session_state)
+        elif page == "rgpd_inicio":
+            from pages.rgpd_inicio import main as rgpd_inicio_page
+            rgpd_inicio_page(supabase_admin, st.session_state)
+        elif page == "rgpd_tratamientos":
+            from pages.rgpd_tratamientos import main as rgpd_tratamientos_page
+            rgpd_tratamientos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_consentimientos":
+            from pages.rgpd_consentimientos import main as rgpd_consentimientos_page
+            rgpd_consentimientos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_encargados":
+            from pages.rgpd_encargados import main as rgpd_encargados_page
+            rgpd_encargados_page(supabase_admin, st.session_state)
+        elif page == "rgpd_derechos":
+            from pages.rgpd_derechos import main as rgpd_derechos_page
+            rgpd_derechos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_evaluacion":
+            from pages.rgpd_evaluacion import main as rgpd_evaluacion_page
+            rgpd_evaluacion_page(supabase_admin, st.session_state)
+        elif page == "rgpd_medidas":
+            from pages.rgpd_medidas import main as rgpd_medidas_page
+            rgpd_medidas_page(supabase_admin, st.session_state)
+        elif page == "rgpd_incidencias":
+            from pages.rgpd_incidencias import main as rgpd_incidencias_page
+            rgpd_incidencias_page(supabase_admin, st.session_state)
+        elif page == "mis_grupos":
+            from pages.mis_grupos import main as mis_grupos_page
+            mis_grupos_page(supabase_public, st.session_state)
+        else:
+            st.title("🏠 Bienvenido al Gestor de Formación")
+            st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
+    except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
+
 # =========================
 # Ejecución principal
 # =========================
