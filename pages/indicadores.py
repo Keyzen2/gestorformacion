@@ -82,7 +82,10 @@ def main(supabase, session_state):
         df_nc["fecha_cierre"] = pd.to_datetime(df_nc["fecha_cierre"], errors="coerce")
         df_nc["dias_resolucion"] = (df_nc["fecha_cierre"] - df_nc["fecha_detectada"]).dt.days
         tiempo_medio = df_nc["dias_resolucion"].mean(skipna=True)
-        st.metric("⏱️ Tiempo medio de resolución (días)", round(tiempo_medio, 1) if pd.notnull(tiempo_medio) else "N/D")
+        if pd.notnull(tiempo_medio):
+            st.metric("⏱️ Tiempo medio de resolución (días)", round(tiempo_medio, 1))
+        else:
+            st.metric("⏱️ Tiempo medio de resolución (días)", "N/D")
 
     # =========================
     # Tablas de detalle
