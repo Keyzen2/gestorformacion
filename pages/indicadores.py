@@ -33,17 +33,13 @@ def main(supabase, session_state):
     # =========================
     try:
         if session_state.role == "gestor":
-            nc_res = supabase.table("no_conformidades").select("*").eq("empresa_id", empresa_id).execute()
-            ac_res = supabase.table("acciones_correctivas").select("*").eq("empresa_id", empresa_id).execute()
-            aud_res = supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute()
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_ac = pd.DataFrame(supabase.table("acciones_correctivas").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute().data or [])
         else:
-            nc_res = supabase.table("no_conformidades").select("*").execute()
-            ac_res = supabase.table("acciones_correctivas").select("*").execute()
-            aud_res = supabase.table("auditorias").select("*").execute()
-
-        df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
-        df_ac = pd.DataFrame(ac_res.data) if ac_res.data else pd.DataFrame()
-        df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("*").execute().data or [])
+            df_ac = pd.DataFrame(supabase.table("acciones_correctivas").select("*").execute().data or [])
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").execute().data or [])
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {e}")
         df_nc = pd.DataFrame()
@@ -64,7 +60,7 @@ def main(supabase, session_state):
             return df[(df[campo_fecha] >= pd.to_datetime(fecha_inicio)) & (df[campo_fecha] <= pd.to_datetime(fecha_fin))]
         return df
 
-    df_nc = filtrar_por_fecha(df_nc, "fecha")
+    df_nc = filtrar_por_fecha(df_nc, "fecha_detectada")
     df_ac = filtrar_por_fecha(df_ac, "fecha_inicio")
     df_aud = filtrar_por_fecha(df_aud, "fecha")
 
@@ -75,16 +71,16 @@ def main(supabase, session_state):
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("NC Abiertas", len(df_nc[df_nc["estado"] == "Abierta"]) if "estado" in df_nc.columns else 0)
     col2.metric("NC Cerradas", len(df_nc[df_nc["estado"] == "Cerrada"]) if "estado" in df_nc.columns else 0)
-    col3.metric("Acciones Correctivas Cerradas", len(df_ac[df_ac["estado"] == "Cerrada"]) if "estado" in df_ac.columns else 0)
+    col3.metric("AC Cerradas", len(df_ac[df_ac["estado"] == "Cerrada"]) if "estado" in df_ac.columns else 0)
     col4.metric("Auditorías Realizadas", len(df_aud))
 
     # =========================
     # Tiempo medio de resolución de NC
     # =========================
-    if "fecha" in df_nc.columns and "fecha_cierre" in df_nc.columns:
-        df_nc["fecha"] = pd.to_datetime(df_nc["fecha"], errors="coerce")
+    if "fecha_detectada" in df_nc.columns and "fecha_cierre" in df_nc.columns:
+        df_nc["fecha_detectada"] = pd.to_datetime(df_nc["fecha_detectada"], errors="coerce")
         df_nc["fecha_cierre"] = pd.to_datetime(df_nc["fecha_cierre"], errors="coerce")
-        df_nc["dias_resolucion"] = (df_nc["fecha_cierre"] - df_nc["fecha"]).dt.days
+        df_nc["dias_resolucion"] = (df_nc["fecha_cierre"] - df_nc["fecha_detectada"]).dt.days
         tiempo_medio = df_nc["dias_resolucion"].mean(skipna=True)
         st.metric("⏱️ Tiempo medio de resolución (días)", round(tiempo_medio, 1) if pd.notnull(tiempo_medio) else "N/D")
 
