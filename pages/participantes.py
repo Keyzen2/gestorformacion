@@ -74,7 +74,7 @@ def main(supabase, session_state):
                 )
                 if creado:
                     st.success("✅ Participante creado correctamente.")
-                    st.experimental_rerun()
+                    st.rerun()
 
     st.divider()
 
@@ -118,6 +118,6 @@ def main(supabase, session_state):
                                 "email": nuevo_email
                             }).eq("id", row["id"]).execute()
                             st.success("✅ Cambios guardados.")
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
