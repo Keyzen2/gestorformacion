@@ -107,7 +107,8 @@ def route():
         "Auditorías": "auditorias",
         "Indicadores": "indicadores",
         "Dashboard Calidad": "dashboard_calidad",
-        "Objetivos de Calidad": "objetivos_calidad"
+        "Objetivos de Calidad": "objetivos_calidad",
+        "Informe de Auditoría": "informe_auditoria"
     }
 
     if st.session_state.role == "admin":
@@ -211,6 +212,9 @@ def route():
         elif page == "objetivos_calidad":
             from pages.objetivos_calidad import main as objetivos_page
             objetivos_page(supabase_admin, st.session_state)
+        elif page == "informe_auditoria":
+            from pages.informe_auditoria import main as informe_auditoria_page
+            informe_auditoria_page(supabase_admin, st.session_state)
         elif page == "mis_grupos":
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
