@@ -8,7 +8,6 @@ def main(supabase, session_state):
     st.caption("Gestión de participantes/alumnos y vinculación con empresas y grupos.")
     st.divider()
 
-    # 🔒 Protección por rol
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
@@ -33,9 +32,11 @@ def main(supabase, session_state):
         else:
             grupos_res = supabase.table("grupos").select("id,codigo_grupo").execute()
         grupos_dict = {g["codigo_grupo"]: g["id"] for g in (grupos_res.data or [])}
+        grupos_nombre_por_id = {g["id"]: g["codigo_grupo"] for g in (grupos_res.data or [])}
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
         grupos_dict = {}
+        grupos_nombre_por_id = {}
 
     # =========================
     # Cargar participantes
@@ -123,6 +124,9 @@ def main(supabase, session_state):
                 st.write(f"**Grupo ID:** {row.get('grupo_id','')}")
                 st.write(f"**Fecha Alta:** {row.get('fecha_alta','')}")
 
+                # =========================
+                # Edición básica
+                # =========================
                 if session_state.role == "admin":
                     with st.form(f"edit_part_{row['id']}", clear_on_submit=True):
                         nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
@@ -136,16 +140,8 @@ def main(supabase, session_state):
                                 usuario_res = supabase.table("usuarios").select("auth_id").eq("email", row.get("email", "")).execute()
                                 if usuario_res.data:
                                     auth_id = usuario_res.data[0]["auth_id"]
-                                    try:
-                                        supabase.auth.admin.update_user_by_id(auth_id, {"email": nuevo_email})
-                                        st.info("📧 Email actualizado en Auth.")
-                                    except Exception as e:
-                                        st.error(f"❌ No se pudo actualizar el email en Auth: {e}")
-                                    try:
-                                        supabase.table("usuarios").update({"email": nuevo_email}).eq("auth_id", auth_id).execute()
-                                        st.info("📧 Email actualizado en tabla 'usuarios'.")
-                                    except Exception as e:
-                                        st.error(f"❌ No se pudo actualizar el email en 'usuarios': {e}")
+                                    supabase.auth.admin.update_user_by_id(auth_id, {"email": nuevo_email})
+                                    supabase.table("usuarios").update({"email": nuevo_email}).eq("auth_id", auth_id).execute()
 
                             supabase.table("participantes").update({
                                 "nombre": nuevo_nombre,
@@ -156,5 +152,51 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
+
+                # =========================
+                # Diplomas del participante
+                # =========================
+                st.markdown("### 🏅 Diplomas del participante")
+                try:
+                    diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
+                    diplomas = diplomas_res.data or []
+                    if diplomas:
+                        for d in diplomas:
+                            grupo_nombre = grupos_nombre_por_id.get(d["grupo_id"], "Grupo desconocido")
+                            st.markdown(f"- 📄 [Diploma]({d['url']}) ({grupo_nombre}, {d['fecha_subida']})")
+                    else:
+                        st.info("Este participante no tiene diplomas registrados.")
+                except Exception as e:
+                    st.error(f"❌ Error al cargar diplomas: {e}")
+
+                # =========================
+                # Subir nuevo diploma
+                # =========================
+                if session_state.role == "admin":
+                    st.markdown("### 📤 Subir nuevo diploma")
+                    with st.form(f"diploma_form_{row['id']}", clear_on_submit=True):
+                        grupo_id = row.get("grupo_id")
+                        grupo_nombre = grupos_nombre_por_id.get(grupo_id, "Grupo asignado")
+                        st.text(f"Grupo: {grupo_nombre}")
+                        url_diploma = st.text_input("Enlace al diploma (URL)")
+                        fecha_subida = st.date_input("Fecha de subida", value=datetime.today())
+                        subir = st.form_submit_button("Subir diploma")
+
+                    if subir:
+                        if not url_diploma.strip():
+                            st.warning("⚠️ Debes proporcionar un enlace al diploma.")
+                        else:
+                            try:
+                                supabase.table("diplomas").insert({
+                                    "participante_id": row["id"],
+                                    "grupo_id": grupo_id,
+                                    "url": url_diploma,
+                                    "fecha_subida": fecha_subida.isoformat()
+                                }).execute()
+                                st.success("✅ Diploma subido correctamente.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al subir el diploma: {e}")
     else:
         st.info("ℹ️ No hay participantes registrados.")
+
