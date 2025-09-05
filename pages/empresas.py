@@ -83,11 +83,23 @@ def main(supabase, session_state):
 
                             st.markdown("#### ⚙️ Configuración de módulos")
                             iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False))
-                            iso_inicio = st.date_input("Fecha de inicio ISO", value=pd.to_datetime(row.get("iso_inicio")) if row.get("iso_inicio") else datetime.today())
-                            iso_fin = st.date_input("Fecha de fin ISO", value=pd.to_datetime(row.get("iso_fin")) if row.get("iso_fin") else None)
+                            iso_inicio = st.date_input(
+                                "Fecha de inicio ISO",
+                                value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date()
+                                if row.get("iso_inicio") else datetime.today().date()
+                            )
+                            iso_fin = st.date_input(
+                                "Fecha de fin ISO",
+                                value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date()
+                                if row.get("iso_fin") else None
+                            )
+
+                            if f"empresa_editada_{row['id']}" not in st.session_state:
+                                st.session_state[f"empresa_editada_{row['id']}"] = False
 
                             guardar = st.form_submit_button("Guardar cambios")
-                            if guardar:
+
+                            if guardar and not st.session_state[f"empresa_editada_{row['id']}"]:
                                 try:
                                     supabase.table("empresas").update({
                                         "nombre": nuevo_nombre,
@@ -104,8 +116,9 @@ def main(supabase, session_state):
                                         "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
                                         "iso_fin": iso_fin.isoformat() if iso_fin else None
                                     }).eq("id", row["id"]).execute()
+                                    st.session_state[f"empresa_editada_{row['id']}"] = True
                                     st.success("✅ Cambios guardados correctamente.")
-                                    st.experimental_rerun()
+                                    st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al actualizar: {str(e)}")
 
@@ -118,7 +131,7 @@ def main(supabase, session_state):
                                 try:
                                     supabase.table("empresas").delete().eq("id", row["id"]).execute()
                                     st.success("✅ Empresa eliminada.")
-                                    st.experimental_rerun()
+                                    st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al eliminar: {str(e)}")
         else:
@@ -175,7 +188,7 @@ def main(supabase, session_state):
 
                             st.session_state.empresa_creada = True
                             st.success(f"✅ Empresa '{nombre}' creada correctamente.")
-                            st.experimental_rerun()
+                            st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error al crear la empresa: {str(e)}")
 
