@@ -90,7 +90,7 @@ def main(supabase, session_state):
                         "observaciones": observaciones
                     }).execute()
                     st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
-                    st.experimental_rerun()
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear el grupo: {e}")
 
@@ -138,7 +138,7 @@ def main(supabase, session_state):
                                 }).eq("id", row["id"]).execute()
                                 st.session_state[f"edit_done_{row['id']}"] = True
                                 st.success("✅ Cambios guardados correctamente.")
-                                st.experimental_rerun()
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al actualizar: {e}")
 
@@ -148,7 +148,7 @@ def main(supabase, session_state):
                             try:
                                 supabase.table("grupos").delete().eq("id", row["id"]).execute()
                                 st.success("✅ Grupo eliminado correctamente.")
-                                st.experimental_rerun()
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al eliminar: {e}")
                             
