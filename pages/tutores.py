@@ -6,12 +6,11 @@ def main(supabase, session_state):
     st.caption("Gestión de tutores internos y externos vinculados a grupos formativos.")
     st.divider()
 
-    # Inicializar paginador si no existe
     if "page_tutores" not in st.session_state:
         st.session_state.page_tutores = 1
 
     # =========================
-    # Cargar datos
+    # Cargar tutores
     # =========================
     try:
         tutores_res = supabase.table("tutores").select("*").execute().data
@@ -37,7 +36,6 @@ def main(supabase, session_state):
         if tipo_filter != "Todos":
             df_tutores = df_tutores[df_tutores["tipo_tutor"] == tipo_filter]
 
-        # Reiniciar paginador si se aplican filtros
         if filtro_nombre or tipo_filter != "Todos":
             st.session_state.page_tutores = 1
 
@@ -77,6 +75,30 @@ def main(supabase, session_state):
                 st.write(f"**Ciudad:** {row.get('ciudad', '')}")
                 st.write(f"**Provincia:** {row.get('provincia', '')}")
                 st.write(f"**Código Postal:** {row.get('codigo_postal', '')}")
+
+                # =========================
+                # Mostrar grupos asignados
+                # =========================
+                try:
+                    grupos_asignados = supabase.table("tutores_grupos") \
+                        .select("grupo_id") \
+                        .eq("tutor_id", row["id"]) \
+                        .execute().data or []
+
+                    grupo_ids = [g["grupo_id"] for g in grupos_asignados]
+                    grupos_info = supabase.table("grupos") \
+                        .select("id, codigo_grupo") \
+                        .in_("id", grupo_ids) \
+                        .execute().data or []
+
+                    if grupos_info:
+                        st.write("**Grupos asignados:**")
+                        for g in grupos_info:
+                            st.markdown(f"- {g['codigo_grupo']}")
+                    else:
+                        st.write("**Grupos asignados:** Ninguno")
+                except Exception as e:
+                    st.error(f"❌ Error al cargar grupos asignados: {e}")
 
                 col1, col2 = st.columns(2)
 
