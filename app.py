@@ -240,3 +240,11 @@ def route():
             st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page}': {e}")
+
+# =========================
+# Ejecución principal
+# =========================
+if not st.session_state.role:
+    login_view()
+else:
+    route()
