@@ -1,14 +1,19 @@
-import sys, os
+import os, sys
 import streamlit as st
 from supabase import create_client
 
-# 🔹 Forzar inclusión de la carpeta raíz en el path de Python
+# Añadir carpeta raíz al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # =========================
 # Configuración de página
 # =========================
-st.set_page_config(page_title="Gestor de Formación", layout="wide")
+st.set_page_config(
+    page_title="Gestor de Formación",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={}
+)
 
 # =========================
 # Conexión a Supabase
@@ -65,6 +70,7 @@ def do_logout():
 
 def login_view():
     st.title("🔐 Iniciar sesión")
+    st.caption("Accede al gestor con tus credenciales.")
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input("Email", autocomplete="email")
         password = st.text_input("Contraseña", type="password", autocomplete="current-password")
@@ -91,11 +97,9 @@ def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
     st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
 
-    # Botón de logout
     if st.sidebar.button("🚪 Cerrar sesión"):
         do_logout()
 
-    # Menú por rol
     if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
@@ -148,11 +152,9 @@ def route():
         if st.sidebar.button("Mis Grupos y Diplomas"):
             st.session_state.page = "mis_grupos"
 
-    # Footer
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · Streamlit + Supabase")
 
-    # Enrutamiento por página
     page = st.session_state.page
     try:
         if page == "usuarios_empresas":
@@ -202,3 +204,11 @@ def route():
             st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page}': {e}")
+
+# =========================
+# Ejecución principal
+# =========================
+if not st.session_state.role:
+    login_view()
+else:
+    route()
