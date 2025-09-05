@@ -184,7 +184,7 @@ def main(supabase, session_state):
                         grupo_nombre = grupos_nombre_por_id.get(grupo_id, "Grupo asignado")
                         st.text(f"Grupo: {grupo_nombre}")
 
-                                                archivo = st.file_uploader("Selecciona el diploma (PDF)", type=["pdf"])
+                        archivo = st.file_uploader("Selecciona el diploma (PDF)", type=["pdf"])
                         fecha_subida = st.date_input("Fecha de subida", value=datetime.today())
                         subir = st.form_submit_button("Subir diploma")
 
