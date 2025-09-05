@@ -328,3 +328,12 @@ else:
                 st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
+
+# =========================
+# Ejecución principal
+# =========================
+if not st.session_state.role:
+    login_view()
+else:
+    route()
+    
