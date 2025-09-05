@@ -33,14 +33,11 @@ def main(supabase, session_state):
     # =========================
     try:
         if session_state.role == "gestor":
-            aud_res = supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute()
-            nc_res = supabase.table("no_conformidades").select("id", "descripcion").eq("empresa_id", empresa_id).execute()
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("id", "descripcion").eq("empresa_id", empresa_id).execute().data or [])
         else:
-            aud_res = supabase.table("auditorias").select("*").execute()
-            nc_res = supabase.table("no_conformidades").select("id", "descripcion").execute()
-
-        df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
-        df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").execute().data or [])
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("id", "descripcion").execute().data or [])
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {e}")
         df_aud = pd.DataFrame()
@@ -132,7 +129,7 @@ def main(supabase, session_state):
         st.info("ℹ️ No hay auditorías registradas.")
 
     # =========================
-    # Alta (admin y gestor)
+    # Alta (admin y gestor) con validación
     # =========================
     if session_state.role in ["admin", "gestor"]:
         st.markdown("### ➕ Registrar Auditoría")
@@ -141,7 +138,7 @@ def main(supabase, session_state):
             estado = st.selectbox("Estado", ["Planificada", "En curso", "Cerrada"])
             fecha = st.date_input("Fecha", datetime.today())
             auditor = st.text_input("Auditor")
-            descripcion = st.text_area("Descripción")
+            descripcion = st.text_area("Descripción *")
             hallazgos = st.text_area("Hallazgos")
 
             nc_id = None
@@ -153,18 +150,21 @@ def main(supabase, session_state):
 
             submitted = st.form_submit_button("Guardar")
             if submitted:
-                data = {
-                    "tipo": tipo,
-                    "estado": estado,
-                    "fecha": fecha.isoformat(),
-                    "auditor": auditor,
-                    "descripcion": descripcion,
-                    "hallazgos": hallazgos,
-                    "no_conformidad_id": nc_id
-                }
-                if session_state.role == "gestor":
-                    data["empresa_id"] = empresa_id
-                supabase.table("auditorias").insert(data).execute()
-                st.success("✅ Auditoría registrada.")
-                st.experimental_rerun()
+                if not descripcion.strip():
+                    st.warning("⚠️ La descripción es obligatoria.")
+                else:
+                    data = {
+                        "tipo": tipo,
+                        "estado": estado,
+                        "fecha": fecha.isoformat(),
+                        "auditor": auditor,
+                        "descripcion": descripcion,
+                        "hallazgos": hallazgos,
+                        "no_conformidad_id": nc_id
+                    }
+                    if session_state.role == "gestor":
+                        data["empresa_id"] = empresa_id
+                    supabase.table("auditorias").insert(data).execute()
+                    st.success("✅ Auditoría registrada.")
+                    st.experimental_rerun()
               
