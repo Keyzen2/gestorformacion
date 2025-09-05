@@ -5,21 +5,17 @@ from datetime import datetime
 def main(supabase, session_state):
     try:
         st.subheader("🏢 Empresas")
+        st.caption("Gestión de empresas registradas en el sistema.")
 
         if session_state.role != "admin":
             st.warning("🔒 Solo los administradores pueden gestionar empresas.")
             st.stop()
 
-        # =========================
-        # Cargar empresas
-        # =========================
+        st.divider()
+        st.markdown("### 📊 Resumen de Empresas")
+
         empresas_res = supabase.table("empresas").select("*").execute()
         df_empresas = pd.DataFrame(empresas_res.data) if empresas_res.data else pd.DataFrame()
-
-        # =========================
-        # Panel resumen de KPIs
-        # =========================
-        st.markdown("### 📊 Resumen de Empresas")
 
         total_empresas = len(df_empresas)
         empresas_mes = df_empresas[
@@ -36,10 +32,9 @@ def main(supabase, session_state):
         col3.metric("📍 Provincia más frecuente", provincia_top)
         col4.metric("🌆 Ciudad más frecuente", ciudad_top)
 
-        # =========================
-        # Filtro y exportación
-        # =========================
-        search_query = st.text_input("🔍 Buscar por nombre o CIF")
+        st.divider()
+        st.markdown("### 🔍 Buscar y Exportar")
+        search_query = st.text_input("Buscar por nombre o CIF")
         if search_query:
             df_empresas = df_empresas[
                 df_empresas["nombre"].str.contains(search_query, case=False, na=False) |
@@ -54,7 +49,8 @@ def main(supabase, session_state):
                 mime="text/csv"
             )
 
-            st.markdown("### 🧾 Gestión de Empresas Registradas")
+            st.divider()
+            st.markdown("### 🧾 Empresas Registradas")
 
             for _, row in df_empresas.iterrows():
                 with st.expander(f"{row['nombre']} ({row['cif']})"):
@@ -69,7 +65,6 @@ def main(supabase, session_state):
 
                     col1, col2 = st.columns(2)
 
-                    # ✏️ Editar empresa
                     with col1:
                         with st.form(f"edit_empresa_{row['id']}", clear_on_submit=True):
                             nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
@@ -103,7 +98,6 @@ def main(supabase, session_state):
                                 except Exception as e:
                                     st.error(f"❌ Error al actualizar: {str(e)}")
 
-                    # 🗑️ Eliminar empresa
                     with col2:
                         with st.form(f"delete_empresa_{row['id']}"):
                             st.warning("⚠️ Esta acción eliminará la empresa permanentemente.")
@@ -116,13 +110,10 @@ def main(supabase, session_state):
                                     st.experimental_rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al eliminar: {str(e)}")
-
         else:
             st.info("ℹ️ No hay empresas registradas.")
 
-        # =========================
-        # Crear nueva empresa
-        # =========================
+        st.divider()
         st.markdown("### ➕ Crear Empresa")
         if "empresa_creada" not in st.session_state:
             st.session_state.empresa_creada = False
