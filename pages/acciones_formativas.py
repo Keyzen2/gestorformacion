@@ -1,145 +1,158 @@
 import streamlit as st
 import pandas as pd
-import traceback
-from services.alumnos import alta_alumno
 
 def main(supabase, session_state):
+    st.subheader("📚 Acciones Formativas")
+
     try:
-        st.subheader("👥 Usuarios y Empresas")
-
-        # -----------------------
-        # Ver usuarios y empresas
-        # -----------------------
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("📋 Ver Usuarios"):
-                usuarios = supabase.table("usuarios").select("*").execute().data
-                if usuarios:
-                    st.dataframe(pd.DataFrame(usuarios))
-                else:
-                    st.info("No hay usuarios registrados")
-
-        with col2:
-            if st.button("🏢 Ver Empresas"):
-                empresas = supabase.table("empresas").select("*").execute().data
-                if empresas:
-                    st.dataframe(pd.DataFrame(empresas))
-                else:
-                    st.info("No hay empresas registradas")
-
-        # -----------------------
-        # Crear Usuario
-        # -----------------------
-        if session_state.role != "admin":
-            st.warning("🔒 Solo los administradores pueden crear usuarios.")
-            return
-
-        st.markdown("### ➕ Crear Usuario")
-
-        if "usuario_creado" not in session_state:
-            session_state.usuario_creado = False
-
-        with st.form("crear_usuario", clear_on_submit=True):
-            email_new = st.text_input("Email *")
-            nombre_new = st.text_input("Nombre *")
-            password_new = st.text_input("Contraseña *", type="password")
-            rol_new = st.selectbox("Rol", ["admin", "gestor", "alumno"])
-
-            empresa_id = None
-            grupo_id = None
-
-            if rol_new == "gestor":
-                empresas_res = supabase.table("empresas").select("id, nombre").execute()
-                empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data} if empresas_res.data else {}
-                if empresas_dict:
-                    empresa_nombre = st.selectbox("Empresa asignada *", options=list(empresas_dict.keys()))
-                    empresa_id = empresas_dict.get(empresa_nombre)
-                else:
-                    st.warning("⚠️ No hay empresas creadas. Debes crear una antes de dar de alta un gestor.")
-                    st.stop()
-
-            if rol_new == "alumno":
-                grupos_res = supabase.table("grupos").select("id, codigo_grupo").execute()
-                grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos_res.data} if grupos_res.data else {}
-                if grupos_dict:
-                    grupo_nombre = st.selectbox("Grupo asignado (opcional)", options=["-- Ninguno --"] + list(grupos_dict.keys()))
-                    if grupo_nombre != "-- Ninguno --":
-                        grupo_id = grupos_dict.get(grupo_nombre)
-
-            submitted_user = st.form_submit_button("Crear Usuario")
-
-            if submitted_user and not session_state.usuario_creado:
-                if not email_new or not nombre_new or not password_new:
-                    st.error("⚠️ Todos los campos son obligatorios")
-                elif rol_new == "gestor" and not empresa_id:
-                    st.error("⚠️ Debes asignar una empresa al gestor")
-                else:
-                    try:
-                        if rol_new == "alumno":
-                            creado = alta_alumno(
-                                supabase,
-                                email=email_new,
-                                password=password_new,
-                                nombre=nombre_new,
-                                grupo_id=grupo_id
-                            )
-                            if creado:
-                                session_state.usuario_creado = True
-                        else:
-                            existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
-                            if existe.data:
-                                st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
-                            else:
-                                auth_res = supabase.auth.sign_up({
-                                    "email": email_new,
-                                    "password": password_new
-                                })
-                                if not auth_res.user:
-                                    st.error("❌ Error al crear el usuario en Auth.")
-                                    return
-
-                                insert_data = {
-                                    "auth_id": auth_res.user.id,
-                                    "email": email_new,
-                                    "nombre": nombre_new,
-                                    "rol": rol_new
-                                }
-                                if empresa_id:
-                                    insert_data["empresa_id"] = empresa_id
-
-                                supabase.table("usuarios").insert(insert_data).execute()
-                                session_state.usuario_creado = True
-                                st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
-
-                        if session_state.usuario_creado:
-                            usuarios = supabase.table("usuarios").select("*").execute().data
-                            if usuarios:
-                                st.dataframe(pd.DataFrame(usuarios))
-
-                    except Exception as e:
-                        st.error(f"❌ Error al crear el usuario: {e}")
-
+        areas_res = supabase.table("areas_profesionales").select("*").order("familia", desc=False).execute()
+        areas_dict = {f"{a.get('codigo','')} - {a.get('nombre','')}": a.get('codigo','') for a in (areas_res.data or [])}
     except Exception as e:
-        st.error(f"💥 Error en usuarios_empresas.main: {e}")
-        st.code(traceback.format_exc())
+        st.error(f"⚠️ No se pudieron cargar las áreas profesionales: {e}")
+        areas_dict = {}
 
-# -----------------------
-# Función auxiliar para gestores
-# -----------------------
-def empresas_only(supabase, session_state):
     try:
-        st.subheader("🏢 Mi Empresa")
-        empresa_id = session_state.user.get("empresa_id")
-        if not empresa_id:
-            st.info("No tienes empresa asignada")
-            return
+        acciones_res = supabase.table("acciones_formativas").select("*").execute()
+        df_acciones = pd.DataFrame(acciones_res.data or [])
+    except Exception as e:
+        st.error(f"⚠️ No se pudieron cargar las acciones formativas: {e}")
+        df_acciones = pd.DataFrame()
 
-        empresa_res = supabase.table("empresas").select("*").eq("id", empresa_id).execute()
-        if empresa_res.data:
-            st.dataframe(pd.DataFrame(empresa_res.data))
+    if st.button("📋 Ver Acciones Formativas"):
+        if not df_acciones.empty:
+            st.dataframe(df_acciones)
         else:
-            st.info("No hay datos de empresa")
-    except Exception as e:
-        st.error(f"💥 Error en empresas_only: {e}")
-        st.code(traceback.format_exc())
+            st.info("No hay acciones formativas registradas.")
+
+    if not df_acciones.empty:
+        search_query = st.text_input("🔍 Buscar por nombre, código o área profesional")
+        if search_query:
+            sq = search_query.lower()
+            for col in ["nombre", "codigo_accion", "area_profesional"]:
+                if col not in df_acciones.columns:
+                    df_acciones[col] = ""
+            df_acciones = df_acciones[
+                df_acciones["nombre"].str.lower().str.contains(sq) |
+                df_acciones["codigo_accion"].str.lower().str.contains(sq) |
+                df_acciones["area_profesional"].str.lower().str.contains(sq)
+            ]
+
+    st.markdown("### ➕ Crear Acción Formativa")
+
+    if "accion_creada" not in st.session_state:
+        st.session_state.accion_creada = False
+
+    with st.form("crear_accion_formativa", clear_on_submit=True):
+        codigo_accion = st.text_input("Código de la acción *")
+        nombre_accion = st.text_input("Nombre de la acción *")
+        area_sel = st.selectbox("Área profesional", list(areas_dict.keys()) if areas_dict else [])
+        sector = st.text_input("Sector")
+        objetivos = st.text_area("Objetivos")
+        contenidos = st.text_area("Contenidos")
+        nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"])
+        modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
+        num_horas = st.number_input("Número de horas", min_value=1, value=1, step=1)
+        certificado_profesionalidad = st.checkbox("¿Certificado de profesionalidad?")
+        observaciones = st.text_area("Observaciones")
+
+        submitted = st.form_submit_button("Crear Acción Formativa")
+
+    if submitted and not st.session_state.accion_creada:
+        if not codigo_accion or not nombre_accion:
+            st.error("⚠️ Código y nombre son obligatorios.")
+        else:
+            try:
+                supabase.table("acciones_formativas").insert({
+                    "codigo_accion": codigo_accion,
+                    "nombre": nombre_accion,
+                    "cod_area_profesional": areas_dict.get(area_sel, ""),
+                    "area_profesional": area_sel.split(" - ", 1)[1] if " - " in area_sel else area_sel,
+                    "sector": sector,
+                    "objetivos": objetivos,
+                    "contenidos": contenidos,
+                    "nivel": nivel,
+                    "modalidad": modalidad,
+                    "num_horas": int(num_horas),
+                    "certificado_profesionalidad": certificado_profesionalidad,
+                    "observaciones": observaciones
+                }).execute()
+
+                st.session_state.accion_creada = True
+                st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
+                st.experimental_rerun()
+
+            except Exception as e:
+                st.error(f"❌ Error al crear la acción formativa: {e}")
+
+    if not df_acciones.empty:
+        for _, row in df_acciones.iterrows():
+            with st.expander(f"{row.get('nombre','')} ({row.get('modalidad','')})"):
+                for campo in ["codigo_accion", "area_profesional", "sector", "objetivos", "contenidos", "nivel", "num_horas", "certificado_profesionalidad", "observaciones"]:
+                    st.write(f"**{campo.replace('_',' ').capitalize()}:** {row.get(campo, '')}")
+
+                col1, col2 = st.columns(2)
+
+                if f"edit_done_{row['id']}" not in st.session_state:
+                    st.session_state[f"edit_done_{row['id']}"] = False
+
+                with col1:
+                    with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
+                        nuevo_codigo = st.text_input("Código de la acción", value=row.get("codigo_accion", ""))
+                        nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
+                        area_actual_key = next((k for k, v in areas_dict.items() if v == row.get("cod_area_profesional")), "")
+                        nueva_area_sel = st.selectbox(
+                            "Área profesional",
+                            list(areas_dict.keys()),
+                            index=list(areas_dict.keys()).index(area_actual_key) if area_actual_key in areas_dict else 0
+                        )
+                        nuevo_sector = st.text_input("Sector", value=row.get("sector", ""))
+                        nuevos_objetivos = st.text_area("Objetivos", value=row.get("objetivos", ""))
+                        nuevos_contenidos = st.text_area("Contenidos", value=row.get("contenidos", ""))
+                        nuevo_nivel = st.selectbox(
+                            "Nivel",
+                            ["Básico", "Intermedio", "Avanzado"],
+                            index=["Básico", "Intermedio", "Avanzado"].index(row.get("nivel", "Básico"))
+                        )
+                        nueva_modalidad = st.selectbox(
+                            "Modalidad",
+                            ["Presencial", "Online", "Mixta"],
+                            index=["Presencial", "Online", "Mixta"].index(row.get("modalidad", "Presencial"))
+                        )
+                        nuevas_horas = st.number_input("Número de horas", min_value=1, value=int(row.get("num_horas", 1)), step=1)
+                        nuevo_certificado = st.checkbox("¿Certificado de profesionalidad?", value=row.get("certificado_profesionalidad", False))
+                        nuevas_obs = st.text_area("Observaciones", value=row.get("observaciones", ""))
+
+                        guardar_cambios = st.form_submit_button("Guardar cambios")
+
+                    if guardar_cambios and not st.session_state[f"edit_done_{row['id']}"]:
+                        try:
+                            supabase.table("acciones_formativas").update({
+                                "codigo_accion": nuevo_codigo,
+                                "nombre": nuevo_nombre,
+                                "cod_area_profesional": areas_dict.get(nueva_area_sel, ""),
+                                "area_profesional": nueva_area_sel.split(" - ", 1)[1] if " - " in nueva_area_sel else nueva_area_sel,
+                                "sector": nuevo_sector,
+                                "objetivos": nuevos_objetivos,
+                                "contenidos": nuevos_contenidos,
+                                "nivel": nuevo_nivel,
+                                "modalidad": nueva_modalidad,
+                                "num_horas": int(nuevas_horas),
+                                "certificado_profesionalidad": nuevo_certificado,
+                                "observaciones": nuevas_obs
+                            }).eq("id", row["id"]).execute()
+
+                            st.session_state[f"edit_done_{row['id']}"] = True
+                            st.success("✅ Cambios guardados correctamente.")
+                            st.experimental_rerun()
+
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar: {e}")
+
+                with col2:
+                    if st.button("🗑️ Eliminar", key=f"delete_{row['id']}"):
+                        try:
+                            supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
+                            st.success("✅ Acción formativa eliminada correctamente.")
+                            st.experimental_rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {e}")
