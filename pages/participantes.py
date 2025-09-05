@@ -187,7 +187,7 @@ def main(supabase, session_state):
                         subir = st.form_submit_button("Subir diploma")
 
                     if subir:
-                                                if not url_diploma.strip():
+                        if not url_diploma.strip():
                             st.warning("⚠️ Debes proporcionar un enlace al diploma.")
                         else:
                             try:
