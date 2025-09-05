@@ -79,7 +79,7 @@ def main(supabase, session_state):
 
                 st.session_state.accion_creada = True
                 st.success(f"✅ Acción formativa '{nombre_accion}' creada correctamente.")
-                st.experimental_rerun()
+                st.rerun()
 
             except Exception as e:
                 st.error(f"❌ Error al crear la acción formativa: {e}")
@@ -143,7 +143,7 @@ def main(supabase, session_state):
 
                             st.session_state[f"edit_done_{row['id']}"] = True
                             st.success("✅ Cambios guardados correctamente.")
-                            st.experimental_rerun()
+                            st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
@@ -153,9 +153,9 @@ def main(supabase, session_state):
                         try:
                             supabase.table("acciones_formativas").delete().eq("id", row["id"]).execute()
                             st.success("✅ Acción formativa eliminada correctamente.")
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar: {e}")
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar: {e}")
