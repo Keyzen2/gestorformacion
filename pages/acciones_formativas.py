@@ -156,3 +156,6 @@ def main(supabase, session_state):
                             st.experimental_rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar: {e}")
+                            st.experimental_rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {e}")
