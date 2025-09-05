@@ -6,9 +6,6 @@ def main(supabase, session_state):
     st.caption("Gestión de grupos de formación y su vinculación con empresas y acciones formativas.")
     st.divider()
 
-    # =========================
-    # Cargar datos base
-    # =========================
     try:
         empresas_res = supabase.table("empresas").select("id,nombre").execute()
         empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
@@ -30,20 +27,11 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
         df_grupos = pd.DataFrame()
 
-    # =========================
-    # KPIs rápidos
-    # =========================
     col1, col2 = st.columns(2)
     col1.metric("Total grupos", len(df_grupos))
-    if "n_participantes_previstos" in df_grupos.columns:
-        col2.metric("Participantes previstos", int(df_grupos["n_participantes_previstos"].sum()))
-    else:
-        col2.metric("Participantes previstos", 0)
+    col2.metric("Participantes previstos", int(df_grupos.get("n_participantes_previstos", pd.Series()).sum()) if "n_participantes_previstos" in df_grupos.columns else 0)
     st.divider()
 
-    # =========================
-    # Búsqueda rápida
-    # =========================
     if not df_grupos.empty:
         search_query = st.text_input("🔍 Buscar por código, empresa o acción formativa")
         if search_query:
@@ -58,9 +46,6 @@ def main(supabase, session_state):
             ]
     st.divider()
 
-    # =========================
-    # Crear nuevo grupo
-    # =========================
     st.markdown("### ➕ Crear Grupo")
     with st.form("crear_grupo", clear_on_submit=True):
         codigo_grupo = st.text_input("Código del grupo *")
@@ -99,9 +84,6 @@ def main(supabase, session_state):
 
     st.divider()
 
-    # =========================
-    # Listado con edición/eliminación
-    # =========================
     if not df_grupos.empty:
         for _, row in df_grupos.iterrows():
             with st.expander(f"{row.get('codigo_grupo','')}"):
