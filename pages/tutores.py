@@ -6,9 +6,23 @@ def main(supabase, session_state):
     st.caption("Gestión de tutores internos y externos vinculados a grupos formativos.")
     st.divider()
 
-    tutores_res = supabase.table("tutores").select("*").execute().data
-    df_tutores = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
+    # Inicializar paginador si no existe
+    if "page_tutores" not in st.session_state:
+        st.session_state.page_tutores = 1
 
+    # =========================
+    # Cargar datos
+    # =========================
+    try:
+        tutores_res = supabase.table("tutores").select("*").execute().data
+        df_tutores = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error al cargar tutores: {e}")
+        return
+
+    # =========================
+    # Filtros
+    # =========================
     if not df_tutores.empty:
         st.markdown("### 🔍 Filtros")
         filtro_nombre = st.text_input("Buscar por nombre, apellidos o NIF")
@@ -23,26 +37,36 @@ def main(supabase, session_state):
         if tipo_filter != "Todos":
             df_tutores = df_tutores[df_tutores["tipo_tutor"] == tipo_filter]
 
+        # Reiniciar paginador si se aplican filtros
+        if filtro_nombre or tipo_filter != "Todos":
+            st.session_state.page_tutores = 1
+
         st.divider()
         st.markdown("### 📄 Listado de Tutores")
 
+        # =========================
+        # Paginación
+        # =========================
         page_size = st.selectbox("Registros por página", [5, 10, 20, 50], index=1)
         total_rows = len(df_tutores)
         total_pages = (total_rows - 1) // page_size + 1
-        page_actual = st.session_state.get("page_tutores", 1)
+        page_actual = st.session_state.page_tutores
 
         col_prev, col_next = st.columns([1, 1])
         with col_prev:
             if st.button("⬅️ Anterior") and page_actual > 1:
-                st.session_state.page_tutores = page_actual - 1
+                st.session_state.page_tutores -= 1
         with col_next:
             if st.button("Siguiente ➡️") and page_actual < total_pages:
-                st.session_state.page_tutores = page_actual + 1
+                st.session_state.page_tutores += 1
 
         start_idx = (st.session_state.page_tutores - 1) * page_size
         end_idx = start_idx + page_size
         st.caption(f"Página {st.session_state.page_tutores} de {total_pages}")
 
+        # =========================
+        # Visualización
+        # =========================
         for _, row in df_tutores.iloc[start_idx:end_idx].iterrows():
             with st.expander(f"{row['nombre']} {row['apellidos']}"):
                 st.write(f"**Email:** {row.get('email', '')}")
@@ -107,4 +131,6 @@ def main(supabase, session_state):
                                     st.error(f"❌ Error al eliminar: {str(e)}")
                             else:
                                 st.error("⚠️ Debes marcar la casilla de confirmación antes de eliminar.")
+    else:
+        st.info("ℹ️ No hay tutores registrados.")
 
