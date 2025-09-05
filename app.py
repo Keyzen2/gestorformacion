@@ -60,7 +60,7 @@ def do_logout():
     except Exception:
         pass
     st.session_state.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 def login_view():
     st.markdown("""
@@ -89,6 +89,7 @@ def login_view():
         <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
         <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
         <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
+        <div class="module-card"><h4>📈 CRM</h4><p>Gestión de clientes, oportunidades y comunicaciones.</p></div>
     """, unsafe_allow_html=True)
 
     st.markdown("### 🔐 Iniciar sesión")
@@ -110,7 +111,7 @@ def login_view():
                 else:
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.experimental_rerun()
+                    st.rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
 
@@ -245,13 +246,39 @@ def route():
                 if st.sidebar.button(label):
                     st.session_state.page = page_key
 
+        # --- CRM ---
+        crm_res = supabase_admin.table("crm_empresas").select(
+            "crm_activo", "crm_inicio", "crm_fin" ).eq("empresa_id", empresa_id).execute()
+        crm = crm_res.data[0] if crm_res.data else {}
+
+        crm_permitido = (
+            crm.get("crm_activo") and
+            (crm.get("crm_inicio") is None or pd.to_datetime(crm["crm_inicio"]).date() <= hoy) and
+            (crm.get("crm_fin") is None or pd.to_datetime(crm["crm_fin"]).date() >= hoy)
+        )
+
+        if crm_permitido:
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("#### 📈 Gestión CRM")
+            crm_menu = {
+                "Panel CRM": "crm_panel",
+                "Clientes": "crm_clientes",
+                "Oportunidades": "crm_oportunidades",
+                "Tareas y Seguimiento": "crm_tareas",
+                "Comunicaciones": "crm_comunicaciones",
+                "Campañas": "crm_campanas"
+            }
+            for label, page_key in crm_menu.items():
+                if st.sidebar.button(label):
+                    st.session_state.page = page_key
+
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
         if st.sidebar.button("Mis Grupos y Diplomas"):
             st.session_state.page = "mis_grupos"
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · Streamlit + Supabase")
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
 
 # =========================
 # Ejecución principal
@@ -335,6 +362,24 @@ else:
         elif page == "rgpd_incidencias":
             from pages.rgpd_incidencias import main as rgpd_incidencias_page
             rgpd_incidencias_page(supabase_admin, st.session_state)
+        elif page == "crm_panel":
+            from pages.crm_panel import main as crm_panel_page
+            crm_panel_page(supabase_admin, st.session_state)
+        elif page == "crm_clientes":
+            from pages.crm_clientes import main as crm_clientes_page
+            crm_clientes_page(supabase_admin, st.session_state)
+        elif page == "crm_oportunidades":
+            from pages.crm_oportunidades import main as crm_oportunidades_page
+            crm_oportunidades_page(supabase_admin, st.session_state)
+        elif page == "crm_tareas":
+            from pages.crm_tareas import main as crm_tareas_page
+            crm_tareas_page(supabase_admin, st.session_state)
+        elif page == "crm_comunicaciones":
+            from pages.crm_comunicaciones import main as crm_comunicaciones_page
+            crm_comunicaciones_page(supabase_admin, st.session_state)
+        elif page == "crm_campanas":
+            from pages.crm_campanas import main as crm_campanas_page
+            crm_campanas_page(supabase_admin, st.session_state)
         elif page == "mis_grupos":
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
