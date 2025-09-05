@@ -58,12 +58,50 @@ def do_logout():
     st.experimental_rerun()
 
 def login_view():
-    st.title("🔐 Iniciar sesión")
+    st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+            html, body, [class*="css"] {
+                font-family: 'Roboto', sans-serif;
+                background-color: #f5f5f5;
+            }
+            .login-title {
+                font-size: 32px;
+                font-weight: 500;
+                color: #202124;
+                margin-bottom: 0.5em;
+            }
+            .module-card {
+                background-color: white;
+                padding: 1em;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                margin-bottom: 1em;
+            }
+            .module-card h4 {
+                margin: 0;
+                color: #4285F4;
+            }
+            .module-card p {
+                margin: 0.5em 0 0;
+                color: #5f6368;
+            }
+        </style>
+        <div class="login-title">Bienvenido a la plataforma</div>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>', unsafe_allow_html=True)
+
+    st.markdown("### 🔐 Iniciar sesión")
     st.caption("Accede al gestor con tus credenciales.")
+
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input("Email", autocomplete="email")
         password = st.text_input("Contraseña", type="password", autocomplete="current-password")
         submitted = st.form_submit_button("Entrar")
+
     if submitted:
         if not email or not password:
             st.warning("Introduce email y contraseña.")
@@ -78,6 +116,7 @@ def login_view():
             st.experimental_rerun()
         except Exception as e:
             st.error(f"Error al iniciar sesión: {e}")
+
 
 def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
