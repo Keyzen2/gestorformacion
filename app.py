@@ -226,7 +226,56 @@ def route():
 # Ejecución principal
 # =========================
 if not st.session_state.role:
-    login_view()
+    st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+            html, body, [class*="css"] {
+                font-family: 'Roboto', sans-serif;
+                background-color: #f5f5f5;
+            }
+            .module-card {
+                background-color: white;
+                padding: 1em;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                margin-bottom: 1em;
+            }
+            .module-card h4 {
+                margin: 0;
+                color: #4285F4;
+            }
+            .module-card p {
+                margin: 0.5em 0 0;
+                color: #5f6368;
+            }
+        </style>
+        <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
+        <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
+        <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🔐 Iniciar sesión")
+    st.caption("Accede al gestor con tus credenciales.")
+
+    with st.form("form_login_acceso", clear_on_submit=False):
+        email = st.text_input("Email", autocomplete="email")
+        password = st.text_input("Contraseña", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Entrar")
+
+    if submitted:
+        if not email or not password:
+            st.warning("Introduce email y contraseña.")
+        else:
+            try:
+                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                if not auth or not auth.user:
+                    st.error("Credenciales inválidas.")
+                else:
+                    st.session_state.auth_session = auth
+                    set_user_role_from_db(auth.user.email)
+                    st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Error al iniciar sesión: {e}")
 else:
     route()
     page = st.session_state.get("page", None)
@@ -284,8 +333,19 @@ else:
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
         else:
-            st.title("🏠 Bienvenido al Gestor de Formación")
-            st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
+            rol = st.session_state.role
+            if rol == "admin":
+                st.title("🛠 Panel de Administración")
+                st.caption("Gestiona usuarios, empresas y módulos avanzados.")
+            elif rol == "gestor":
+                st.title("📚 Panel de Formación Bonificada")
+                st.caption("Accede a tus grupos, participantes y documentos.")
+            elif rol == "alumno":
+                st.title("🎓 Área del Alumno")
+                st.caption("Consulta tus grupos, diplomas y seguimiento formativo.")
+            else:
+                st.title("🏠 Bienvenido al Gestor de Formación")
+                st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
 
