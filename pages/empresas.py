@@ -62,6 +62,9 @@ def main(supabase, session_state):
                     st.write(f"**Provincia:** {row.get('provincia', '')}")
                     st.write(f"**Código Postal:** {row.get('codigo_postal', '')}")
                     st.write(f"**Fecha Alta:** {row.get('fecha_alta', '')}")
+                    st.write(f"**ISO 9001 Activo:** {'✅ Sí' if row.get('iso_activo') else '❌ No'}")
+                    st.write(f"**Inicio ISO:** {row.get('iso_inicio', '—')}")
+                    st.write(f"**Fin ISO:** {row.get('iso_fin', '—')}")
 
                     col1, col2 = st.columns(2)
 
@@ -78,6 +81,11 @@ def main(supabase, session_state):
                             nueva_provincia = st.text_input("Provincia", value=row.get("provincia", ""))
                             nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
 
+                            st.markdown("#### ⚙️ Configuración de módulos")
+                            iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False))
+                            iso_inicio = st.date_input("Fecha de inicio ISO", value=pd.to_datetime(row.get("iso_inicio")) if row.get("iso_inicio") else datetime.today())
+                            iso_fin = st.date_input("Fecha de fin ISO", value=pd.to_datetime(row.get("iso_fin")) if row.get("iso_fin") else None)
+
                             guardar = st.form_submit_button("Guardar cambios")
                             if guardar:
                                 try:
@@ -91,7 +99,10 @@ def main(supabase, session_state):
                                         "representante_dni": nuevo_rep_dni,
                                         "ciudad": nueva_ciudad,
                                         "provincia": nueva_provincia,
-                                        "codigo_postal": nuevo_cp
+                                        "codigo_postal": nuevo_cp,
+                                        "iso_activo": iso_activo,
+                                        "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
+                                        "iso_fin": iso_fin.isoformat() if iso_fin else None
                                     }).eq("id", row["id"]).execute()
                                     st.success("✅ Cambios guardados correctamente.")
                                     st.experimental_rerun()
@@ -130,6 +141,11 @@ def main(supabase, session_state):
             provincia = st.text_input("Provincia")
             codigo_postal = st.text_input("Código Postal")
 
+            st.markdown("#### ⚙️ Configuración de módulos")
+            iso_activo = st.checkbox("Activar módulo ISO 9001", value=False)
+            iso_inicio = st.date_input("Fecha de inicio ISO", value=datetime.today())
+            iso_fin = st.date_input("Fecha de fin ISO", value=None)
+
             submitted = st.form_submit_button("Crear Empresa")
             if submitted and not st.session_state.empresa_creada:
                 if not nombre or not cif:
@@ -151,7 +167,10 @@ def main(supabase, session_state):
                                 "ciudad": ciudad,
                                 "provincia": provincia,
                                 "codigo_postal": codigo_postal,
-                                "fecha_alta": datetime.utcnow().isoformat()
+                                "fecha_alta": datetime.utcnow().isoformat(),
+                                "iso_activo": iso_activo,
+                                "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
+                                "iso_fin": iso_fin.isoformat() if iso_fin else None
                             }).execute()
 
                             st.session_state.empresa_creada = True
