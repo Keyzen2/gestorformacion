@@ -100,7 +100,6 @@ def route():
     if st.sidebar.button("🚪 Cerrar sesión"):
         do_logout()
 
-    # ✅ Mover definición de menu_iso aquí para que esté disponible para todos los roles
     menu_iso = {
         "No Conformidades": "no_conformidades",
         "Acciones Correctivas": "acciones_correctivas",
@@ -143,11 +142,24 @@ def route():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
 
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-        for label, page_key in menu_iso.items():
-            if st.sidebar.button(label):
-                st.session_state.page = page_key
+        # ✅ Verificar si la empresa tiene ISO activo y vigente
+        empresa_id = st.session_state.user.get("empresa_id")
+        empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if iso_permitido:
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+            for label, page_key in menu_iso.items():
+                if st.sidebar.button(label):
+                    st.session_state.page = page_key
 
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
