@@ -284,6 +284,9 @@ else:
         elif page == "documentos":
             from pages.documentos import main as documentos_page
             documentos_page(supabase_admin, st.session_state)
+        elif page == "tutores":
+            from pages.tutores import main as tutores_page
+            tutores_page(supabase_admin, st.session_state)
         elif page == "no_conformidades":
             from pages.no_conformidades import main as no_conformidades_page
             no_conformidades_page(supabase_admin, st.session_state)
