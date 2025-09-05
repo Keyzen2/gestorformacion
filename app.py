@@ -182,7 +182,7 @@ def route():
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · Streamlit + Supabase")
 
-    page = st.session_state.page
+page = st.session_state.page
 
 try:
     if page == "usuarios_empresas":
