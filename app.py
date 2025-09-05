@@ -284,8 +284,7 @@ try:
         st.title("🏠 Bienvenido al Gestor de Formación")
         st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
 except Exception as e:
-    st.error(f"❌ Error al cargar la página '{page}': {e}")
-
+        st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
 # =========================
 # Ejecución principal
 # =========================
