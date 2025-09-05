@@ -1,6 +1,7 @@
 import os, sys
 import streamlit as st
 from supabase import create_client
+from datetime import datetime
 
 # Añadir carpeta raíz al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
