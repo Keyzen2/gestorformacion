@@ -5,9 +5,6 @@ from services.alumnos import alta_alumno
 def main(supabase, session_state):
     st.subheader("👥 Usuarios y Empresas")
 
-    # -----------------------
-    # Ver usuarios y empresas
-    # -----------------------
     col1, col2 = st.columns(2)
 
     with col1:
@@ -26,9 +23,6 @@ def main(supabase, session_state):
             else:
                 st.info("No hay empresas registradas")
 
-    # -----------------------
-    # Crear Usuario
-    # -----------------------
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden crear usuarios.")
         return
@@ -89,9 +83,10 @@ def main(supabase, session_state):
                         if existe.data:
                             st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
                         else:
-                            auth_res = supabase.auth.sign_up({
+                            auth_res = supabase.auth.admin.create_user({
                                 "email": email_new,
-                                "password": password_new
+                                "password": password_new,
+                                "email_confirm": True
                             })
                             if not auth_res.user:
                                 st.error("❌ Error al crear el usuario en Auth.")
@@ -118,9 +113,6 @@ def main(supabase, session_state):
                 except Exception as e:
                     st.error(f"❌ Error al crear el usuario: {e}")
 
-# -----------------------
-# Función auxiliar para gestores
-# -----------------------
 def empresas_only(supabase, session_state):
     st.subheader("🏢 Mi Empresa")
     empresa_id = session_state.user.get("empresa_id")
