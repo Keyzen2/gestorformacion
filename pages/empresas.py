@@ -71,6 +71,9 @@ def main(supabase, session_state):
 
                     col1, col2 = st.columns(2)
 
+                    # -----------------------
+                    # FORMULARIO EDICIÓN
+                    # -----------------------
                     with col1:
                         with st.form(f"edit_empresa_{row['id']}", clear_on_submit=True):
                             nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
@@ -101,20 +104,24 @@ def main(supabase, session_state):
                                 iso_inicio, iso_fin = None, None
 
                             st.markdown("#### 🛡️ Configuración RGPD")
-                            rgpd_activo = st.checkbox("Activar módulo RGPD", value=row.get("rgpd_activo", False))
-                            if rgpd_activo:
-                                rgpd_inicio = st.date_input(
-                                    "Fecha de inicio RGPD",
-                                    value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date()
-                                    if row.get("rgpd_inicio") else datetime.today().date()
-                                )
-                                rgpd_fin = st.date_input(
-                                    "Fecha de fin RGPD",
-                                    value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date()
-                                    if row.get("rgpd_fin") else datetime.today().date()
-                                )
-                            else:
-                                rgpd_inicio, rgpd_fin = None, None
+                            # --- siempre mostramos fechas ---
+                            rgpd_inicio = st.date_input(
+                                "Fecha de inicio RGPD",
+                                value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date()
+                                if row.get("rgpd_inicio") else datetime.today().date()
+                            )
+                            rgpd_fin = st.date_input(
+                                "Fecha de fin RGPD (opcional)",
+                                value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date()
+                                if row.get("rgpd_fin") else None
+                            )
+
+                            # --- auto desactivar si fecha fin ya pasó ---
+                            rgpd_activo_valor = row.get("rgpd_activo", False)
+                            if rgpd_fin and rgpd_fin <= datetime.today().date():
+                                rgpd_activo_valor = False
+
+                            rgpd_activo = st.checkbox("Activar módulo RGPD", value=rgpd_activo_valor)
 
                             if f"empresa_editada_{row['id']}" not in st.session_state:
                                 st.session_state[f"empresa_editada_{row['id']}"] = False
@@ -147,6 +154,9 @@ def main(supabase, session_state):
                                 except Exception as e:
                                     st.error(f"❌ Error al actualizar: {str(e)}")
 
+                    # -----------------------
+                    # FORMULARIO ELIMINAR
+                    # -----------------------
                     with col2:
                         with st.form(f"delete_empresa_{row['id']}"):
                             st.warning("⚠️ Esta acción eliminará la empresa permanentemente.")
@@ -162,6 +172,9 @@ def main(supabase, session_state):
         else:
             st.info("ℹ️ No hay empresas registradas.")
 
+        # ======================================================
+        # CREAR EMPRESA
+        # ======================================================
         st.divider()
         st.markdown("### ➕ Crear Empresa")
         if "empresa_creada" not in st.session_state:
@@ -188,12 +201,13 @@ def main(supabase, session_state):
                 iso_inicio, iso_fin = None, None
 
             st.markdown("#### 🛡️ Configuración RGPD")
+            rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
+            rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=None)
+
             rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
-            if rgpd_activo:
-                rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
-                rgpd_fin = st.date_input("Fecha de fin RGPD", value=datetime.today())
-            else:
-                rgpd_inicio, rgpd_fin = None, None
+            # auto desactivar si fecha fin ya pasó
+            if rgpd_fin and rgpd_fin <= datetime.today().date():
+                rgpd_activo = False
 
             submitted = st.form_submit_button("Crear Empresa")
             if submitted and not st.session_state.empresa_creada:
