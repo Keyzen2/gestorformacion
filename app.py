@@ -115,6 +115,7 @@ def route():
     if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
+            "Panel de Alertas": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
             "Empresas": "empresas",
             "Acciones Formativas": "acciones_formativas",
@@ -176,6 +177,9 @@ def route():
         if page == "usuarios_empresas":
             from pages.usuarios_empresas import main as usuarios_empresas_page
             usuarios_empresas_page(supabase_admin, st.session_state)
+        elif page == "panel_admin":
+            from pages.panel_admin import main as panel_admin_page
+            panel_admin_page(supabase_admin, st.session_state)
         elif page == "empresas":
             from pages.empresas import main as empresas_page
             empresas_page(supabase_admin, st.session_state)
