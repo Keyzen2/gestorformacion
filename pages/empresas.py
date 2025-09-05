@@ -65,6 +65,9 @@ def main(supabase, session_state):
                     st.write(f"**ISO 9001 Activo:** {'✅ Sí' if row.get('iso_activo') else '❌ No'}")
                     st.write(f"**Inicio ISO:** {row.get('iso_inicio', '—')}")
                     st.write(f"**Fin ISO:** {row.get('iso_fin', '—')}")
+                    st.write(f"**RGPD Activo:** {'✅ Sí' if row.get('rgpd_activo') else '❌ No'}")
+                    st.write(f"**Inicio RGPD:** {row.get('rgpd_inicio', '—')}")
+                    st.write(f"**Fin RGPD:** {row.get('rgpd_fin', '—')}")
 
                     col1, col2 = st.columns(2)
 
@@ -83,16 +86,13 @@ def main(supabase, session_state):
 
                             st.markdown("#### ⚙️ Configuración de módulos")
                             iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False))
-                            iso_inicio = st.date_input(
-                                "Fecha de inicio ISO",
-                                value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date()
-                                if row.get("iso_inicio") else datetime.today().date()
-                            )
-                            iso_fin = st.date_input(
-                                "Fecha de fin ISO",
-                                value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date()
-                                if row.get("iso_fin") else None
-                            )
+                            iso_inicio = st.date_input("Fecha de inicio ISO", value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date() if row.get("iso_inicio") else datetime.today().date())
+                            iso_fin = st.date_input("Fecha de fin ISO", value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date() if row.get("iso_fin") else None)
+
+                            st.markdown("#### 🛡️ Configuración RGPD")
+                            rgpd_activo = st.checkbox("Activar módulo RGPD", value=row.get("rgpd_activo", False))
+                            rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date() if row.get("rgpd_inicio") else datetime.today().date())
+                            rgpd_fin = st.date_input("Fecha de fin RGPD", value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date() if row.get("rgpd_fin") else None)
 
                             if f"empresa_editada_{row['id']}" not in st.session_state:
                                 st.session_state[f"empresa_editada_{row['id']}"] = False
@@ -114,7 +114,10 @@ def main(supabase, session_state):
                                         "codigo_postal": nuevo_cp,
                                         "iso_activo": iso_activo,
                                         "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
-                                        "iso_fin": iso_fin.isoformat() if iso_fin else None
+                                        "iso_fin": iso_fin.isoformat() if iso_fin else None,
+                                        "rgpd_activo": rgpd_activo,
+                                        "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
+                                        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                                     }).eq("id", row["id"]).execute()
                                     st.session_state[f"empresa_editada_{row['id']}"] = True
                                     st.success("✅ Cambios guardados correctamente.")
@@ -159,6 +162,11 @@ def main(supabase, session_state):
             iso_inicio = st.date_input("Fecha de inicio ISO", value=datetime.today())
             iso_fin = st.date_input("Fecha de fin ISO", value=None)
 
+            st.markdown("#### 🛡️ Configuración RGPD")
+            rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
+            rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
+            rgpd_fin = st.date_input("Fecha de fin RGPD", value=None)
+
             submitted = st.form_submit_button("Crear Empresa")
             if submitted and not st.session_state.empresa_creada:
                 if not nombre or not cif:
@@ -183,7 +191,10 @@ def main(supabase, session_state):
                                 "fecha_alta": datetime.utcnow().isoformat(),
                                 "iso_activo": iso_activo,
                                 "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
-                                "iso_fin": iso_fin.isoformat() if iso_fin else None
+                                "iso_fin": iso_fin.isoformat() if iso_fin else None,
+                                "rgpd_activo": rgpd_activo,
+                                "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
+                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                             }).execute()
 
                             st.session_state.empresa_creada = True
@@ -191,6 +202,3 @@ def main(supabase, session_state):
                             st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error al crear la empresa: {str(e)}")
-
-    except Exception as e:
-        st.error(f"❌ Error al cargar el módulo de empresas: {e}")
