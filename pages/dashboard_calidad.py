@@ -5,73 +5,109 @@ from datetime import datetime
 def main(supabase, session_state):
     st.subheader("📊 Dashboard de Calidad ISO 9001")
     st.caption("Panel visual con KPIs, objetivos y seguimiento del sistema de gestión de calidad.")
+    st.divider()
 
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
+    # 🔒 Protección por rol y módulo ISO activo
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        empresa_res = supabase.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if not iso_permitido:
+            st.warning("🔒 Tu empresa no tiene activado el módulo ISO 9001.")
+            st.stop()
+
+    elif session_state.role != "admin":
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
     # =========================
     # Cargar datos
     # =========================
-    df_nc = pd.DataFrame(supabase.table("no_conformidades").select("*").execute().data or [])
-    df_ac = pd.DataFrame(supabase.table("acciones_correctivas").select("*").execute().data or [])
-    df_aud = pd.DataFrame(supabase.table("auditorias").select("*").execute().data or [])
-    df_obj = pd.DataFrame(supabase.table("objetivos_calidad").select("*").execute().data or [])
-    df_seg = pd.DataFrame(supabase.table("seguimiento_objetivos").select("*").execute().data or [])
+    try:
+        if session_state.role == "gestor":
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_ac = pd.DataFrame(supabase.table("acciones_correctivas").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_obj = pd.DataFrame(supabase.table("objetivos_calidad").select("*").eq("empresa_id", empresa_id).execute().data or [])
+            df_seg = pd.DataFrame(supabase.table("seguimiento_objetivos").select("*").eq("empresa_id", empresa_id).execute().data or [])
+        else:
+            df_nc = pd.DataFrame(supabase.table("no_conformidades").select("*").execute().data or [])
+            df_ac = pd.DataFrame(supabase.table("acciones_correctivas").select("*").execute().data or [])
+            df_aud = pd.DataFrame(supabase.table("auditorias").select("*").execute().data or [])
+            df_obj = pd.DataFrame(supabase.table("objetivos_calidad").select("*").execute().data or [])
+            df_seg = pd.DataFrame(supabase.table("seguimiento_objetivos").select("*").execute().data or [])
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+        return
 
     # =========================
     # Botón de actualización automática
     # =========================
     if st.button("🔄 Actualizar indicadores automáticos"):
-        # NC abiertas
-        objetivo_nc = [o for o in df_obj.to_dict("records") if "No Conformidades" in o["nombre"]]
-        if objetivo_nc:
-            valor = len(df_nc[df_nc["estado"] == "Abierta"])
-            supabase.table("seguimiento_objetivos").insert({
-                "objetivo_id": objetivo_nc[0]["id"],
-                "valor_real": valor,
-                "observaciones": "Actualización automática desde dashboard"
-            }).execute()
-
-        # Tiempo medio de resolución NC
-        objetivo_tiempo = [o for o in df_obj.to_dict("records") if "Tiempo medio" in o["nombre"]]
-        if objetivo_tiempo and not df_nc.empty:
-            df_nc_cerradas = df_nc[df_nc["fecha_cierre"].notna() & df_nc["fecha_detectada"].notna()]
-            if not df_nc_cerradas.empty:
-                df_nc_cerradas["fecha_cierre"] = pd.to_datetime(df_nc_cerradas["fecha_cierre"], errors="coerce")
-                df_nc_cerradas["fecha_detectada"] = pd.to_datetime(df_nc_cerradas["fecha_detectada"], errors="coerce")
-                dias = (df_nc_cerradas["fecha_cierre"] - df_nc_cerradas["fecha_detectada"]).dt.days
-                valor = dias.mean()
+        try:
+            # NC abiertas
+            objetivo_nc = [o for o in df_obj.to_dict("records") if "No Conformidades" in o["nombre"]]
+            if objetivo_nc:
+                valor = len(df_nc[df_nc["estado"] == "Abierta"])
                 supabase.table("seguimiento_objetivos").insert({
-                    "objetivo_id": objetivo_tiempo[0]["id"],
+                    "objetivo_id": objetivo_nc[0]["id"],
                     "valor_real": valor,
+                    "empresa_id": empresa_id if session_state.role == "gestor" else None,
                     "observaciones": "Actualización automática desde dashboard"
                 }).execute()
 
-        # Acciones Correctivas cerradas
-        objetivo_ac = [o for o in df_obj.to_dict("records") if "Acciones Correctivas" in o["nombre"]]
-        if objetivo_ac:
-            valor = len(df_ac[df_ac["estado"] == "Cerrada"])
-            supabase.table("seguimiento_objetivos").insert({
-                "objetivo_id": objetivo_ac[0]["id"],
-                "valor_real": valor,
-                "observaciones": "Actualización automática desde dashboard"
-            }).execute()
+            # Tiempo medio de resolución NC
+            objetivo_tiempo = [o for o in df_obj.to_dict("records") if "Tiempo medio" in o["nombre"]]
+            if objetivo_tiempo and not df_nc.empty:
+                df_nc_cerradas = df_nc[df_nc["fecha_cierre"].notna() & df_nc["fecha_detectada"].notna()]
+                if not df_nc_cerradas.empty:
+                    df_nc_cerradas["fecha_cierre"] = pd.to_datetime(df_nc_cerradas["fecha_cierre"], errors="coerce")
+                    df_nc_cerradas["fecha_detectada"] = pd.to_datetime(df_nc_cerradas["fecha_detectada"], errors="coerce")
+                    dias = (df_nc_cerradas["fecha_cierre"] - df_nc_cerradas["fecha_detectada"]).dt.days
+                    valor = dias.mean()
+                    supabase.table("seguimiento_objetivos").insert({
+                        "objetivo_id": objetivo_tiempo[0]["id"],
+                        "valor_real": valor,
+                        "empresa_id": empresa_id if session_state.role == "gestor" else None,
+                        "observaciones": "Actualización automática desde dashboard"
+                    }).execute()
 
-        # Cumplimiento plan de auditorías
-        objetivo_aud = [o for o in df_obj.to_dict("records") if "plan de auditorías" in o["nombre"]]
-        if objetivo_aud and not df_aud.empty:
-            total = len(df_aud)
-            cerradas = len(df_aud[df_aud["estado"] == "Cerrada"])
-            valor = (cerradas / total * 100) if total > 0 else 0
-            supabase.table("seguimiento_objetivos").insert({
-                "objetivo_id": objetivo_aud[0]["id"],
-                "valor_real": valor,
-                "observaciones": "Actualización automática desde dashboard"
-            }).execute()
+            # Acciones Correctivas cerradas
+            objetivo_ac = [o for o in df_obj.to_dict("records") if "Acciones Correctivas" in o["nombre"]]
+            if objetivo_ac:
+                valor = len(df_ac[df_ac["estado"] == "Cerrada"])
+                supabase.table("seguimiento_objetivos").insert({
+                    "objetivo_id": objetivo_ac[0]["id"],
+                    "valor_real": valor,
+                    "empresa_id": empresa_id if session_state.role == "gestor" else None,
+                    "observaciones": "Actualización automática desde dashboard"
+                }).execute()
 
-        st.success("✅ Indicadores automáticos actualizados y guardados en seguimiento.")
-        st.experimental_rerun()
+            # Cumplimiento plan de auditorías
+            objetivo_aud = [o for o in df_obj.to_dict("records") if "plan de auditorías" in o["nombre"]]
+            if objetivo_aud and not df_aud.empty:
+                total = len(df_aud)
+                cerradas = len(df_aud[df_aud["estado"] == "Cerrada"])
+                valor = (cerradas / total * 100) if total > 0 else 0
+                supabase.table("seguimiento_objetivos").insert({
+                    "objetivo_id": objetivo_aud[0]["id"],
+                    "valor_real": valor,
+                    "empresa_id": empresa_id if session_state.role == "gestor" else None,
+                    "observaciones": "Actualización automática desde dashboard"
+                }).execute()
+
+            st.success("✅ Indicadores automáticos actualizados y guardados en seguimiento.")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"❌ Error al actualizar indicadores: {e}")
 
     # =========================
     # Filtro por fechas
@@ -163,4 +199,5 @@ def main(supabase, session_state):
         st.dataframe(df_obj)
     with st.expander("📈 Seguimiento de Objetivos"):
         st.dataframe(df_seg)
+
     
