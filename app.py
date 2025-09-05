@@ -111,6 +111,14 @@ def route():
         "Informe de Auditoría": "informe_auditoria"
     }
 
+    def safe_parse_date(fecha):
+        if fecha is None:
+            return None
+        fecha_parsed = pd.to_datetime(fecha, errors='coerce')
+        if pd.isna(fecha_parsed):
+            return None
+        return fecha_parsed.date()
+
     if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
