@@ -33,9 +33,10 @@ def main(supabase, session_state):
     # =========================
     try:
         if session_state.role == "gestor":
-            nc_res = supabase.table("no_conformidades_app").select("*").eq("empresa_id", empresa_id).execute()
+            empresa_id = session_state.user.get("empresa_id")
+            nc_res = supabase.table("no_conformidades").select("*").eq("empresa_id", empresa_id).execute()
         else:
-            nc_res = supabase.table("no_conformidades_app").select("*").execute()
+            nc_res = supabase.table("no_conformidades").select("*").execute()
         df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Error al cargar no conformidades: {e}")
@@ -86,7 +87,7 @@ def main(supabase, session_state):
         for _, row in df_nc.iterrows():
             with st.expander(f"{row['descripcion'][:50]}... ({row['estado']})"):
                 st.write(f"**Responsable:** {row.get('responsable', '')}")
-                st.write(f"**Fecha detección:** {row.get('fecha', '')}")
+                st.write(f"**Fecha detección:** {row.get('fecha_detectada', '')}")
                 st.write(f"**Estado:** {row.get('estado', '')}")
                 st.write(f"**Acciones tomadas:** {row.get('acciones', '')}")
 
@@ -124,9 +125,9 @@ def main(supabase, session_state):
         st.info("ℹ️ No hay no conformidades registradas.")
 
     # =========================
-    # Alta (solo admin)
+    # Alta (admin y gestor)
     # =========================
-    if session_state.role == "admin":
+    if session_state.role in ["admin", "gestor"]:
         st.markdown("### ➕ Registrar No Conformidad")
         with st.form("form_nc", clear_on_submit=True):
             descripcion = st.text_area("Descripción *")
@@ -137,12 +138,15 @@ def main(supabase, session_state):
             submitted = st.form_submit_button("Guardar")
 
             if submitted:
-                supabase.table("no_conformidades").insert({
+                data = {
                     "descripcion": descripcion,
                     "responsable": responsable,
                     "fecha_detectada": fecha.isoformat(),
                     "estado": estado,
                     "acciones": acciones
-                }).execute()
+                }
+                if session_state.role == "gestor":
+                    data["empresa_id"] = session_state.user.get("empresa_id")
+                supabase.table("no_conformidades").insert(data).execute()
                 st.success("✅ No conformidad registrada.")
                 st.experimental_rerun()
