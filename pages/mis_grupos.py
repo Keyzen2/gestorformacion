@@ -18,36 +18,37 @@ def main(supabase, session_state):
             st.info("No estás registrado como participante.")
             return
 
-        # Buscar diplomas
-        diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", participante["id"]).execute()
-        diplomas = diplomas_res.data or []
-        if not diplomas:
-            st.info("No tienes diplomas registrados aún.")
+        # Buscar todos los grupos del participante
+        grupos_res = supabase.table("grupos").select("id", "fecha_inicio", "fecha_fin", "accion_formativa_id").eq("id", participante["grupo_id"]).execute()
+        grupos = grupos_res.data or []
+        if not grupos:
+            st.info("No tienes cursos asignados aún.")
             return
 
-        # Obtener info de grupos y cursos
-        grupo_ids = [d["grupo_id"] for d in diplomas]
-        grupos_res = supabase.table("grupos").select("id", "fecha_inicio", "fecha_fin", "accion_formativa_id").in_("id", grupo_ids).execute()
-        grupos = {g["id"]: g for g in grupos_res.data or []}
+        # Buscar diplomas del participante
+        diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", participante["id"]).execute()
+        diplomas = diplomas_res.data or []
+        diplomas_dict = {d["grupo_id"]: d for d in diplomas}
 
-        accion_ids = [g["accion_formativa_id"] for g in grupos.values()]
+        # Buscar acciones formativas
+        accion_ids = [g["accion_formativa_id"] for g in grupos]
         acciones_res = supabase.table("acciones_formativas").select("id", "nombre", "duracion_horas").in_("id", accion_ids).execute()
         acciones = {a["id"]: a for a in acciones_res.data or []}
 
-        # Construir tabla visual
+        # Construir registros
         registros = []
-        for d in diplomas:
-            grupo = grupos.get(d["grupo_id"])
-            accion = acciones.get(grupo["accion_formativa_id"]) if grupo else None
-            if grupo and accion:
-                registros.append({
-                    "Curso": accion["nombre"],
-                    "Inicio": grupo["fecha_inicio"],
-                    "Fin": grupo["fecha_fin"],
-                    "Duración": accion.get("duracion_horas", ""),
-                    "Diploma": d["url"],
-                    "Año": pd.to_datetime(grupo["fecha_inicio"]).year
-                })
+        for g in grupos:
+            accion = acciones.get(g["accion_formativa_id"])
+            diploma = diplomas_dict.get(g["id"])
+            registros.append({
+                "Curso": accion["nombre"] if accion else "Sin nombre",
+                "Inicio": g["fecha_inicio"],
+                "Fin": g["fecha_fin"],
+                "Duración": accion.get("duracion_horas", "") if accion else "",
+                "Diploma": diploma["url"] if diploma else None,
+                "Estado": "🟢 Disponible" if diploma else "🟡 Pendiente",
+                "Año": pd.to_datetime(g["fecha_inicio"]).year
+            })
 
         df = pd.DataFrame(registros)
 
@@ -75,9 +76,10 @@ def main(supabase, session_state):
                     st.markdown(f"### 🧾 {row['Curso']}")
                     st.markdown(f"📅 **Fechas:** {row['Inicio']} → {row['Fin']}")
                     st.markdown(f"⏱️ **Duración:** {row['Duración']} horas")
-                    st.markdown(f"[📄 Descargar diploma]({row['Diploma']})", unsafe_allow_html=True)
+                    st.markdown(f"📌 **Estado del diploma:** {row['Estado']}")
+                    if row["Diploma"]:
+                        st.markdown(f"[📄 Descargar diploma]({row['Diploma']})", unsafe_allow_html=True)
                     st.divider()
 
     except Exception as e:
         st.error(f"❌ Error al cargar tus cursos: {e}")
-
