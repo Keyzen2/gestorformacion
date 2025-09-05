@@ -3,26 +3,33 @@ import pandas as pd
 from services.alumnos import alta_alumno
 
 def main(supabase, session_state):
-    st.subheader("👥 Usuarios y Empresas")
+    st.subheader("👥 Gestión de Usuarios y Empresas")
+    st.caption("Consulta y creación de usuarios vinculados a empresas y grupos.")
 
-    col1, col2 = st.columns(2)
+    # =========================
+    # Visualización de datos
+    # =========================
+    with st.expander("📋 Ver Usuarios"):
+        usuarios = supabase.table("usuarios").select("*").execute().data
+        if usuarios:
+            st.dataframe(pd.DataFrame(usuarios))
+        else:
+            st.info("ℹ️ No hay usuarios registrados.")
 
-    with col1:
-        if st.button("📋 Ver Usuarios"):
-            usuarios = supabase.table("usuarios").select("*").execute().data
-            if usuarios:
-                st.dataframe(pd.DataFrame(usuarios))
-            else:
-                st.info("No hay usuarios registrados")
+    st.divider()
 
-    with col2:
-        if st.button("🏢 Ver Empresas"):
-            empresas = supabase.table("empresas").select("*").execute().data
-            if empresas:
-                st.dataframe(pd.DataFrame(empresas))
-            else:
-                st.info("No hay empresas registradas")
+    with st.expander("🏢 Ver Empresas"):
+        empresas = supabase.table("empresas").select("*").execute().data
+        if empresas:
+            st.dataframe(pd.DataFrame(empresas))
+        else:
+            st.info("ℹ️ No hay empresas registradas.")
 
+    st.divider()
+
+    # =========================
+    # Alta de usuarios
+    # =========================
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden crear usuarios.")
         return
@@ -63,9 +70,9 @@ def main(supabase, session_state):
 
         if submitted_user and not st.session_state.usuario_creado:
             if not email_new or not nombre_new or not password_new:
-                st.error("⚠️ Todos los campos son obligatorios")
+                st.error("⚠️ Todos los campos son obligatorios.")
             elif rol_new == "gestor" and not empresa_id:
-                st.error("⚠️ Debes asignar una empresa al gestor")
+                st.error("⚠️ Debes asignar una empresa al gestor.")
             else:
                 try:
                     if rol_new == "alumno":
@@ -103,9 +110,10 @@ def main(supabase, session_state):
 
                             supabase.table("usuarios").insert(insert_data).execute()
                             st.session_state.usuario_creado = True
-                            st.success(f"✅ Usuario '{nombre_new}' creado correctamente")
+                            st.success(f"✅ Usuario '{nombre_new}' creado correctamente.")
 
                     if st.session_state.usuario_creado:
+                        st.markdown("### 👤 Usuarios actualizados")
                         usuarios = supabase.table("usuarios").select("*").execute().data
                         if usuarios:
                             st.dataframe(pd.DataFrame(usuarios))
@@ -117,12 +125,12 @@ def empresas_only(supabase, session_state):
     st.subheader("🏢 Mi Empresa")
     empresa_id = session_state.user.get("empresa_id")
     if not empresa_id:
-        st.info("No tienes empresa asignada")
+        st.info("ℹ️ No tienes empresa asignada.")
         return
 
     empresa_res = supabase.table("empresas").select("*").eq("id", empresa_id).execute()
     if empresa_res.data:
         st.dataframe(pd.DataFrame(empresa_res.data))
     else:
-        st.info("No hay datos de empresa")
+        st.info("ℹ️ No hay datos de empresa.")
         
