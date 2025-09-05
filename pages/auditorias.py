@@ -114,7 +114,7 @@ def main(supabase, session_state):
                                     "hallazgos": nuevos_hallazgos
                                 }).eq("id", row["id"]).execute()
                                 st.success("✅ Cambios guardados.")
-                                st.experimental_rerun()
+                                st.rerun()
 
                     with col2:
                         with st.form(f"delete_aud_{row['id']}"):
@@ -124,7 +124,7 @@ def main(supabase, session_state):
                             if eliminar and confirmar:
                                 supabase.table("auditorias").delete().eq("id", row["id"]).execute()
                                 st.success("✅ Eliminada.")
-                                st.experimental_rerun()
+                                st.rerun()
     else:
         st.info("ℹ️ No hay auditorías registradas.")
 
@@ -166,5 +166,5 @@ def main(supabase, session_state):
                         data["empresa_id"] = empresa_id
                     supabase.table("auditorias").insert(data).execute()
                     st.success("✅ Auditoría registrada.")
-                    st.experimental_rerun()
+                    st.rerun()
               
