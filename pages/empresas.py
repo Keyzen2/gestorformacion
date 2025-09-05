@@ -121,6 +121,27 @@ def main(supabase, session_state):
 
                             rgpd_activo = st.checkbox("Activar módulo RGPD", value=rgpd_activo_valor)
 
+                            # 📈 Configuración CRM
+                            crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
+                            crm_data = crm_res.data[0] if crm_res.data else {}
+
+                            crm_inicio = st.date_input(
+                                "Fecha de inicio CRM",
+                                value=pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date()
+                                if crm_data.get("crm_inicio") else datetime.today().date()
+                            )
+                            crm_fin = st.date_input(
+                                "Fecha de fin CRM (opcional)",
+                                value=pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date()
+                                if crm_data.get("crm_fin") else None
+                            )
+
+                            crm_activo_valor = crm_data.get("crm_activo", False)
+                            if crm_fin and crm_fin <= datetime.today().date():
+                                crm_activo_valor = False
+
+                            crm_activo = st.checkbox("Activar módulo CRM", value=crm_activo_valor)
+
                             if f"empresa_editada_{row['id']}" not in st.session_state:
                                 st.session_state[f"empresa_editada_{row['id']}"] = False
 
@@ -128,7 +149,6 @@ def main(supabase, session_state):
 
                             if guardar and not st.session_state[f"empresa_editada_{row['id']}"]:
                                 try:
-                                    # Actualizamos empresa
                                     supabase.table("empresas").update({
                                         "nombre": nuevo_nombre,
                                         "cif": nuevo_cif,
@@ -145,7 +165,7 @@ def main(supabase, session_state):
                                         "iso_fin": iso_fin.isoformat() if iso_fin else None,
                                         "rgpd_activo": rgpd_activo,
                                         "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
-                                        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
+                                                                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                                     }).eq("id", row["id"]).execute()
 
                                     # Crear registro en rgpd_empresas si activamos RGPD y no existe
@@ -159,6 +179,25 @@ def main(supabase, session_state):
                                                 "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
                                                 "created_at": datetime.utcnow().isoformat()
                                             }).execute()
+
+                                    # Guardar configuración CRM
+                                    try:
+                                        if crm_data:
+                                            supabase.table("crm_empresas").update({
+                                                "crm_activo": crm_activo,
+                                                "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
+                                                "crm_fin": crm_fin.isoformat() if crm_fin else None
+                                            }).eq("empresa_id", row["id"]).execute()
+                                        else:
+                                            supabase.table("crm_empresas").insert({
+                                                "empresa_id": row["id"],
+                                                "crm_activo": crm_activo,
+                                                "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
+                                                "crm_fin": crm_fin.isoformat() if crm_fin else None,
+                                                "created_at": datetime.utcnow().isoformat()
+                                            }).execute()
+                                    except Exception as e:
+                                        st.error(f"❌ Error al guardar configuración CRM: {e}")
 
                                     st.session_state[f"empresa_editada_{row['id']}"] = True
                                     st.success("✅ Cambios guardados correctamente.")
@@ -219,6 +258,13 @@ def main(supabase, session_state):
             if rgpd_fin and rgpd_fin <= datetime.today().date():
                 rgpd_activo = False
 
+            st.markdown("#### 📈 Configuración CRM")
+            crm_inicio = st.date_input("Fecha de inicio CRM", value=datetime.today())
+            crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=None)
+            crm_activo = st.checkbox("Activar módulo CRM", value=False)
+            if crm_fin and crm_fin <= datetime.today().date():
+                crm_activo = False
+
             submitted = st.form_submit_button("Crear Empresa")
             if submitted and not st.session_state.empresa_creada:
                 if not nombre or not cif:
@@ -249,13 +295,25 @@ def main(supabase, session_state):
                                 "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
                             }).execute()
 
+                            empresa_id = empresa_res.data[0]["id"]
+
                             # Insert RGPD empresa si activado
                             if rgpd_activo:
                                 supabase.table("rgpd_empresas").insert({
-                                    "empresa_id": empresa_res.data[0]["id"],
+                                    "empresa_id": empresa_id,
                                     "rgpd_activo": True,
                                     "rgpd_inicio": rgpd_inicio.isoformat(),
                                     "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+                                    "created_at": datetime.utcnow().isoformat()
+                                }).execute()
+
+                            # Insert CRM empresa si activado
+                            if crm_activo:
+                                supabase.table("crm_empresas").insert({
+                                    "empresa_id": empresa_id,
+                                    "crm_activo": True,
+                                    "crm_inicio": crm_inicio.isoformat(),
+                                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
                                     "created_at": datetime.utcnow().isoformat()
                                 }).execute()
 
