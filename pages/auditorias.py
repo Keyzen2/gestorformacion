@@ -132,9 +132,9 @@ def main(supabase, session_state):
         st.info("ℹ️ No hay auditorías registradas.")
 
     # =========================
-    # Alta (solo admin)
+    # Alta (admin y gestor)
     # =========================
-    if session_state.role == "admin":
+    if session_state.role in ["admin", "gestor"]:
         st.markdown("### ➕ Registrar Auditoría")
         with st.form("form_aud", clear_on_submit=True):
             tipo = st.selectbox("Tipo", ["Interna", "Externa"])
@@ -153,7 +153,7 @@ def main(supabase, session_state):
 
             submitted = st.form_submit_button("Guardar")
             if submitted:
-                supabase.table("auditorias").insert({
+                data = {
                     "tipo": tipo,
                     "estado": estado,
                     "fecha": fecha.isoformat(),
@@ -161,7 +161,10 @@ def main(supabase, session_state):
                     "descripcion": descripcion,
                     "hallazgos": hallazgos,
                     "no_conformidad_id": nc_id
-                }).execute()
+                }
+                if session_state.role == "gestor":
+                    data["empresa_id"] = empresa_id
+                supabase.table("auditorias").insert(data).execute()
                 st.success("✅ Auditoría registrada.")
                 st.experimental_rerun()
               
