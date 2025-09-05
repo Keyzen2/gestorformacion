@@ -2,6 +2,7 @@ import os, sys
 import streamlit as st
 from supabase import create_client
 from datetime import datetime
+import pandas as pd
 
 # Añadir carpeta raíz al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -90,7 +91,7 @@ def login_view():
             st.experimental_rerun()
         except Exception as e:
             st.error(f"Error al iniciar sesión: {e}")
-            
+
 # =========================
 # Enrutamiento principal
 # =========================
@@ -108,10 +109,10 @@ def route():
         "Indicadores": "indicadores",
         "Dashboard Calidad": "dashboard_calidad",
         "Objetivos de Calidad": "objetivos_calidad",
-        "Informe de Auditoría": "informe_auditoria"
+        "Informe Auditoría": "informe_auditoria"
     }
 
-      if st.session_state.role == "admin":
+    if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         menu_admin = {
             "Usuarios y Empresas": "usuarios_empresas",
@@ -120,8 +121,7 @@ def route():
             "Grupos": "grupos",
             "Participantes": "participantes",
             "Documentos": "documentos",
-            "Tutores": "tutores",
-            "Gestión de Alumnos": "participantes"
+            "Tutores": "tutores"
         }
         for label, page_key in menu_admin.items():
             if st.sidebar.button(label):
@@ -144,19 +144,16 @@ def route():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
 
-        # ✅ Verificar si la empresa tiene ISO activo y vigente
+        # Verificar si la empresa tiene ISO activo y vigente
         empresa_id = st.session_state.user.get("empresa_id")
         empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
         hoy = datetime.today().date()
 
-        iso_inicio = safe_parse_date(empresa.get("iso_inicio"))
-        iso_fin = safe_parse_date(empresa.get("iso_fin"))
-
         iso_permitido = (
             empresa.get("iso_activo") and
-            (iso_inicio is None or iso_inicio <= hoy) and
-            (iso_fin is None or iso_fin >= hoy)
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
         )
 
         if iso_permitido:
@@ -216,8 +213,8 @@ def route():
             from pages.objetivos_calidad import main as objetivos_page
             objetivos_page(supabase_admin, st.session_state)
         elif page == "informe_auditoria":
-            from pages.informe_auditoria import main as informe_auditoria_page
-            informe_auditoria_page(supabase_admin, st.session_state)
+            from pages.informe_auditoria import main as informe_page
+            informe_page(supabase_admin, st.session_state)
         elif page == "mis_grupos":
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
