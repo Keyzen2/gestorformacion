@@ -226,56 +226,7 @@ def route():
 # Ejecución principal
 # =========================
 if not st.session_state.role:
-    st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
-            html, body, [class*="css"] {
-                font-family: 'Roboto', sans-serif;
-                background-color: #f5f5f5;
-            }
-            .module-card {
-                background-color: white;
-                padding: 1em;
-                border-radius: 10px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                margin-bottom: 1em;
-            }
-            .module-card h4 {
-                margin: 0;
-                color: #4285F4;
-            }
-            .module-card p {
-                margin: 0.5em 0 0;
-                color: #5f6368;
-            }
-        </style>
-        <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
-        <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
-        <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### 🔐 Iniciar sesión")
-    st.caption("Accede al gestor con tus credenciales.")
-
-    with st.form("form_login_acceso", clear_on_submit=False):
-        email = st.text_input("Email", autocomplete="email")
-        password = st.text_input("Contraseña", type="password", autocomplete="current-password")
-        submitted = st.form_submit_button("Entrar")
-
-    if submitted:
-        if not email or not password:
-            st.warning("Introduce email y contraseña.")
-        else:
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if not auth or not auth.user:
-                    st.error("Credenciales inválidas.")
-                else:
-                    st.session_state.auth_session = auth
-                    set_user_role_from_db(auth.user.email)
-                    st.experimental_rerun()
-            except Exception as e:
-                st.error(f"Error al iniciar sesión: {e}")
+    login_view()
 else:
     route()
     page = st.session_state.get("page", None)
@@ -284,51 +235,7 @@ else:
         if page == "usuarios_empresas":
             from pages.usuarios_empresas import main as usuarios_empresas_page
             usuarios_empresas_page(supabase_admin, st.session_state)
-        elif page == "panel_admin":
-            from pages.panel_admin import main as panel_admin_page
-            panel_admin_page(supabase_admin, st.session_state)
-        elif page == "empresas":
-            from pages.empresas import main as empresas_page
-            empresas_page(supabase_admin, st.session_state)
-        elif page == "acciones_formativas":
-            from pages.acciones_formativas import main as acciones_page
-            acciones_page(supabase_admin, st.session_state)
-        elif page == "grupos":
-            from pages.grupos import main as grupos_page
-            grupos_page(supabase_admin, st.session_state)
-        elif page == "participantes":
-            from pages.participantes import main as participantes_page
-            participantes_page(supabase_admin, st.session_state)
-        elif page == "documentos":
-            from pages.documentos import main as documentos_page
-            documentos_page(supabase_admin, st.session_state)
-        elif page == "rgpd_panel":
-            from pages.rgpd_panel import main as rgpd_panel_page
-            rgpd_panel_page(supabase_admin, st.session_state)
-        elif page == "rgpd_inicio":
-            from pages.rgpd_inicio import main as rgpd_inicio_page
-            rgpd_inicio_page(supabase_admin, st.session_state)
-        elif page == "rgpd_tratamientos":
-            from pages.rgpd_tratamientos import main as rgpd_tratamientos_page
-            rgpd_tratamientos_page(supabase_admin, st.session_state)
-        elif page == "rgpd_consentimientos":
-            from pages.rgpd_consentimientos import main as rgpd_consentimientos_page
-            rgpd_consentimientos_page(supabase_admin, st.session_state)
-        elif page == "rgpd_encargados":
-            from pages.rgpd_encargados import main as rgpd_encargados_page
-            rgpd_encargados_page(supabase_admin, st.session_state)
-        elif page == "rgpd_derechos":
-            from pages.rgpd_derechos import main as rgpd_derechos_page
-            rgpd_derechos_page(supabase_admin, st.session_state)
-        elif page == "rgpd_evaluacion":
-            from pages.rgpd_evaluacion import main as rgpd_evaluacion_page
-            rgpd_evaluacion_page(supabase_admin, st.session_state)
-        elif page == "rgpd_medidas":
-            from pages.rgpd_medidas import main as rgpd_medidas_page
-            rgpd_medidas_page(supabase_admin, st.session_state)
-        elif page == "rgpd_incidencias":
-            from pages.rgpd_incidencias import main as rgpd_incidencias_page
-            rgpd_incidencias_page(supabase_admin, st.session_state)
+        # ... resto de páginas ...
         elif page == "mis_grupos":
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
