@@ -226,8 +226,8 @@ if not st.session_state.role:
     login_view()
 else:
     route()
-    page = st.session_state.page
-
+    page = st.session_state.get("page", None)
+    
 try:
     if page == "usuarios_empresas":
         from pages.usuarios_empresas import main as usuarios_empresas_page
