@@ -168,8 +168,9 @@ def main(supabase, session_state):
                                     st.rerun()
 
                                 if eliminar:
+                                    supabase.storage.from_("documentos").remove([d["archivo_nombre"]])
                                     supabase.table("diplomas").delete().eq("id", d["id"]).execute()
-                                    st.success("✅ Diploma eliminado.")
+                                    st.success("✅ Diploma eliminado del sistema y del almacenamiento.")
                                     st.rerun()
                         else:
                             st.info("Este participante no tiene diplomas registrados.")
@@ -178,17 +179,18 @@ def main(supabase, session_state):
 
                     # Subir nuevo diploma
                     st.markdown("### 📤 Subir nuevo diploma")
-                    with st.form(f"diploma_form_{row['id']}", clear_on_submit=True):
+                    with st.form(f"diploma_upload_form_{row['id']}", clear_on_submit=True):
                         grupo_id = row.get("grupo_id")
                         grupo_nombre = grupos_nombre_por_id.get(grupo_id, "Grupo asignado")
                         st.text(f"Grupo: {grupo_nombre}")
-                        url_diploma = st.text_input("Enlace al diploma (URL)")
+
+                                                archivo = st.file_uploader("Selecciona el diploma (PDF)", type=["pdf"])
                         fecha_subida = st.date_input("Fecha de subida", value=datetime.today())
                         subir = st.form_submit_button("Subir diploma")
 
                     if subir:
-                        if not url_diploma.strip():
-                            st.warning("⚠️ Debes proporcionar un enlace al diploma.")
+                        if not archivo:
+                            st.warning("⚠️ Debes seleccionar un archivo PDF.")
                         else:
                             try:
                                 # Validación: evitar duplicados por grupo
@@ -196,23 +198,32 @@ def main(supabase, session_state):
                                 if existe.data:
                                     st.warning("⚠️ Ya existe un diploma para este participante en este grupo.")
                                 else:
+                                    # Generar nombre único
+                                    nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
+
+                                    # Subir al bucket 'documentos'
+                                    supabase.storage.from_("documentos").upload(nombre_archivo, archivo)
+
+                                    # Obtener URL pública
+                                    url_diploma = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
+
+                                    # Registrar en tabla diplomas
                                     supabase.table("diplomas").insert({
                                         "participante_id": row["id"],
                                         "grupo_id": grupo_id,
                                         "url": url_diploma,
-                                        "fecha_subida": fecha_subida.isoformat()
+                                        "fecha_subida": fecha_subida.isoformat(),
+                                        "archivo_nombre": nombre_archivo
                                     }).execute()
+
                                     st.success("✅ Diploma subido correctamente.")
                                     st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al subir el diploma: {e}")
-
     else:
         st.info("ℹ️ No hay participantes registrados.")
 
-    # =========================
     # Vista consolidada de diplomas por grupo (solo admin)
-    # =========================
     if session_state.role == "admin":
         st.markdown("## 📊 Diplomas por grupo")
         try:
