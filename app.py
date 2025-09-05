@@ -282,6 +282,27 @@ else:
         elif page == "documentos":
             from pages.documentos import main as documentos_page
             documentos_page(supabase_admin, st.session_state)
+        elif page == "no_conformidades":
+            from pages.no_conformidades import main as no_conformidades_page
+            no_conformidades_page(supabase_admin, st.session_state)
+        elif page == "acciones_correctivas":
+            from pages.acciones_correctivas import main as acciones_correctivas_page
+            acciones_correctivas_page(supabase_admin, st.session_state)
+        elif page == "auditorias":
+            from pages.auditorias import main as auditorias_page
+            auditorias_page(supabase_admin, st.session_state)
+        elif page == "indicadores":
+            from pages.indicadores import main as indicadores_page
+            indicadores_page(supabase_admin, st.session_state)
+        elif page == "dashboard_calidad":
+            from pages.dashboard_calidad import main as dashboard_calidad_page
+            dashboard_calidad_page(supabase_admin, st.session_state)
+        elif page == "objetivos_calidad":
+            from pages.objetivos_calidad import main as objetivos_calidad_page
+            objetivos_calidad_page(supabase_admin, st.session_state)
+        elif page == "informe_auditoria":
+            from pages.informe_auditoria import main as informe_auditoria_page
+            informe_auditoria_page(supabase_admin, st.session_state)
         elif page == "rgpd_panel":
             from pages.rgpd_panel import main as rgpd_panel_page
             rgpd_panel_page(supabase_admin, st.session_state)
