@@ -4,12 +4,8 @@ from supabase import create_client
 from datetime import datetime
 import pandas as pd
 
-# Añadir carpeta raíz al path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# =========================
-# Configuración de página
-# =========================
 st.set_page_config(
     page_title="Gestor de Formación",
     layout="wide",
@@ -17,9 +13,6 @@ st.set_page_config(
     menu_items={}
 )
 
-# =========================
-# Conexión a Supabase
-# =========================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
 SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
@@ -27,9 +20,6 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# =========================
-# Estado de sesión
-# =========================
 if "page" not in st.session_state:
     st.session_state.page = "home"
 if "role" not in st.session_state:
@@ -39,9 +29,6 @@ if "user" not in st.session_state:
 if "auth_session" not in st.session_state:
     st.session_state.auth_session = None
 
-# =========================
-# Funciones auxiliares
-# =========================
 def set_user_role_from_db(email: str):
     try:
         res = supabase_public.table("usuarios").select("*").eq("email", email).limit(1).execute()
@@ -92,9 +79,6 @@ def login_view():
         except Exception as e:
             st.error(f"Error al iniciar sesión: {e}")
 
-# =========================
-# Enrutamiento principal
-# =========================
 def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
     st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
@@ -145,7 +129,6 @@ def route():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
 
-        # Verificar si la empresa tiene ISO activo y vigente
         empresa_id = st.session_state.user.get("empresa_id")
         empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
@@ -164,13 +147,40 @@ def route():
                 if st.sidebar.button(label):
                     st.session_state.page = page_key
 
+        rgpd_res = supabase_admin.table("rgpd_empresas").select("rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("empresa_id", empresa_id).execute()
+        rgpd = rgpd_res.data[0] if rgpd_res.data else {}
+
+        rgpd_permitido = (
+            rgpd.get("rgpd_activo") and
+            (rgpd.get("rgpd_inicio") is None or pd.to_datetime(rgpd["rgpd_inicio"]).date() <= hoy) and
+            (rgpd.get("rgpd_fin") is None or pd.to_datetime(rgpd["rgpd_fin"]).date() >= hoy)
+        )
+
+        if rgpd_permitido:
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
+            rgpd_menu = {
+                "Panel RGPD": "rgpd_panel",
+                "Diagnóstico Inicial": "rgpd_inicio",
+                "Tratamientos": "rgpd_tratamientos",
+                "Cláusulas y Consentimientos": "rgpd_consentimientos",
+                "Encargados del Tratamiento": "rgpd_encargados",
+                "Derechos de los Interesados": "rgpd_derechos",
+                "Evaluación de Impacto": "rgpd_evaluacion",
+                "Medidas de Seguridad": "rgpd_medidas",
+                "Incidencias": "rgpd_incidencias"
+            }
+            for label, page_key in rgpd_menu.items():
+                if st.sidebar.button(label):
+                    st.session_state.page = page_key
+
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
         if st.sidebar.button("Mis Grupos y Diplomas"):
             st.session_state.page = "mis_grupos"
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · Streamlit + Supabase")
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · Streamlit + Supabase")
 
     page = st.session_state.page
     try:
@@ -194,31 +204,34 @@ def route():
             participantes_page(supabase_admin, st.session_state)
         elif page == "documentos":
             from pages.documentos import main as documentos_page
-            documentos_page(supabase_admin, st.session_state)
-        elif page == "tutores":
-            from pages.tutores import main as tutores_page
-            tutores_page(supabase_admin, st.session_state)
-        elif page == "no_conformidades":
-            from pages.no_conformidades import main as nc_page
-            nc_page(supabase_admin, st.session_state)
-        elif page == "acciones_correctivas":
-            from pages.acciones_correctivas import main as ac_page
-            ac_page(supabase_admin, st.session_state)
-        elif page == "auditorias":
-            from pages.auditorias import main as auditorias_page
-            auditorias_page(supabase_admin, st.session_state)
-        elif page == "indicadores":
-            from pages.indicadores import main as indicadores_page
-            indicadores_page(supabase_admin, st.session_state)
-        elif page == "dashboard_calidad":
-            from pages.dashboard_calidad import main as dashboard_calidad_page
-            dashboard_calidad_page(supabase_admin, st.session_state)
-        elif page == "objetivos_calidad":
-            from pages.objetivos_calidad import main as objetivos_page
-            objetivos_page(supabase_admin, st.session_state)
-        elif page == "informe_auditoria":
-            from pages.informe_auditoria import main as informe_page
-            informe_page(supabase_admin, st.session_state)
+            documentos_page(supabase_admin, st.session_state
+        elif page == "rgpd_panel":
+            from pages.rgpd_panel import main as rgpd_panel_page
+            rgpd_panel_page(supabase_admin, st.session_state)
+        elif page == "rgpd_inicio":
+            from pages.rgpd_inicio import main as rgpd_inicio_page
+            rgpd_inicio_page(supabase_admin, st.session_state)
+        elif page == "rgpd_tratamientos":
+            from pages.rgpd_tratamientos import main as rgpd_tratamientos_page
+            rgpd_tratamientos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_consentimientos":
+            from pages.rgpd_consentimientos import main as rgpd_consentimientos_page
+            rgpd_consentimientos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_encargados":
+            from pages.rgpd_encargados import main as rgpd_encargados_page
+            rgpd_encargados_page(supabase_admin, st.session_state)
+        elif page == "rgpd_derechos":
+            from pages.rgpd_derechos import main as rgpd_derechos_page
+            rgpd_derechos_page(supabase_admin, st.session_state)
+        elif page == "rgpd_evaluacion":
+            from pages.rgpd_evaluacion import main as rgpd_evaluacion_page
+            rgpd_evaluacion_page(supabase_admin, st.session_state)
+        elif page == "rgpd_medidas":
+            from pages.rgpd_medidas import main as rgpd_medidas_page
+            rgpd_medidas_page(supabase_admin, st.session_state)
+        elif page == "rgpd_incidencias":
+            from pages.rgpd_incidencias import main as rgpd_incidencias_page
+            rgpd_incidencias_page(supabase_admin, st.session_state)
         elif page == "mis_grupos":
             from pages.mis_grupos import main as mis_grupos_page
             mis_grupos_page(supabase_public, st.session_state)
@@ -227,11 +240,3 @@ def route():
             st.caption("Usa el menú lateral para navegar por las secciones disponibles según tu rol.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page}': {e}")
-
-# =========================
-# Ejecución principal
-# =========================
-if not st.session_state.role:
-    login_view()
-else:
-    route()
