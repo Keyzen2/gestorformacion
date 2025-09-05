@@ -1,7 +1,6 @@
 import sys, os
 import streamlit as st
 from supabase import create_client
-import pages.usuarios_empresas
 
 # 🔹 Forzar inclusión de la carpeta raíz en el path de Python
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -12,15 +11,13 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 st.set_page_config(page_title="Gestor de Formación", layout="wide")
 
 # =========================
-# Conexión a Supabase usando secrets
+# Conexión a Supabase
 # =========================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
 SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 
-# Cliente público (operaciones con RLS)
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-# Cliente admin (operaciones sin RLS, crear usuarios, etc.)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 # =========================
@@ -66,33 +63,6 @@ def do_logout():
     st.session_state.clear()
     st.experimental_rerun()
 
-def mostrar_menu():
-    st.sidebar.title("📋 Menú principal")
-
-    if st.session_state.role == "admin":
-        st.sidebar.markdown("### 👥 Gestión de usuarios y empresas")
-        if st.sidebar.button("👤 Usuarios y Empresas"):
-            st.session_state.page = "usuarios_empresas"
-        if st.sidebar.button("🧑‍🎓 Participantes"):
-            st.session_state.page = "participantes"
-        if st.sidebar.button("👥 Grupos"):
-            st.session_state.page = "grupos"
-        if st.sidebar.button("📚 Acciones formativas"):
-            st.session_state.page = "acciones_formativas"
-
-    if st.session_state.role in ["admin", "gestor"]:
-        st.sidebar.markdown("### 🏢 Gestión de empresa")
-        if st.sidebar.button("🏢 Mi Empresa"):
-            st.session_state.page = "mi_empresa"
-
-    st.sidebar.divider()
-    st.sidebar.subheader("📑 Gestión ISO 9001")
-    st.sidebar.caption("Sección informativa o futura implementación")
-
-    st.sidebar.divider()
-    if st.sidebar.button("🚪 Cerrar sesión"):
-        do_logout()
-
 def login_view():
     st.title("🔐 Iniciar sesión")
     with st.form("login_form", clear_on_submit=False):
@@ -114,26 +84,113 @@ def login_view():
         except Exception as e:
             st.error(f"Error al iniciar sesión: {e}")
 
+# =========================
+# Enrutamiento principal
+# =========================
 def route():
-    page = st.session_state.page
-    if page == "usuarios_empresas":
-        usuarios_empresas.main(supabase_admin, st.session_state)
-    elif page == "participantes":
-        participantes.main(supabase_admin, st.session_state)
-    elif page == "grupos":
-        grupos.main(supabase_admin, st.session_state)
-    elif page == "acciones_formativas":
-        acciones_formativas.main(supabase_admin, st.session_state)
-    elif page == "mi_empresa":
-        usuarios_empresas.empresas_only(supabase_public, st.session_state)
+    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
+    st.sidebar.title(f"👋 Bienvenido {nombre_usuario}")
+    st.sidebar.button("Cerrar sesión", on_click=do_logout)
+
+    # Menú dinámico según rol
+    if st.session_state.role == "admin":
+        opciones = [
+            "👥 Usuarios y Empresas",
+            "🏢 Empresas",
+            "📚 Acciones Formativas",
+            "👨‍🏫 Grupos",
+            "🧑‍🎓 Participantes",
+            "📄 Documentos",
+            "🎓 Tutores",
+            "📋 Gestión de Alumnos",
+            "— 📏 Gestión ISO 9001 —",
+            "🚨 No Conformidades (ISO 9001)",
+            "🛠️ Acciones Correctivas (ISO 9001)",
+            "📋 Auditorías (ISO 9001)",
+            "📈 Indicadores (ISO 9001)",
+            "📊 Dashboard Calidad (ISO 9001)",
+            "🎯 Objetivos de Calidad (ISO 9001)"
+        ]
+    elif st.session_state.role == "gestor":
+        opciones = [
+            "👨‍🏫 Grupos",
+            "🧑‍🎓 Participantes",
+            "📄 Documentos",
+            "— 📏 Gestión ISO 9001 —",
+            "🚨 No Conformidades (ISO 9001)",
+            "🛠️ Acciones Correctivas (ISO 9001)",
+            "📋 Auditorías (ISO 9001)",
+            "📈 Indicadores (ISO 9001)",
+            "📊 Dashboard Calidad (ISO 9001)",
+            "🎯 Objetivos de Calidad (ISO 9001)"
+        ]
+    elif st.session_state.role == "alumno":
+        opciones = ["🎓 Mis Grupos y Diplomas"]
     else:
-        st.title("🏠 Bienvenido al Gestor de Formación")
-        if st.session_state.role == "admin":
-            st.caption("Usa el menú para gestionar usuarios, participantes, grupos y acciones.")
-        elif st.session_state.role == "gestor":
-            st.caption("Gestiona tu empresa, grupos y participantes asignados.")
-        else:
-            st.caption("Consulta tus cursos y tu perfil.")
+        opciones = []
+
+    menu = st.sidebar.radio("📂 Menú", opciones)
+
+    # Carga de páginas
+    if menu.startswith("👥 Usuarios"):
+        from pages.usuarios_empresas import main as usuarios_empresas_page
+        usuarios_empresas_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🏢 Empresas"):
+        from pages.empresas import main as empresas_page
+        empresas_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("📚 Acciones Formativas"):
+        from pages.acciones_formativas import main as acciones_page
+        acciones_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("👨‍🏫 Grupos"):
+        from pages.grupos import main as grupos_page
+        grupos_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🧑‍🎓 Participantes") or menu.startswith("📋 Gestión de Alumnos"):
+        from pages.participantes import main as participantes_page
+        participantes_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("📄 Documentos"):
+        from pages.documentos import main as documentos_page
+        documentos_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🎓 Tutores"):
+        from pages.tutores import main as tutores_page
+        tutores_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🚨 No Conformidades"):
+        from pages.no_conformidades import main as nc_page
+        nc_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🛠️ Acciones Correctivas"):
+        from pages.acciones_correctivas import main as ac_page
+        ac_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("📋 Auditorías"):
+        from pages.auditorias import main as auditorias_page
+        auditorias_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("📈 Indicadores"):
+        from pages.indicadores import main as indicadores_page
+        indicadores_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("📊 Dashboard Calidad"):
+        from pages.dashboard_calidad import main as dashboard_calidad_page
+        dashboard_calidad_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🎯 Objetivos de Calidad"):
+        from pages.objetivos_calidad import main as objetivos_page
+        objetivos_page(supabase_admin, st.session_state)
+
+    elif menu.startswith("🎓 Mis Grupos"):
+        from pages.mis_grupos import main as mis_grupos_page
+        mis_grupos_page(supabase_public, st.session_state)
+
+    # Footer
+    st.sidebar.divider()
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · Streamlit + Supabase")
 
 # =========================
 # Ejecución principal
@@ -141,6 +198,5 @@ def route():
 if not st.session_state.role:
     login_view()
 else:
-    mostrar_menu()
     route()
         
