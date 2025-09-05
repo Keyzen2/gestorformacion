@@ -4,22 +4,51 @@ from datetime import datetime
 
 def main(supabase, session_state):
     st.subheader("📈 Indicadores de Calidad ISO 9001")
+    st.caption("Análisis de desempeño del sistema de calidad basado en registros ISO.")
+    st.divider()
 
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
+    # 🔒 Protección por rol y módulo ISO activo
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        empresa_res = supabase.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if not iso_permitido:
+            st.warning("🔒 Tu empresa no tiene activado el módulo ISO 9001.")
+            st.stop()
+
+    elif session_state.role != "admin":
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
     # =========================
-    # Cargar datos de las tablas clave
+    # Cargar datos
     # =========================
-    nc_res = supabase.table("no_conformidades").select("*").execute()
-    df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+    try:
+        if session_state.role == "gestor":
+            nc_res = supabase.table("no_conformidades").select("*").eq("empresa_id", empresa_id).execute()
+            ac_res = supabase.table("acciones_correctivas").select("*").eq("empresa_id", empresa_id).execute()
+            aud_res = supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute()
+        else:
+            nc_res = supabase.table("no_conformidades").select("*").execute()
+            ac_res = supabase.table("acciones_correctivas").select("*").execute()
+            aud_res = supabase.table("auditorias").select("*").execute()
 
-    ac_res = supabase.table("acciones_correctivas").select("*").execute()
-    df_ac = pd.DataFrame(ac_res.data) if ac_res.data else pd.DataFrame()
-
-    aud_res = supabase.table("auditorias").select("*").execute()
-    df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
+        df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+        df_ac = pd.DataFrame(ac_res.data) if ac_res.data else pd.DataFrame()
+        df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+        df_nc = pd.DataFrame()
+        df_ac = pd.DataFrame()
+        df_aud = pd.DataFrame()
 
     # =========================
     # Filtro por fecha
