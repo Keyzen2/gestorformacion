@@ -63,7 +63,7 @@ def main(supabase, session_state):
         st.caption(f"Página {st.session_state.page_tutores} de {total_pages}")
 
         # =========================
-        # Visualización
+        # Visualización y edición
         # =========================
         for _, row in df_tutores.iloc[start_idx:end_idx].iterrows():
             with st.expander(f"{row['nombre']} {row['apellidos']}"):
@@ -102,41 +102,48 @@ def main(supabase, session_state):
 
                 col1, col2 = st.columns(2)
 
-                if st.session_state.get(f"editado_{row['id']}", False) is False:
-                    with col1:
-                        with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
-                            nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
-                            nuevos_apellidos = st.text_input("Apellidos", value=row["apellidos"])
-                            nuevo_email = st.text_input("Email", value=row.get("email", ""))
-                            nuevo_telefono = st.text_input("Teléfono", value=row.get("telefono", ""))
-                            nuevo_nif = st.text_input("NIF/DNI", value=row.get("nif", ""))
-                            nuevo_tipo = st.selectbox("Tipo de Tutor", ["Interno", "Externo"], index=["Interno", "Externo"].index(row.get("tipo_tutor", "Interno")))
-                            nueva_direccion = st.text_input("Dirección", value=row.get("direccion", ""))
-                            nueva_ciudad = st.text_input("Ciudad", value=row.get("ciudad", ""))
-                            nueva_provincia = st.text_input("Provincia", value=row.get("provincia", ""))
-                            nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
+                # =========================
+                # Formulario de edición
+                # =========================
+                with col1:
+                    with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
+                        nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
+                        nuevos_apellidos = st.text_input("Apellidos", value=row["apellidos"])
+                        nuevo_email = st.text_input("Email", value=row.get("email", ""))
+                        nuevo_telefono = st.text_input("Teléfono", value=row.get("telefono", ""))
+                        nuevo_nif = st.text_input("NIF/DNI", value=row.get("nif", ""))
+                        tipos = ["Interno", "Externo"]
+                        tipo_actual = row.get("tipo_tutor") if row.get("tipo_tutor") in tipos else "Interno"
+                        nuevo_tipo = st.selectbox("Tipo de Tutor", tipos, index=tipos.index(tipo_actual))
+                        nueva_direccion = st.text_input("Dirección", value=row.get("direccion", ""))
+                        nueva_ciudad = st.text_input("Ciudad", value=row.get("ciudad", ""))
+                        nueva_provincia = st.text_input("Provincia", value=row.get("provincia", ""))
+                        nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
 
-                            guardar = st.form_submit_button("Guardar cambios")
-                            if guardar:
-                                try:
-                                    supabase.table("tutores").update({
-                                        "nombre": nuevo_nombre,
-                                        "apellidos": nuevos_apellidos,
-                                        "email": nuevo_email,
-                                        "telefono": nuevo_telefono,
-                                        "nif": nuevo_nif,
-                                        "tipo_tutor": nuevo_tipo,
-                                        "direccion": nueva_direccion,
-                                        "ciudad": nueva_ciudad,
-                                        "provincia": nueva_provincia,
-                                        "codigo_postal": nuevo_cp
-                                    }).eq("id", row["id"]).execute()
+                        guardar = st.form_submit_button("💾 Guardar cambios")
+                        if guardar:
+                            try:
+                                supabase.table("tutores").update({
+                                    "nombre": nuevo_nombre,
+                                    "apellidos": nuevos_apellidos,
+                                    "email": nuevo_email,
+                                    "telefono": nuevo_telefono,
+                                    "nif": nuevo_nif,
+                                    "tipo_tutor": nuevo_tipo,
+                                    "direccion": nueva_direccion,
+                                    "ciudad": nueva_ciudad,
+                                    "provincia": nueva_provincia,
+                                    "codigo_postal": nuevo_cp
+                                }).eq("id", row["id"]).execute()
 
-                                    st.session_state[f"editado_{row['id']}"] = True
-                                    st.success("✅ Cambios guardados correctamente.")
-                                except Exception as e:
-                                    st.error(f"❌ Error al actualizar: {str(e)}")
+                                st.success("✅ Cambios guardados correctamente.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar: {str(e)}")
 
+                # =========================
+                # Formulario de eliminación
+                # =========================
                 with col2:
                     with st.form(f"delete_form_{row['id']}"):
                         st.warning(f"⚠️ Vas a eliminar al tutor '{row['nombre']} {row['apellidos']}'. Esta acción no se puede deshacer.")
@@ -153,6 +160,6 @@ def main(supabase, session_state):
                                     st.error(f"❌ Error al eliminar: {str(e)}")
                             else:
                                 st.error("⚠️ Debes marcar la casilla de confirmación antes de eliminar.")
+
     else:
         st.info("ℹ️ No hay tutores registrados.")
-
