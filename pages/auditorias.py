@@ -4,19 +4,47 @@ from datetime import datetime
 
 def main(supabase, session_state):
     st.subheader("📋 Auditorías")
+    st.caption("Gestión de auditorías internas y externas, y vinculación con no conformidades.")
+    st.divider()
 
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
+    # 🔒 Protección por rol y módulo ISO activo
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        empresa_res = supabase.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if not iso_permitido:
+            st.warning("🔒 Tu empresa no tiene activado el módulo ISO 9001.")
+            st.stop()
+
+    elif session_state.role != "admin":
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
     # =========================
     # Cargar datos
     # =========================
-    aud_res = supabase.table("auditorias").select("*").execute()
-    df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
+    try:
+        if session_state.role == "gestor":
+            aud_res = supabase.table("auditorias").select("*").eq("empresa_id", empresa_id).execute()
+            nc_res = supabase.table("no_conformidades").select("id", "descripcion").eq("empresa_id", empresa_id).execute()
+        else:
+            aud_res = supabase.table("auditorias").select("*").execute()
+            nc_res = supabase.table("no_conformidades").select("id", "descripcion").execute()
 
-    nc_res = supabase.table("no_conformidades").select("id", "descripcion").execute()
-    df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+        df_aud = pd.DataFrame(aud_res.data) if aud_res.data else pd.DataFrame()
+        df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+        df_aud = pd.DataFrame()
+        df_nc = pd.DataFrame()
 
     # =========================
     # KPIs
@@ -68,73 +96,72 @@ def main(supabase, session_state):
                 st.write(f"**Hallazgos:** {row.get('hallazgos', '')}")
                 st.write(f"**No Conformidad asociada:** {row.get('no_conformidad_id', '')}")
 
-                col1, col2 = st.columns(2)
+                if session_state.role == "admin":
+                    col1, col2 = st.columns(2)
 
-                # ✏️ Editar
-                with col1:
-                    with st.form(f"edit_aud_{row['id']}", clear_on_submit=True):
-                        nuevo_tipo = st.selectbox("Tipo", ["Interna", "Externa"], index=["Interna", "Externa"].index(row.get("tipo", "Interna")))
-                        nuevo_estado = st.selectbox("Estado", ["Planificada", "En curso", "Cerrada"], index=["Planificada", "En curso", "Cerrada"].index(row.get("estado", "Planificada")))
-                        nuevo_auditor = st.text_input("Auditor", value=row.get("auditor", ""))
-                        nueva_desc = st.text_area("Descripción", value=row.get("descripcion", ""))
-                        nuevos_hallazgos = st.text_area("Hallazgos", value=row.get("hallazgos", ""))
+                    with col1:
+                        with st.form(f"edit_aud_{row['id']}", clear_on_submit=True):
+                            nuevo_tipo = st.selectbox("Tipo", ["Interna", "Externa"], index=["Interna", "Externa"].index(row.get("tipo", "Interna")))
+                            nuevo_estado = st.selectbox("Estado", ["Planificada", "En curso", "Cerrada"], index=["Planificada", "En curso", "Cerrada"].index(row.get("estado", "Planificada")))
+                            nuevo_auditor = st.text_input("Auditor", value=row.get("auditor", ""))
+                            nueva_desc = st.text_area("Descripción", value=row.get("descripcion", ""))
+                            nuevos_hallazgos = st.text_area("Hallazgos", value=row.get("hallazgos", ""))
 
-                        guardar = st.form_submit_button("Guardar cambios")
-                        if guardar:
-                            supabase.table("auditorias").update({
-                                "tipo": nuevo_tipo,
-                                "estado": nuevo_estado,
-                                "auditor": nuevo_auditor,
-                                "descripcion": nueva_desc,
-                                "hallazgos": nuevos_hallazgos
-                            }).eq("id", row["id"]).execute()
-                            st.success("✅ Cambios guardados.")
-                            st.experimental_rerun()
+                            guardar = st.form_submit_button("Guardar cambios")
+                            if guardar:
+                                supabase.table("auditorias").update({
+                                    "tipo": nuevo_tipo,
+                                    "estado": nuevo_estado,
+                                    "auditor": nuevo_auditor,
+                                    "descripcion": nueva_desc,
+                                    "hallazgos": nuevos_hallazgos
+                                }).eq("id", row["id"]).execute()
+                                st.success("✅ Cambios guardados.")
+                                st.experimental_rerun()
 
-                # 🗑️ Eliminar
-                with col2:
-                    with st.form(f"delete_aud_{row['id']}"):
-                        st.warning("⚠️ Esta acción eliminará la auditoría.")
-                        confirmar = st.checkbox("Confirmo la eliminación")
-                        eliminar = st.form_submit_button("Eliminar")
-                        if eliminar and confirmar:
-                            supabase.table("auditorias").delete().eq("id", row["id"]).execute()
-                            st.success("✅ Eliminada.")
-                            st.experimental_rerun()
-
+                    with col2:
+                        with st.form(f"delete_aud_{row['id']}"):
+                            st.warning("⚠️ Esta acción eliminará la auditoría.")
+                            confirmar = st.checkbox("Confirmo la eliminación")
+                            eliminar = st.form_submit_button("Eliminar")
+                            if eliminar and confirmar:
+                                supabase.table("auditorias").delete().eq("id", row["id"]).execute()
+                                st.success("✅ Eliminada.")
+                                st.experimental_rerun()
     else:
         st.info("ℹ️ No hay auditorías registradas.")
 
     # =========================
-    # Alta
+    # Alta (solo admin)
     # =========================
-    st.markdown("### ➕ Registrar Auditoría")
-    with st.form("form_aud", clear_on_submit=True):
-        tipo = st.selectbox("Tipo", ["Interna", "Externa"])
-        estado = st.selectbox("Estado", ["Planificada", "En curso", "Cerrada"])
-        fecha = st.date_input("Fecha", datetime.today())
-        auditor = st.text_input("Auditor")
-        descripcion = st.text_area("Descripción")
-        hallazgos = st.text_area("Hallazgos")
+    if session_state.role == "admin":
+        st.markdown("### ➕ Registrar Auditoría")
+        with st.form("form_aud", clear_on_submit=True):
+            tipo = st.selectbox("Tipo", ["Interna", "Externa"])
+            estado = st.selectbox("Estado", ["Planificada", "En curso", "Cerrada"])
+            fecha = st.date_input("Fecha", datetime.today())
+            auditor = st.text_input("Auditor")
+            descripcion = st.text_area("Descripción")
+            hallazgos = st.text_area("Hallazgos")
 
-        nc_id = None
-        if not df_nc.empty:
-            nc_opciones = {f"{row['id']} - {row['descripcion'][:50]}": row['id'] for _, row in df_nc.iterrows()}
-            nc_seleccion = st.selectbox("No Conformidad asociada (opcional)", ["Ninguna"] + list(nc_opciones.keys()))
-            if nc_seleccion != "Ninguna":
-                nc_id = nc_opciones[nc_seleccion]
+            nc_id = None
+            if not df_nc.empty:
+                nc_opciones = {f"{row['id']} - {row['descripcion'][:50]}": row['id'] for _, row in df_nc.iterrows()}
+                nc_seleccion = st.selectbox("No Conformidad asociada (opcional)", ["Ninguna"] + list(nc_opciones.keys()))
+                if nc_seleccion != "Ninguna":
+                    nc_id = nc_opciones[nc_seleccion]
 
-        submitted = st.form_submit_button("Guardar")
-        if submitted:
-            supabase.table("auditorias").insert({
-                "tipo": tipo,
-                "estado": estado,
-                "fecha": fecha.isoformat(),
-                "auditor": auditor,
-                "descripcion": descripcion,
-                "hallazgos": hallazgos,
-                "no_conformidad_id": nc_id
-            }).execute()
-            st.success("✅ Auditoría registrada.")
-            st.experimental_rerun()
+            submitted = st.form_submit_button("Guardar")
+            if submitted:
+                supabase.table("auditorias").insert({
+                    "tipo": tipo,
+                    "estado": estado,
+                    "fecha": fecha.isoformat(),
+                    "auditor": auditor,
+                    "descripcion": descripcion,
+                    "hallazgos": hallazgos,
+                    "no_conformidad_id": nc_id
+                }).execute()
+                st.success("✅ Auditoría registrada.")
+                st.experimental_rerun()
               
