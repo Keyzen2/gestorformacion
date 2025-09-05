@@ -51,8 +51,8 @@ def main(supabase, session_state):
             st.markdown(f"**{row['nombre']}** — Meta: {row['meta']} — Responsable: {row.get('responsable','')}")
             st.caption(f"Fuente: {row.get('fuente_datos','')} | Frecuencia: {row.get('frecuencia','')} | Año: {row.get('ano','')}")
 
-            segs = df_seg[df_seg["objetivo_id"] == row["id"]]
-            if not segs.empty:
+            segs = df_seg[df_seg["objetivo_id"] == row["id"]] if "objetivo_id" in df_seg.columns else pd.DataFrame()
+            if not segs.empty and "valor_real" in segs.columns:
                 ultimo_valor = segs.sort_values("fecha", ascending=False).iloc[0]
                 valor_real = ultimo_valor["valor_real"]
                 meta_num = None
@@ -80,16 +80,19 @@ def main(supabase, session_state):
                     observaciones = st.text_area("Observaciones")
                     submitted = st.form_submit_button("Guardar")
                     if submitted:
-                        seguimiento_data = {
-                            "objetivo_id": row["id"],
-                            "valor_real": valor_real,
-                            "observaciones": observaciones
-                        }
-                        if session_state.role == "gestor":
-                            seguimiento_data["empresa_id"] = empresa_id
-                        supabase.table("seguimiento_objetivos").insert(seguimiento_data).execute()
-                        st.success("✅ Avance registrado.")
-                        st.experimental_rerun()
+                        if valor_real is None or valor_real == 0:
+                            st.warning("⚠️ El valor real debe ser mayor que cero.")
+                        else:
+                            seguimiento_data = {
+                                "objetivo_id": row["id"],
+                                "valor_real": valor_real,
+                                "observaciones": observaciones
+                            }
+                            if session_state.role == "gestor":
+                                seguimiento_data["empresa_id"] = empresa_id
+                            supabase.table("seguimiento_objetivos").insert(seguimiento_data).execute()
+                            st.success("✅ Avance registrado.")
+                            st.experimental_rerun()
 
             st.divider()
     else:
@@ -108,18 +111,22 @@ def main(supabase, session_state):
             frecuencia = st.selectbox("Frecuencia", ["Mensual", "Trimestral", "Semestral", "Anual"])
             ano = st.number_input("Año", value=datetime.today().year, step=1)
             submitted = st.form_submit_button("Guardar")
+
             if submitted:
-                objetivo_data = {
-                    "nombre": nombre,
-                    "meta": meta,
-                    "responsable": responsable,
-                    "fuente_datos": fuente_datos,
-                    "frecuencia": frecuencia,
-                    "ano": ano
-                }
-                if session_state.role == "gestor":
-                    objetivo_data["empresa_id"] = empresa_id
-                supabase.table("objetivos_calidad").insert(objetivo_data).execute()
-                st.success("✅ Objetivo añadido.")
-                st.experimental_rerun()
+                if not nombre.strip() or not meta.strip():
+                    st.warning("⚠️ El nombre y la meta son obligatorios.")
+                else:
+                    objetivo_data = {
+                        "nombre": nombre,
+                        "meta": meta,
+                        "responsable": responsable,
+                        "fuente_datos": fuente_datos,
+                        "frecuencia": frecuencia,
+                        "ano": ano
+                    }
+                    if session_state.role == "gestor":
+                        objetivo_data["empresa_id"] = empresa_id
+                    supabase.table("objetivos_calidad").insert(objetivo_data).execute()
+                    st.success("✅ Objetivo añadido.")
+                    st.experimental_rerun()
       
