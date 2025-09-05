@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 import streamlit as st
 from supabase import create_client
 from datetime import datetime
@@ -6,6 +7,9 @@ import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# =========================
+# Configuración de la página
+# =========================
 st.set_page_config(
     page_title="Gestor de Formación",
     layout="wide",
@@ -13,6 +17,9 @@ st.set_page_config(
     menu_items={}
 )
 
+# =========================
+# Claves Supabase
+# =========================
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
 SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
@@ -20,7 +27,9 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
+# =========================
 # Estado inicial
+# =========================
 for key, default in {
     "page": "home",
     "role": None,
@@ -58,6 +67,7 @@ def set_user_role_from_db(email: str):
         st.session_state.role = "alumno"
         st.session_state.user = {"email": email}
 
+
 def do_logout():
     try:
         supabase_public.auth.sign_out()
@@ -66,18 +76,19 @@ def do_logout():
     st.session_state.clear()
     st.experimental_rerun()
 
+
 def login_view():
     st.markdown("""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
-            html, body, [class*="css"] { font-family: 'Roboto', sans-serif; background-color: #f5f5f5; }
-            .module-card { background-color: white; padding: 1em; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1em; }
-            .module-card h4 { margin: 0; color: #4285F4; }
-            .module-card p { margin: 0.5em 0 0; color: #5f6368; }
-        </style>
-        <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
-        <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
-        <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+    html, body, [class*="css"] { font-family: 'Roboto', sans-serif; background-color: #f5f5f5'; }
+    .module-card { background-color: white; padding: 1em; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1em; }
+    .module-card h4 { margin: 0; color: #4285F4; }
+    .module-card p { margin: 0.5em 0 0; color: #5f6368; }
+    </style>
+    <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
+    <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
+    <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
     """, unsafe_allow_html=True)
 
     st.markdown("### 🔐 Iniciar sesión")
@@ -102,6 +113,7 @@ def login_view():
                     st.experimental_rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
+
 
 # =========================
 # Sidebar y navegación
@@ -139,6 +151,7 @@ def route():
         for label, page_key in menu_admin.items():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
+
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📏 Gestión ISO 9001")
         for label, page_key in menu_iso.items():
@@ -248,6 +261,7 @@ def route():
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
+
 
 # =========================
 # Ejecución principal
