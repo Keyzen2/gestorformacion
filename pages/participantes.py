@@ -141,41 +141,93 @@ def main(supabase, session_state):
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
 
-                # Diplomas del participante
-                if session_state.role == "admin":
-                    st.markdown("### 🏅 Diplomas del participante")
-                    try:
-                        diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
-                        diplomas = diplomas_res.data or []
-                        if diplomas:
-                            for d in diplomas:
-                                grupo_nombre = grupos_nombre_por_id.get(d["grupo_id"], "Grupo desconocido")
-                                st.markdown(f"- 📄 [Diploma]({d['url']}) ({grupo_nombre}, {d['fecha_subida']})")
+       # Diplomas del participante
+        if session_state.role == "admin":
+                st.markdown("### 🏅 Diplomas del participante")
+        try:
+                diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
+                diplomas = diplomas_res.data or []
+        if diplomas:
+            for d in diplomas:
+                grupo_nombre = grupos_nombre_por_id.get(d["grupo_id"], "Grupo desconocido")
+                st.markdown(f"- 📄 [Diploma]({d['url']}) ({grupo_nombre}, {d['fecha_subida']})")
 
-                                with st.form(f"edit_diploma_{d['id']}", clear_on_submit=True):
-                                    nuevo_url = st.text_input("Actualizar URL", value=d["url"])
-                                    nueva_fecha = st.date_input("Actualizar fecha", value=pd.to_datetime(d["fecha_subida"]))
-                                    col1, col2 = st.columns(2)
-                                    actualizar = col1.form_submit_button("💾 Actualizar")
-                                    eliminar = col2.form_submit_button("🗑️ Eliminar")
+                with st.form(f"edit_diploma_{d['id']}", clear_on_submit=True):
+                    nuevo_url = st.text_input("Actualizar URL", value=d["url"])
+                    nueva_fecha = st.date_input("Actualizar fecha", value=pd.to_datetime(d["fecha_subida"]))
+                    col1, col2 = st.columns(2)
+                    actualizar = col1.form_submit_button("💾 Actualizar")
+                    eliminar = col2.form_submit_button("🗑️ Eliminar")
 
-                                if actualizar:
-                                    supabase.table("diplomas").update({
-                                        "url": nuevo_url,
-                                        "fecha_subida": nueva_fecha.isoformat()
-                                    }).eq("id", d["id"]).execute()
-                                    st.success("✅ Diploma actualizado.")
-                                    st.rerun()
+                if actualizar:
+                    supabase.table("diplomas").update({
+                        "url": nuevo_url,
+                        "fecha_subida": nueva_fecha.isoformat()
+                    }).eq("id", d["id"]).execute()
+                    st.success("✅ Diploma actualizado.")
+                    st.rerun()
 
-                                if eliminar:
-                                    supabase.storage.from_("documentos").remove([d["archivo_nombre"]])
-                                    supabase.table("diplomas").delete().eq("id", d["id"]).execute()
-                                    st.success("✅ Diploma eliminado del sistema y del almacenamiento.")
-                                    st.rerun()
-                        else:
-                            st.info("Este participante no tiene diplomas registrados.")
-                    except Exception as e:
-                        st.error(f"❌ Error al cargar diplomas: {e}")
+                if eliminar:
+                    supabase.storage.from_("documentos").remove([d["archivo_nombre"]])
+                    supabase.table("diplomas").delete().eq("id", d["id"]).execute()
+                    st.success("✅ Diploma eliminado del sistema y del almacenamiento.")
+                    st.rerun()
+        else:
+            st.info("Este participante no tiene diplomas registrados.")
+    except Exception as e:
+        st.error(f"❌ Error al cargar diplomas: {e}")
+
+    # Subir nuevo diploma
+    st.markdown("### 📤 Subir nuevo diploma")
+    with st.form(f"diploma_upload_form_{row['id']}", clear_on_submit=True):
+        grupo_id = row.get("grupo_id")
+        grupo_nombre = grupos_nombre_por_id.get(grupo_id, "Grupo asignado")
+        st.text(f"Grupo: {grupo_nombre}")
+
+        archivo = st.file_uploader("Selecciona el diploma (PDF)", type=["pdf"])
+        fecha_subida = st.date_input("Fecha de subida", value=datetime.today())
+        subir = st.form_submit_button("Subir diploma")
+
+    if subir:
+        if not archivo:
+            st.warning("⚠️ Debes seleccionar un archivo PDF.")
+        else:
+            try:
+                # Validación: evitar duplicados por grupo
+                existe = supabase.table("diplomas").select("id").eq("participante_id", row["id"]).eq("grupo_id", grupo_id).execute()
+                if existe.data:
+                    st.warning("⚠️ Ya existe un diploma para este participante en este grupo.")
+                else:
+                    # Generar nombre único
+                    nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
+
+                    # Leer contenido del archivo subido
+                    file_bytes = archivo.read()
+
+                    # Subir al bucket 'documentos'
+                    supabase.storage.from_("documentos").upload(
+                        nombre_archivo,
+                        file_bytes,
+                        {"content-type": "application/pdf"}
+                    )
+
+                    # Obtener URL pública
+                    url_diploma = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
+
+                    # Registrar en tabla diplomas
+                    supabase.table("diplomas").insert({
+                        "participante_id": row["id"],
+                        "grupo_id": grupo_id,
+                        "url": url_diploma,
+                        "fecha_subida": fecha_subida.isoformat(),
+                        "archivo_nombre": nombre_archivo
+                    }).execute()
+
+                    st.success("✅ Diploma subido correctamente.")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al subir el diploma: {e}")
+
 
                     # Subir nuevo diploma
                     st.markdown("### 📤 Subir nuevo diploma")
