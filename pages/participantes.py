@@ -139,16 +139,17 @@ def main(supabase, session_state):
                             st.success("✅ Cambios guardados.")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Error al actualizar: {e}")
-    
-    # Diplomas del participante
-     if session_state.role == "admin":
-            st.markdown("### 🏅 Diplomas del participante")
+                           st.error(f"❌ Error al actualizar: {e}")
 
-     try:
-            diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
-            diplomas = diplomas_res.data or []
-     if diplomas:
+      # Diplomas del participante
+if session_state.role == "admin":
+    st.markdown("### 🏅 Diplomas del participante")
+
+try:
+    diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
+    diplomas = diplomas_res.data or []
+
+    if diplomas:
         for d in diplomas:
             grupo_nombre = grupos_nombre_por_id.get(d["grupo_id"], "Grupo desconocido")
             st.markdown(f"- 📄 [Diploma]({d['url']}) ({grupo_nombre}, {d['fecha_subida']})")
@@ -176,10 +177,8 @@ def main(supabase, session_state):
     else:
         st.info("Este participante no tiene diplomas registrados.")
 
- except Exception as e:
+except Exception as e:
     st.error(f"❌ Error al cargar diplomas: {e}")
-
-       
 
     # Subir nuevo diploma
     st.markdown("### 📤 Subir nuevo diploma")
