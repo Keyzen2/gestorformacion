@@ -9,7 +9,7 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 st.title("🔍 Diagnóstico de conexión con Supabase")
-st.caption("Esta página verifica que el cliente admin tiene acceso a Auth y a las tablas protegidas.")
+st.caption("Verifica que el cliente admin tiene acceso a Auth y a las tablas protegidas.")
 
 # Test 1: Conexión básica
 try:
@@ -20,9 +20,13 @@ except Exception as e:
 # Test 2: Acceso a Auth Admin
 with st.expander("🔐 Verificar acceso a Auth Admin"):
     try:
-        users = supabase_admin.auth.admin.list_users()
-        st.success(f"✅ Acceso a Auth Admin correcto. Usuarios encontrados: {len(users.users)}")
-        st.write(users.users[:5])  # Mostrar los primeros 5 usuarios
+        users_list = supabase_admin.auth.admin.list_users()
+        if isinstance(users_list, list):
+            st.success(f"✅ Acceso a Auth Admin correcto. Usuarios encontrados: {len(users_list)}")
+            st.write(users_list[:5])  # Mostrar los primeros 5 usuarios
+        else:
+            st.warning("⚠️ La respuesta no es una lista. Resultado:")
+            st.write(users_list)
     except Exception as e:
         st.error(f"❌ Error al acceder a Auth Admin: {e}")
 
