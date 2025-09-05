@@ -13,6 +13,9 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
+    # =========================
+    # Cargar empresas y grupos
+    # =========================
     try:
         if session_state.role == "gestor":
             empresa_id = session_state.user.get("empresa_id")
@@ -34,6 +37,9 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
         grupos_dict = {}
 
+    # =========================
+    # Cargar participantes
+    # =========================
     try:
         if session_state.role == "gestor":
             part_res = supabase.table("participantes").select("*").eq("empresa_id", empresa_id).execute()
@@ -44,7 +50,9 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar los participantes: {e}")
         df_part = pd.DataFrame()
 
-    # Solo el admin puede crear participantes
+    # =========================
+    # Alta de participantes (solo admin)
+    # =========================
     if session_state.role == "admin":
         st.markdown("### ➕ Añadir Participante")
         with st.form("crear_participante", clear_on_submit=True):
@@ -78,7 +86,34 @@ def main(supabase, session_state):
 
     st.divider()
 
+    # =========================
+    # Filtros
+    # =========================
+    st.markdown("### 🔍 Filtros")
+    col1, col2 = st.columns(2)
+    filtro_nombre = col1.text_input("Filtrar por nombre")
+    filtro_email = col2.text_input("Filtrar por email")
+
+    if filtro_nombre:
+        df_part = df_part[df_part["nombre"].str.contains(filtro_nombre, case=False, na=False)]
+    if filtro_email:
+        df_part = df_part[df_part["email"].str.contains(filtro_email, case=False, na=False)]
+
+    # =========================
+    # Visualización
+    # =========================
     if not df_part.empty:
+        st.markdown("### 📋 Participantes registrados")
+        st.dataframe(df_part[["nombre", "apellidos", "email", "dni", "telefono", "grupo_id", "empresa_id"]])
+
+        st.download_button(
+            "⬇️ Descargar CSV",
+            data=df_part.to_csv(index=False).encode("utf-8"),
+            file_name="participantes.csv",
+            mime="text/csv"
+        )
+
+        st.markdown("### 🔍 Detalles individuales")
         for _, row in df_part.iterrows():
             with st.expander(f"{row.get('nombre','')} {row.get('apellidos','')}"):
                 st.write(f"**Email:** {row.get('email','')}")
@@ -121,3 +156,5 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
+    else:
+        st.info("ℹ️ No hay participantes registrados.")
