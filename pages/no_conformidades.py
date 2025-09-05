@@ -5,16 +5,41 @@ from datetime import datetime
 def main(supabase, session_state):
     st.subheader("🚨 No Conformidades (ISO 9001)")
     st.caption("Registro, seguimiento y cierre de no conformidades detectadas en procesos, auditorías o inspecciones.")
+    st.divider()
 
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 Solo administradores o gestores pueden acceder a esta sección.")
+    # 🔒 Protección por rol y módulo ISO activo
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        empresa_res = supabase.table("empresas").select("iso_activo", "iso_inicio", "iso_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        hoy = datetime.today().date()
+
+        iso_permitido = (
+            empresa.get("iso_activo") and
+            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
+            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+        )
+
+        if not iso_permitido:
+            st.warning("🔒 Tu empresa no tiene activado el módulo ISO 9001.")
+            st.stop()
+
+    elif session_state.role != "admin":
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
     # =========================
-    # Cargar datos desde la vista
+    # Cargar datos
     # =========================
-    nc_res = supabase.table("no_conformidades_app").select("*").execute()
-    df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+    try:
+        if session_state.role == "gestor":
+            nc_res = supabase.table("no_conformidades_app").select("*").eq("empresa_id", empresa_id).execute()
+        else:
+            nc_res = supabase.table("no_conformidades_app").select("*").execute()
+        df_nc = pd.DataFrame(nc_res.data) if nc_res.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error al cargar no conformidades: {e}")
+        df_nc = pd.DataFrame()
 
     # =========================
     # KPIs
@@ -65,60 +90,59 @@ def main(supabase, session_state):
                 st.write(f"**Estado:** {row.get('estado', '')}")
                 st.write(f"**Acciones tomadas:** {row.get('acciones', '')}")
 
-                col1, col2 = st.columns(2)
+                if session_state.role == "admin":
+                    col1, col2 = st.columns(2)
 
-                # ✏️ Editar
-                with col1:
-                    with st.form(f"edit_nc_{row['id']}", clear_on_submit=True):
-                        nueva_desc = st.text_area("Descripción", value=row["descripcion"])
-                        nuevo_resp = st.text_input("Responsable", value=row.get("responsable", ""))
-                        nuevo_estado = st.selectbox("Estado", ["Abierta", "En curso", "Cerrada"], index=["Abierta", "En curso", "Cerrada"].index(row.get("estado", "Abierta")))
-                        nuevas_acciones = st.text_area("Acciones tomadas", value=row.get("acciones", ""))
+                    with col1:
+                        with st.form(f"edit_nc_{row['id']}", clear_on_submit=True):
+                            nueva_desc = st.text_area("Descripción", value=row["descripcion"])
+                            nuevo_resp = st.text_input("Responsable", value=row.get("responsable", ""))
+                            nuevo_estado = st.selectbox("Estado", ["Abierta", "En curso", "Cerrada"], index=["Abierta", "En curso", "Cerrada"].index(row.get("estado", "Abierta")))
+                            nuevas_acciones = st.text_area("Acciones tomadas", value=row.get("acciones", ""))
 
-                        guardar = st.form_submit_button("Guardar cambios")
-                        if guardar:
-                            supabase.table("no_conformidades").update({
-                                "descripcion": nueva_desc,
-                                "responsable": nuevo_resp,
-                                "estado": nuevo_estado,
-                                "acciones": nuevas_acciones
-                            }).eq("id", row["id"]).execute()
-                            st.success("✅ Cambios guardados.")
-                            st.experimental_rerun()
+                            guardar = st.form_submit_button("Guardar cambios")
+                            if guardar:
+                                supabase.table("no_conformidades").update({
+                                    "descripcion": nueva_desc,
+                                    "responsable": nuevo_resp,
+                                    "estado": nuevo_estado,
+                                    "acciones": nuevas_acciones
+                                }).eq("id", row["id"]).execute()
+                                st.success("✅ Cambios guardados.")
+                                st.experimental_rerun()
 
-                # 🗑️ Eliminar
-                with col2:
-                    with st.form(f"delete_nc_{row['id']}"):
-                        st.warning("⚠️ Esta acción eliminará la no conformidad.")
-                        confirmar = st.checkbox("Confirmo la eliminación")
-                        eliminar = st.form_submit_button("Eliminar")
-                        if eliminar and confirmar:
-                            supabase.table("no_conformidades").delete().eq("id", row["id"]).execute()
-                            st.success("✅ Eliminada.")
-                            st.experimental_rerun()
-
+                    with col2:
+                        with st.form(f"delete_nc_{row['id']}"):
+                            st.warning("⚠️ Esta acción eliminará la no conformidad.")
+                            confirmar = st.checkbox("Confirmo la eliminación")
+                            eliminar = st.form_submit_button("Eliminar")
+                            if eliminar and confirmar:
+                                supabase.table("no_conformidades").delete().eq("id", row["id"]).execute()
+                                st.success("✅ Eliminada.")
+                                st.experimental_rerun()
     else:
         st.info("ℹ️ No hay no conformidades registradas.")
 
     # =========================
-    # Alta
+    # Alta (solo admin)
     # =========================
-    st.markdown("### ➕ Registrar No Conformidad")
-    with st.form("form_nc", clear_on_submit=True):
-        descripcion = st.text_area("Descripción *")
-        responsable = st.text_input("Responsable")
-        fecha = st.date_input("Fecha detección", datetime.today())
-        estado = st.selectbox("Estado", ["Abierta", "En curso", "Cerrada"])
-        acciones = st.text_area("Acciones tomadas")
-        submitted = st.form_submit_button("Guardar")
+    if session_state.role == "admin":
+        st.markdown("### ➕ Registrar No Conformidad")
+        with st.form("form_nc", clear_on_submit=True):
+            descripcion = st.text_area("Descripción *")
+            responsable = st.text_input("Responsable")
+            fecha = st.date_input("Fecha detección", datetime.today())
+            estado = st.selectbox("Estado", ["Abierta", "En curso", "Cerrada"])
+            acciones = st.text_area("Acciones tomadas")
+            submitted = st.form_submit_button("Guardar")
 
-        if submitted:
-            supabase.table("no_conformidades").insert({
-                "descripcion": descripcion,
-                "responsable": responsable,
-                "fecha_detectada": fecha.isoformat(),
-                "estado": estado,
-                "acciones": acciones
-            }).execute()
-            st.success("✅ No conformidad registrada.")
-            st.experimental_rerun()
+            if submitted:
+                supabase.table("no_conformidades").insert({
+                    "descripcion": descripcion,
+                    "responsable": responsable,
+                    "fecha_detectada": fecha.isoformat(),
+                    "estado": estado,
+                    "acciones": acciones
+                }).execute()
+                st.success("✅ No conformidad registrada.")
+                st.experimental_rerun()
