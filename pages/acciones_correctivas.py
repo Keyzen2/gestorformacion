@@ -112,7 +112,7 @@ def main(supabase, session_state):
                                     "seguimiento": nuevo_seguimiento
                                 }).eq("id", row["id"]).execute()
                                 st.success("✅ Cambios guardados.")
-                                st.experimental_rerun()
+                                st.rerun()
 
                     with col2:
                         with st.form(f"delete_ac_{row['id']}"):
@@ -122,7 +122,7 @@ def main(supabase, session_state):
                             if eliminar and confirmar:
                                 supabase.table("acciones_correctivas").delete().eq("id", row["id"]).execute()
                                 st.success("✅ Eliminada.")
-                                st.experimental_rerun()
+                                st.rerun()
     else:
         st.info("ℹ️ No hay acciones correctivas registradas.")
 
@@ -161,5 +161,5 @@ def main(supabase, session_state):
                         data["empresa_id"] = empresa_id
                     supabase.table("acciones_correctivas").insert(data).execute()
                     st.success("✅ Acción correctiva registrada.")
-                    st.experimental_rerun()
+                    st.rerun()
           
