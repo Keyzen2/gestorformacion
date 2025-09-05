@@ -7,7 +7,6 @@ def main(supabase, session_state):
     st.caption("Gestión de participantes/alumnos y vinculación con empresas y grupos.")
     st.divider()
 
-    # Cargar empresas y grupos
     try:
         empresas_res = supabase.table("empresas").select("id,nombre").execute()
         empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
@@ -22,7 +21,6 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
         grupos_dict = {}
 
-    # Cargar participantes
     try:
         part_res = supabase.table("participantes").select("*").execute()
         df_part = pd.DataFrame(part_res.data or [])
@@ -30,7 +28,6 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar los participantes: {e}")
         df_part = pd.DataFrame()
 
-    # Formulario para añadir participante
     st.markdown("### ➕ Añadir Participante")
     with st.form("crear_participante", clear_on_submit=True):
         nombre = st.text_input("Nombre *")
@@ -49,7 +46,7 @@ def main(supabase, session_state):
             creado = alta_alumno(
                 supabase,
                 email=email,
-                password=None,  # contraseña temporal
+                password=None,
                 nombre=nombre,
                 dni=dni,
                 apellidos=apellidos,
@@ -62,7 +59,6 @@ def main(supabase, session_state):
 
     st.divider()
 
-    # Listado y edición
     if not df_part.empty:
         for _, row in df_part.iterrows():
             with st.expander(f"{row.get('nombre','')} {row.get('apellidos','')}"):
@@ -75,25 +71,21 @@ def main(supabase, session_state):
 
                 if guardar:
                     try:
-                        # Si el email cambia, actualizar en Auth y en usuarios
                         if nuevo_email != row.get("email", ""):
                             usuario_res = supabase.table("usuarios").select("auth_id").eq("email", row.get("email", "")).execute()
-                           if usuario_res.data:
+                            if usuario_res.data:
                                 auth_id = usuario_res.data[0]["auth_id"]
-                                # Actualizar en Auth
                                 try:
                                     supabase.auth.admin.update_user_by_id(auth_id, {"email": nuevo_email})
                                     st.info("📧 Email actualizado en Auth.")
                                 except Exception as e:
                                     st.error(f"❌ No se pudo actualizar el email en Auth: {e}")
-                                # Actualizar en usuarios
                                 try:
                                     supabase.table("usuarios").update({"email": nuevo_email}).eq("auth_id", auth_id).execute()
                                     st.info("📧 Email actualizado en tabla 'usuarios'.")
                                 except Exception as e:
                                     st.error(f"❌ No se pudo actualizar el email en 'usuarios': {e}")
 
-                        # Actualizar en participantes
                         supabase.table("participantes").update({
                             "nombre": nuevo_nombre,
                             "apellidos": nuevos_apellidos,
