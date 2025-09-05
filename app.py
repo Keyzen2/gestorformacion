@@ -112,12 +112,17 @@ def route():
     }
 
     def safe_parse_date(fecha):
-        if fecha is None:
-            return None
-        fecha_parsed = pd.to_datetime(fecha, errors='coerce')
+    if fecha is None:
+        return None
+    try:
+        # Convierte a string por si viene como otro tipo (ej. datetime.datetime, etc)
+        fecha_str = str(fecha)
+        fecha_parsed = pd.to_datetime(fecha_str, errors='coerce')
         if pd.isna(fecha_parsed):
             return None
         return fecha_parsed.date()
+    except Exception:
+         return None
 
     if st.session_state.role == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
