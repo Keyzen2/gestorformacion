@@ -102,7 +102,7 @@ def main(supabase, session_state):
                                 try:
                                     supabase.table("tutores").delete().eq("id", row["id"]).execute()
                                     st.success("✅ Tutor eliminado.")
-                                    st.experimental_rerun()
+                                    st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ Error al eliminar: {str(e)}")
                             else:
