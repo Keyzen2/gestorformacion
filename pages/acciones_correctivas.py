@@ -127,9 +127,9 @@ def main(supabase, session_state):
         st.info("ℹ️ No hay acciones correctivas registradas.")
 
     # =========================
-    # Alta (solo admin)
+    # Alta (admin y gestor)
     # =========================
-    if session_state.role == "admin":
+    if session_state.role in ["admin", "gestor"]:
         st.markdown("### ➕ Registrar Acción Correctiva")
         with st.form("form_ac", clear_on_submit=True):
             nc_id = None
@@ -146,14 +146,17 @@ def main(supabase, session_state):
             submitted = st.form_submit_button("Guardar")
 
             if submitted:
-                supabase.table("acciones_correctivas").insert({
+                data = {
                     "no_conformidad_id": nc_id,
                     "descripcion": descripcion,
                     "responsable": responsable,
                     "fecha_inicio": fecha_inicio.isoformat(),
                     "estado": estado,
                     "seguimiento": seguimiento
-                }).execute()
+                }
+                if session_state.role == "gestor":
+                    data["empresa_id"] = empresa_id
+                supabase.table("acciones_correctivas").insert(data).execute()
                 st.success("✅ Acción correctiva registrada.")
                 st.experimental_rerun()
           
