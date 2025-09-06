@@ -178,7 +178,7 @@ def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
     """
 
 # =========================
-# Sidebar y navegación
+# Sidebar y navegación + Bienvenida por rol
 # =========================
 def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
@@ -187,24 +187,26 @@ def route():
     if st.sidebar.button("🚪 Cerrar sesión", key="logout"):
         do_logout()
 
+    # --- Obtener empresa y módulos ---
     empresa_id = st.session_state.user.get("empresa_id")
     empresa = {}
     empresa_crm = {}
     hoy = datetime.today().date()
     if empresa_id:
-        empresa_res = supabase_admin.table(
-            "empresas"
-        ).select("iso_activo", "iso_inicio", "iso_fin", "rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("id", empresa_id).execute()
+        empresa_res = supabase_admin.table("empresas").select(
+            "iso_activo", "iso_inicio", "iso_fin",
+            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
+        ).eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
-        crm_res = supabase_admin.table(
-            "crm_empresas"
-        ).select("crm_activo", "crm_inicio", "crm_fin").eq("empresa_id", empresa_id).execute()
+        crm_res = supabase_admin.table("crm_empresas").select(
+            "crm_activo", "crm_inicio", "crm_fin"
+        ).eq("empresa_id", empresa_id).execute()
         empresa_crm = crm_res.data[0] if crm_res.data else {}
 
-    role = st.session_state.role
+    rol = st.session_state.role
 
-    # --- Menú base por rol ---
-    if role == "admin":
+    # --- Menú base según rol ---
+    if rol == "admin":
         st.sidebar.markdown("#### 🧭 Navegación")
         base_menu = {
             "Panel de Alertas": "panel_admin",
@@ -217,10 +219,10 @@ def route():
             "Tutores": "tutores"
         }
         for label, page_key in base_menu.items():
-            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+            if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                 st.session_state.page = page_key
 
-    elif role == "gestor":
+    elif rol == "gestor":
         st.sidebar.markdown("#### 🧭 Navegación")
         base_menu = {
             "Grupos": "grupos",
@@ -228,20 +230,20 @@ def route():
             "Documentos": "documentos"
         }
         for label, page_key in base_menu.items():
-            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+            if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                 st.session_state.page = page_key
 
-    elif role == "alumno":
+    elif rol == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
         if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos"):
             st.session_state.page = "mis_grupos"
 
-    elif role == "comercial":
+    elif rol == "comercial":
         pass  # CRM se añade más abajo
 
     # --- Módulos activos ---
-    if role in ["admin", "gestor"]:
-        if is_module_active(empresa, empresa_crm, "iso", hoy, role):
+    if rol in ["admin", "gestor"]:
+        if is_module_active(empresa, empresa_crm, "iso", hoy):
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 📏 Gestión ISO 9001")
             iso_menu = {
@@ -254,10 +256,10 @@ def route():
                 "Informe Auditoría": "informe_auditoria"
             }
             for label, page_key in iso_menu.items():
-                if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                     st.session_state.page = page_key
 
-        if is_module_active(empresa, empresa_crm, "rgpd", hoy, role):
+        if is_module_active(empresa, empresa_crm, "rgpd", hoy):
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 🛡️ Gestión RGPD")
             rgpd_menu = {
@@ -273,11 +275,10 @@ def route():
                 "Incidencias": "rgpd_incidencias"
             }
             for label, page_key in rgpd_menu.items():
-                if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                     st.session_state.page = page_key
 
-    # CRM para admin, gestor y comercial si está activo
-    if is_module_active(empresa, empresa_crm, "crm", hoy, role) or role in ["comercial", "admin", "gestor"]:
+    if is_module_active(empresa, empresa_crm, "crm", hoy) or rol == "comercial":
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📈 Gestión CRM")
         crm_menu = {
@@ -289,7 +290,7 @@ def route():
             "Estadísticas": "crm_estadisticas"
         }
         for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+            if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                 st.session_state.page = page_key
 
     st.sidebar.markdown("---")
@@ -332,40 +333,63 @@ else:
                 col2.markdown(tarjeta("👤", "Usuarios", f"Número total de usuarios: {total_usuarios}"), unsafe_allow_html=True)
                 col3.markdown(tarjeta("📚", "Cursos activos", f"Número total de cursos/acciones formativas: {total_cursos}"), unsafe_allow_html=True)
 
-            # ===============================
-            # BIENVENIDA SEGÚN ROL
-            # ===============================
-            if rol == "admin":
-                st.subheader("🛠 Panel de Administración")
-                st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."), unsafe_allow_html=True)
-                st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."), unsafe_allow_html=True)
-                st.markdown(tarjeta("⚙️", "Módulos avanzados", "ISO, RGPD, CRM y configuración general."), unsafe_allow_html=True)
+            # --- Página de bienvenida ---
+    page = st.session_state.get("page", None)
+    if page is None or page == "home":
+        st.title("👋 Bienvenido al Gestor de Formación")
 
-            elif rol == "gestor":
-                st.subheader("📚 Panel del Gestor")
-                st.markdown(tarjeta("👥", "Grupos y participantes", "Crea y gestiona grupos de alumnos."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."), unsafe_allow_html=True)
+        if rol == "admin":
+            st.subheader("🛠 Panel de Administración")
+            try:
+                total_empresas = supabase_admin.table("empresas").select("*").execute().count or 0
+                total_usuarios = supabase_admin.table("usuarios").select("*").execute().count or 0
+                total_cursos = supabase_admin.table("acciones_formativas").select("*").execute().count or 0
+            except:
+                total_empresas = total_usuarios = total_cursos = 0
 
-                st.subheader("📦 Módulos disponibles")
-                st.markdown(tarjeta("✅", "ISO", "Gestión documental ISO y auditorías.", activo=is_module_active(empresa, empresa_crm, "iso", hoy)), unsafe_allow_html=True)
-                st.markdown(tarjeta("🔒", "RGPD", "Control de protección de datos y consentimientos.", activo=is_module_active(empresa, empresa_crm, "rgpd", hoy)), unsafe_allow_html=True)
-                st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=is_module_active(empresa, empresa_crm, "crm", hoy)), unsafe_allow_html=True)
+            st.subheader("📊 Métricas del sistema")
+            col1, col2, col3 = st.columns(3)
+            col1.markdown(tarjeta("🏢", "Empresas", f"Número total de empresas: {total_empresas}"), unsafe_allow_html=True)
+            col2.markdown(tarjeta("👤", "Usuarios", f"Número total de usuarios: {total_usuarios}"), unsafe_allow_html=True)
+            col3.markdown(tarjeta("📚", "Cursos activos", f"Número total de cursos/acciones formativas: {total_cursos}"), unsafe_allow_html=True)
 
-            elif rol == "alumno":
-                st.subheader("🎓 Área del Alumno")
-                st.markdown(tarjeta("👥", "Mis grupos", "Consulta a qué grupos perteneces."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📜", "Diplomas", "Descarga tus diplomas disponibles."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📊", "Seguimiento", "Accede al progreso de tu formación."), unsafe_allow_html=True)
+            st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."), unsafe_allow_html=True)
+            st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."), unsafe_allow_html=True)
+            st.markdown(tarjeta("⚙️", "Módulos avanzados", "ISO, RGPD, CRM y configuración general."), unsafe_allow_html=True)
 
-            elif rol == "comercial":
-                st.subheader("📈 Área Comercial - CRM")
-                st.markdown(tarjeta("👤", "Clientes", "Consulta y gestiona tu cartera de clientes."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📝", "Oportunidades", "Registra y da seguimiento a nuevas oportunidades."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📅", "Tareas", "Organiza tus visitas y recordatorios."), unsafe_allow_html=True)
+        elif rol == "gestor":
+            st.subheader("📚 Panel del Gestor")
+            st.markdown(tarjeta("👥", "Grupos y participantes", "Crea y gestiona grupos de alumnos."), unsafe_allow_html=True)
+            st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."), unsafe_allow_html=True)
 
-            else:
-                st.subheader("🏠 Inicio")
-                st.markdown("Usa el menú lateral para navegar por las secciones disponibles.")
+            st.subheader("📦 Módulos disponibles")
+            modulos_activados = False
+            if is_module_active(empresa, empresa_crm, "iso", hoy):
+                st.markdown(tarjeta("✅", "ISO", "Gestión documental ISO y auditorías.", activo=True), unsafe_allow_html=True)
+                modulos_activados = True
+            if is_module_active(empresa, empresa_crm, "rgpd", hoy):
+                st.markdown(tarjeta("🔒", "RGPD", "Control de protección de datos y consentimientos.", activo=True), unsafe_allow_html=True)
+                modulos_activados = True
+            if is_module_active(empresa, empresa_crm, "crm", hoy):
+                st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=True), unsafe_allow_html=True)
+                modulos_activados = True
+            if not modulos_activados:
+                st.info("No hay módulos activos actualmente para tu empresa.")
+         elif rol == "alumno":
+             st.subheader("🎓 Área del Alumno")
+             st.markdown(tarjeta("👥", "Mis grupos", "Consulta a qué grupos perteneces."), unsafe_allow_html=True)
+             st.markdown(tarjeta("📜", "Diplomas", "Descarga tus diplomas disponibles."), unsafe_allow_html=True)
+             st.markdown(tarjeta("📊", "Seguimiento", "Accede al progreso de tu formación."), unsafe_allow_html=True)
+
+         elif rol == "comercial":
+             st.subheader("📈 Área Comercial - CRM")
+             st.markdown(tarjeta("👤", "Clientes", "Consulta y gestiona tu cartera de clientes."), unsafe_allow_html=True)
+             st.markdown(tarjeta("📝", "Oportunidades", "Registra y da seguimiento a nuevas oportunidades."), unsafe_allow_html=True)
+             st.markdown(tarjeta("📅", "Tareas", "Organiza tus visitas y recordatorios."), unsafe_allow_html=True)
+         
+         else:
+            st.subheader("🏠 Inicio")
+            st.markdown("Usa el menú lateral para navegar por las secciones disponibles.")
 
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
