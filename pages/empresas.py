@@ -33,6 +33,8 @@ def modulo_rgpd(row=None):
     return rgpd_activo, rgpd_inicio, rgpd_fin
 
 def modulo_crm(supabase, empresa_id, row=None):
+    if not empresa_id:
+        return False, None, None
     crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", empresa_id).execute()
     crm_data = crm_res.data[0] if crm_res.data else {}
     crm_inicio_val = pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date() if crm_data.get("crm_inicio") else datetime.today().date()
@@ -108,7 +110,7 @@ def gestionar_empresas(supabase):
 
         iso_activo, iso_inicio, iso_fin = modulo_iso()
         rgpd_activo, rgpd_inicio, rgpd_fin = modulo_rgpd()
-        crm_activo, crm_inicio, crm_fin = modulo_crm(supabase, empresa_id="")  # al crear no hay id aún
+        # CRM se omite al crear
 
         if st.form_submit_button("Crear"):
             nueva_empresa = {
@@ -126,9 +128,11 @@ def gestionar_empresas(supabase):
             res = supabase.table("empresas").insert(nueva_empresa).execute()
             if res.data:
                 empresa_id = res.data[0]["id"]
-                guardar_empresa(supabase, empresa_id, nueva_empresa,
-                                {"activo": rgpd_activo, "inicio": rgpd_inicio, "fin": rgpd_fin},
-                                {"activo": crm_activo, "inicio": crm_inicio, "fin": crm_fin})
+                guardar_empresa(
+                    supabase, empresa_id, nueva_empresa,
+                    {"activo": rgpd_activo, "inicio": rgpd_inicio, "fin": rgpd_fin},
+                    {"activo": False, "inicio": None, "fin": None}  # CRM vacío al crear
+                )
                 st.success("Empresa creada correctamente ✅")
                 st.rerun()
 
@@ -161,9 +165,11 @@ def gestionar_empresas(supabase):
                         "rgpd_inicio": rgpd_inicio.isoformat(),
                         "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
                     }
-                    guardar_empresa(supabase, empresa["id"], datos,
-                                    {"activo": rgpd_activo, "inicio": rgpd_inicio, "fin": rgpd_fin},
-                                    {"activo": crm_activo, "inicio": crm_inicio, "fin": crm_fin})
+                    guardar_empresa(
+                        supabase, empresa["id"], datos,
+                        {"activo": rgpd_activo, "inicio": rgpd_inicio, "fin": rgpd_fin},
+                        {"activo": crm_activo, "inicio": crm_inicio, "fin": crm_fin}
+                    )
                     st.success("Empresa actualizada ✅")
                     st.rerun()
 
