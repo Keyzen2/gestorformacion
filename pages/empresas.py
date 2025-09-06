@@ -172,156 +172,83 @@ def main(supabase, session_state):
                                     if rgpd_activo:
                                         existe_rgpd = supabase.table("rgpd_empresas").select("id").eq("empresa_id", row["id"]).execute()
                                         if not existe_rgpd.data:
-                                            supabase.table("rgpd_empresas").insert({
-                                                "empresa_id": row["id"],
-                                                "rgpd_activo": True,
-                                                "rgpd_inicio": rgpd_inicio.isoformat(),
-                                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
-                                                "created_at": datetime.utcnow().isoformat()
-                                            }).execute()
+import streamlit as st
+import pandas as pd
 
-                                    # Guardar configuración CRM
-                                    try:
-                                        if crm_data:
-                                            supabase.table("crm_empresas").update({
-                                                "crm_activo": crm_activo,
-                                                "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-                                                "crm_fin": crm_fin.isoformat() if crm_fin else None
-                                            }).eq("empresa_id", row["id"]).execute()
-                                        else:
-                                            supabase.table("crm_empresas").insert({
-                                                "empresa_id": row["id"],
-                                                "crm_activo": crm_activo,
-                                                "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-                                                "crm_fin": crm_fin.isoformat() if crm_fin else None,
-                                                "created_at": datetime.utcnow().isoformat()
-                                            }).execute()
-                                    except Exception as e:
-                                        st.error(f"❌ Error al guardar configuración CRM: {e}")
+def main(supabase_admin, session_state):
+    st.title("🏢 Gestión de Empresas")
 
-                                    st.session_state[f"empresa_editada_{row['id']}"] = True
-                                    st.success("✅ Cambios guardados correctamente.")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al actualizar: {str(e)}")
-
-                    # -----------------------
-                    # FORMULARIO ELIMINAR
-                    # -----------------------
-                    with col2:
-                        with st.form(f"delete_empresa_{row['id']}"):
-                            st.warning("⚠️ Esta acción eliminará la empresa permanentemente.")
-                            confirmar = st.checkbox("Confirmo la eliminación")
-                            eliminar = st.form_submit_button("🗑️ Eliminar empresa")
-                            if eliminar and confirmar:
-                                try:
-                                    supabase.table("empresas").delete().eq("id", row["id"]).execute()
-                                    st.success("✅ Empresa eliminada.")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al eliminar: {str(e)}")
-        else:
-            st.info("ℹ️ No hay empresas registradas.")
-
-        # ======================================================
-        # CREAR EMPRESA
-        # ======================================================
-        st.divider()
-        st.markdown("### ➕ Crear Empresa")
-        if "empresa_creada" not in st.session_state:
-            st.session_state.empresa_creada = False
-
-        with st.form("crear_empresa", clear_on_submit=True):
-            nombre = st.text_input("Nombre *")
-            cif = st.text_input("CIF *")
-            direccion = st.text_input("Dirección")
+    # --- Botón crear nueva empresa ---
+    with st.expander("➕ Crear nueva empresa"):
+        with st.form("form_nueva_empresa"):
+            nombre = st.text_input("Nombre de la empresa")
+            cif = st.text_input("CIF")
             telefono = st.text_input("Teléfono")
             email = st.text_input("Email")
-            representante_nombre = st.text_input("Nombre del representante")
-            representante_dni = st.text_input("DNI del representante")
-            ciudad = st.text_input("Ciudad")
-            provincia = st.text_input("Provincia")
-            codigo_postal = st.text_input("Código Postal")
+            submit = st.form_submit_button("Guardar")
 
-            st.markdown("#### ⚙️ Configuración de módulos")
-            iso_activo = st.checkbox("Activar módulo ISO 9001", value=False)
-            if iso_activo:
-                iso_inicio = st.date_input("Fecha de inicio ISO", value=datetime.today())
-                iso_fin = st.date_input("Fecha de fin ISO", value=datetime.today())
+        if submit:
+            if not nombre or not cif:
+                st.warning("El nombre y CIF son obligatorios.")
             else:
-                iso_inicio, iso_fin = None, None
+                try:
+                    supabase_admin.table("empresas").insert({
+                        "nombre": nombre,
+                        "cif": cif,
+                        "telefono": telefono,
+                        "email": email
+                    }).execute()
+                    st.success("✅ Empresa creada correctamente")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al crear empresa: {e}")
 
-            st.markdown("#### 🛡️ Configuración RGPD")
-            rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
-            rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=None)
-            rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
-            if rgpd_fin and rgpd_fin <= datetime.today().date():
-                rgpd_activo = False
-
-            st.markdown("#### 📈 Configuración CRM")
-            crm_inicio = st.date_input("Fecha de inicio CRM", value=datetime.today())
-            crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=None)
-            crm_activo = st.checkbox("Activar módulo CRM", value=False)
-            if crm_fin and crm_fin <= datetime.today().date():
-                crm_activo = False
-
-            submitted = st.form_submit_button("Crear Empresa")
-            if submitted and not st.session_state.empresa_creada:
-                if not nombre or not cif:
-                    st.error("⚠️ Los campos 'Nombre' y 'CIF' son obligatorios.")
-                else:
-                    try:
-                        existe = supabase.table("empresas").select("id").eq("cif", cif).execute()
-                        if existe.data:
-                            st.error(f"⚠️ Ya existe una empresa con el CIF '{cif}'.")
-                        else:
-                            empresa_res = supabase.table("empresas").insert({
-                                "nombre": nombre,
-                                "cif": cif,
-                                "direccion": direccion,
-                                "telefono": telefono,
-                                "email": email,
-                                "representante_nombre": representante_nombre,
-                                "representante_dni": representante_dni,
-                                "ciudad": ciudad,
-                                "provincia": provincia,
-                                "codigo_postal": codigo_postal,
-                                "fecha_alta": datetime.utcnow().isoformat(),
-                                "iso_activo": iso_activo,
-                                "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
-                                "iso_fin": iso_fin.isoformat() if iso_fin else None,
-                                "rgpd_activo": rgpd_activo,
-                                "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
-                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
-                            }).execute()
-
-                            empresa_id = empresa_res.data[0]["id"]
-
-                            # Insert RGPD empresa si activado
-                            if rgpd_activo:
-                                supabase.table("rgpd_empresas").insert({
-                                    "empresa_id": empresa_id,
-                                    "rgpd_activo": True,
-                                    "rgpd_inicio": rgpd_inicio.isoformat(),
-                                    "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
-                                    "created_at": datetime.utcnow().isoformat()
-                                }).execute()
-
-                            # Insert CRM empresa si activado
-                            if crm_activo:
-                                supabase.table("crm_empresas").insert({
-                                    "empresa_id": empresa_id,
-                                    "crm_activo": True,
-                                    "crm_inicio": crm_inicio.isoformat(),
-                                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
-                                    "created_at": datetime.utcnow().isoformat()
-                                }).execute()
-
-                            st.session_state.empresa_creada = True
-                            st.success(f"✅ Empresa '{nombre}' creada correctamente.")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al crear la empresa: {str(e)}")
-
+    # --- Listado de empresas ---
+    try:
+        res = supabase_admin.table("empresas").select("*").execute()
+        empresas = res.data if res.data else []
     except Exception as e:
-        st.error(f"❌ Error al cargar la página 'empresas': {str(e)}")
+        st.error(f"❌ Error cargando empresas: {e}")
+        empresas = []
+
+    if not empresas:
+        st.info("No hay empresas registradas aún.")
+        return
+
+    df = pd.DataFrame(empresas)
+    st.dataframe(df, use_container_width=True)
+
+    # --- Selección de empresa para editar ---
+    empresa_ids = [e["id"] for e in empresas if "id" in e]
+    empresa_sel = st.selectbox("Seleccionar empresa", empresa_ids)
+
+    if empresa_sel:
+        empresa = next((e for e in empresas if e["id"] == empresa_sel), None)
+        if empresa:
+            st.subheader(f"✏️ Editar Empresa: {empresa.get('nombre', '')}")
+
+            with st.form(f"form_edit_empresa_{empresa_sel}"):
+                nombre = st.text_input("Nombre", value=empresa.get("nombre", ""))
+                cif = st.text_input("CIF", value=empresa.get("cif", ""))
+                telefono = st.text_input("Teléfono", value=empresa.get("telefono", ""))
+                email = st.text_input("Email", value=empresa.get("email", ""))
+                iso_activo = st.checkbox("ISO Activo", value=empresa.get("iso_activo", False))
+                rgpd_activo = st.checkbox("RGPD Activo", value=empresa.get("rgpd_activo", False))
+                crm_activo = st.checkbox("CRM Activo", value=empresa.get("crm_activo", False))
+                guardar = st.form_submit_button("💾 Guardar cambios")
+
+            if guardar:
+                try:
+                    supabase_admin.table("empresas").update({
+                        "nombre": nombre,
+                        "cif": cif,
+                        "telefono": telefono,
+                        "email": email,
+                        "iso_activo": iso_activo,
+                        "rgpd_activo": rgpd_activo,
+                        "crm_activo": crm_activo
+                    }).eq("id", empresa_sel).execute()
+                    st.success("✅ Empresa actualizada correctamente")
+                    st.experimental_rerun()
+                except Exception as e:
+                    st.error(f"❌ Error actualizando empresa: {e}")
