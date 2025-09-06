@@ -129,6 +129,25 @@ def is_module_active(empresa, empresa_crm, key, hoy):
 
 
 # =========================
+# Función de tarjetas para dashboard
+# =========================
+def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
+    color = color_activo if activo else "#f3f4f6"  # verde si activo, gris si no
+    return f"""
+    <div style="
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+        background-color: {color};
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+    ">
+        <h3 style="margin:0;">{icono} {titulo}</h3>
+        <p style="margin:0; color:#374151;">{descripcion}</p>
+    </div>
+    """
+
+
+# =========================
 # Sidebar y navegación
 # =========================
 def route():
@@ -149,9 +168,9 @@ def route():
         empresa_crm = crm_res.data[0] if crm_res.data else {}
 
     # --- Menús por rol ---
+    menu_base = {}
     if st.session_state.role == "admin":
-        st.sidebar.markdown("#### 🧭 Navegación")
-        menu_admin = {
+        menu_base = {
             "Panel de Alertas": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
             "Empresas": "empresas",
@@ -161,95 +180,32 @@ def route():
             "Documentos": "documentos",
             "Tutores": "tutores"
         }
-        for label, page_key in menu_admin.items():
-            if st.sidebar.button(label, key=f"{page_key}_admin"):
-                st.session_state.page = page_key
-
     elif st.session_state.role == "gestor":
-        st.sidebar.markdown("#### 🧭 Navegación")
-        menu_gestor = {
+        menu_base = {
             "Grupos": "grupos",
             "Participantes": "participantes",
             "Documentos": "documentos"
         }
-        for label, page_key in menu_gestor.items():
-            if st.sidebar.button(label, key=f"{page_key}_gestor"):
-                st.session_state.page = page_key
-
-        if is_module_active(empresa, empresa_crm, "iso", hoy):
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-            for label, page_key in {
-                "No Conformidades": "no_conformidades",
-                "Acciones Correctivas": "acciones_correctivas",
-                "Auditorías": "auditorias",
-                "Indicadores": "indicadores",
-                "Dashboard Calidad": "dashboard_calidad",
-                "Objetivos de Calidad": "objetivos_calidad",
-                "Informe Auditoría": "informe_auditoria"
-            }.items():
-                if st.sidebar.button(label, key=f"{page_key}_iso"):
-                    st.session_state.page = page_key
-
-        if is_module_active(empresa, empresa_crm, "rgpd", hoy):
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
-            for label, page_key in {
-                "Panel RGPD": "rgpd_panel",
-                "Tareas RGPD": "rgpd_planner",
-                "Diagnóstico Inicial": "rgpd_inicio",
-                "Tratamientos": "rgpd_tratamientos",
-                "Cláusulas y Consentimientos": "rgpd_consentimientos",
-                "Encargados del Tratamiento": "rgpd_encargados",
-                "Derechos de los Interesados": "rgpd_derechos",
-                "Evaluación de Impacto": "rgpd_evaluacion",
-                "Medidas de Seguridad": "rgpd_medidas",
-                "Incidencias": "rgpd_incidencias"
-            }.items():
-                if st.sidebar.button(label, key=f"{page_key}_rgpd"):
-                    st.session_state.page = page_key
-
-    if is_module_active(empresa, empresa_crm, "crm", hoy) or st.session_state.role == "comercial":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📈 Gestión CRM")
-        crm_menu = {
-            "Panel CRM": "crm_panel",
-            "Clientes": "crm_clientes",
-            "Oportunidades": "crm_oportunidades",
-            "Tareas y Seguimiento": "crm_tareas",
-            "Comunicaciones": "crm_comunicaciones",
-            "Estadisticas": "crm_estadisticas"
-        }
-        for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=f"{page_key}_crm"):
-                st.session_state.page = page_key
-
     elif st.session_state.role == "alumno":
-        st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos_alumno"):
-            st.session_state.page = "mis_grupos"
+        menu_base = {"Mis Grupos y Diplomas": "mis_grupos"}
+    elif st.session_state.role == "comercial":
+        menu_base = {}  # CRM se añade abajo
+
+    # Añadir módulos activos
+    if st.session_state.role in ["admin", "gestor"]:
+        if is_module_active(empresa, empresa_crm, "iso", hoy):
+            menu_base["ISO"] = "iso"
+        if is_module_active(empresa, empresa_crm, "rgpd", hoy):
+            menu_base["RGPD"] = "rgpd"
+    if is_module_active(empresa, empresa_crm, "crm", hoy) or st.session_state.role == "comercial":
+        menu_base["CRM"] = "crm"
+
+    for label, page_key in menu_base.items():
+        if st.sidebar.button(label, key=f"{page_key}_{st.session_state.role}"):
+            st.session_state.page = page_key
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
-
-
-# =========================
-# Función de tarjetas para dashboard
-# =========================
-def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
-    color = color_activo if activo else "#f3f4f6"  # verde si activo, gris si no
-    return f"""
-    <div style="
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 15px;
-        background-color: {color};
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
-    ">
-        <h3 style="margin:0;">{icono} {titulo}</h3>
-        <p style="margin:0; color:#374151;">{descripcion}</p>
-    </div>
-    """
 
 
 # =========================
@@ -293,7 +249,6 @@ else:
             # BIENVENIDA SEGÚN ROL
             # ===============================
             if rol == "admin":
-                # Funcionalidades del admin
                 st.subheader("🛠 Panel de Administración")
                 st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."), unsafe_allow_html=True)
                 st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."), unsafe_allow_html=True)
