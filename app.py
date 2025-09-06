@@ -88,6 +88,7 @@ def login_view():
     <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
     <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
     <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
+    <div class="module-card"><h4>📈 CRM</h4><p>Gestión de clientes, oportunidades y tareas comerciales.</p></div>
     """, unsafe_allow_html=True)
 
     st.markdown("### 🔐 Iniciar sesión")
@@ -238,7 +239,7 @@ def route():
             "Oportunidades": "crm_oportunidades",
             "Tareas y Seguimiento": "crm_tareas",
             "Comunicaciones": "crm_comunicaciones",
-            "Campañas": "crm_campanas"
+            "Estadisticas": "crm_estadisticas"
         }
         for label, page_key in crm_menu.items():
             if st.sidebar.button(label, key=page_key):
