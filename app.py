@@ -311,20 +311,57 @@ else:
             mod_import.main(supabase_admin, st.session_state)
         else:
             rol = st.session_state.role
+
+            # ===============================
+            # BIENVENIDA SEGÚN ROL
+            # ===============================
+            st.title("👋 Bienvenido al Gestor de Formación")
+
+            def tarjeta(icono, titulo, descripcion, activo=True):
+                color = "#d1fae5" if activo else "#f3f4f6"  # verde si activo, gris si no
+                return f"""
+                <div style="
+                    border-radius: 15px;
+                    padding: 20px;
+                    margin-bottom: 15px;
+                    background-color: {color};
+                    box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+                ">
+                    <h3 style="margin:0;">{icono} {titulo}</h3>
+                    <p style="margin:0; color:#374151;">{descripcion}</p>
+                </div>
+                """
+
             if rol == "admin":
-                st.title("🛠 Panel de Administración")
-                st.caption("Gestiona usuarios, empresas y módulos avanzados.")
+                st.subheader("🛠 Panel de Administración")
+                st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."))
+                st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."))
+                st.markdown(tarjeta("⚙️", "Módulos avanzados", "ISO, RGPD, CRM y configuración general."))
+
             elif rol == "gestor":
-                st.title("📚 Panel de Formación Bonificada")
-                st.caption("Accede a tus grupos, participantes y documentos.")
+                st.subheader("📚 Panel del Gestor")
+                st.markdown(tarjeta("👥", "Grupos y participantes", "Crea y gestiona grupos de alumnos."))
+                st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."))
+
+                st.subheader("📦 Módulos disponibles")
+                st.markdown(tarjeta("✅", "ISO", "Gestión documental ISO y auditorías.", activo=True if st.session_state.get("iso_activo") else False))
+                st.markdown(tarjeta("🔒", "RGPD", "Control de protección de datos y consentimientos.", activo=True if st.session_state.get("rgpd_activo") else False))
+                st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=True if st.session_state.get("crm_activo") else False))
+
             elif rol == "alumno":
-                st.title("🎓 Área del Alumno")
-                st.caption("Consulta tus grupos, diplomas y seguimiento formativo.")
+                st.subheader("🎓 Área del Alumno")
+                st.markdown(tarjeta("👥", "Mis grupos", "Consulta a qué grupos perteneces."))
+                st.markdown(tarjeta("📜", "Diplomas", "Descarga tus diplomas disponibles."))
+                st.markdown(tarjeta("📊", "Seguimiento", "Accede al progreso de tu formación."))
+
             elif rol == "comercial":
-                st.title("📈 Módulo CRM")
-                st.caption("Gestiona tus clientes, oportunidades y tareas asignadas.")
+                st.subheader("📈 Área Comercial - CRM")
+                st.markdown(tarjeta("👤", "Clientes", "Consulta y gestiona tu cartera de clientes."))
+                st.markdown(tarjeta("📝", "Oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
+                st.markdown(tarjeta("📅", "Tareas", "Organiza tus visitas y recordatorios."))
+
             else:
-                st.title("🏠 Bienvenido al Gestor de Formación")
-                st.caption("Usa el menú lateral para navegar por las secciones disponibles.")
+                st.subheader("🏠 Inicio")
+                st.markdown("Usa el menú lateral para navegar por las secciones disponibles.")
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
