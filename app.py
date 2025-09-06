@@ -307,7 +307,7 @@ else:
             # ===============================
             # MÉTRICAS DINÁMICAS PARA ADMIN Y GESTOR
             # ===============================
-            if rol in ["admin", "gestor"]:
+            if rol in ["admin"]:
                 try:
                     total_empresas = supabase_admin.table("empresas").select("*").execute().count or 0
                     total_usuarios = supabase_admin.table("usuarios").select("*").execute().count or 0
