@@ -77,6 +77,7 @@ def main(supabase, session_state):
                     # -----------------------
                     with col1_form:
                         with st.form(f"edit_empresa_{row['id']}", clear_on_submit=True):
+                            # Datos básicos
                             nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
                             nuevo_cif = st.text_input("CIF", value=row["cif"])
                             nueva_direccion = st.text_input("Dirección", value=row.get("direccion", ""))
@@ -88,8 +89,13 @@ def main(supabase, session_state):
                             nueva_provincia = st.text_input("Provincia", value=row.get("provincia", ""))
                             nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
 
-                            st.markdown("#### ⚙️ Configuración de módulos")
+                            # -----------------------
+                            # MÓDULOS
+                            # -----------------------
+                            # ISO
+                            st.markdown("#### ⚙️ Configuración de módulos ISO")
                             iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False))
+                            iso_inicio = iso_fin = None
                             if iso_activo:
                                 iso_inicio = st.date_input(
                                     "Fecha de inicio ISO",
@@ -101,9 +107,8 @@ def main(supabase, session_state):
                                     value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date()
                                     if row.get("iso_fin") else datetime.today().date()
                                 )
-                            else:
-                                iso_inicio, iso_fin = None, None
 
+                            # RGPD
                             st.markdown("#### 🛡️ Configuración RGPD")
                             rgpd_inicio = st.date_input(
                                 "Fecha de inicio RGPD",
@@ -115,37 +120,34 @@ def main(supabase, session_state):
                                 value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date()
                                 if row.get("rgpd_fin") else None
                             )
-
                             rgpd_activo_valor = row.get("rgpd_activo", False)
                             if rgpd_fin and rgpd_fin <= datetime.today().date():
                                 rgpd_activo_valor = False
                             rgpd_activo = st.checkbox("Activar módulo RGPD", value=rgpd_activo_valor)
 
                             # CRM
+                            st.markdown("#### 📈 Configuración CRM")
                             crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
                             crm_data = crm_res.data[0] if crm_res.data else {}
-
-                            crm_inicio = st.date_input(
-                                "Fecha de inicio CRM",
-                                value=pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date()
-                                if crm_data.get("crm_inicio") else datetime.today().date()
-                            )
-                            crm_fin = st.date_input(
-                                "Fecha de fin CRM (opcional)",
-                                value=pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date()
-                                if crm_data.get("crm_fin") else None
-                            )
+                            crm_inicio_val = pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date() if crm_data.get("crm_inicio") else datetime.today().date()
+                            crm_fin_val = pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date() if crm_data.get("crm_fin") else None
                             crm_activo_valor = crm_data.get("crm_activo", False)
-                            if crm_fin and crm_fin <= datetime.today().date():
+                            if crm_fin_val and crm_fin_val <= datetime.today().date():
                                 crm_activo_valor = False
                             crm_activo = st.checkbox("Activar módulo CRM", value=crm_activo_valor)
+                            crm_inicio = st.date_input("Fecha de inicio CRM", value=crm_inicio_val)
+                            crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=crm_fin_val)
 
+                            # -----------------------
+                            # GUARDAR CAMBIOS
+                            # -----------------------
                             if f"empresa_editada_{row['id']}" not in st.session_state:
                                 st.session_state[f"empresa_editada_{row['id']}"] = False
 
                             guardar = st.form_submit_button("Guardar cambios")
                             if guardar and not st.session_state[f"empresa_editada_{row['id']}"]:
                                 try:
+                                    # Actualizar empresa
                                     supabase.table("empresas").update({
                                         "nombre": nuevo_nombre,
                                         "cif": nuevo_cif,
@@ -162,7 +164,8 @@ def main(supabase, session_state):
                                         "iso_fin": iso_fin.isoformat() if iso_fin else None,
                                         "rgpd_activo": rgpd_activo,
                                         "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
-                                        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
+                                        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+                                        "crm_activo": crm_activo
                                     }).eq("id", row["id"]).execute()
 
                                     # RGPD
@@ -183,7 +186,7 @@ def main(supabase, session_state):
                                             "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
                                             "crm_fin": crm_fin.isoformat() if crm_fin else None
                                         }).eq("empresa_id", row["id"]).execute()
-                                    else:
+                                    elif crm_activo:
                                         supabase.table("crm_empresas").insert({
                                             "empresa_id": row["id"],
                                             "crm_activo": crm_activo,
@@ -226,6 +229,7 @@ def main(supabase, session_state):
             st.session_state.empresa_creada = False
 
         with st.form("crear_empresa", clear_on_submit=True):
+            # Campos básicos
             nombre = st.text_input("Nombre *")
             cif = st.text_input("CIF *")
             direccion = st.text_input("Dirección")
@@ -237,27 +241,23 @@ def main(supabase, session_state):
             provincia = st.text_input("Provincia")
             codigo_postal = st.text_input("Código Postal")
 
-            st.markdown("#### ⚙️ Configuración de módulos")
+            # Módulos
+            st.markdown("#### ⚙️ Configuración de módulos ISO")
             iso_activo = st.checkbox("Activar módulo ISO 9001", value=False)
+            iso_inicio = iso_fin = None
             if iso_activo:
                 iso_inicio = st.date_input("Fecha de inicio ISO", value=datetime.today())
                 iso_fin = st.date_input("Fecha de fin ISO", value=datetime.today())
-            else:
-                iso_inicio, iso_fin = None, None
 
             st.markdown("#### 🛡️ Configuración RGPD")
+            rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
             rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=datetime.today())
             rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=None)
-            rgpd_activo = st.checkbox("Activar módulo RGPD", value=False)
-            if rgpd_fin and rgpd_fin <= datetime.today().date():
-                rgpd_activo = False
 
             st.markdown("#### 📈 Configuración CRM")
+            crm_activo = st.checkbox("Activar módulo CRM", value=False)
             crm_inicio = st.date_input("Fecha de inicio CRM", value=datetime.today())
             crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=None)
-            crm_activo = st.checkbox("Activar módulo CRM", value=False)
-            if crm_fin and crm_fin <= datetime.today().date():
-                crm_activo = False
 
             submitted = st.form_submit_button("Crear Empresa")
             if submitted and not st.session_state.empresa_creada:
@@ -286,11 +286,13 @@ def main(supabase, session_state):
                                 "iso_fin": iso_fin.isoformat() if iso_fin else None,
                                 "rgpd_activo": rgpd_activo,
                                 "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
-                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
+                                "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+                                "crm_activo": crm_activo
                             }).execute()
 
                             empresa_id = empresa_res.data[0]["id"]
 
+                            # RGPD
                             if rgpd_activo:
                                 supabase.table("rgpd_empresas").insert({
                                     "empresa_id": empresa_id,
@@ -300,6 +302,7 @@ def main(supabase, session_state):
                                     "created_at": datetime.utcnow().isoformat()
                                 }).execute()
 
+                            # CRM
                             if crm_activo:
                                 supabase.table("crm_empresas").insert({
                                     "empresa_id": empresa_id,
