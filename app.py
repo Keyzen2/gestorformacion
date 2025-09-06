@@ -162,7 +162,7 @@ def route():
             "Tutores": "tutores"
         }
         for label, page_key in menu_admin.items():
-            if st.sidebar.button(label, key=page_key):
+            if st.sidebar.button(label, key=f"{page_key}_admin"):
                 st.session_state.page = page_key
 
     elif st.session_state.role == "gestor":
@@ -173,10 +173,11 @@ def route():
             "Documentos": "documentos"
         }
         for label, page_key in menu_gestor.items():
-            if st.sidebar.button(label, key=page_key):
+            if st.sidebar.button(label, key=f"{page_key}_gestor"):
                 st.session_state.page = page_key
 
         if is_module_active(empresa, empresa_crm, "iso", hoy):
+            st.sidebar.markdown("---")
             st.sidebar.markdown("#### 📏 Gestión ISO 9001")
             for label, page_key in {
                 "No Conformidades": "no_conformidades",
@@ -187,10 +188,11 @@ def route():
                 "Objetivos de Calidad": "objetivos_calidad",
                 "Informe Auditoría": "informe_auditoria"
             }.items():
-                if st.sidebar.button(label, key=page_key):
+                if st.sidebar.button(label, key=f"{page_key}_iso"):
                     st.session_state.page = page_key
 
         if is_module_active(empresa, empresa_crm, "rgpd", hoy):
+            st.sidebar.markdown("---")
             st.sidebar.markdown("#### 🛡️ Gestión RGPD")
             for label, page_key in {
                 "Panel RGPD": "rgpd_panel",
@@ -204,94 +206,50 @@ def route():
                 "Medidas de Seguridad": "rgpd_medidas",
                 "Incidencias": "rgpd_incidencias"
             }.items():
-                if st.sidebar.button(label, key=page_key):
+                if st.sidebar.button(label, key=f"{page_key}_rgpd"):
                     st.session_state.page = page_key
 
-    if is_module_active(empresa, empresa_crm, "crm", hoy):
+    if is_module_active(empresa, empresa_crm, "crm", hoy) or st.session_state.role == "comercial":
+        st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📈 Gestión CRM")
-        for label, page_key in {
+        crm_menu = {
             "Panel CRM": "crm_panel",
             "Clientes": "crm_clientes",
             "Oportunidades": "crm_oportunidades",
             "Tareas y Seguimiento": "crm_tareas",
             "Comunicaciones": "crm_comunicaciones",
             "Estadisticas": "crm_estadisticas"
-        }.items():
-            if st.sidebar.button(label, key=page_key):
-                st.session_state.page = page_key
-
-    elif st.session_state.role == "comercial":
-        st.sidebar.markdown("#### 📈 Módulo CRM")
-        crm_menu = {
-            "Panel CRM": "crm_panel",
-            "Mis Clientes": "crm_clientes",
-            "Mis Oportunidades": "crm_oportunidades",
-            "Mis Tareas": "crm_tareas",
-            "Mis Comunicaciones": "crm_comunicaciones",
-            "Mis Estadísticas": "crm_estadisticas"
         }
         for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=page_key):
+            if st.sidebar.button(label, key=f"{page_key}_crm"):
                 st.session_state.page = page_key
 
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos"):
+        if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos_alumno"):
             st.session_state.page = "mis_grupos"
-
-    # --- Módulos activos por empresa ---
-    if is_module_active(empresa, empresa_crm, "iso", hoy):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-        menu_iso = {
-            "No Conformidades": "no_conformidades",
-            "Acciones Correctivas": "acciones_correctivas",
-            "Auditorías": "auditorias",
-            "Indicadores": "indicadores",
-            "Dashboard Calidad": "dashboard_calidad",
-            "Objetivos de Calidad": "objetivos_calidad",
-            "Informe Auditoría": "informe_auditoria"
-        }
-        for label, page_key in menu_iso.items():
-            if st.sidebar.button(label, key=page_key):
-                st.session_state.page = page_key
-
-    if is_module_active(empresa, empresa_crm, "rgpd", hoy):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 🛡️ Gestión RGPD")
-        rgpd_menu = {
-            "Panel RGPD": "rgpd_panel",
-            "Tareas RGPD": "rgpd_planner",
-            "Diagnóstico Inicial": "rgpd_inicio",
-            "Tratamientos": "rgpd_tratamientos",
-            "Cláusulas y Consentimientos": "rgpd_consentimientos",
-            "Encargados del Tratamiento": "rgpd_encargados",
-            "Derechos de los Interesados": "rgpd_derechos",
-            "Evaluación de Impacto": "rgpd_evaluacion",
-            "Medidas de Seguridad": "rgpd_medidas",
-            "Incidencias": "rgpd_incidencias"
-        }
-        for label, page_key in rgpd_menu.items():
-            if st.sidebar.button(label, key=page_key):
-                st.session_state.page = page_key
-
-    if is_module_active(empresa, empresa_crm, "crm", hoy):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📈 Gestión CRM")
-        crm_menu = {
-            "Panel CRM": "crm_panel",
-            "Clientes": "crm_clientes",
-            "Oportunidades": "crm_oportunidades",
-            "Tareas y Seguimiento": "crm_tareas",
-            "Comunicaciones": "crm_comunicaciones",
-            "Estadisticas": "crm_estadisticas"
-        }
-        for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=page_key):
-                st.session_state.page = page_key
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
+
+
+# =========================
+# Función de tarjetas para dashboard
+# =========================
+def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
+    color = color_activo if activo else "#f3f4f6"  # verde si activo, gris si no
+    return f"""
+    <div style="
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 15px;
+        background-color: {color};
+        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
+    ">
+        <h3 style="margin:0;">{icono} {titulo}</h3>
+        <p style="margin:0; color:#374151;">{descripcion}</p>
+    </div>
+    """
 
 
 # =========================
@@ -311,27 +269,28 @@ else:
             mod_import.main(supabase_admin, st.session_state)
         else:
             rol = st.session_state.role
+            st.title("👋 Bienvenido al Gestor de Formación")
+
+            # ===============================
+            # MÉTRICAS DINÁMICAS PARA ADMIN Y GESTOR
+            # ===============================
+            if rol in ["admin", "gestor"]:
+                try:
+                    total_empresas = supabase_admin.table("empresas").select("*").execute().count or 0
+                    total_usuarios = supabase_admin.table("usuarios").select("*").execute().count or 0
+                    total_cursos = supabase_admin.table("acciones_formativas").select("*").execute().count or 0
+                except:
+                    total_empresas = total_usuarios = total_cursos = 0
+
+                st.subheader("📊 Métricas del sistema")
+                col1, col2, col3 = st.columns(3)
+                col1.markdown(tarjeta("🏢", "Empresas", f"Número total de empresas: {total_empresas}"))
+                col2.markdown(tarjeta("👤", "Usuarios", f"Número total de usuarios: {total_usuarios}"))
+                col3.markdown(tarjeta("📚", "Cursos activos", f"Número total de cursos/acciones formativas: {total_cursos}"))
 
             # ===============================
             # BIENVENIDA SEGÚN ROL
             # ===============================
-            st.title("👋 Bienvenido al Gestor de Formación")
-
-            def tarjeta(icono, titulo, descripcion, activo=True):
-                color = "#d1fae5" if activo else "#f3f4f6"  # verde si activo, gris si no
-                return f"""
-                <div style="
-                    border-radius: 15px;
-                    padding: 20px;
-                    margin-bottom: 15px;
-                    background-color: {color};
-                    box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
-                ">
-                    <h3 style="margin:0;">{icono} {titulo}</h3>
-                    <p style="margin:0; color:#374151;">{descripcion}</p>
-                </div>
-                """
-
             if rol == "admin":
                 st.subheader("🛠 Panel de Administración")
                 st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."))
@@ -344,9 +303,9 @@ else:
                 st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."))
 
                 st.subheader("📦 Módulos disponibles")
-                st.markdown(tarjeta("✅", "ISO", "Gestión documental ISO y auditorías.", activo=True if st.session_state.get("iso_activo") else False))
-                st.markdown(tarjeta("🔒", "RGPD", "Control de protección de datos y consentimientos.", activo=True if st.session_state.get("rgpd_activo") else False))
-                st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=True if st.session_state.get("crm_activo") else False))
+                st.markdown(tarjeta("✅", "ISO", "Gestión documental ISO y auditorías.", activo=is_module_active(empresa, empresa_crm, "iso", datetime.today().date())))
+                st.markdown(tarjeta("🔒", "RGPD", "Control de protección de datos y consentimientos.", activo=is_module_active(empresa, empresa_crm, "rgpd", datetime.today().date())))
+                st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=is_module_active(empresa, empresa_crm, "crm", datetime.today().date())))
 
             elif rol == "alumno":
                 st.subheader("🎓 Área del Alumno")
@@ -363,5 +322,6 @@ else:
             else:
                 st.subheader("🏠 Inicio")
                 st.markdown("Usa el menú lateral para navegar por las secciones disponibles.")
+
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
