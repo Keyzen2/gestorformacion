@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from datetime import date
 
 def main(supabase, session_state):
     st.markdown("## 📊 Panel RGPD")
@@ -12,6 +13,8 @@ def main(supabase, session_state):
         st.stop()
 
     def semaforo(valor, total):
+        if total == 0:
+            return "⚪"
         if valor == total:
             return "🟢"
         elif valor >= total // 2:
@@ -126,5 +129,25 @@ def main(supabase, session_state):
         st.markdown("### 🚨 Incidencias registradas: 🔴")
         st.link_button("Ir a incidencias", "rgpd_incidencias")
 
+    # NUEVO BLOQUE: Planner de tareas RGPD
+    try:
+        tareas = supabase.table("rgpd_tareas").select("*").eq("empresa_id", empresa_id).execute().data or []
+        total_tareas = len(tareas)
+        pendientes_t = [t for t in tareas if t["estado"] == "Pendiente"]
+        en_curso_t = [t for t in tareas if t["estado"] == "En curso"]
+        completadas_t = [t for t in tareas if t["estado"] == "Completada"]
+        vencidas_t = [t for t in tareas if t.get("fecha_limite") and pd.to_datetime(t["fecha_limite"]).date() < date.today() and t["estado"] != "Completada"]
+
+        st.markdown(f"### 🗂️ Planner de tareas RGPD: {semaforo(len(completadas_t), total_tareas)}")
+        st.write(f"**Total:** {total_tareas} | **Pendientes:** {len(pendientes_t)} | **En curso:** {len(en_curso_t)} | **Completadas:** {len(completadas_t)}")
+        if vencidas_t:
+            st.error(f"⚠️ {len(vencidas_t)} tarea(s) vencida(s) sin completar")
+        st.link_button("Ir al planner", "rgpd_planner")
+    except Exception as e:
+        st.markdown("### 🗂️ Planner de tareas RGPD: 🔴")
+        st.write("No se pudieron cargar las tareas.")
+        st.link_button("Ir al planner", "rgpd_planner")
+
     st.divider()
     st.caption("Este panel se actualiza automáticamente cada vez que accedes.")
+    
