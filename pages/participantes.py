@@ -174,7 +174,7 @@ def main(supabase, session_state):
                                 if existe.data:
                                     anterior = existe.data[0]
                                     supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
-                                    supabase.table("documentos").delete().eq("id", anterior["id"]).execute()
+                                    supabase.table("diplomas").delete().eq("id", anterior["id"]).execute()
 
                                 # Subir nuevo
                                 supabase.storage.from_("documentos").upload(nombre_archivo, file_bytes, {"content-type": "application/pdf"})
