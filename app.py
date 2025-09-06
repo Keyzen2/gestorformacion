@@ -116,17 +116,48 @@ def login_view():
 
 
 # =========================
-# Función de verificación de módulo activo
+# Función de verificación de módulo activo (revisada)
 # =========================
-def is_module_active(empresa, empresa_crm, key, hoy):
-    if key == "iso":
-        return empresa.get("iso_activo") and (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
-    elif key == "rgpd":
-        return empresa.get("rgpd_activo") and (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
-    elif key == "crm":
-        return empresa_crm.get("crm_activo") and (empresa_crm.get("crm_inicio") is None or pd.to_datetime(empresa_crm["crm_inicio"]).date() <= hoy) and (empresa_crm.get("crm_fin") is None or pd.to_datetime(empresa_crm["crm_fin"]).date() >= hoy)
-    return False
+def is_module_active(empresa, empresa_crm, key, hoy, role):
+    # Los alumnos nunca ven módulos
+    if role == "alumno":
+        return False
 
+    if key == "iso":
+        if not empresa.get("iso_activo"):
+            return False
+        inicio = empresa.get("iso_inicio")
+        if inicio and pd.to_datetime(inicio).date() > hoy:
+            return False
+        # Si quieres que la fecha fin bloquee, descomenta:
+        # fin = empresa.get("iso_fin")
+        # if fin and pd.to_datetime(fin).date() < hoy:
+        #     return False
+        return True
+
+    elif key == "rgpd":
+        if not empresa.get("rgpd_activo"):
+            return False
+        inicio = empresa.get("rgpd_inicio")
+        if inicio and pd.to_datetime(inicio).date() > hoy:
+            return False
+        # fin = empresa.get("rgpd_fin")
+        # if fin and pd.to_datetime(fin).date() < hoy:
+        #     return False
+        return True
+
+    elif key == "crm":
+        if not empresa_crm.get("crm_activo"):
+            return False
+        inicio = empresa_crm.get("crm_inicio")
+        if inicio and pd.to_datetime(inicio).date() > hoy:
+            return False
+        # fin = empresa_crm.get("crm_fin")
+        # if fin and pd.to_datetime(fin).date() < hoy:
+        #     return False
+        return True
+
+    return False
 
 # =========================
 # Función de tarjetas para dashboard
@@ -145,7 +176,6 @@ def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
         <p style="margin:0; color:#374151;">{descripcion}</p>
     </div>
     """
-
 
 # =========================
 # Sidebar y navegación
@@ -172,11 +202,11 @@ def route():
         empresa_crm = crm_res.data[0] if crm_res.data else {}
 
     role = st.session_state.role
-    menu_base = {}
 
-    # --- Menús base ---
+    # --- Menú base por rol ---
     if role == "admin":
-        menu_base = {
+        st.sidebar.markdown("#### 🧭 Navegación")
+        base_menu = {
             "Panel de Alertas": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
             "Empresas": "empresas",
@@ -186,21 +216,35 @@ def route():
             "Documentos": "documentos",
             "Tutores": "tutores"
         }
+        for label, page_key in base_menu.items():
+            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                st.session_state.page = page_key
+
     elif role == "gestor":
-        menu_base = {
+        st.sidebar.markdown("#### 🧭 Navegación")
+        base_menu = {
             "Grupos": "grupos",
             "Participantes": "participantes",
             "Documentos": "documentos"
         }
-    elif role == "alumno":
-        menu_base = {"Mis Grupos y Diplomas": "mis_grupos"}
-    elif role == "comercial":
-        menu_base = {}  # CRM se añade abajo
+        for label, page_key in base_menu.items():
+            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                st.session_state.page = page_key
 
-    # --- Añadir módulos activos con todas sus páginas ---
+    elif role == "alumno":
+        st.sidebar.markdown("#### 🎓 Área del Alumno")
+        if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos"):
+            st.session_state.page = "mis_grupos"
+
+    elif role == "comercial":
+        pass  # CRM se añade más abajo
+
+    # --- Módulos activos ---
     if role in ["admin", "gestor"]:
-        if is_module_active(empresa, empresa_crm, "iso", hoy):
-            menu_base.update({
+        if is_module_active(empresa, empresa_crm, "iso", hoy, role):
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+            iso_menu = {
                 "No Conformidades": "no_conformidades",
                 "Acciones Correctivas": "acciones_correctivas",
                 "Auditorías": "auditorias",
@@ -208,10 +252,17 @@ def route():
                 "Dashboard Calidad": "dashboard_calidad",
                 "Objetivos de Calidad": "objetivos_calidad",
                 "Informe Auditoría": "informe_auditoria"
-            })
-        if is_module_active(empresa, empresa_crm, "rgpd", hoy):
-            menu_base.update({
+            }
+            for label, page_key in iso_menu.items():
+                if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                    st.session_state.page = page_key
+
+        if is_module_active(empresa, empresa_crm, "rgpd", hoy, role):
+            st.sidebar.markdown("---")
+            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
+            rgpd_menu = {
                 "Panel RGPD": "rgpd_panel",
+                "Tareas RGPD": "rgpd_planner",
                 "Diagnóstico Inicial": "rgpd_inicio",
                 "Tratamientos": "rgpd_tratamientos",
                 "Cláusulas y Consentimientos": "rgpd_consentimientos",
@@ -220,23 +271,26 @@ def route():
                 "Evaluación de Impacto": "rgpd_evaluacion",
                 "Medidas de Seguridad": "rgpd_medidas",
                 "Incidencias": "rgpd_incidencias"
-            })
+            }
+            for label, page_key in rgpd_menu.items():
+                if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                    st.session_state.page = page_key
 
     # CRM para admin, gestor y comercial si está activo
-    if is_module_active(empresa, empresa_crm, "crm", hoy) or role in ["comercial", "admin", "gestor"]:
-        menu_base.update({
+    if is_module_active(empresa, empresa_crm, "crm", hoy, role) or role in ["comercial", "admin", "gestor"]:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📈 Gestión CRM")
+        crm_menu = {
             "Panel CRM": "crm_panel",
             "Clientes": "crm_clientes",
             "Oportunidades": "crm_oportunidades",
             "Tareas y Seguimiento": "crm_tareas",
             "Comunicaciones": "crm_comunicaciones",
             "Estadísticas": "crm_estadisticas"
-        })
-
-    # --- Renderizar botones en sidebar ---
-    for label, page_key in menu_base.items():
-        if st.sidebar.button(label, key=f"{page_key}_{role}"):
-            st.session_state.page = page_key
+        }
+        for label, page_key in crm_menu.items():
+            if st.sidebar.button(label, key=f"{page_key}_{role}"):
+                st.session_state.page = page_key
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
