@@ -312,6 +312,8 @@ def main(supabase, session_state):
                             st.session_state.empresa_creada = True
                             st.success(f"✅ Empresa '{nombre}' creada correctamente.")
                             st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al crear la empresa: {str(e)}")
 
     except Exception as e:
         st.error(f"❌ Error al cargar la página 'empresas': {str(e)}")
