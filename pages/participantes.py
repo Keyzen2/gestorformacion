@@ -173,12 +173,12 @@ def main(supabase, session_state):
                                 # Eliminar anterior si existe
                                 if existe.data:
                                     anterior = existe.data[0]
-                                    supabase.storage.from_("diplomas").remove([anterior["archivo_nombre"]])
-                                    supabase.table("diplomas").delete().eq("id", anterior["id"]).execute()
+                                    supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
+                                    supabase.table("documentos").delete().eq("id", anterior["id"]).execute()
 
                                 # Subir nuevo
-                                supabase.storage.from_("diplomas").upload(nombre_archivo, file_bytes, {"content-type": "application/pdf"})
-                                url = supabase.storage.from_("diplomas").get_public_url(nombre_archivo)
+                                supabase.storage.from_("documentos").upload(nombre_archivo, file_bytes, {"content-type": "application/pdf"})
+                                url = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
 
                                 # Registrar en tabla diplomas
                                 supabase.table("diplomas").insert({
