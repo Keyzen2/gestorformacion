@@ -6,6 +6,7 @@ from datetime import datetime
 # FUNCIONES AUXILIARES
 # -----------------------
 def modulo_iso(row=None):
+    st.markdown("#### 🏷️ Configuración ISO 9001")
     iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False) if row else False)
     iso_inicio = iso_fin = None
     if iso_activo:
@@ -20,30 +21,31 @@ def modulo_iso(row=None):
     return iso_activo, iso_inicio, iso_fin
 
 def modulo_rgpd(row=None):
+    st.markdown("#### 🛡️ Configuración RGPD")
+    rgpd_activo_val = row.get("rgpd_activo", False) if row else False
     rgpd_inicio_val = pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date() if row and row.get("rgpd_inicio") else datetime.today().date()
     rgpd_fin_val = pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date() if row and row.get("rgpd_fin") else None
-    rgpd_activo_val = row.get("rgpd_activo", False) if row else False
     if rgpd_fin_val and rgpd_fin_val <= datetime.today().date():
         rgpd_activo_val = False
 
-    st.markdown("#### 🛡️ Configuración RGPD")
     rgpd_activo = st.checkbox("Activar módulo RGPD", value=rgpd_activo_val)
     rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=rgpd_inicio_val)
     rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=rgpd_fin_val)
     return rgpd_activo, rgpd_inicio, rgpd_fin
 
-def modulo_crm(supabase, empresa_id):
-    if not empresa_id:
-        return False, None, None
-    crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", empresa_id).execute()
-    crm_data = crm_res.data[0] if crm_res.data else {}
-    crm_activo = crm_data.get("crm_activo", False)
-    crm_inicio = pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date() if crm_data.get("crm_inicio") else datetime.today().date()
-    crm_fin = pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date() if crm_data.get("crm_fin") else None
-    if crm_fin and crm_fin <= datetime.today().date():
-        crm_activo = False
-
+def modulo_crm(supabase, empresa_id=None):
     st.markdown("#### 📈 Configuración CRM")
+    if not empresa_id:
+        crm_activo, crm_inicio, crm_fin = False, datetime.today().date(), None
+    else:
+        crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", empresa_id).execute()
+        crm_data = crm_res.data[0] if crm_res.data else {}
+        crm_activo = crm_data.get("crm_activo", False)
+        crm_inicio = pd.to_datetime(crm_data.get("crm_inicio"), errors="coerce").date() if crm_data.get("crm_inicio") else datetime.today().date()
+        crm_fin = pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date() if crm_data.get("crm_fin") else None
+        if crm_fin and crm_fin <= datetime.today().date():
+            crm_activo = False
+
     crm_activo = st.checkbox("Activar módulo CRM", value=crm_activo)
     crm_inicio = st.date_input("Fecha de inicio CRM", value=crm_inicio)
     crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=crm_fin)
@@ -97,31 +99,25 @@ def export_csv(df, filename="empresas.csv"):
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Descargar CSV", data=csv, file_name=filename, mime="text/csv")
 
+
 # -----------------------
 # MAIN
 # -----------------------
 def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
 
-    # -----------------------
+    # =======================
     # RESUMEN
-    # -----------------------
+    # =======================
     empresas_res = supabase.table("empresas").select("*").execute()
     empresas = empresas_res.data if empresas_res.data else []
     df_empresas = pd.DataFrame(empresas) if empresas else pd.DataFrame()
 
-    total_empresas = len(df_empresas)
-    empresas_mes = df_empresas[pd.to_datetime(df_empresas.get("fecha_alta", pd.Series()), errors="coerce").dt.month == datetime.now().month] if not df_empresas.empty else pd.DataFrame()
-    total_mes = len(empresas_mes)
-
-    provincia_top = df_empresas["provincia"].value_counts().idxmax() if "provincia" in df_empresas.columns and not df_empresas.empty else "N/D"
-    ciudad_top = df_empresas["ciudad"].value_counts().idxmax() if "ciudad" in df_empresas.columns and not df_empresas.empty else "N/D"
-
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("🏢 Total Empresas", total_empresas)
-    col2.metric("🆕 Nuevas este mes", total_mes)
-    col3.metric("📍 Provincia más frecuente", provincia_top)
-    col4.metric("🌆 Ciudad más frecuente", ciudad_top)
+    col1.metric("🏢 Total Empresas", len(df_empresas))
+    col2.metric("🆕 Nuevas este mes", len(df_empresas[pd.to_datetime(df_empresas.get("fecha_alta", pd.Series()), errors="coerce").dt.month == datetime.now().month]) if not df_empresas.empty else 0)
+    col3.metric("📍 Provincia más frecuente", df_empresas["provincia"].value_counts().idxmax() if "provincia" in df_empresas.columns and not df_empresas.empty else "N/D")
+    col4.metric("🌆 Ciudad más frecuente", df_empresas["ciudad"].value_counts().idxmax() if "ciudad" in df_empresas.columns and not df_empresas.empty else "N/D")
 
     st.divider()
     st.markdown("### 🔍 Buscar y Exportar")
@@ -138,7 +134,7 @@ def main(supabase, session_state):
     st.markdown("### ✏️ Empresas Registradas")
     if empresas:
         for row in empresas:
-            with st.expander(f"{row['nombre']} ({row.get('cif', '')})"):
+            with st.expander(f"{row['nombre']} ({row.get('cif','')})"):
                 st.write(f"**Dirección:** {row.get('direccion','')}")
                 st.write(f"**Teléfono:** {row.get('telefono','')}")
                 st.write(f"**Email:** {row.get('email','')}")
@@ -148,7 +144,16 @@ def main(supabase, session_state):
                 st.write(f"**Código Postal:** {row.get('codigo_postal','')}")
                 st.write(f"**Fecha Alta:** {row.get('fecha_alta','')}")
 
-                # Formulario edición
+                # Estado módulos
+                st.write(f"✅ ISO 9001: {'Activo' if row.get('iso_activo') else 'Inactivo'}")
+                st.write(f"✅ RGPD: {'Activo' if row.get('rgpd_activo') else 'Inactivo'}")
+                crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
+                crm_data = crm_res.data[0] if crm_res.data else {}
+                st.write(f"✅ CRM: {'Activo' if crm_data.get('crm_activo') else 'Inactivo'}")
+
+                # -----------------------
+                # FORMULARIO EDICIÓN
+                # -----------------------
                 with st.form(f"editar_{row['id']}"):
                     nuevo_nombre = st.text_input("Nombre", value=row.get("nombre",""))
                     nuevo_cif = st.text_input("CIF", value=row.get("cif",""))
@@ -183,15 +188,6 @@ def main(supabase, session_state):
                         st.success("Empresa actualizada ✅")
                         st.rerun()
 
-                # Formulario eliminar
-                with st.form(f"eliminar_{row['id']}"):
-                    confirmar = st.checkbox("Confirmar eliminación")
-                    eliminar = st.form_submit_button("Eliminar empresa")
-                    if eliminar and confirmar:
-                        supabase.table("empresas").delete().eq("id", row["id"]).execute()
-                        st.success("Empresa eliminada ✅")
-                        st.rerun()
-
     # -----------------------
     # CREAR NUEVA EMPRESA
     # -----------------------
@@ -210,7 +206,7 @@ def main(supabase, session_state):
         codigo_postal = st.text_input("Código Postal")
         iso = modulo_iso()
         rgpd = modulo_rgpd()
-        crm = (False, None, None)
+        crm = modulo_crm(supabase)
 
         guardar = st.form_submit_button("Crear empresa")
         if guardar:
