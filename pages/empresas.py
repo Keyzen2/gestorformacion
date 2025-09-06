@@ -166,8 +166,9 @@ def gestionar_empresas(supabase):
                                     {"activo": crm_activo, "inicio": crm_inicio, "fin": crm_fin})
                     st.success("Empresa actualizada ✅")
                     st.rerun()
+
 # =========================
 # Punto de entrada para app.py
 # =========================
-   def main(supabase, session_state):
-       gestionar_empresas(supabase)
+def main(supabase, session_state):
+    gestionar_empresas(supabase)
