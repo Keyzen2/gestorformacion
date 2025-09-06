@@ -162,14 +162,20 @@ def route():
     empresa_crm = {}
     hoy = datetime.today().date()
     if empresa_id:
-        empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin", "rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("id", empresa_id).execute()
+        empresa_res = supabase_admin.table(
+            "empresas"
+        ).select("iso_activo", "iso_inicio", "iso_fin", "rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
-        crm_res = supabase_admin.table("crm_empresas").select("crm_activo", "crm_inicio", "crm_fin").eq("empresa_id", empresa_id).execute()
+        crm_res = supabase_admin.table(
+            "crm_empresas"
+        ).select("crm_activo", "crm_inicio", "crm_fin").eq("empresa_id", empresa_id).execute()
         empresa_crm = crm_res.data[0] if crm_res.data else {}
 
-    # --- Menús por rol ---
+    role = st.session_state.role
     menu_base = {}
-    if st.session_state.role == "admin":
+
+    # --- Menús base ---
+    if role == "admin":
         menu_base = {
             "Panel de Alertas": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
@@ -180,33 +186,60 @@ def route():
             "Documentos": "documentos",
             "Tutores": "tutores"
         }
-    elif st.session_state.role == "gestor":
+    elif role == "gestor":
         menu_base = {
             "Grupos": "grupos",
             "Participantes": "participantes",
             "Documentos": "documentos"
         }
-    elif st.session_state.role == "alumno":
+    elif role == "alumno":
         menu_base = {"Mis Grupos y Diplomas": "mis_grupos"}
-    elif st.session_state.role == "comercial":
+    elif role == "comercial":
         menu_base = {}  # CRM se añade abajo
 
-    # Añadir módulos activos
-    if st.session_state.role in ["admin", "gestor"]:
+    # --- Añadir módulos activos con todas sus páginas ---
+    if role in ["admin", "gestor"]:
         if is_module_active(empresa, empresa_crm, "iso", hoy):
-            menu_base["ISO"] = "iso"
+            menu_base.update({
+                "No Conformidades": "no_conformidades",
+                "Acciones Correctivas": "acciones_correctivas",
+                "Auditorías": "auditorias",
+                "Indicadores": "indicadores",
+                "Dashboard Calidad": "dashboard_calidad",
+                "Objetivos de Calidad": "objetivos_calidad",
+                "Informe Auditoría": "informe_auditoria"
+            })
         if is_module_active(empresa, empresa_crm, "rgpd", hoy):
-            menu_base["RGPD"] = "rgpd"
-    if is_module_active(empresa, empresa_crm, "crm", hoy) or st.session_state.role == "comercial":
-        menu_base["CRM"] = "crm"
+            menu_base.update({
+                "Panel RGPD": "rgpd_panel",
+                "Diagnóstico Inicial": "rgpd_inicio",
+                "Tratamientos": "rgpd_tratamientos",
+                "Cláusulas y Consentimientos": "rgpd_consentimientos",
+                "Encargados del Tratamiento": "rgpd_encargados",
+                "Derechos de los Interesados": "rgpd_derechos",
+                "Evaluación de Impacto": "rgpd_evaluacion",
+                "Medidas de Seguridad": "rgpd_medidas",
+                "Incidencias": "rgpd_incidencias"
+            })
 
+    # CRM para admin, gestor y comercial si está activo
+    if is_module_active(empresa, empresa_crm, "crm", hoy) or role in ["comercial", "admin", "gestor"]:
+        menu_base.update({
+            "Panel CRM": "crm_panel",
+            "Clientes": "crm_clientes",
+            "Oportunidades": "crm_oportunidades",
+            "Tareas y Seguimiento": "crm_tareas",
+            "Comunicaciones": "crm_comunicaciones",
+            "Estadísticas": "crm_estadisticas"
+        })
+
+    # --- Renderizar botones en sidebar ---
     for label, page_key in menu_base.items():
-        if st.sidebar.button(label, key=f"{page_key}_{st.session_state.role}"):
+        if st.sidebar.button(label, key=f"{page_key}_{role}"):
             st.session_state.page = page_key
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
-
 
 # =========================
 # Ejecución principal
