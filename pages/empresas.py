@@ -68,7 +68,6 @@ def main(supabase, session_state):
                     st.write(f"**RGPD Activo:** {'✅ Sí' if row.get('rgpd_activo') else '❌ No'}")
                     st.write(f"**Inicio RGPD:** {row.get('rgpd_inicio', '—')}")
                     st.write(f"**Fin RGPD:** {row.get('rgpd_fin', '—')}")
-                    # Traer el estado real de CRM desde la tabla crm_empresas
                     crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
                     crm_data = crm_res.data[0] if crm_res.data else {}
                     st.write(f"**CRM Activo:** {'✅ Sí' if crm_data.get('crm_activo') else '❌ No'}")
