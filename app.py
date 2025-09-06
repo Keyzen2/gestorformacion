@@ -176,6 +176,50 @@ def route():
             if st.sidebar.button(label, key=page_key):
                 st.session_state.page = page_key
 
+        if is_module_active(empresa, empresa_crm, "iso", hoy):
+            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+            for label, page_key in {
+                "No Conformidades": "no_conformidades",
+                "Acciones Correctivas": "acciones_correctivas",
+                "Auditorías": "auditorias",
+                "Indicadores": "indicadores",
+                "Dashboard Calidad": "dashboard_calidad",
+                "Objetivos de Calidad": "objetivos_calidad",
+                "Informe Auditoría": "informe_auditoria"
+            }.items():
+                if st.sidebar.button(label, key=page_key):
+                    st.session_state.page = page_key
+
+        if is_module_active(empresa, empresa_crm, "rgpd", hoy):
+            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
+            for label, page_key in {
+                "Panel RGPD": "rgpd_panel",
+                "Tareas RGPD": "rgpd_planner",
+                "Diagnóstico Inicial": "rgpd_inicio",
+                "Tratamientos": "rgpd_tratamientos",
+                "Cláusulas y Consentimientos": "rgpd_consentimientos",
+                "Encargados del Tratamiento": "rgpd_encargados",
+                "Derechos de los Interesados": "rgpd_derechos",
+                "Evaluación de Impacto": "rgpd_evaluacion",
+                "Medidas de Seguridad": "rgpd_medidas",
+                "Incidencias": "rgpd_incidencias"
+            }.items():
+                if st.sidebar.button(label, key=page_key):
+                    st.session_state.page = page_key
+
+    if is_module_active(empresa, empresa_crm, "crm", hoy):
+        st.sidebar.markdown("#### 📈 Gestión CRM")
+        for label, page_key in {
+            "Panel CRM": "crm_panel",
+            "Clientes": "crm_clientes",
+            "Oportunidades": "crm_oportunidades",
+            "Tareas y Seguimiento": "crm_tareas",
+            "Comunicaciones": "crm_comunicaciones",
+            "Estadisticas": "crm_estadisticas"
+        }.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
+
     elif st.session_state.role == "comercial":
         st.sidebar.markdown("#### 📈 Módulo CRM")
         crm_menu = {
@@ -247,7 +291,7 @@ def route():
                 st.session_state.page = page_key
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
 
 
 # =========================
