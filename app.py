@@ -149,11 +149,144 @@ def route():
             "Tutores": "tutores"
         }
         for label, page_key in menu_admin.items():
+import os
+import sys
+import streamlit as st
+from supabase import create_client
+from datetime import datetime
+import pandas as pd
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# =========================
+# Configuración de la página
+# =========================
+st.set_page_config(
+    page_title="Gestor de Formación",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={}
+)
+
+# =========================
+# Claves Supabase
+# =========================
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+
+supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+# =========================
+# Estado inicial
+# =========================
+for key, default in {
+    "page": "home",
+    "role": None,
+    "user": {},
+    "auth_session": None
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+# =========================
+# Funciones auxiliares
+# =========================
+def set_user_role_from_db(email: str):
+    try:
+        res = supabase_public.table("usuarios").select("*").eq("email", email).limit(1).execute()
+        if res.data:
+            row = res.data[0]
+            st.session_state.role = row.get("rol") or "alumno"
+            st.session_state.user = {
+                "id": row.get("id"),
+                "auth_id": row.get("auth_id"),
+                "email": row.get("email"),
+                "nombre": row.get("nombre"),
+                "empresa_id": row.get("empresa_id")
+            }
+            if st.session_state.role == "comercial":
+                com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
+                if com_res.data:
+                    st.session_state.user["comercial_id"] = com_res.data[0]["id"]
+        else:
+            st.session_state.role = "alumno"
+            st.session_state.user = {"email": email}
+    except Exception as e:
+        st.error(f"No se pudo obtener el rol del usuario: {e}")
+        st.session_state.role = "alumno"
+        st.session_state.user = {"email": email}
+
+def do_logout():
+    try:
+        supabase_public.auth.sign_out()
+    except Exception:
+        pass
+    st.session_state.clear()
+    st.experimental_rerun()
+
+def login_view():
+    st.markdown("### 🔐 Iniciar sesión")
+    with st.form("form_login_acceso", clear_on_submit=False):
+        email = st.text_input("Email", autocomplete="email")
+        password = st.text_input("Contraseña", type="password", autocomplete="current-password")
+        submitted = st.form_submit_button("Entrar")
+
+    if submitted:
+        if not email or not password:
+            st.warning("Introduce email y contraseña.")
+        else:
+            try:
+                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                if not auth or not auth.user:
+                    st.error("Credenciales inválidas.")
+                else:
+                    st.session_state.auth_session = auth
+                    set_user_role_from_db(auth.user.email)
+                    st.experimental_rerun()
+            except Exception as e:
+                st.error(f"Error al iniciar sesión: {e}")
+
+# =========================
+# Sidebar y navegación
+# =========================
+def route():
+    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
+    st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
+
+    if st.sidebar.button("🚪 Cerrar sesión"):
+        do_logout()
+
+    menu_iso = {
+        "No Conformidades": "no_conformidades",
+        "Acciones Correctivas": "acciones_correctivas",
+        "Auditorías": "auditorias",
+        "Indicadores": "indicadores",
+        "Dashboard Calidad": "dashboard_calidad",
+        "Objetivos de Calidad": "objetivos_calidad",
+        "Informe Auditoría": "informe_auditoria"
+    }
+
+    # --- ADMIN ---
+    if st.session_state.role == "admin":
+        st.sidebar.markdown("#### 🧭 Navegación")
+        menu_admin = {
+            "Panel de Alertas": "panel_admin",
+            "Usuarios y Empresas": "usuarios_empresas",
+            "Empresas": "empresas",
+            "Acciones Formativas": "acciones_formativas",
+            "Grupos": "grupos",
+            "Participantes": "participantes",
+            "Documentos": "documentos",
+            "Tutores": "tutores"
+        }
+        for label, page_key in menu_admin.items():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
 
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
         for label, page_key in menu_iso.items():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
@@ -172,12 +305,17 @@ def route():
 
         empresa_id = st.session_state.user.get("empresa_id")
         if empresa_id:
-            empresa_res = supabase_admin.table("empresas").select(
-                "iso_activo", "iso_inicio", "iso_fin",
-                "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-                "crm_activo", "crm_inicio", "crm_fin"
-            ).eq("id", empresa_id).execute()
-            empresa = empresa_res.data[0] if empresa_res.data else {}
+            try:
+                empresa_res = supabase_admin.table("empresas").select(
+                    "iso_activo", "iso_inicio", "iso_fin",
+                    "rgpd_activo", "rgpd_inicio", "rgpd_fin",
+                    "crm_activo", "crm_inicio", "crm_fin"
+                ).eq("id", empresa_id).execute()
+                empresa = empresa_res.data[0] if empresa_res.data else {}
+            except Exception as e:
+                st.error(f"Error cargando datos de la empresa: {e}")
+                empresa = {}
+
             hoy = datetime.today().date()
 
             # --- ISO ---
@@ -260,8 +398,7 @@ def route():
             st.session_state.page = "mis_grupos"
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
-
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
 
 # =========================
 # Ejecución principal
