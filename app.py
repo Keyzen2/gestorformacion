@@ -217,6 +217,7 @@ def route():
         st.sidebar.markdown("#### 🛡️ Gestión RGPD")
         rgpd_menu = {
             "Panel RGPD": "rgpd_panel",
+            "Tareas RGPD": "rgpd_planner",
             "Diagnóstico Inicial": "rgpd_inicio",
             "Tratamientos": "rgpd_tratamientos",
             "Cláusulas y Consentimientos": "rgpd_consentimientos",
