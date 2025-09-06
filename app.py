@@ -49,12 +49,12 @@ def set_user_role_from_db(email: str):
             row = res.data[0]
             st.session_state.role = row.get("rol") or "alumno"
             st.session_state.user = {
-                "id": row.get("id"),
                 "auth_id": row.get("auth_id"),
                 "email": row.get("email"),
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
+            # Comercial
             if st.session_state.role == "comercial":
                 com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
                 if com_res.data:
@@ -67,6 +67,7 @@ def set_user_role_from_db(email: str):
         st.session_state.role = "alumno"
         st.session_state.user = {"email": email}
 
+
 def do_logout():
     try:
         supabase_public.auth.sign_out()
@@ -75,8 +76,24 @@ def do_logout():
     st.session_state.clear()
     st.experimental_rerun()
 
+
 def login_view():
+    st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
+    html, body, [class*="css"] { font-family: 'Roboto', sans-serif; background-color: #f5f5f5'; }
+    .module-card { background-color: white; padding: 1em; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 1em; }
+    .module-card h4 { margin: 0; color: #4285F4; }
+    .module-card p { margin: 0.5em 0 0; color: #5f6368; }
+    </style>
+    <div class="module-card"><h4>📚 Formación Bonificada</h4><p>Gestión de acciones formativas y documentos FUNDAE.</p></div>
+    <div class="module-card"><h4>📋 ISO 9001</h4><p>Auditorías, informes y seguimiento de calidad.</p></div>
+    <div class="module-card"><h4>🔐 RGPD</h4><p>Consentimientos, documentación legal y trazabilidad.</p></div>
+    """, unsafe_allow_html=True)
+
     st.markdown("### 🔐 Iniciar sesión")
+    st.caption("Accede al gestor con tus credenciales.")
+
     with st.form("form_login_acceso", clear_on_submit=False):
         email = st.text_input("Email", autocomplete="email")
         password = st.text_input("Contraseña", type="password", autocomplete="current-password")
@@ -96,6 +113,7 @@ def login_view():
                     st.experimental_rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
+
 
 # =========================
 # Sidebar y navegación
@@ -135,7 +153,7 @@ def route():
                 st.session_state.page = page_key
 
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
         for label, page_key in menu_iso.items():
             if st.sidebar.button(label):
                 st.session_state.page = page_key
@@ -154,17 +172,12 @@ def route():
 
         empresa_id = st.session_state.user.get("empresa_id")
         if empresa_id:
-            try:
-                empresa_res = supabase_admin.table("empresas").select(
-                    "iso_activo", "iso_inicio", "iso_fin",
-                    "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-                    "crm_activo", "crm_inicio", "crm_fin"
-                ).eq("id", empresa_id).execute()
-                empresa = empresa_res.data[0] if empresa_res.data else {}
-            except Exception as e:
-                st.error(f"Error cargando datos de la empresa: {e}")
-                empresa = {}
-
+            empresa_res = supabase_admin.table("empresas").select(
+                "iso_activo", "iso_inicio", "iso_fin",
+                "rgpd_activo", "rgpd_inicio", "rgpd_fin",
+                "crm_activo", "crm_inicio", "crm_fin"
+            ).eq("id", empresa_id).execute()
+            empresa = empresa_res.data[0] if empresa_res.data else {}
             hoy = datetime.today().date()
 
             # --- ISO ---
@@ -247,7 +260,8 @@ def route():
             st.session_state.page = "mis_grupos"
 
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
+    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
+
 
 # =========================
 # Ejecución principal
