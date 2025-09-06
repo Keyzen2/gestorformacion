@@ -74,7 +74,7 @@ def do_logout():
     except Exception:
         pass
     st.session_state.clear()
-    st.experimental_rerun()
+    st.rerun()
 
 
 def login_view():
@@ -110,7 +110,7 @@ def login_view():
                 else:
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.experimental_rerun()
+                    st.rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
 
