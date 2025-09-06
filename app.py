@@ -54,7 +54,6 @@ def set_user_role_from_db(email: str):
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
-            # Comercial
             if st.session_state.role == "comercial":
                 com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
                 if com_res.data:
@@ -116,232 +115,66 @@ def login_view():
 
 
 # =========================
+# Función de verificación de módulo activo
+# =========================
+def is_module_active(empresa, empresa_crm, key, hoy):
+    if key == "iso":
+        return empresa.get("iso_activo") and (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
+    elif key == "rgpd":
+        return empresa.get("rgpd_activo") and (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
+    elif key == "crm":
+        return empresa_crm.get("crm_activo") and (empresa_crm.get("crm_inicio") is None or pd.to_datetime(empresa_crm["crm_inicio"]).date() <= hoy) and (empresa_crm.get("crm_fin") is None or pd.to_datetime(empresa_crm["crm_fin"]).date() >= hoy)
+    return False
+
+
+# =========================
 # Sidebar y navegación
 # =========================
 def route():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email")
     st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
 
-    if st.sidebar.button("🚪 Cerrar sesión"):
+    if st.sidebar.button("🚪 Cerrar sesión", key="logout"):
         do_logout()
 
-    menu_iso = {
-        "No Conformidades": "no_conformidades",
-        "Acciones Correctivas": "acciones_correctivas",
-        "Auditorías": "auditorias",
-        "Indicadores": "indicadores",
-        "Dashboard Calidad": "dashboard_calidad",
-        "Objetivos de Calidad": "objetivos_calidad",
-        "Informe Auditoría": "informe_auditoria"
-    }
+    empresa_id = st.session_state.user.get("empresa_id")
+    empresa = {}
+    empresa_crm = {}
+    hoy = datetime.today().date()
+    if empresa_id:
+        empresa_res = supabase_admin.table("empresas").select("iso_activo", "iso_inicio", "iso_fin", "rgpd_activo", "rgpd_inicio", "rgpd_fin").eq("id", empresa_id).execute()
+        empresa = empresa_res.data[0] if empresa_res.data else {}
+        crm_res = supabase_admin.table("crm_empresas").select("crm_activo", "crm_inicio", "crm_fin").eq("empresa_id", empresa_id).execute()
+        empresa_crm = crm_res.data[0] if crm_res.data else {}
 
-    # --- ADMIN ---
+    # --- Menús por rol ---
     if st.session_state.role == "admin":
-    st.sidebar.markdown("#### 🧭 Navegación")
-    menu_admin = {
-        "Panel de Alertas": "panel_admin",
-        "Usuarios y Empresas": "usuarios_empresas",
-        "Empresas": "empresas",
-        "Acciones Formativas": "acciones_formativas",
-        "Grupos": "grupos",
-        "Participantes": "participantes",
-        "Documentos": "documentos",
-        "Tutores": "tutores"
-    }
-    for label, page_key in menu_admin.items():
-        if st.sidebar.button(label):
-            st.session_state.page = page_key
+        st.sidebar.markdown("#### 🧭 Navegación")
+        menu_admin = {
+            "Panel de Alertas": "panel_admin",
+            "Usuarios y Empresas": "usuarios_empresas",
+            "Empresas": "empresas",
+            "Acciones Formativas": "acciones_formativas",
+            "Grupos": "grupos",
+            "Participantes": "participantes",
+            "Documentos": "documentos",
+            "Tutores": "tutores"
+        }
+        for label, page_key in menu_admin.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
 
-    st.sidebar.markdown("---")
-    
-    # --- ISO ---
-    st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-    menu_iso = {
-        "No Conformidades": "no_conformidades",
-        "Acciones Correctivas": "acciones_correctivas",
-        "Auditorías": "auditorias",
-        "Indicadores": "indicadores",
-        "Dashboard Calidad": "dashboard_calidad",
-        "Objetivos de Calidad": "objetivos_calidad",
-        "Informe Auditoría": "informe_auditoria"
-    }
-    for label, page_key in menu_iso.items():
-        if st.sidebar.button(label):
-            st.session_state.page = page_key
-
-    # Carga empresa si tiene asignada
-    empresa_id = st.session_state.user.get("empresa_id")
-    if empresa_id:
-        # Datos ISO y RGPD desde empresas
-        empresa_res = supabase_admin.table("empresas").select(
-            "iso_activo", "iso_inicio", "iso_fin",
-            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
-        ).eq("id", empresa_id).execute()
-        empresa = empresa_res.data[0] if empresa_res.data else {}
-
-        # Datos CRM desde crm_empresas
-        crm_res = supabase_admin.table("crm_empresas").select(
-            "crm_activo", "crm_inicio", "crm_fin"
-        ).eq("empresa_id", empresa_id).execute()
-        empresa_crm = crm_res.data[0] if crm_res.data else {}
-
-        hoy = datetime.today().date()
-
-        # --- ISO ---
-        iso_permitido = (
-            empresa.get("iso_activo") and
-            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
-            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
-        )
-        if iso_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-            for label, page_key in menu_iso.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-        # --- RGPD ---
-        rgpd_permitido = (
-            empresa.get("rgpd_activo") and
-            (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and
-            (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
-        )
-        if rgpd_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
-            rgpd_menu = {
-                "Panel RGPD": "rgpd_panel",
-                "Diagnóstico Inicial": "rgpd_inicio",
-                "Tratamientos": "rgpd_tratamientos",
-                "Cláusulas y Consentimientos": "rgpd_consentimientos",
-                "Encargados del Tratamiento": "rgpd_encargados",
-                "Derechos de los Interesados": "rgpd_derechos",
-                "Evaluación de Impacto": "rgpd_evaluacion",
-                "Medidas de Seguridad": "rgpd_medidas",
-                "Incidencias": "rgpd_incidencias"
-            }
-            for label, page_key in rgpd_menu.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-        # --- CRM ---
-        crm_permitido = (
-            empresa_crm.get("crm_activo") and
-            (empresa_crm.get("crm_inicio") is None or pd.to_datetime(empresa_crm["crm_inicio"]).date() <= hoy) and
-            (empresa_crm.get("crm_fin") is None or pd.to_datetime(empresa_crm["crm_fin"]).date() >= hoy)
-        )
-        if crm_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📈 Gestión CRM")
-            crm_menu = {
-                "Panel CRM": "crm_panel",
-                "Clientes": "crm_clientes",
-                "Oportunidades": "crm_oportunidades",
-                "Tareas y Seguimiento": "crm_tareas",
-                "Comunicaciones": "crm_comunicaciones",
-                "Campañas": "crm_campanas"
-            }
-            for label, page_key in crm_menu.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-    # --- GESTOR ---
     elif st.session_state.role == "gestor":
-    st.sidebar.markdown("#### 🧭 Navegación")
-    menu_gestor = {
-        "Grupos": "grupos",
-        "Participantes": "participantes",
-        "Documentos": "documentos"
-    }
-    for label, page_key in menu_gestor.items():
-        if st.sidebar.button(label):
-            st.session_state.page = page_key
+        st.sidebar.markdown("#### 🧭 Navegación")
+        menu_gestor = {
+            "Grupos": "grupos",
+            "Participantes": "participantes",
+            "Documentos": "documentos"
+        }
+        for label, page_key in menu_gestor.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
 
-    empresa_id = st.session_state.user.get("empresa_id")
-    if empresa_id:
-        # Datos ISO y RGPD desde empresas
-        empresa_res = supabase_admin.table("empresas").select(
-            "iso_activo", "iso_inicio", "iso_fin",
-            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
-        ).eq("id", empresa_id).execute()
-        empresa = empresa_res.data[0] if empresa_res.data else {}
-
-        # Datos CRM desde crm_empresas
-        crm_res = supabase_admin.table("crm_empresas").select(
-            "crm_activo", "crm_inicio", "crm_fin"
-        ).eq("empresa_id", empresa_id).execute()
-        empresa_crm = crm_res.data[0] if crm_res.data else {}
-
-        hoy = datetime.today().date()
-
-        # --- ISO ---
-        iso_permitido = (
-            empresa.get("iso_activo") and
-            (empresa.get("iso_inicio") is None or pd.to_datetime(empresa["iso_inicio"]).date() <= hoy) and
-            (empresa.get("iso_fin") is None or pd.to_datetime(empresa["iso_fin"]).date() >= hoy)
-        )
-        if iso_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-            menu_iso = {
-                "No Conformidades": "no_conformidades",
-                "Acciones Correctivas": "acciones_correctivas",
-                "Auditorías": "auditorias",
-                "Indicadores": "indicadores",
-                "Dashboard Calidad": "dashboard_calidad",
-                "Objetivos de Calidad": "objetivos_calidad",
-                "Informe Auditoría": "informe_auditoria"
-            }
-            for label, page_key in menu_iso.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-        # --- RGPD ---
-        rgpd_permitido = (
-            empresa.get("rgpd_activo") and
-            (empresa.get("rgpd_inicio") is None or pd.to_datetime(empresa["rgpd_inicio"]).date() <= hoy) and
-            (empresa.get("rgpd_fin") is None or pd.to_datetime(empresa["rgpd_fin"]).date() >= hoy)
-        )
-        if rgpd_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 🛡️ Gestión RGPD")
-            rgpd_menu = {
-                "Panel RGPD": "rgpd_panel",
-                "Diagnóstico Inicial": "rgpd_inicio",
-                "Tratamientos": "rgpd_tratamientos",
-                "Cláusulas y Consentimientos": "rgpd_consentimientos",
-                "Encargados del Tratamiento": "rgpd_encargados",
-                "Derechos de los Interesados": "rgpd_derechos",
-                "Evaluación de Impacto": "rgpd_evaluacion",
-                "Medidas de Seguridad": "rgpd_medidas",
-                "Incidencias": "rgpd_incidencias"
-            }
-            for label, page_key in rgpd_menu.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-        # --- CRM ---
-        crm_permitido = (
-            empresa_crm.get("crm_activo") and
-            (empresa_crm.get("crm_inicio") is None or pd.to_datetime(empresa_crm["crm_inicio"]).date() <= hoy) and
-            (empresa_crm.get("crm_fin") is None or pd.to_datetime(empresa_crm["crm_fin"]).date() >= hoy)
-        )
-        if crm_permitido:
-            st.sidebar.markdown("---")
-            st.sidebar.markdown("#### 📈 Gestión CRM")
-            crm_menu = {
-                "Panel CRM": "crm_panel",
-                "Clientes": "crm_clientes",
-                "Oportunidades": "crm_oportunidades",
-                "Tareas y Seguimiento": "crm_tareas",
-                "Comunicaciones": "crm_comunicaciones",
-                "Campañas": "crm_campanas"
-            }
-            for label, page_key in crm_menu.items():
-                if st.sidebar.button(label):
-                    st.session_state.page = page_key
-
-    # --- COMERCIAL ---
     elif st.session_state.role == "comercial":
         st.sidebar.markdown("#### 📈 Módulo CRM")
         crm_menu = {
@@ -353,14 +186,63 @@ def route():
             "Mis Estadísticas": "crm_estadisticas"
         }
         for label, page_key in crm_menu.items():
-            if st.sidebar.button(label):
+            if st.sidebar.button(label, key=page_key):
                 st.session_state.page = page_key
 
-    # --- ALUMNO ---
     elif st.session_state.role == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas"):
+        if st.sidebar.button("Mis Grupos y Diplomas", key="mis_grupos"):
             st.session_state.page = "mis_grupos"
+
+    # --- Módulos activos por empresa ---
+    if is_module_active(empresa, empresa_crm, "iso", hoy):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
+        menu_iso = {
+            "No Conformidades": "no_conformidades",
+            "Acciones Correctivas": "acciones_correctivas",
+            "Auditorías": "auditorias",
+            "Indicadores": "indicadores",
+            "Dashboard Calidad": "dashboard_calidad",
+            "Objetivos de Calidad": "objetivos_calidad",
+            "Informe Auditoría": "informe_auditoria"
+        }
+        for label, page_key in menu_iso.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
+
+    if is_module_active(empresa, empresa_crm, "rgpd", hoy):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 🛡️ Gestión RGPD")
+        rgpd_menu = {
+            "Panel RGPD": "rgpd_panel",
+            "Diagnóstico Inicial": "rgpd_inicio",
+            "Tratamientos": "rgpd_tratamientos",
+            "Cláusulas y Consentimientos": "rgpd_consentimientos",
+            "Encargados del Tratamiento": "rgpd_encargados",
+            "Derechos de los Interesados": "rgpd_derechos",
+            "Evaluación de Impacto": "rgpd_evaluacion",
+            "Medidas de Seguridad": "rgpd_medidas",
+            "Incidencias": "rgpd_incidencias"
+        }
+        for label, page_key in rgpd_menu.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
+
+    if is_module_active(empresa, empresa_crm, "crm", hoy):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📈 Gestión CRM")
+        crm_menu = {
+            "Panel CRM": "crm_panel",
+            "Clientes": "crm_clientes",
+            "Oportunidades": "crm_oportunidades",
+            "Tareas y Seguimiento": "crm_tareas",
+            "Comunicaciones": "crm_comunicaciones",
+            "Campañas": "crm_campanas"
+        }
+        for label, page_key in crm_menu.items():
+            if st.sidebar.button(label, key=page_key):
+                st.session_state.page = page_key
 
     st.sidebar.markdown("---")
     st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Streamlit + Supabase")
