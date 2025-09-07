@@ -69,4 +69,47 @@ def main(supabase, session_state):
             })
             st.success("✅ Textos generales actualizados.")
             st.rerun()
-          
+
+    # =========================
+    # Textos de tarjetas por rol
+    # =========================
+    with st.form("textos_tarjetas"):
+        st.subheader("🧾 Textos de tarjetas por rol")
+
+        # Admin
+        tarjeta_admin_usuarios = st.text_area("Admin - Usuarios", value=ajustes.get("tarjeta_admin_usuarios", "Alta, gestión y permisos de usuarios."))
+        tarjeta_admin_empresas = st.text_area("Admin - Empresas", value=ajustes.get("tarjeta_admin_empresas", "Gestión de empresas y sus módulos."))
+        tarjeta_admin_ajustes = st.text_area("Admin - Ajustes", value=ajustes.get("tarjeta_admin_ajustes", "Configuración global de la aplicación."))
+
+        # Gestor
+        tarjeta_gestor_grupos = st.text_area("Gestor - Grupos", value=ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
+        tarjeta_gestor_documentos = st.text_area("Gestor - Documentación", value=ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación de formación."))
+
+        # Alumno
+        tarjeta_alumno_grupos = st.text_area("Alumno - Mis grupos", value=ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
+        tarjeta_alumno_diplomas = st.text_area("Alumno - Diplomas", value=ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."))
+        tarjeta_alumno_seguimiento = st.text_area("Alumno - Seguimiento", value=ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."))
+
+        # Comercial
+        tarjeta_comercial_clientes = st.text_area("Comercial - Clientes", value=ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."))
+        tarjeta_comercial_oportunidades = st.text_area("Comercial - Oportunidades", value=ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
+        tarjeta_comercial_tareas = st.text_area("Comercial - Tareas", value=ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."))
+
+        guardar_tarjetas = st.form_submit_button("💾 Guardar textos de tarjetas")
+        if guardar_tarjetas:
+            update_ajustes_app(supabase, {
+                "tarjeta_admin_usuarios": tarjeta_admin_usuarios,
+                "tarjeta_admin_empresas": tarjeta_admin_empresas,
+                "tarjeta_admin_ajustes": tarjeta_admin_ajustes,
+                "tarjeta_gestor_grupos": tarjeta_gestor_grupos,
+                "tarjeta_gestor_documentos": tarjeta_gestor_documentos,
+                "tarjeta_alumno_grupos": tarjeta_alumno_grupos,
+                "tarjeta_alumno_diplomas": tarjeta_alumno_diplomas,
+                "tarjeta_alumno_seguimiento": tarjeta_alumno_seguimiento,
+                "tarjeta_comercial_clientes": tarjeta_comercial_clientes,
+                "tarjeta_comercial_oportunidades": tarjeta_comercial_oportunidades,
+                "tarjeta_comercial_tareas": tarjeta_comercial_tareas
+            })
+            st.success("✅ Textos de tarjetas actualizados.")
+            st.rerun()
+            
