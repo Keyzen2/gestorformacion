@@ -4,6 +4,8 @@ import pandas as pd
 def main(supabase, session_state):
     st.subheader("📚 Acciones Formativas")
 
+    empresa_id = session_state.user.get("empresa_id")
+
     try:
         areas_res = supabase.table("areas_profesionales").select("*").order("familia", desc=False).execute()
         areas_dict = {f"{a.get('codigo','')} - {a.get('nombre','')}": a.get('codigo','') for a in (areas_res.data or [])}
@@ -12,7 +14,7 @@ def main(supabase, session_state):
         areas_dict = {}
 
     try:
-        acciones_res = supabase.table("acciones_formativas").select("*").execute()
+        acciones_res = supabase.table("acciones_formativas").select("*").eq("empresa_id", empresa_id).execute()
         df_acciones = pd.DataFrame(acciones_res.data or [])
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar las acciones formativas: {e}")
@@ -74,7 +76,8 @@ def main(supabase, session_state):
                     "modalidad": modalidad,
                     "num_horas": int(num_horas),
                     "certificado_profesionalidad": certificado_profesionalidad,
-                    "observaciones": observaciones
+                    "observaciones": observaciones,
+                    "empresa_id": empresa_id  # ✅ Asociación directa
                 }).execute()
 
                 st.session_state.accion_creada = True
@@ -138,7 +141,8 @@ def main(supabase, session_state):
                                 "modalidad": nueva_modalidad,
                                 "num_horas": int(nuevas_horas),
                                 "certificado_profesionalidad": nuevo_certificado,
-                                "observaciones": nuevas_obs
+                                "observaciones": nuevas_obs,
+                                "empresa_id": empresa_id  # ✅ Refuerzo de asociación
                             }).eq("id", row["id"]).execute()
 
                             st.session_state[f"edit_done_{row['id']}"] = True
@@ -156,6 +160,4 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar: {e}")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al eliminar: {e}")
+                            
