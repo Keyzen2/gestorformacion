@@ -462,6 +462,3 @@ elif rol == "comercial":
 else:
     st.subheader("🏠 Inicio")
     st.markdown("Usa el menú lateral para navegar por las secciones disponibles.")
-
-    except Exception as e:
-        st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
