@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from utils import get_ajustes_app
 from datetime import datetime
 from services.alumnos import alta_alumno
 
@@ -102,15 +103,16 @@ def main(supabase, session_state):
                             except Exception as e:
                                 st.error(f"❌ Error al eliminar usuario: {str(e)}")
 
-    # =========================
-    # Crear nuevo usuario
-    # =========================
-    if session_state.role != "admin":
-        st.warning("🔒 Solo los administradores pueden crear usuarios.")
-        return
+# =========================
+# Crear nuevo usuario
+# =========================
+if session_state.role != "admin":
+    st.warning("🔒 Solo los administradores pueden crear usuarios.")
+    return
 
-    st.markdown("### ➕ Crear nuevo usuario")
-    with st.expander("Formulario de alta", expanded=True):
+st.markdown("### ➕ Crear nuevo usuario")
+with st.expander("Formulario de alta", expanded=True):
+    with st.form("form_nuevo_usuario", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
             email_new = st.text_input("📧 Email *")
@@ -128,6 +130,7 @@ def main(supabase, session_state):
                 grupo_id_new = st.text_input("👥 Grupo ID asignado (opcional)", help="Solo el ID. La gestión de grupos se realiza en grupos.py")
 
         submitted_user = st.form_submit_button("✅ Crear usuario")
+
         if submitted_user:
             if not email_new or not nombre_new or not password_new:
                 st.error("⚠️ Todos los campos son obligatorios.")
@@ -170,4 +173,3 @@ def main(supabase, session_state):
                             st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al crear el usuario: {e}")
-                    
