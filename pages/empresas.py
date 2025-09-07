@@ -10,14 +10,8 @@ def modulo_iso(row=None):
     iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False) if row else False)
     iso_inicio = iso_fin = None
     if iso_activo:
-        iso_inicio = st.date_input(
-            "Fecha de inicio ISO",
-            value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date() if row and row.get("iso_inicio") else datetime.today().date()
-        )
-        iso_fin = st.date_input(
-            "Fecha de fin ISO",
-            value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date() if row and row.get("iso_fin") else datetime.today().date()
-        )
+        iso_inicio = st.date_input("Fecha de inicio ISO", value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date() if row and row.get("iso_inicio") else datetime.today().date())
+        iso_fin = st.date_input("Fecha de fin ISO", value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date() if row and row.get("iso_fin") else datetime.today().date())
     return iso_activo, iso_inicio, iso_fin
 
 def modulo_rgpd(row=None):
@@ -27,7 +21,6 @@ def modulo_rgpd(row=None):
     rgpd_fin_val = pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date() if row and row.get("rgpd_fin") else None
     if rgpd_fin_val and rgpd_fin_val <= datetime.today().date():
         rgpd_activo_val = False
-
     rgpd_activo = st.checkbox("Activar módulo RGPD", value=rgpd_activo_val)
     rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=rgpd_inicio_val)
     rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=rgpd_fin_val)
@@ -45,28 +38,38 @@ def modulo_crm(supabase, empresa_id=None):
         crm_fin = pd.to_datetime(crm_data.get("crm_fin"), errors="coerce").date() if crm_data.get("crm_fin") else None
         if crm_fin and crm_fin <= datetime.today().date():
             crm_activo = False
-
     crm_activo = st.checkbox("Activar módulo CRM", value=crm_activo)
     crm_inicio = st.date_input("Fecha de inicio CRM", value=crm_inicio)
     crm_fin = st.date_input("Fecha de fin CRM (opcional)", value=crm_fin)
     return crm_activo, crm_inicio, crm_fin
 
-def guardar_modulos(supabase, empresa_id, iso, rgpd, crm):
+def modulo_docu_avanzada(row=None):
+    st.markdown("#### 📁 Configuración Documentación Avanzada")
+    docu_activo = st.checkbox("Activar módulo Documentación Avanzada", value=row.get("docu_avanzada_activo", False) if row else False)
+    docu_inicio = docu_fin = None
+    if docu_activo:
+        docu_inicio = st.date_input("Fecha de inicio Documentación", value=pd.to_datetime(row.get("docu_avanzada_inicio"), errors="coerce").date() if row and row.get("docu_avanzada_inicio") else datetime.today().date())
+        docu_fin = st.date_input("Fecha de fin Documentación", value=pd.to_datetime(row.get("docu_avanzada_fin"), errors="coerce").date() if row and row.get("docu_avanzada_fin") else datetime.today().date())
+    return docu_activo, docu_inicio, docu_fin
+
+def guardar_modulos(supabase, empresa_id, iso, rgpd, crm, docu):
     iso_activo, iso_inicio, iso_fin = iso
     rgpd_activo, rgpd_inicio, rgpd_fin = rgpd
     crm_activo, crm_inicio, crm_fin = crm
+    docu_activo, docu_inicio, docu_fin = docu
 
-    # Actualizar ISO y RGPD en tabla empresas
     supabase.table("empresas").update({
         "iso_activo": iso_activo,
         "iso_inicio": iso_inicio.isoformat() if iso_inicio else None,
         "iso_fin": iso_fin.isoformat() if iso_fin else None,
         "rgpd_activo": rgpd_activo,
         "rgpd_inicio": rgpd_inicio.isoformat() if rgpd_inicio else None,
-        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None
+        "rgpd_fin": rgpd_fin.isoformat() if rgpd_fin else None,
+        "docu_avanzada_activo": docu_activo,
+        "docu_avanzada_inicio": docu_inicio.isoformat() if docu_inicio else None,
+        "docu_avanzada_fin": docu_fin.isoformat() if docu_fin else None
     }).eq("id", empresa_id).execute()
 
-    # RGPD tabla separada
     if rgpd_activo:
         existe = supabase.table("rgpd_empresas").select("id").eq("empresa_id", empresa_id).execute()
         if not existe.data:
@@ -78,7 +81,6 @@ def guardar_modulos(supabase, empresa_id, iso, rgpd, crm):
                 "created_at": datetime.utcnow().isoformat()
             }).execute()
 
-    # CRM tabla separada
     crm_res = supabase.table("crm_empresas").select("id").eq("empresa_id", empresa_id).execute()
     if crm_res.data:
         supabase.table("crm_empresas").update({
@@ -105,9 +107,6 @@ def export_csv(df, filename="empresas.csv"):
 def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
 
-    # =======================
-    # RESUMEN
-    # =======================
     empresas_res = supabase.table("empresas").select("*").execute()
     empresas = empresas_res.data if empresas_res.data else []
     df_empresas = pd.DataFrame(empresas) if empresas else pd.DataFrame()
@@ -136,7 +135,7 @@ def main(supabase, session_state):
             with st.expander(f"{row['nombre']} ({row.get('cif','')})"):
                 st.write(f"**Dirección:** {row.get('direccion','')}")
                 st.write(f"**Teléfono:** {row.get('telefono','')}")
-                st.write(f"**Email:** {row.get('email','')}")
+                                st.write(f"**Email:** {row.get('email','')}")
                 st.write(f"**Representante:** {row.get('representante_nombre','')} ({row.get('representante_dni','')})")
                 st.write(f"**Ciudad:** {row.get('ciudad','')}")
                 st.write(f"**Provincia:** {row.get('provincia','')}")
@@ -150,6 +149,7 @@ def main(supabase, session_state):
                 crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
                 crm_data = crm_res.data[0] if crm_res.data else {}
                 st.write(f"📈 CRM: {'Activo' if crm_data.get('crm_activo') else 'Inactivo'}")
+                st.write(f"📁 Documentación Avanzada: {'Activo' if row.get('docu_avanzada_activo') else 'Inactivo'}")  # ✅ Nuevo estado
 
                 # -----------------------
                 # FORMULARIOS INDEPENDIENTES
@@ -216,9 +216,15 @@ def main(supabase, session_state):
                         st.success("Módulo CRM actualizado ✅")
                         st.rerun()
 
-                # -----------------------
-                # FORMULARIO ELIMINAR
-                # -----------------------
+                # Módulo Documentación Avanzada
+                with st.form(f"editar_docu_{row['id']}"):
+                    docu = modulo_docu_avanzada(row)
+                    if st.form_submit_button("💾 Guardar Documentación"):
+                        guardar_modulos(supabase, row["id"], iso, rgpd, crm, docu)
+                        st.success("Módulo Documentación actualizado ✅")
+                        st.rerun()
+
+                # Eliminar empresa
                 with st.form(f"eliminar_{row['id']}"):
                     st.warning("⚠️ Esta acción eliminará la empresa permanentemente.")
                     confirmar = st.checkbox("Confirmar la eliminación")
@@ -254,6 +260,7 @@ def main(supabase, session_state):
         iso = modulo_iso()
         rgpd = modulo_rgpd()
         crm = modulo_crm(supabase)
+        docu = modulo_docu_avanzada()  # ✅ Nuevo módulo
 
         guardar = st.form_submit_button("Crear empresa")
         if guardar:
@@ -280,16 +287,19 @@ def main(supabase, session_state):
                     "iso_fin": iso[2].isoformat() if iso[2] else None,
                     "rgpd_activo": rgpd[0],
                     "rgpd_inicio": rgpd[1].isoformat() if rgpd[1] else None,
-                    "rgpd_fin": rgpd[2].isoformat() if rgpd[2] else None
+                    "rgpd_fin": rgpd[2].isoformat() if rgpd[2] else None,
+                    "docu_avanzada_activo": docu[0],
+                    "docu_avanzada_inicio": docu[1].isoformat() if docu[1] else None,
+                    "docu_avanzada_fin": docu[2].isoformat() if docu[2] else None
                 }).execute()
 
                 empresa_id = res.data[0]["id"]
 
-                # Guardar módulos en sus tablas correspondientes
                 guardar_modulo_formacion(supabase, empresa_id, formacion)
                 guardar_modulo_iso(supabase, empresa_id, iso)
                 guardar_modulo_rgpd(supabase, empresa_id, rgpd)
                 guardar_modulo_crm(supabase, empresa_id, crm)
+                guardar_modulos(supabase, empresa_id, iso, rgpd, crm, docu)  # ✅ Guardar Documentación
 
                 st.success("Empresa creada ✅")
                 st.rerun()
