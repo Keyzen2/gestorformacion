@@ -324,8 +324,6 @@ def route():
     st.sidebar.markdown("---")
     st.sidebar.caption(mensaje_footer)
 
-from utils import get_ajustes_app
-
 # =========================
 # Ejecución principal
 # =========================
