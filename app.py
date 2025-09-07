@@ -236,11 +236,10 @@ def route():
     if rol == "admin":
         st.sidebar.markdown("#### 🧭 Administración SaaS")
         base_menu = {
-            "Panel de Alertas": "panel_admin",
+            "Panel Admin": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
             "Empresas": "empresas",
-            "Ajustes de la App": "ajustes_app",
-            "Estadísticas Globales": "estadisticas_app"
+            "Ajustes de la App": "ajustes_app"
         }
         for label, page_key in base_menu.items():
             if st.sidebar.button(label, key=f"{page_key}_{rol}"):
