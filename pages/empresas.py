@@ -144,16 +144,19 @@ def main(supabase, session_state):
                 st.write(f"**Fecha Alta:** {row.get('fecha_alta','')}")
 
                 # Estado módulos
+                st.write(f"📚 Formación: {'Activo' if row.get('formacion_activo') else 'Inactivo'}")
                 st.write(f"✅ ISO 9001: {'Activo' if row.get('iso_activo') else 'Inactivo'}")
-                st.write(f"✅ RGPD: {'Activo' if row.get('rgpd_activo') else 'Inactivo'}")
+                st.write(f"🛡️ RGPD: {'Activo' if row.get('rgpd_activo') else 'Inactivo'}")
                 crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
                 crm_data = crm_res.data[0] if crm_res.data else {}
-                st.write(f"✅ CRM: {'Activo' if crm_data.get('crm_activo') else 'Inactivo'}")
+                st.write(f"📈 CRM: {'Activo' if crm_data.get('crm_activo') else 'Inactivo'}")
 
                 # -----------------------
-                # FORMULARIO EDICIÓN
+                # FORMULARIOS INDEPENDIENTES
                 # -----------------------
-                with st.form(f"editar_{row['id']}"):
+
+                # Datos generales
+                with st.form(f"editar_datos_{row['id']}"):
                     nuevo_nombre = st.text_input("Nombre", value=row.get("nombre",""))
                     nuevo_cif = st.text_input("CIF", value=row.get("cif",""))
                     nuevo_direccion = st.text_input("Dirección", value=row.get("direccion",""))
@@ -164,13 +167,8 @@ def main(supabase, session_state):
                     nueva_ciudad = st.text_input("Ciudad", value=row.get("ciudad",""))
                     nueva_provincia = st.text_input("Provincia", value=row.get("provincia",""))
                     nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal",""))
-
-                    iso = modulo_iso(row)
-                    rgpd = modulo_rgpd(row)
-                    crm = modulo_crm(supabase, row["id"])
-
-                    guardar = st.form_submit_button("Guardar cambios")
-                    if guardar:
+                    guardar_datos = st.form_submit_button("💾 Guardar datos generales")
+                    if guardar_datos:
                         supabase.table("empresas").update({
                             "nombre": nuevo_nombre,
                             "cif": nuevo_cif,
@@ -183,8 +181,39 @@ def main(supabase, session_state):
                             "provincia": nueva_provincia,
                             "codigo_postal": nuevo_cp
                         }).eq("id", row["id"]).execute()
-                        guardar_modulos(supabase, row["id"], iso, rgpd, crm)
-                        st.success("Empresa actualizada ✅")
+                        st.success("Datos generales actualizados ✅")
+                        st.rerun()
+
+                # Módulo Formación
+                with st.form(f"editar_formacion_{row['id']}"):
+                    formacion = modulo_formacion(row)
+                    if st.form_submit_button("💾 Guardar Formación"):
+                        guardar_modulo_formacion(supabase, row["id"], formacion)
+                        st.success("Módulo Formación actualizado ✅")
+                        st.rerun()
+
+                # Módulo ISO
+                with st.form(f"editar_iso_{row['id']}"):
+                    iso = modulo_iso(row)
+                    if st.form_submit_button("💾 Guardar ISO"):
+                        guardar_modulo_iso(supabase, row["id"], iso)
+                        st.success("Módulo ISO actualizado ✅")
+                        st.rerun()
+
+                # Módulo RGPD
+                with st.form(f"editar_rgpd_{row['id']}"):
+                    rgpd = modulo_rgpd(row)
+                    if st.form_submit_button("💾 Guardar RGPD"):
+                        guardar_modulo_rgpd(supabase, row["id"], rgpd)
+                        st.success("Módulo RGPD actualizado ✅")
+                        st.rerun()
+
+                # Módulo CRM
+                with st.form(f"editar_crm_{row['id']}"):
+                    crm = modulo_crm(supabase, row["id"])
+                    if st.form_submit_button("💾 Guardar CRM"):
+                        guardar_modulo_crm(supabase, row["id"], crm)
+                        st.success("Módulo CRM actualizado ✅")
                         st.rerun()
 
                 # -----------------------
@@ -220,6 +249,8 @@ def main(supabase, session_state):
         ciudad = st.text_input("Ciudad")
         provincia = st.text_input("Provincia")
         codigo_postal = st.text_input("Código Postal")
+
+        formacion = modulo_formacion()
         iso = modulo_iso()
         rgpd = modulo_rgpd()
         crm = modulo_crm(supabase)
@@ -241,6 +272,9 @@ def main(supabase, session_state):
                     "provincia": provincia,
                     "codigo_postal": codigo_postal,
                     "fecha_alta": datetime.utcnow().isoformat(),
+                    "formacion_activo": formacion[0],
+                    "formacion_inicio": formacion[1].isoformat() if formacion[1] else None,
+                    "formacion_fin": formacion[2].isoformat() if formacion[2] else None,
                     "iso_activo": iso[0],
                     "iso_inicio": iso[1].isoformat() if iso[1] else None,
                     "iso_fin": iso[2].isoformat() if iso[2] else None,
@@ -248,7 +282,14 @@ def main(supabase, session_state):
                     "rgpd_inicio": rgpd[1].isoformat() if rgpd[1] else None,
                     "rgpd_fin": rgpd[2].isoformat() if rgpd[2] else None
                 }).execute()
+
                 empresa_id = res.data[0]["id"]
-                guardar_modulos(supabase, empresa_id, iso, rgpd, crm)
+
+                # Guardar módulos en sus tablas correspondientes
+                guardar_modulo_formacion(supabase, empresa_id, formacion)
+                guardar_modulo_iso(supabase, empresa_id, iso)
+                guardar_modulo_rgpd(supabase, empresa_id, rgpd)
+                guardar_modulo_crm(supabase, empresa_id, crm)
+
                 st.success("Empresa creada ✅")
                 st.rerun()
