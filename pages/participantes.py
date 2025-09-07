@@ -191,9 +191,11 @@ def main(supabase, session_state):
                             st.warning("⚠️ Debes seleccionar un archivo PDF.")
                         else:
                             try:
-                                nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
+                                empresa_id = row.get("empresa_id")
+                                nombre_archivo = f"documentos/{empresa_id}/diplomas/diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
+                                ruta_archivo = f"{empresa_id}/diplomas/{nombre_archivo}"
                                 file_bytes = archivo.read()
-
+                                
                                 if existe.data:
                                     anterior = existe.data[0]
                                     supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
