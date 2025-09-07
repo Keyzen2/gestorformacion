@@ -80,16 +80,9 @@ def main(supabase, session_state):
                 # Mostrar grupos asignados
                 # =========================
                 try:
-                    grupos_asignados = supabase.table("tutores_grupos") \
-                        .select("grupo_id") \
-                        .eq("tutor_id", row["id"]) \
-                        .execute().data or []
-
+                    grupos_asignados = supabase.table("tutores_grupos").select("grupo_id").eq("tutor_id", row["id"]).execute().data or []
                     grupo_ids = [g["grupo_id"] for g in grupos_asignados]
-                    grupos_info = supabase.table("grupos") \
-                        .select("id, codigo_grupo") \
-                        .in_("id", grupo_ids) \
-                        .execute().data or []
+                    grupos_info = supabase.table("grupos").select("id, codigo_grupo").in_("id", grupo_ids).execute().data or []
 
                     if grupos_info:
                         st.write("**Grupos asignados:**")
@@ -135,7 +128,6 @@ def main(supabase, session_state):
                                     "provincia": nueva_provincia,
                                     "codigo_postal": nuevo_cp
                                 }).eq("id", row["id"]).execute()
-
                                 st.success("✅ Cambios guardados correctamente.")
                                 st.rerun()
                             except Exception as e:
@@ -150,16 +142,14 @@ def main(supabase, session_state):
                         confirmar = st.checkbox("✅ Confirmo que quiero eliminar este tutor")
                         eliminar = st.form_submit_button("🗑️ Eliminar definitivamente")
 
-                        if eliminar:
-                            if confirmar:
-                                try:
-                                    supabase.table("tutores").delete().eq("id", row["id"]).execute()
-                                    st.success("✅ Tutor eliminado.")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"❌ Error al eliminar: {str(e)}")
-                            else:
-                                st.error("⚠️ Debes marcar la casilla de confirmación antes de eliminar.")
+                        if eliminar and confirmar:
+                            try:
+                                supabase.table("tutores").delete().eq("id", row["id"]).execute()
+                                st.success("✅ Tutor eliminado.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al eliminar: {str(e)}")
 
     else:
         st.info("ℹ️ No hay tutores registrados.")
+        
