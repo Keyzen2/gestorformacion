@@ -150,9 +150,6 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
         inicio = empresa.get("formacion_inicio")
         if inicio and pd.to_datetime(inicio).date() > hoy:
             return False
-        # fin = empresa.get("formacion_fin")
-        # if fin and pd.to_datetime(fin).date() < hoy:
-        #     return False
         return True
 
     if key == "iso":
@@ -163,7 +160,7 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
             return False
         return True
 
-    elif key == "rgpd":
+    if key == "rgpd":
         if not empresa.get("rgpd_activo"):
             return False
         inicio = empresa.get("rgpd_inicio")
@@ -171,10 +168,18 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
             return False
         return True
 
-    elif key == "crm":
+    if key == "crm":
         if not empresa_crm.get("crm_activo"):
             return False
         inicio = empresa_crm.get("crm_inicio")
+        if inicio and pd.to_datetime(inicio).date() > hoy:
+            return False
+        return True
+
+    if key == "docu_avanzada":  # ✅ Nuevo módulo
+        if not empresa.get("docu_avanzada_activo"):
+            return False
+        inicio = empresa.get("docu_avanzada_inicio")
         if inicio and pd.to_datetime(inicio).date() > hoy:
             return False
         return True
@@ -218,7 +223,8 @@ def route():
         empresa_res = supabase_admin.table("empresas").select(
             "formacion_activo", "formacion_inicio", "formacion_fin",
             "iso_activo", "iso_inicio", "iso_fin",
-            "rgpd_activo", "rgpd_inicio", "rgpd_fin"
+            "rgpd_activo", "rgpd_inicio", "rgpd_fin",
+            "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin"  # ✅ Añadido
         ).eq("id", empresa_id).execute()
         empresa = empresa_res.data[0] if empresa_res.data else {}
         crm_res = supabase_admin.table("crm_empresas").select(
@@ -317,6 +323,17 @@ def route():
             if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                 st.session_state.page = page_key
 
+    # --- Módulo Documentación Avanzada ---
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📁 Documentación Avanzada")
+        docu_menu = {
+            "Gestión Documental": "documentacion_avanzada"
+        }
+        for label, page_key in docu_menu.items():
+            if st.sidebar.button(label, key=f"{page_key}_{rol}"):
+                st.session_state.page = page_key
+
     # ✅ Footer dinámico desde ajustes_app
     ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
     mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
@@ -402,6 +419,9 @@ else:
                     modulos_activados = True
                 if is_module_active(empresa, empresa_crm, "crm", hoy, rol):
                     st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=True), unsafe_allow_html=True)
+                    modulos_activados = True
+                if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):  # ✅ Nuevo módulo
+                    st.markdown(tarjeta("📁", "Documentación Avanzada", "Repositorio documental transversal por empresa, grupo o usuario.", activo=True), unsafe_allow_html=True)
                     modulos_activados = True
                 if not modulos_activados:
                     st.info("No hay módulos activos actualmente para tu empresa.")
