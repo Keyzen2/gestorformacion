@@ -327,6 +327,8 @@ def route():
     st.sidebar.markdown("---")
     st.sidebar.caption(mensaje_footer)
 
+from utils import get_ajustes_app
+
 # =========================
 # Ejecución principal
 # =========================
@@ -348,10 +350,15 @@ else:
             empresa = st.session_state.get("empresa", {})
             empresa_crm = st.session_state.get("empresa_crm", {})
 
-            # ✅ Obtener textos de bienvenida por rol
+            # ✅ Obtener textos dinámicos desde ajustes_app
             ajustes = get_ajustes_app(supabase_admin, campos=[
-                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial"
+                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
+                "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
+                "tarjeta_gestor_grupos", "tarjeta_gestor_documentos",
+                "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
+                "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
             ])
+
             bienvenida_por_rol = {
                 "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
                 "gestor": ajustes.get("bienvenida_gestor", "Panel del Gestor"),
@@ -363,7 +370,7 @@ else:
             st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
 
             # ===============================
-            # MÉTRICAS DINÁMICAS PARA ADMIN (superadmin global)
+            # MÉTRICAS DINÁMICAS PARA ADMIN
             # ===============================
             if rol == "admin":
                 try:
@@ -379,13 +386,13 @@ else:
                 col2.markdown(tarjeta("👤", "Usuarios", f"Número total de usuarios: {total_usuarios}"), unsafe_allow_html=True)
                 col3.markdown(tarjeta("📚", "Cursos activos", f"Número total de cursos/acciones formativas: {total_cursos}"), unsafe_allow_html=True)
 
-                st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."), unsafe_allow_html=True)
-                st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."), unsafe_allow_html=True)
-                st.markdown(tarjeta("⚙️", "Ajustes", "Configuración global de la aplicación."), unsafe_allow_html=True)
+                st.markdown(tarjeta("👤", "Usuarios", ajustes.get("tarjeta_admin_usuarios", "Alta, gestión y permisos de usuarios.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("🏢", "Empresas", ajustes.get("tarjeta_admin_empresas", "Gestión de empresas y sus módulos.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("⚙️", "Ajustes", ajustes.get("tarjeta_admin_ajustes", "Configuración global de la aplicación.")), unsafe_allow_html=True)
 
             elif rol == "gestor":
-                st.markdown(tarjeta("👥", "Grupos y participantes", "Crea y gestiona grupos de alumnos."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."), unsafe_allow_html=True)
+                st.markdown(tarjeta("👥", "Grupos y participantes", ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("📄", "Documentación", ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación de formación.")), unsafe_allow_html=True)
 
                 st.subheader("📦 Módulos disponibles")
                 modulos_activados = False
@@ -405,14 +412,14 @@ else:
                     st.info("No hay módulos activos actualmente para tu empresa.")
 
             elif rol == "alumno":
-                st.markdown(tarjeta("👥", "Mis grupos", "Consulta a qué grupos perteneces."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📜", "Diplomas", "Descarga tus diplomas disponibles."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📊", "Seguimiento", "Accede al progreso de tu formación."), unsafe_allow_html=True)
+                st.markdown(tarjeta("👥", "Mis grupos", ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("📜", "Diplomas", ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("📊", "Seguimiento", ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación.")), unsafe_allow_html=True)
 
             elif rol == "comercial":
-                st.markdown(tarjeta("👤", "Clientes", "Consulta y gestiona tu cartera de clientes."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📝", "Oportunidades", "Registra y da seguimiento a nuevas oportunidades."), unsafe_allow_html=True)
-                st.markdown(tarjeta("📅", "Tareas", "Organiza tus visitas y recordatorios."), unsafe_allow_html=True)
+                st.markdown(tarjeta("👤", "Clientes", ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("📝", "Oportunidades", ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades.")), unsafe_allow_html=True)
+                st.markdown(tarjeta("📅", "Tareas", ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios.")), unsafe_allow_html=True)
 
             else:
                 st.subheader("🏠 Inicio")
