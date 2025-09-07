@@ -131,7 +131,55 @@ def generar_xml_finalizacion_grupo(grupo: dict) -> str:
 
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
+# =========================
+# Ajustes globales de la app
+# =========================
+def get_ajustes_app(supabase, campos=None):
+    """
+    Devuelve los ajustes globales desde la tabla ajustes_app.
+    Si se especifican campos, se hace un select parcial.
+    """
+    try:
+        query = supabase.table("ajustes_app")
+        if campos:
+            query = query.select(",".join(campos))
+        else:
+            query = query.select("*")
+        res = query.eq("id", 1).execute()
+        return res.data[0] if res.data else {}
+    except Exception as e:
+        st.error(f"❌ Error al cargar ajustes de la app: {e}")
+        return {}
 
+def update_ajustes_app(supabase, data_dict):
+    """
+    Actualiza los ajustes globales en la tabla ajustes_app.
+    """
+    try:
+        data_dict["updated_at"] = datetime.utcnow().isoformat()
+        supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
+    except Exception as e:
+        st.error(f"❌ Error al guardar ajustes de la app: {e}")
+
+# =========================
+# Renderizado seguro de textos
+# =========================
+def render_texto(texto: str, modo="markdown"):
+    """
+    Renderiza texto en Streamlit según el modo indicado.
+    - markdown: usa st.markdown()
+    - html: usa st.markdown(..., unsafe_allow_html=True)
+    """
+    if not texto:
+        return
+    try:
+        if modo == "html":
+            st.markdown(texto, unsafe_allow_html=True)
+        else:
+            st.markdown(texto)
+    except Exception as e:
+        st.error(f"❌ Error al renderizar texto: {e}")
+        
 # =========================
 # Validación de DNI/NIE/CIF español
 # =========================
