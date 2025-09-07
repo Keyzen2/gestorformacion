@@ -1,11 +1,12 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import is_module_active  # Asegúrate de importar esta función
+from io import BytesIO
+from utils import is_module_active
 
 def main(supabase, session_state):
     st.markdown("## 👨‍🏫 Grupos")
-    st.caption("Gestión de grupos de formación y su vinculación con empresas y acciones formativas.")
+    st.caption("Gestión de grupos de formación y vinculación con participantes.")
     st.divider()
 
     if session_state.role not in ["admin", "gestor"]:
@@ -14,6 +15,7 @@ def main(supabase, session_state):
 
     empresa_id = session_state.user.get("empresa_id")
 
+    # Cargar acciones formativas
     try:
         acciones_res = supabase.table("acciones_formativas").select("id,nombre").eq("empresa_id", empresa_id).execute() if session_state.role == "gestor" else supabase.table("acciones_formativas").select("id,nombre").execute()
         acciones_dict = {a["nombre"]: a["id"] for a in (acciones_res.data or [])}
@@ -21,11 +23,9 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar las acciones formativas: {e}")
         acciones_dict = {}
 
+    # Cargar grupos
     try:
-        if session_state.role == "gestor":
-            grupos_res = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute()
-        else:
-            grupos_res = supabase.table("grupos").select("*").execute()
+        grupos_res = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute() if session_state.role == "gestor" else supabase.table("grupos").select("*").execute()
         df_grupos = pd.DataFrame(grupos_res.data or [])
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
@@ -33,35 +33,29 @@ def main(supabase, session_state):
 
     col1, col2 = st.columns(2)
     col1.metric("Total grupos", len(df_grupos))
-    col2.metric("Participantes previstos", int(df_grupos.get("n_participantes_previstos", pd.Series()).sum()) if "n_participantes_previstos" in df_grupos.columns else 0)
+    col2.metric(
+        "Participantes previstos",
+        int(df_grupos.get("n_participantes_previstos", pd.Series()).sum()) if "n_participantes_previstos" in df_grupos.columns else 0
+    )
     st.divider()
 
-    if not df_grupos.empty:
-        search_query = st.text_input("🔍 Buscar por código o acción formativa")
-        if search_query:
-            sq = search_query.lower()
-            for col in ["codigo_grupo", "accion_formativa_nombre"]:
-                if col not in df_grupos.columns:
-                    df_grupos[col] = ""
-            df_grupos = df_grupos[
-                df_grupos["codigo_grupo"].str.lower().str.contains(sq) |
-                df_grupos["accion_formativa_nombre"].str.lower().str.contains(sq)
-            ]
-    st.divider()
-
-    # =========================
     # Crear grupo
-    # =========================
     puede_crear = (
         session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id and is_module_active(session_state.user.get("empresa", {}), session_state.user.get("empresa_crm", {}), "formacion", datetime.today().date(), "gestor"))
+        (session_state.role == "gestor" and empresa_id and is_module_active(
+            session_state.user.get("empresa", {}),
+            session_state.user.get("empresa_crm", {}),
+            "formacion",
+            datetime.today().date(),
+            "gestor"
+        ))
     )
 
     if puede_crear:
         st.markdown("### ➕ Crear Grupo")
         with st.form("crear_grupo", clear_on_submit=True):
             codigo_grupo = st.text_input("Código del grupo *")
-            accion_sel = st.selectbox("Acción formativa", sorted(list(acciones_dict.keys())) if acciones_dict else [])
+            accion_sel = st.selectbox("Acción formativa", sorted(acciones_dict.keys()))
             fecha_inicio = st.date_input("Fecha inicio")
             fecha_fin = st.date_input("Fecha fin")
             localidad = st.text_input("Localidad")
@@ -71,76 +65,125 @@ def main(supabase, session_state):
             observaciones = st.text_area("Observaciones")
             submitted_new = st.form_submit_button("➕ Crear Grupo")
 
-        if submitted_new:
-            if not codigo_grupo:
-                st.error("⚠️ El código del grupo es obligatorio.")
-            else:
-                try:
-                    supabase.table("grupos").insert({
-                        "codigo_grupo": codigo_grupo,
-                        "empresa_id": empresa_id if session_state.role == "gestor" else None,
-                        "accion_formativa_id": acciones_dict.get(accion_sel),
-                        "fecha_inicio": fecha_inicio.isoformat() if fecha_inicio else None,
-                        "fecha_fin": fecha_fin.isoformat() if fecha_fin else None,
-                        "localidad": localidad,
-                        "provincia": provincia,
-                        "cp": cp,
-                        "n_participantes_previstos": int(n_previstos),
-                        "observaciones": observaciones
-                    }).execute()
-                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al crear el grupo: {e}")
+        if submitted_new and codigo_grupo:
+            try:
+                supabase.table("grupos").insert({
+                    "codigo_grupo": codigo_grupo,
+                    "empresa_id": empresa_id if session_state.role == "gestor" else None,
+                    "accion_formativa_id": acciones_dict.get(accion_sel),
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin": fecha_fin.isoformat(),
+                    "localidad": localidad,
+                    "provincia": provincia,
+                    "cp": cp,
+                    "n_participantes_previstos": int(n_previstos),
+                    "observaciones": observaciones
+                }).execute()
+                st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al crear el grupo: {e}")
 
     st.divider()
 
-    if not df_grupos.empty:
-        for _, row in df_grupos.iterrows():
-            with st.expander(f"{row.get('codigo_grupo','')}"):
-                st.write(f"**Acción formativa:** {row.get('accion_formativa_nombre','')}")
-                st.write(f"**Fechas:** {row.get('fecha_inicio','')} → {row.get('fecha_fin','')}")
-                st.write(f"**Localidad:** {row.get('localidad','')}")
-                st.write(f"**Provincia:** {row.get('provincia','')}")
-                st.write(f"**CP:** {row.get('cp','')}")
-                st.write(f"**Participantes previstos:** {row.get('n_participantes_previstos','')}")
-                st.write(f"**Observaciones:** {row.get('observaciones','')}")
+    # Asignar participantes manualmente
+    if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
+        st.markdown("### 👥 Asignar participantes a grupo")
+        try:
+            filtro = {"empresa_id": empresa_id} if session_state.role == "gestor" else {}
+            part_res = supabase.table("participantes").select("id,nombre,email,dni").eq(**filtro).execute()
+            df_part = pd.DataFrame(part_res.data or [])
+        except Exception as e:
+            st.error(f"❌ Error al cargar participantes: {e}")
+            df_part = pd.DataFrame()
 
-                if session_state.role == "admin":
-                    col1, col2 = st.columns(2)
+        if not df_part.empty:
+            grupo_sel = st.selectbox("Grupo", df_grupos["codigo_grupo"])
+            grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel]["id"].values[0]
+            participante_sel = st.selectbox("Participante", df_part["dni"] + " - " + df_part["nombre"])
+            participante_id = df_part[df_part["dni"] == participante_sel.split(" - ")[0]]["id"].values[0]
+            asignar = st.button("✅ Asignar")
 
-                    if f"edit_done_{row['id']}" not in st.session_state:
-                        st.session_state[f"edit_done_{row['id']}"] = False
+            if asignar:
+                try:
+                    supabase.table("participantes_grupos").insert({
+                        "participante_id": participante_id,
+                        "grupo_id": grupo_id
+                    }).execute()
+                    st.success("✅ Participante asignado correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al asignar: {e}")
 
-                    with col1:
-                        with st.form(f"edit_grupo_{row['id']}", clear_on_submit=True):
-                            nuevo_codigo = st.text_input("Código del grupo", value=row.get("codigo_grupo",""))
-                            nueva_accion = st.selectbox(
-                                "Acción formativa",
-                                sorted(list(acciones_dict.keys())),
-                                index=sorted(list(acciones_dict.keys())).index(row.get("accion_formativa_nombre","")) if row.get("accion_formativa_nombre","") in acciones_dict else 0
-                            )
-                            guardar = st.form_submit_button("💾 Guardar cambios")
+    # Importar participantes por Excel
+    st.markdown("### 📤 Importar participantes a grupo desde Excel")
+    archivo_excel = st.file_uploader("Archivo Excel (.xlsx)", type=["xlsx"])
+    grupo_sel_excel = st.selectbox("Grupo destino", df_grupos["codigo_grupo"], key="grupo_excel")
+    grupo_id_excel = df_grupos[df_grupos["codigo_grupo"] == grupo_sel_excel]["id"].values[0]
+    importar_excel = st.button("📥 Importar Excel")
 
-                        if guardar and not st.session_state[f"edit_done_{row['id']}"]:
+    if importar_excel and archivo_excel:
+        try:
+            df_import = pd.read_excel(archivo_excel)
+            if "dni" not in df_import.columns:
+                st.error("❌ El archivo debe contener la columna 'dni'.")
+            else:
+                filtro = {"empresa_id": empresa_id} if session_state.role == "gestor" else {}
+                part_res = supabase.table("participantes").select("id,dni").eq(**filtro).execute()
+                participantes_existentes = {p["dni"]: p["id"] for p in (part_res.data or [])}
+
+                creados = 0
+                errores = []
+
+                for _, fila in df_import.iterrows():
+                    dni = str(fila.get("dni", "")).strip()
+                    participante_id = participantes_existentes.get(dni)
+
+                    if not participante_id:
+                        errores.append(f"DNI {dni} no encontrado.")
+                        continue
+
+                    try:
+                        supabase.table("participantes_grupos").insert({
+                            "participante_id": participante_id,
+                            "grupo_id": grupo_id_excel
+                        }).execute()
+                        creados += 1
+                    except Exception as e:
+                        errores.append(f"DNI {dni} - Error: {e}")
+
+                st.success(f"✅ Se han asignado {creados} participantes.")
+                if errores:
+                    st.warning("⚠️ Errores:")
+                    for err in errores:
+                        st.write(f"- {err}")
+                st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al procesar el archivo: {e}")
+
+    # Vista de participantes por grupo
+    st.markdown("### 📋 Participantes por grupo")
+    for _, grupo in df_grupos.iterrows():
+        with st.expander(f"👥 {grupo['codigo_grupo']}"):
+            try:
+                pg_res = supabase.table("participantes_grupos").select("id,participante_id").eq("grupo_id", grupo["id"]).execute()
+                pg_data = pg_res.data or []
+                ids = [p["participante_id"] for p in pg_data]
+                if ids:
+                    part_res = supabase.table("participantes").select("id,nombre,email,dni").in_("id", ids).execute()
+                    df_part = pd.DataFrame(part_res.data or [])
+                    for _, p in df_part.iterrows():
+                        col1, col2 = st.columns([4, 1])
+                        col1.write(f"- {p['nombre']} ({p['email']})")
+                        eliminar = col2.button("🗑️", key=f"del_{grupo['id']}_{p['id']}")
+                        if eliminar:
                             try:
-                                supabase.table("grupos").update({
-                                    "codigo_grupo": nuevo_codigo,
-                                    "accion_formativa_id": acciones_dict.get(nueva_accion)
-                                }).eq("id", row["id"]).execute()
-                                st.session_state[f"edit_done_{row['id']}"] = True
-                                st.success("✅ Cambios guardados correctamente.")
+                                supabase.table("participantes_grupos").delete().eq("participante_id", p["id"]).eq("grupo_id", grupo["id"]).execute()
+                                st.success(f"✅ Participante {p['nombre']} eliminado del grupo.")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"❌ Error al actualizar: {e}")
-
-                    with col2:
-                        confirmar = st.checkbox("Confirmar eliminación", key=f"confirm_{row['id']}")
-                        if st.button("🗑️ Eliminar", key=f"delete_{row['id']}") and confirmar:
-                            try:
-                                supabase.table("grupos").delete().eq("id", row["id"]).execute()
-                                st.success("✅ Grupo eliminado correctamente.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error al eliminar: {e}")
-                                
+                                st.error(f"❌ Error al eliminar participante: {e}")
+                else:
+                    st.info("ℹ️ Este grupo no tiene participantes asignados.")
+            except Exception as e:
+                st.error(f"❌ Error al cargar participantes del grupo: {e}")
