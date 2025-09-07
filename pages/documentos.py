@@ -81,7 +81,9 @@ def main(supabase, session_state):
             xml_str = generar_xml_accion_formativa(accion)
             xsd_url = st.secrets["FUNDAE"]["xsd_accion_formativa"]
             xsd_string = requests.get(xsd_url).text
-            if validar_xml(xml_str, xsd_string):
+            if not xsd_string:
+                st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
+            elif validar_xml(xml_str, xsd_string):
                 st.download_button(
                     "⬇️ Descargar XML Acción Formativa",
                     xml_str.encode("utf-8"),
@@ -89,14 +91,16 @@ def main(supabase, session_state):
                     mime="application/xml"
                 )
             else:
-                st.error("❌ El XML no es válido según el esquema de Fundae.")
+                st.error("❌ El XML no cumple con el esquema oficial de Fundae.")
 
         if grupo:
             if st.button("📤 Generar XML de Inicio de Grupo"):
                 xml_str = generar_xml_inicio_grupo(grupo)
                 xsd_url = st.secrets["FUNDAE"]["xsd_inicio_grupo"]
                 xsd_string = requests.get(xsd_url).text
-                if validar_xml(xml_str, xsd_string):
+                if not xsd_string:
+                    st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
+                elif validar_xml(xml_str, xsd_string):
                     st.download_button(
                         "⬇️ Descargar XML Inicio Grupo",
                         xml_str.encode("utf-8"),
@@ -104,13 +108,15 @@ def main(supabase, session_state):
                         mime="application/xml"
                     )
                 else:
-                    st.error("❌ El XML de inicio de grupo no es válido.")
+                    st.error("❌ El XML de inicio de grupo no cumple con el esquema oficial.")
 
             if st.button("📤 Generar XML de Finalización de Grupo"):
                 xml_str = generar_xml_finalizacion_grupo(grupo)
                 xsd_url = st.secrets["FUNDAE"]["xsd_finalizacion_grupo"]
                 xsd_string = requests.get(xsd_url).text
-                if validar_xml(xml_str, xsd_string):
+                if not xsd_string:
+                    st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
+                elif validar_xml(xml_str, xsd_string):
                     st.download_button(
                         "⬇️ Descargar XML Finalización Grupo",
                         xml_str.encode("utf-8"),
@@ -118,4 +124,5 @@ def main(supabase, session_state):
                         mime="application/xml"
                     )
                 else:
-                    st.error("❌ El XML de finalización de grupo no es válido.")
+                    st.error("❌ El XML de finalización de grupo no cumple con el esquema oficial.")
+                    
