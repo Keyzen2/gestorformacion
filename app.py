@@ -364,7 +364,7 @@ else:
     page = st.session_state.get("page", None)
 
     try:
-    if page and page != "home":
+      if page and page != "home":
         if page == "panel_gestor":
             from panel_gestor import main as panel_gestor_main
             panel_gestor_main(supabase_admin, st.session_state)
