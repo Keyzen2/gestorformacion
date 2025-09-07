@@ -199,8 +199,6 @@ def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
     </div>
     """
 
-from utils import get_ajustes_app  # ✅ Importamos la función auxiliar
-
 # =========================
 # Sidebar y navegación + Bienvenida
 # =========================
