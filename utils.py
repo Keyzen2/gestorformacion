@@ -67,33 +67,52 @@ def generar_pdf(nombre_archivo, contenido="Documento generado", encabezado=None)
 # =========================
 # Validación de XML con XSD
 # =========================
-def validar_xml(xml_string, xsd_string):
+from lxml import etree
+
+def validar_xml(xml_string: str, xsd_string: str) -> bool:
     try:
-        xml_doc = etree.fromstring(xml_string.encode())
-        xsd_doc = etree.fromstring(xsd_string.encode())
+        # Parsear el esquema XSD
+        xsd_doc = etree.XML(xsd_string.encode("utf-8"))
         schema = etree.XMLSchema(xsd_doc)
-        return schema.validate(xml_doc)
+
+        # Parsear el XML generado
+        xml_doc = etree.XML(xml_string.encode("utf-8"))
+
+        # Validar y capturar errores detallados
+        schema.assertValid(xml_doc)
+        return True
+
+    except etree.DocumentInvalid as e:
+        errores = schema.error_log
+        st.error("❌ El XML no es válido según el esquema XSD.")
+        for err in errores:
+            st.markdown(f"- 🛑 Línea {err.line}: `{err.message}`")
+        return False
+
     except Exception as e:
-        st.error(f"❌ Error validando XML: {e}")
+        st.error(f"⚠️ Error técnico al validar XML: {e}")
         return False
 
 # =========================
 # Generador XML: Acción Formativa
 # =========================
+import xml.etree.ElementTree as ET
+
 def generar_xml_accion_formativa(accion: dict) -> str:
-    root = ET.Element("ACCIONES_FORMATIVAS")
+    root = ET.Element("ACCIONES_FORMATIVAS", xmlns="http://www.fundae.es/esquemas/accion_formativa")
     af = ET.SubElement(root, "ACCION_FORMATIVA")
 
-    ET.SubElement(af, "CODIGO_ACCION").text = str(accion.get("codigo_accion", ""))
-    ET.SubElement(af, "NOMBRE_ACCION").text = accion.get("nombre", "")
-    ET.SubElement(af, "CODIGO_AREA_PROFESIONAL").text = accion.get("cod_area_profesional", "")
-    ET.SubElement(af, "SECTOR").text = accion.get("sector") or "No especificado"
-    ET.SubElement(af, "OBJETIVOS").text = accion.get("objetivos") or "No especificado"
-    ET.SubElement(af, "CONTENIDOS").text = accion.get("contenidos") or "No especificado"
-    ET.SubElement(af, "MODALIDAD").text = accion.get("modalidad", "")
-    ET.SubElement(af, "NIVEL").text = accion.get("nivel", "")
-    ET.SubElement(af, "DURACION").text = str(accion.get("num_horas") or accion.get("duracion_horas") or 0)
-    ET.SubElement(af, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado_profesionalidad") else "N"
+    datos = ET.SubElement(af, "DATOS_GENERALES")
+    ET.SubElement(datos, "CODIGO_ACCION").text = str(accion.get("codigo_accion", ""))
+    ET.SubElement(datos, "NOMBRE_ACCION").text = accion.get("nombre", "")
+    ET.SubElement(datos, "CODIGO_AREA_PROFESIONAL").text = accion.get("cod_area_profesional", "")
+    ET.SubElement(datos, "SECTOR").text = accion.get("sector") or "No especificado"
+    ET.SubElement(datos, "OBJETIVOS").text = accion.get("objetivos") or "No especificado"
+    ET.SubElement(datos, "CONTENIDOS").text = accion.get("contenidos") or "No especificado"
+    ET.SubElement(datos, "MODALIDAD").text = accion.get("modalidad", "")
+    ET.SubElement(datos, "NIVEL").text = accion.get("nivel", "")
+    ET.SubElement(datos, "DURACION").text = str(accion.get("num_horas") or accion.get("duracion_horas") or 0)
+    ET.SubElement(datos, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado_profesionalidad") else "N"
 
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
@@ -102,16 +121,18 @@ def generar_xml_accion_formativa(accion: dict) -> str:
 # Generador XML: Inicio de Grupo
 # =========================
 def generar_xml_inicio_grupo(grupo: dict) -> str:
-    root = ET.Element("INICIO_GRUPO")
-    ET.SubElement(root, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(root, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(root, "FECHA_INICIO").text = grupo.get("fecha_inicio", "")
-    ET.SubElement(root, "AULA_VIRTUAL").text = "S" if grupo.get("aula_virtual") else "N"
-    ET.SubElement(root, "LOCALIDAD").text = grupo.get("localidad") or "No especificado"
-    ET.SubElement(root, "PROVINCIA").text = grupo.get("provincia") or "No especificado"
-    ET.SubElement(root, "CP").text = grupo.get("cp") or "00000"
-    ET.SubElement(root, "N_PARTICIPANTES_PREVISTOS").text = str(grupo.get("n_participantes_previstos") or 0)
-    ET.SubElement(root, "OBSERVACIONES").text = grupo.get("observaciones") or ""
+    root = ET.Element("INICIO_GRUPO", xmlns="http://www.fundae.es/esquemas/inicio_grupo")
+    datos = ET.SubElement(root, "DATOS_GRUPO")
+
+    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
+    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
+    ET.SubElement(datos, "FECHA_INICIO").text = grupo.get("fecha_inicio", "")
+    ET.SubElement(datos, "AULA_VIRTUAL").text = "S" if grupo.get("aula_virtual") else "N"
+    ET.SubElement(datos, "LOCALIDAD").text = grupo.get("localidad") or "No especificado"
+    ET.SubElement(datos, "PROVINCIA").text = grupo.get("provincia") or "No especificado"
+    ET.SubElement(datos, "CP").text = grupo.get("cp") or "00000"
+    ET.SubElement(datos, "N_PARTICIPANTES_PREVISTOS").text = str(grupo.get("n_participantes_previstos") or 0)
+    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
 
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
@@ -120,14 +141,16 @@ def generar_xml_inicio_grupo(grupo: dict) -> str:
 # Generador XML: Finalización de Grupo
 # =========================
 def generar_xml_finalizacion_grupo(grupo: dict) -> str:
-    root = ET.Element("FINALIZACION_GRUPO")
-    ET.SubElement(root, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(root, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(root, "FECHA_FIN").text = grupo.get("fecha_fin", "")
-    ET.SubElement(root, "N_PARTICIPANTES_FINALIZADOS").text = str(grupo.get("n_participantes_finalizados") or 0)
-    ET.SubElement(root, "N_APTOS").text = str(grupo.get("n_aptos") or 0)
-    ET.SubElement(root, "N_NO_APTOS").text = str(grupo.get("n_no_aptos") or 0)
-    ET.SubElement(root, "OBSERVACIONES").text = grupo.get("observaciones") or ""
+    root = ET.Element("FINALIZACION_GRUPO", xmlns="http://www.fundae.es/esquemas/finalizacion_grupo")
+    datos = ET.SubElement(root, "DATOS_FINALIZACION")
+
+    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
+    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
+    ET.SubElement(datos, "FECHA_FIN").text = grupo.get("fecha_fin", "")
+    ET.SubElement(datos, "N_PARTICIPANTES_FINALIZADOS").text = str(grupo.get("n_participantes_finalizados") or 0)
+    ET.SubElement(datos, "N_APTOS").text = str(grupo.get("n_aptos") or 0)
+    ET.SubElement(datos, "N_NO_APTOS").text = str(grupo.get("n_no_aptos") or 0)
+    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
 
     xml_bytes = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return xml_bytes.decode("utf-8")
