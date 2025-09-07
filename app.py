@@ -43,8 +43,13 @@ for key, default in {
 # Funciones auxiliares
 # =========================
 def set_user_role_from_db(email: str):
+    """
+    Obtiene el rol y datos básicos del usuario desde la base de datos
+    y los guarda en session_state.
+    """
     try:
-        res = supabase_public.table("usuarios").select("*").eq("email", email).limit(1).execute()
+        clean_email = email.strip().lower()
+        res = supabase_public.table("usuarios").select("*").eq("email", clean_email).limit(1).execute()
         if res.data:
             row = res.data[0]
             rol = row.get("rol") or "alumno"
@@ -56,20 +61,23 @@ def set_user_role_from_db(email: str):
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
+            # Guardar comercial_id si es comercial
             if rol == "comercial":
                 com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
                 if com_res.data:
                     st.session_state.user["comercial_id"] = com_res.data[0]["id"]
         else:
+            # Usuario no encontrado: rol por defecto alumno
             st.session_state.role = "alumno"
-            st.session_state.user = {"email": email}
+            st.session_state.user = {"email": clean_email, "empresa_id": None}
     except Exception as e:
         st.error(f"No se pudo obtener el rol del usuario: {e}")
         st.session_state.role = "alumno"
-        st.session_state.user = {"email": email}
+        st.session_state.user = {"email": email, "empresa_id": None}
 
 
 def do_logout():
+    """Cierra la sesión y limpia el estado."""
     try:
         supabase_public.auth.sign_out()
     except Exception:
@@ -79,6 +87,7 @@ def do_logout():
 
 
 def login_view():
+    """Pantalla de login con tarjetas de módulos."""
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
@@ -121,6 +130,11 @@ def login_view():
 # Función de verificación de módulo activo
 # =========================
 def is_module_active(empresa, empresa_crm, key, hoy, role):
+    """
+    Comprueba si un módulo está activo para la empresa del usuario.
+    Admin y gestor (admin_empresa) pueden ver módulos activos de su empresa.
+    Comercial solo CRM. Alumno nunca ve módulos.
+    """
     # Los alumnos nunca ven módulos
     if role == "alumno":
         return False
@@ -142,9 +156,6 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
         inicio = empresa.get("iso_inicio")
         if inicio and pd.to_datetime(inicio).date() > hoy:
             return False
-        # fin = empresa.get("iso_fin")
-        # if fin and pd.to_datetime(fin).date() < hoy:
-        #     return False
         return True
 
     elif key == "rgpd":
@@ -153,9 +164,6 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
         inicio = empresa.get("rgpd_inicio")
         if inicio and pd.to_datetime(inicio).date() > hoy:
             return False
-        # fin = empresa.get("rgpd_fin")
-        # if fin and pd.to_datetime(fin).date() < hoy:
-        #     return False
         return True
 
     elif key == "crm":
@@ -164,9 +172,6 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
         inicio = empresa_crm.get("crm_inicio")
         if inicio and pd.to_datetime(inicio).date() > hoy:
             return False
-        # fin = empresa_crm.get("crm_fin")
-        # if fin and pd.to_datetime(fin).date() < hoy:
-        #     return False
         return True
 
     return False
@@ -189,7 +194,6 @@ def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
     </div>
     """
 
-# =========================
 # =========================
 # Sidebar y navegación + Bienvenida
 # =========================
@@ -215,12 +219,16 @@ def route():
         crm_res = supabase_admin.table("crm_empresas").select(
             "crm_activo", "crm_inicio", "crm_fin"
         ).eq("empresa_id", empresa_id).execute()
-        empresa_crm = crm_res.data[0] if empresa_crm.data else {}
+        empresa_crm = crm_res.data[0] if crm_res.data else {}
+
+    # Guardar en session_state para bienvenida y otras páginas
+    st.session_state.empresa = empresa
+    st.session_state.empresa_crm = empresa_crm
 
     rol = st.session_state.role
 
-    # --- Menú base por rol ---
-    if rol == "superadmin":
+    # --- Bloque exclusivo para admin (superadmin global) ---
+    if rol == "admin":
         st.sidebar.markdown("#### 🧭 Administración SaaS")
         base_menu = {
             "Panel de Alertas": "panel_admin",
@@ -239,7 +247,7 @@ def route():
             st.session_state.page = "mis_grupos"
 
     # --- Módulo Formación ---
-    if is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📚 Gestión de Formación")
         formacion_menu = {
@@ -253,7 +261,7 @@ def route():
                 st.session_state.page = page_key
 
     # --- Módulo ISO ---
-    if is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📏 Gestión ISO 9001")
         iso_menu = {
@@ -270,7 +278,7 @@ def route():
                 st.session_state.page = page_key
 
     # --- Módulo RGPD ---
-    if is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 🛡️ Gestión RGPD")
         rgpd_menu = {
@@ -290,7 +298,7 @@ def route():
                 st.session_state.page = page_key
 
     # --- Módulo CRM ---
-    if is_module_active(empresa, empresa_crm, "crm", hoy, rol) or rol == "comercial":
+    if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📈 Gestión CRM")
         crm_menu = {
@@ -332,9 +340,9 @@ else:
             st.title("👋 Bienvenido al Gestor de Formación")
 
             # ===============================
-            # MÉTRICAS DINÁMICAS PARA SUPERADMIN
+            # MÉTRICAS DINÁMICAS PARA ADMIN (superadmin global)
             # ===============================
-            if rol == "superadmin":
+            if rol == "admin":
                 try:
                     total_empresas = supabase_admin.table("empresas").select("*").execute().count or 0
                     total_usuarios = supabase_admin.table("usuarios").select("*").execute().count or 0
