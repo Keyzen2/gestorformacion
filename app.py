@@ -333,93 +333,9 @@ def login_view():
         if not email or not password:
             st.warning("Introduce email y contraseña.")
         else:
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if not auth or not auth.user:
-                    st.error("Credenciales inválidas.")
-                else:
-                    st.session_state.auth_session = auth
-                    set_user_role_from_db(auth.user.email)
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error al iniciar sesión: {e}")
-
-
-# =========================
-# Función de verificación de módulo activo
-# =========================
-def is_module_active(empresa, empresa_crm, key, hoy, role):
-    """
-    Comprueba si un módulo está activo para la empresa del usuario.
-    Admin y gestor (admin_empresa) pueden ver módulos activos de su empresa.
-    Comercial solo CRM. Alumno nunca ve módulos.
-    """
-    # Los alumnos nunca ven módulos
-    if role == "alumno":
-        return False
-
-    if key == "formacion":
-        if not empresa.get("formacion_activo"):
-            return False
-        inicio = empresa.get("formacion_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    if key == "iso":
-        if not empresa.get("iso_activo"):
-            return False
-        inicio = empresa.get("iso_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    if key == "rgpd":
-        if not empresa.get("rgpd_activo"):
-            return False
-        inicio = empresa.get("rgpd_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    if key == "crm":
-        if not empresa_crm.get("crm_activo"):
-            return False
-        inicio = empresa_crm.get("crm_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
 
     if key == "docu_avanzada":  # ✅ Nuevo módulo
-        if not empresa.get("docu_avanzada_activo"):
-            return False
-        inicio = empresa.get("docu_avanzada_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    return False
-
-
-# =========================
-# Función de tarjetas
-# =========================
-def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
-    color = color_activo if activo else "#f3f4f6"
-    return f"""
-    <div style="
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 15px;
-        background-color: {color};
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
-    ">
-        <h3 style="margin:0;">{icono} {titulo}</h3>
-        <p style="margin:0; color:#374151;">{descripcion}</p>
-    </div>
-    """
-
-
+    
 # =========================
 # Sidebar y navegación + Bienvenida
 # =========================
