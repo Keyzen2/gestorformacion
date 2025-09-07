@@ -421,7 +421,7 @@ else:
                     st.markdown(tarjeta("📈", "CRM", "Gestión de clientes y oportunidades comerciales.", activo=True), unsafe_allow_html=True)
                     modulos_activados = True
                 if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):  # ✅ Nuevo módulo
-                    st.markdown(tarjeta("📁", "Documentación Avanzada", "Repositorio documental transversal por empresa, grupo o usuario.", activo=True), unsafe_allow_html=True)
+                    st.markdown(tarjeta("📁", "Documentación Avanzada", ajustes.get("tarjeta_gestor_docu_avanzada", "Repositorio documental transversal por empresa, grupo o usuario."), activo=True), unsafe_allow_html=True)
                     modulos_activados = True
                 if not modulos_activados:
                     st.info("No hay módulos activos actualmente para tu empresa.")
