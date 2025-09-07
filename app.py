@@ -199,6 +199,8 @@ def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
     </div>
     """
 
+from utils import get_ajustes_app  # ✅ Importamos la función auxiliar
+
 # =========================
 # Sidebar y navegación + Bienvenida
 # =========================
@@ -318,8 +320,12 @@ def route():
             if st.sidebar.button(label, key=f"{page_key}_{rol}"):
                 st.session_state.page = page_key
 
+    # ✅ Footer dinámico desde ajustes_app
+    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
+    mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
+
     st.sidebar.markdown("---")
-    st.sidebar.caption("© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
+    st.sidebar.caption(mensaje_footer)
 
 # =========================
 # Ejecución principal
@@ -342,7 +348,19 @@ else:
             empresa = st.session_state.get("empresa", {})
             empresa_crm = st.session_state.get("empresa_crm", {})
 
+            # ✅ Obtener textos de bienvenida por rol
+            ajustes = get_ajustes_app(supabase_admin, campos=[
+                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial"
+            ])
+            bienvenida_por_rol = {
+                "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
+                "gestor": ajustes.get("bienvenida_gestor", "Panel del Gestor"),
+                "alumno": ajustes.get("bienvenida_alumno", "Área del Alumno"),
+                "comercial": ajustes.get("bienvenida_comercial", "Área Comercial - CRM")
+            }
+
             st.title("👋 Bienvenido al Gestor de Formación")
+            st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
 
             # ===============================
             # MÉTRICAS DINÁMICAS PARA ADMIN (superadmin global)
@@ -361,13 +379,11 @@ else:
                 col2.markdown(tarjeta("👤", "Usuarios", f"Número total de usuarios: {total_usuarios}"), unsafe_allow_html=True)
                 col3.markdown(tarjeta("📚", "Cursos activos", f"Número total de cursos/acciones formativas: {total_cursos}"), unsafe_allow_html=True)
 
-                st.subheader("🛠 Panel de Administración SaaS")
                 st.markdown(tarjeta("👤", "Usuarios", "Alta, gestión y permisos de usuarios."), unsafe_allow_html=True)
                 st.markdown(tarjeta("🏢", "Empresas", "Gestión de empresas y sus módulos."), unsafe_allow_html=True)
                 st.markdown(tarjeta("⚙️", "Ajustes", "Configuración global de la aplicación."), unsafe_allow_html=True)
 
             elif rol == "gestor":
-                st.subheader("📚 Panel del Gestor")
                 st.markdown(tarjeta("👥", "Grupos y participantes", "Crea y gestiona grupos de alumnos."), unsafe_allow_html=True)
                 st.markdown(tarjeta("📄", "Documentación", "Sube y organiza la documentación de formación."), unsafe_allow_html=True)
 
@@ -389,13 +405,11 @@ else:
                     st.info("No hay módulos activos actualmente para tu empresa.")
 
             elif rol == "alumno":
-                st.subheader("🎓 Área del Alumno")
                 st.markdown(tarjeta("👥", "Mis grupos", "Consulta a qué grupos perteneces."), unsafe_allow_html=True)
                 st.markdown(tarjeta("📜", "Diplomas", "Descarga tus diplomas disponibles."), unsafe_allow_html=True)
                 st.markdown(tarjeta("📊", "Seguimiento", "Accede al progreso de tu formación."), unsafe_allow_html=True)
 
             elif rol == "comercial":
-                st.subheader("📈 Área Comercial - CRM")
                 st.markdown(tarjeta("👤", "Clientes", "Consulta y gestiona tu cartera de clientes."), unsafe_allow_html=True)
                 st.markdown(tarjeta("📝", "Oportunidades", "Registra y da seguimiento a nuevas oportunidades."), unsafe_allow_html=True)
                 st.markdown(tarjeta("📅", "Tareas", "Organiza tus visitas y recordatorios."), unsafe_allow_html=True)
