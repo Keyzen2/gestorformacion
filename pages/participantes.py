@@ -2,8 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from services.alumnos import alta_alumno
-from utils import is_module_active  # Asegúrate de importar esta función
-
+from utils import is_module_active
 
 def main(supabase, session_state):
     st.markdown("## 🧑‍🎓 Participantes")
@@ -75,9 +74,17 @@ def main(supabase, session_state):
             telefono = st.text_input("Teléfono")
 
             if session_state.role == "admin":
-                empresa_sel = st.selectbox("Empresa", sorted(empresas_dict.keys()))
+                empresa_busqueda = st.text_input("🔍 Buscar empresa por nombre")
+                empresas_filtradas = [nombre for nombre in empresas_dict if empresa_busqueda.lower() in nombre.lower()] if empresa_busqueda else list(empresas_dict.keys())
+
+                if not empresas_filtradas:
+                    st.warning("⚠️ No se encontraron empresas con ese nombre.")
+                    empresa_id_new = None
+                else:
+                    empresa_sel = st.selectbox("Empresa", sorted(empresas_filtradas))
+                    empresa_id_new = empresas_dict.get(empresa_sel)
+
                 grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
-                empresa_id_new = empresas_dict.get(empresa_sel)
                 grupo_id_new = grupos_dict.get(grupo_sel)
             else:
                 grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
@@ -142,6 +149,7 @@ def main(supabase, session_state):
                         nuevos_apellidos = st.text_input("Apellidos", value=row.get("apellidos", ""))
                         nuevo_email = st.text_input("Email", value=row.get("email", ""))
                         guardar = st.form_submit_button("💾 Guardar cambios")
+
                     if guardar:
                         try:
                             if nuevo_email != row.get("email", ""):
@@ -192,27 +200,28 @@ def main(supabase, session_state):
                         else:
                             try:
                                 empresa_id = row.get("empresa_id")
-                                nombre_archivo = f"documentos/{empresa_id}/diplomas/diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
+                                nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
                                 ruta_archivo = f"{empresa_id}/diplomas/{nombre_archivo}"
                                 file_bytes = archivo.read()
-                                
+
+                                # Eliminar anterior si existe
                                 if existe.data:
                                     anterior = existe.data[0]
                                     supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
                                     supabase.table("diplomas").delete().eq("id", anterior["id"]).execute()
 
                                 # Subir nuevo archivo
-                                supabase.storage.from_("documentos").upload(nombre_archivo, file_bytes, {"content-type": "application/pdf"})
-                                url = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
+                                supabase.storage.from_("documentos").upload(ruta_archivo, file_bytes, {"content-type": "application/pdf"})
+                                url = supabase.storage.from_("documentos").get_public_url(ruta_archivo)
 
                                 # Registrar en tabla diplomas
                                 supabase.table("diplomas").insert({
                                     "participante_id": row["id"],
                                     "grupo_id": grupo_id,
-                                    "empresa_id": row.get("empresa_id"),
+                                    "empresa_id": empresa_id,
                                     "url": url,
                                     "fecha_subida": fecha_subida.isoformat(),
-                                    "archivo_nombre": nombre_archivo
+                                    "archivo_nombre": ruta_archivo
                                 }).execute()
 
                                 st.success("✅ Diploma subido y registrado correctamente.")
