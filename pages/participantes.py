@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from services.alumnos import alta_alumno
+from utils import is_module_active  # Asegúrate de importar esta función
+
 
 def main(supabase, session_state):
     st.markdown("## 🧑‍🎓 Participantes")
@@ -12,9 +14,10 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
+    empresa_id = session_state.user.get("empresa_id")
+
     # Cargar empresas y grupos
     try:
-        empresa_id = session_state.user.get("empresa_id")
         if session_state.role == "gestor":
             empresas_res = supabase.table("empresas").select("id,nombre").eq("id", empresa_id).execute()
         else:
@@ -48,7 +51,21 @@ def main(supabase, session_state):
         df_part = pd.DataFrame()
 
     # Alta de participantes
-    if session_state.role == "admin":
+    puede_crear = (
+        session_state.role == "admin" or
+        (
+            session_state.role == "gestor" and empresa_id and
+            is_module_active(
+                session_state.user.get("empresa", {}),
+                session_state.user.get("empresa_crm", {}),
+                "formacion",
+                datetime.today().date(),
+                "gestor"
+            )
+        )
+    )
+
+    if puede_crear:
         st.markdown("### ➕ Añadir Participante")
         with st.form("crear_participante", clear_on_submit=True):
             nombre = st.text_input("Nombre *")
@@ -56,8 +73,17 @@ def main(supabase, session_state):
             dni = st.text_input("DNI/NIF")
             email = st.text_input("Email *")
             telefono = st.text_input("Teléfono")
-            empresa_sel = st.selectbox("Empresa", sorted(empresas_dict.keys()))
-            grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
+
+            if session_state.role == "admin":
+                empresa_sel = st.selectbox("Empresa", sorted(empresas_dict.keys()))
+                grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
+                empresa_id_new = empresas_dict.get(empresa_sel)
+                grupo_id_new = grupos_dict.get(grupo_sel)
+            else:
+                grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
+                empresa_id_new = empresa_id
+                grupo_id_new = grupos_dict.get(grupo_sel)
+
             submitted = st.form_submit_button("➕ Añadir Participante")
 
         if submitted:
@@ -72,8 +98,8 @@ def main(supabase, session_state):
                     dni=dni,
                     apellidos=apellidos,
                     telefono=telefono,
-                    empresa_id=empresas_dict.get(empresa_sel),
-                    grupo_id=grupos_dict.get(grupo_sel)
+                    empresa_id=empresa_id_new,
+                    grupo_id=grupo_id_new
                 )
                 if creado:
                     st.success("✅ Participante creado correctamente.")
@@ -110,7 +136,6 @@ def main(supabase, session_state):
                 st.write(f"**Grupo ID:** {row.get('grupo_id','')}")
                 st.write(f"**Fecha Alta:** {row.get('fecha_alta','')}")
 
-                # Edición básica
                 if session_state.role == "admin":
                     with st.form(f"edit_part_{row['id']}", clear_on_submit=True):
                         nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
@@ -136,7 +161,6 @@ def main(supabase, session_state):
                         except Exception as e:
                             st.error(f"❌ Error al actualizar: {e}")
 
-                # Diplomas del participante
                 if session_state.role in ["admin", "gestor"]:
                     st.markdown("### 🏅 Diplomas del participante")
                     try:
@@ -170,13 +194,12 @@ def main(supabase, session_state):
                                 nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
                                 file_bytes = archivo.read()
 
-                                # Eliminar anterior si existe
                                 if existe.data:
                                     anterior = existe.data[0]
                                     supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
                                     supabase.table("diplomas").delete().eq("id", anterior["id"]).execute()
 
-                                # Subir nuevo
+                                # Subir nuevo archivo
                                 supabase.storage.from_("documentos").upload(nombre_archivo, file_bytes, {"content-type": "application/pdf"})
                                 url = supabase.storage.from_("documentos").get_public_url(nombre_archivo)
 
@@ -184,6 +207,7 @@ def main(supabase, session_state):
                                 supabase.table("diplomas").insert({
                                     "participante_id": row["id"],
                                     "grupo_id": grupo_id,
+                                    "empresa_id": row.get("empresa_id"),
                                     "url": url,
                                     "fecha_subida": fecha_subida.isoformat(),
                                     "archivo_nombre": nombre_archivo
@@ -193,5 +217,3 @@ def main(supabase, session_state):
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al subir el diploma: {e}")
-    else:
-        st.info("ℹ️ No hay participantes registrados.")
