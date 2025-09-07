@@ -233,6 +233,44 @@ def render_texto(texto: str, modo="markdown"):
         st.error(f"❌ Error al renderizar texto: {e}")
         
 # =========================
+# Verificación de módulo activo por empresa
+# =========================
+from datetime import date
+
+def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date, rol: str) -> bool:
+    """
+    Verifica si un módulo está activo para una empresa en una fecha determinada y para un rol específico.
+    """
+    if not empresa or not modulo:
+        return False
+
+    # Verificación por configuración directa en empresa
+    mod_config = empresa.get("modulos_activos", {})
+    activo = mod_config.get(modulo)
+
+    if activo is True:
+        return True
+
+    # Verificación por fechas de activación
+    fecha_inicio = empresa.get(f"{modulo}_inicio")
+    fecha_fin = empresa.get(f"{modulo}_fin")
+
+    if fecha_inicio and fecha_fin:
+        try:
+            inicio = date.fromisoformat(fecha_inicio)
+            fin = date.fromisoformat(fecha_fin)
+            return inicio <= fecha <= fin
+        except Exception:
+            return False
+
+    # Verificación por CRM si aplica
+    if empresa_crm:
+        crm_modulos = empresa_crm.get("modulos", [])
+        return modulo in crm_modulos
+
+    return False
+    
+# =========================
 # Validación de DNI/NIE/CIF español
 # =========================
 def validar_dni_cif(valor: str) -> bool:
