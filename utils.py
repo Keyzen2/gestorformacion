@@ -189,6 +189,31 @@ def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
         return None
         
 # =========================
+# Eliminación de archivos en Supabase Storage
+# =========================
+def eliminar_archivo_supabase(supabase, url, bucket="documentos"):
+    """
+    Elimina un archivo de Supabase Storage a partir de su URL pública.
+    """
+    try:
+        # Extraer ruta interna desde la URL pública
+        base_url = supabase.storage.from_(bucket).get_public_url("")
+        if not url.startswith(base_url):
+            st.warning("⚠️ La URL no pertenece al bucket especificado.")
+            return False
+
+        ruta = url.replace(base_url, "")
+        res = supabase.storage.from_(bucket).remove([ruta])
+        if res.get("error"):
+            st.error("❌ Error al eliminar el archivo de Supabase Storage.")
+            return False
+
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al procesar la eliminación del archivo: {e}")
+        return False
+        
+# =========================
 # Renderizado seguro de textos
 # =========================
 def render_texto(texto: str, modo="markdown"):
