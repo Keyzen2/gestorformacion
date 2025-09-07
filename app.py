@@ -407,7 +407,6 @@ else:
 # ===============================
 # MÉTRICAS DINÁMICAS PARA ADMIN
 # ===============================
-
 try:
     if page and page != "home":
         if page == "panel_gestor":
