@@ -324,22 +324,35 @@ def route():
                 st.session_state.page = page_key
 
     # --- Módulo Documentación Avanzada ---
-    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📁 Documentación Avanzada")
-        docu_menu = {
-            "Gestión Documental": "documentacion_avanzada"
-        }
-        for label, page_key in docu_menu.items():
-            if st.sidebar.button(label, key=f"{page_key}_{rol}"):
-                st.session_state.page = page_key
-
-    # ✅ Footer dinámico desde ajustes_app
-    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
-    mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
-
+if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
     st.sidebar.markdown("---")
-    st.sidebar.caption(mensaje_footer)
+    st.sidebar.markdown("#### 📁 Documentación Avanzada")
+    docu_menu = {
+        "Gestión Documental": "documentacion_avanzada"
+    }
+    for label, page_key in docu_menu.items():
+        if st.sidebar.button(label, key=f"{page_key}_{rol}"):
+            st.session_state.page = page_key
+
+# --- Módulo Panel de Formación (solo para gestores con módulo activo) ---
+if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("#### 📊 Panel de Formación")
+    panel_menu = {
+        "Panel del Gestor": "panel_gestor",
+        "Grupos": "grupos",
+        "Participantes": "participantes"
+    }
+    for label, page_key in panel_menu.items():
+        if st.sidebar.button(label, key=f"{page_key}_{rol}"):
+            st.session_state.page = page_key
+
+# ✅ Footer dinámico desde ajustes_app
+ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
+mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
+
+st.sidebar.markdown("---")
+st.sidebar.caption(mensaje_footer)
 
 # =========================
 # Ejecución principal
@@ -350,12 +363,17 @@ else:
     route()
     page = st.session_state.get("page", None)
 
-    try:
-        if page and page != "home":
+    try:try:
+    if page and page != "home":
+        if page == "panel_gestor":
+            from panel_gestor import main as panel_gestor_main
+            panel_gestor_main(supabase_admin, st.session_state)
+        else:
             mod = page.replace("-", "_")
             mod_path = f"pages.{mod}"
             mod_import = __import__(mod_path, fromlist=["main"])
             mod_import.main(supabase_admin, st.session_state)
+
         else:
             rol = st.session_state.role
             hoy = datetime.today().date()
