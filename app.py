@@ -1,6 +1,7 @@
 import os
 import sys
 import streamlit as st
+from utils import get_ajustes_app
 from supabase import create_client
 from datetime import datetime
 import pandas as pd
@@ -88,6 +89,11 @@ def do_logout():
 
 def login_view():
     """Pantalla de login con tarjetas de módulos."""
+
+    # ✅ Obtener mensaje de login desde ajustes
+    ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login"])
+    mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales.")
+
     st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap');
@@ -103,7 +109,7 @@ def login_view():
     """, unsafe_allow_html=True)
 
     st.markdown("### 🔐 Iniciar sesión")
-    st.caption("Accede al gestor con tus credenciales.")
+    st.caption(mensaje_login)
 
     with st.form("form_login_acceso", clear_on_submit=False):
         email = st.text_input("Email", autocomplete="email")
@@ -124,7 +130,6 @@ def login_view():
                     st.rerun()
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
-
 
 # =========================
 # Función de verificación de módulo activo
