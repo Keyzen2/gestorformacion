@@ -93,4 +93,33 @@ def main(supabase, session_state):
         st.subheader("🧑‍🎓 Últimos participantes registrados")
         df_recent = df_part.sort_values("fecha_alta", ascending=False).head(5)
         st.table(df_recent[["nombre", "apellidos", "email", "fecha_alta"]])
-      
+
+    # =========================
+    # Participantes por grupo (detalle)
+    # =========================
+    st.divider()
+    st.subheader("📋 Participantes asignados por grupo")
+
+    try:
+        pg_res = supabase.table("participantes_grupos").select("id,participante_id,grupo_id").execute()
+        pg_data = pd.DataFrame(pg_res.data or [])
+    except Exception as e:
+        st.error(f"❌ Error al cargar asignaciones: {e}")
+        pg_data = pd.DataFrame()
+
+    if not df_grupos.empty and not pg_data.empty:
+        for _, grupo in df_grupos.iterrows():
+            grupo_id = grupo["id"]
+            participantes_ids = pg_data[pg_data["grupo_id"] == grupo_id]["participante_id"].tolist()
+
+            if participantes_ids:
+                try:
+                    part_res = supabase.table("participantes").select("id,nombre,email,dni").in_("id", participantes_ids).execute()
+                    df_part_grupo = pd.DataFrame(part_res.data or [])
+                    with st.expander(f"👥 {grupo['codigo_grupo']} ({len(df_part_grupo)} participantes)"):
+                        st.table(df_part_grupo[["nombre", "email", "dni"]])
+                except Exception as e:
+                    st.error(f"❌ Error al cargar participantes del grupo {grupo['codigo_grupo']}: {e}")
+            else:
+                with st.expander(f"👥 {grupo['codigo_grupo']}"):
+                    st.info("ℹ️ No hay participantes asignados a este grupo.")
