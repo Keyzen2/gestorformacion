@@ -369,6 +369,7 @@ else:
                 "tarjeta_gestor_grupos", "tarjeta_gestor_documentos",
                 "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
                 "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+                "bienvenida_docu_avanzada"
             ])
 
             bienvenida_por_rol = {
