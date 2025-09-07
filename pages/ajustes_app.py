@@ -6,12 +6,10 @@ def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
     st.caption("Configura los textos, apariencia y comportamiento global de la plataforma.")
 
-    # Solo admin puede acceder
     if session_state.role != "admin":
         st.warning("🔒 Solo el administrador global puede acceder a esta sección.")
         return
 
-    # Obtener ajustes actuales
     ajustes = get_ajustes_app(supabase)
 
     # =========================
@@ -43,13 +41,16 @@ def main(supabase, session_state):
         bienvenida_gestor = st.text_area("Bienvenida para gestor", value=ajustes.get("bienvenida_gestor", "Panel del Gestor"))
         bienvenida_alumno = st.text_area("Bienvenida para alumno", value=ajustes.get("bienvenida_alumno", "Área del Alumno"))
         bienvenida_comercial = st.text_area("Bienvenida para comercial", value=ajustes.get("bienvenida_comercial", "Área Comercial - CRM"))
+        bienvenida_docu_avanzada = st.text_area("Bienvenida para Documentación Avanzada", value=ajustes.get("bienvenida_docu_avanzada", "Gestión documental avanzada por empresa"))  # ✅ Nuevo campo
+
         guardar_textos = st.form_submit_button("💾 Guardar textos")
         if guardar_textos:
             update_ajustes_app(supabase, {
                 "bienvenida_admin": bienvenida_admin,
                 "bienvenida_gestor": bienvenida_gestor,
                 "bienvenida_alumno": bienvenida_alumno,
-                "bienvenida_comercial": bienvenida_comercial
+                "bienvenida_comercial": bienvenida_comercial,
+                "bienvenida_docu_avanzada": bienvenida_docu_avanzada  # ✅ Guardar nuevo campo
             })
             st.success("✅ Textos de bienvenida actualizados.")
             st.rerun()
@@ -84,6 +85,7 @@ def main(supabase, session_state):
         # Gestor
         tarjeta_gestor_grupos = st.text_area("Gestor - Grupos", value=ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
         tarjeta_gestor_documentos = st.text_area("Gestor - Documentación", value=ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación de formación."))
+        tarjeta_gestor_docu_avanzada = st.text_area("Gestor - Documentación Avanzada", value=ajustes.get("tarjeta_gestor_docu_avanzada", "Repositorio documental transversal por empresa, grupo o usuario."))  # ✅ Nuevo campo
 
         # Alumno
         tarjeta_alumno_grupos = st.text_area("Alumno - Mis grupos", value=ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
@@ -103,6 +105,7 @@ def main(supabase, session_state):
                 "tarjeta_admin_ajustes": tarjeta_admin_ajustes,
                 "tarjeta_gestor_grupos": tarjeta_gestor_grupos,
                 "tarjeta_gestor_documentos": tarjeta_gestor_documentos,
+                "tarjeta_gestor_docu_avanzada": tarjeta_gestor_docu_avanzada,  # ✅ Guardar nuevo campo
                 "tarjeta_alumno_grupos": tarjeta_alumno_grupos,
                 "tarjeta_alumno_diplomas": tarjeta_alumno_diplomas,
                 "tarjeta_alumno_seguimiento": tarjeta_alumno_seguimiento,
