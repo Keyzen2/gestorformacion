@@ -363,7 +363,7 @@ else:
     route()
     page = st.session_state.get("page", None)
 
-    try:try:
+    try:
     if page and page != "home":
         if page == "panel_gestor":
             from panel_gestor import main as panel_gestor_main
