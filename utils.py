@@ -160,7 +160,34 @@ def update_ajustes_app(supabase, data_dict):
         supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
     except Exception as e:
         st.error(f"❌ Error al guardar ajustes de la app: {e}")
+        
+# =========================
+# Subida de archivos a Supabase Storage por empresa
+# =========================
+import uuid
 
+def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
+    """
+    Sube un archivo a Supabase Storage en una carpeta por empresa.
+    Devuelve la URL pública del archivo o None si falla.
+    """
+    try:
+        nombre_original = archivo.name
+        extension = nombre_original.split(".")[-1]
+        nombre_unico = f"{uuid.uuid4()}.{extension}"
+        ruta = f"empresa_{empresa_id}/{nombre_unico}"
+
+        res = supabase.storage.from_(bucket).upload(ruta, archivo)
+        if res.get("error"):
+            st.error("❌ Error al subir el archivo a Supabase Storage.")
+            return None
+
+        url = supabase.storage.from_(bucket).get_public_url(ruta)
+        return url
+    except Exception as e:
+        st.error(f"❌ Error al subir archivo: {e}")
+        return None
+        
 # =========================
 # Renderizado seguro de textos
 # =========================
