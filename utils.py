@@ -263,29 +263,48 @@ def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date,
     """
     Verifica si un módulo está activo para una empresa en una fecha determinada y para un rol específico.
     """
+
+    if rol == "alumno":
+        return False
+
     if not empresa or not modulo:
         return False
 
-    # Si el campo *_activo está en true, se considera activo
+    # Verificación directa por campo *_activo
     if empresa.get(f"{modulo}_activo") is True:
+        fecha_inicio = empresa.get(f"{modulo}_inicio")
+        if fecha_inicio:
+            try:
+                inicio = pd.to_datetime(fecha_inicio).date()
+                if inicio > fecha:
+                    return False
+            except Exception:
+                return False
         return True
 
-    # Si hay fechas de inicio y fin, se evalúan
+    # Verificación por rango de fechas
     fecha_inicio = empresa.get(f"{modulo}_inicio")
     fecha_fin = empresa.get(f"{modulo}_fin")
-
     if fecha_inicio and fecha_fin:
         try:
-            inicio = date.fromisoformat(fecha_inicio)
-            fin = date.fromisoformat(fecha_fin)
+            inicio = pd.to_datetime(fecha_inicio).date()
+            fin = pd.to_datetime(fecha_fin).date()
             return inicio <= fecha <= fin
         except Exception:
             return False
 
     # Verificación por CRM si aplica
-    if empresa_crm:
-        crm_modulos = empresa_crm.get("modulos", [])
-        return modulo in crm_modulos
+    if modulo == "crm" and empresa_crm:
+        if empresa_crm.get("crm_activo") is True:
+            crm_inicio = empresa_crm.get("crm_inicio")
+            if crm_inicio:
+                try:
+                    inicio = pd.to_datetime(crm_inicio).date()
+                    if inicio > fecha:
+                        return False
+                except Exception:
+                    return False
+            return True
 
     return False
     
