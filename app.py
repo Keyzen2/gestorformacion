@@ -138,55 +138,58 @@ def login_view():
 def is_module_active(empresa, empresa_crm, key, hoy, role):
     """
     Comprueba si un módulo está activo para la empresa del usuario.
-    Admin y gestor (admin_empresa) pueden ver módulos activos de su empresa.
+    Admin y gestor pueden ver módulos activos de su empresa.
     Comercial solo CRM. Alumno nunca ve módulos.
     """
-    # Los alumnos nunca ven módulos
     if role == "alumno":
         return False
 
     if key == "formacion":
-        if not empresa.get("formacion_activo"):
-            return False
+        if empresa.get("formacion_activo"):
+            return True
         inicio = empresa.get("formacion_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        fin = empresa.get("formacion_fin")
+        if inicio and fin:
+            return pd.to_datetime(inicio).date() <= hoy <= pd.to_datetime(fin).date()
+        return False
 
     if key == "iso":
-        if not empresa.get("iso_activo"):
-            return False
+        if empresa.get("iso_activo"):
+            return True
         inicio = empresa.get("iso_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        fin = empresa.get("iso_fin")
+        if inicio and fin:
+            return pd.to_datetime(inicio).date() <= hoy <= pd.to_datetime(fin).date()
+        return False
 
     if key == "rgpd":
-        if not empresa.get("rgpd_activo"):
-            return False
+        if empresa.get("rgpd_activo"):
+            return True
         inicio = empresa.get("rgpd_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        fin = empresa.get("rgpd_fin")
+        if inicio and fin:
+            return pd.to_datetime(inicio).date() <= hoy <= pd.to_datetime(fin).date()
+        return False
 
     if key == "crm":
-        if not empresa_crm.get("crm_activo"):
-            return False
+        if empresa_crm.get("crm_activo"):
+            return True
         inicio = empresa_crm.get("crm_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        fin = empresa_crm.get("crm_fin")
+        if inicio and fin:
+            return pd.to_datetime(inicio).date() <= hoy <= pd.to_datetime(fin).date()
+        return False
 
-    if key == "docu_avanzada":  # ✅ Nuevo módulo
-        if not empresa.get("docu_avanzada_activo"):
-            return False
+    if key == "docu_avanzada":
+        if empresa.get("docu_avanzada_activo"):
+            return True
         inicio = empresa.get("docu_avanzada_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        fin = empresa.get("docu_avanzada_fin")
+        if inicio and fin:
+            return pd.to_datetime(inicio).date() <= hoy <= pd.to_datetime(fin).date()
+        return False
 
     return False
-
 
 # =========================
 # Función de tarjetas
@@ -445,8 +448,13 @@ if rol:
                 col2.markdown(tarjeta("🧑‍🎓", "Participantes", f"{total_participantes} registrados"), unsafe_allow_html=True)
                 col3.markdown(tarjeta("📄", "Documentos", f"{total_documentos} subidos<br><small>{ajustes.get('tarjeta_gestor_documentos')}</small>"), unsafe_allow_html=True)
 
-                if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
-                    st.markdown(tarjeta("📁", "Documentación Avanzada", f"<small>{ajustes.get('tarjeta_gestor_docu_avanzada')}</small>", activo=True), unsafe_allow_html=True)
+                if is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+                    st.markdown(tarjeta("📏", "ISO 9001", "<small>Auditorías, indicadores y calidad</small>", activo=True), unsafe_allow_html=True)
+                if is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+                    st.markdown(tarjeta("🛡️", "RGPD", "<small>Tratamientos, cláusulas y derechos</small>", activo=True), unsafe_allow_html=True)
+                if is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
+                    st.markdown(tarjeta("📚", "Formación", "<small>Gestión de acciones formativas</small>", activo=True), unsafe_allow_html=True)
+
             else:
                 st.warning("⚠️ No se ha asignado una empresa al gestor.")
         except Exception as e:
