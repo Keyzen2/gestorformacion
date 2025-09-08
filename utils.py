@@ -267,14 +267,11 @@ def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date,
     if not empresa or not modulo:
         return False
 
-    # Verificación por configuración directa en empresa
-    mod_config = empresa.get("modulos_activos") or {}
-    activo = mod_config.get(modulo)
-
-    if activo is True:
+    # Si el campo *_activo está en true, se considera activo
+    if empresa.get(f"{modulo}_activo") is True:
         return True
 
-    # Verificación por fechas de activación
+    # Si hay fechas de inicio y fin, se evalúan
     fecha_inicio = empresa.get(f"{modulo}_inicio")
     fecha_fin = empresa.get(f"{modulo}_fin")
 
