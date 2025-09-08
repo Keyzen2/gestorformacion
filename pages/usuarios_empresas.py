@@ -66,7 +66,11 @@ def main(supabase, session_state):
                     with st.form(f"edit_user_{row['id']}", clear_on_submit=False):
                         nombre_new = st.text_input("Nombre", value=row.get("nombre", ""))
                         email_new = st.text_input("Email", value=row.get("email", ""))
-                        rol_new = st.selectbox("Rol", ["admin", "gestor", "alumno"], index=["admin", "gestor", "alumno"].index(row.get("rol", "usuario")))
+                        rol_new = st.selectbox(
+                            "Rol",
+                            ["admin", "gestor", "alumno"],
+                            index=["admin", "gestor", "alumno"].index(row.get("rol", "usuario"))
+                        )
 
                         empresa_id_new = row.get("empresa_id")
                         grupo_id_new = row.get("grupo_id")
@@ -80,7 +84,11 @@ def main(supabase, session_state):
                             empresa_id_new = empresas_dict.get(empresa_nombre_sel)
 
                         if rol_new == "alumno":
-                            grupo_id_new = st.text_input("Grupo ID asignado", value=str(grupo_id_new or ""), help="Solo el ID. La gestión de grupos se realiza en grupos.py")
+                            grupo_id_new = st.text_input(
+                                "Grupo ID asignado",
+                                value=str(grupo_id_new or ""),
+                                help="Solo el ID. La gestión de grupos se realiza en grupos.py"
+                            )
 
                         guardar = st.form_submit_button("💾 Guardar cambios")
                         if guardar:
@@ -140,7 +148,10 @@ def main(supabase, session_state):
                     empresa_id_new = empresas_dict.get(empresa_nombre_sel)
 
                 if rol_new == "alumno":
-                    grupo_id_new = st.text_input("👥 Grupo ID asignado (opcional)", help="Solo el ID. La gestión de grupos se realiza en grupos.py")
+                    grupo_id_new = st.text_input(
+                        "👥 Grupo ID asignado (opcional)",
+                        help="Solo el ID. La gestión de grupos se realiza en grupos.py"
+                    )
 
             submitted_user = st.form_submit_button("✅ Crear usuario")
 
@@ -152,7 +163,13 @@ def main(supabase, session_state):
                 else:
                     try:
                         if rol_new == "alumno":
-                            creado = alta_alumno(supabase, email=email_new, password=password_new, nombre=nombre_new, grupo_id=grupo_id_new)
+                            creado = alta_alumno(
+                                supabase,
+                                email=email_new,
+                                password=password_new,
+                                nombre=nombre_new,
+                                grupo_id=grupo_id_new
+                            )
                             if creado:
                                 st.success(f"✅ Usuario '{nombre_new}' creado correctamente.")
                                 st.rerun()
@@ -190,4 +207,3 @@ def main(supabase, session_state):
                                 st.rerun()
                     except Exception as e:
                         st.error(f"❌ Error al crear el usuario: {e}")
-                        
