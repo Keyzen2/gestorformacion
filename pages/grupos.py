@@ -73,36 +73,50 @@ def main(supabase, session_state):
     )
 
     if puede_crear:
-        st.markdown("### ➕ Crear Grupo")
-        with st.form("crear_grupo", clear_on_submit=True):
-            codigo_grupo = st.text_input("Código del grupo *")
-            accion_sel = st.selectbox("Acción formativa", sorted(acciones_dict.keys()))
-            fecha_inicio = st.date_input("Fecha inicio")
-            fecha_fin_prevista = st.date_input("Fecha fin prevista")
-            localidad = st.text_input("Localidad")
-            provincia = st.text_input("Provincia")
-            cp = st.text_input("Código postal")
-            n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
-            observaciones = st.text_area("Observaciones")
-            submitted_new = st.form_submit_button("➕ Crear Grupo")
+    st.markdown("### ➕ Crear Grupo")
+    with st.form("crear_grupo", clear_on_submit=True):
+        codigo_grupo = st.text_input("Código del grupo *")
+        accion_sel = st.selectbox("Acción formativa", sorted(acciones_dict.keys()))
+        fecha_inicio = st.date_input("Fecha inicio")
+        fecha_fin_prevista = st.date_input("Fecha fin prevista")
+        localidad = st.text_input("Localidad")
+        provincia = st.text_input("Provincia")
+        cp = st.text_input("Código postal")
+        n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
+        observaciones = st.text_area("Observaciones")
 
-        if submitted_new and codigo_grupo:
+        # Si es admin, permitir elegir empresa
+        empresa_id_sel = empresa_id
+        if session_state.role == "admin":
+            empresas_res = supabase.table("empresas").select("id,nombre").execute()
+            empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
+            empresa_nombre_sel = st.selectbox("Empresa", sorted(empresas_dict.keys()))
+            empresa_id_sel = empresas_dict.get(empresa_nombre_sel)
+
+        submitted_new = st.form_submit_button("➕ Crear Grupo")
+
+    if submitted_new:
+        if not codigo_grupo:
+            st.error("⚠️ El código de grupo es obligatorio.")
+        elif not accion_sel or acciones_dict.get(accion_sel) is None:
+            st.error("⚠️ Debes seleccionar una acción formativa válida.")
+        elif not empresa_id_sel:
+            st.error("⚠️ Debes seleccionar una empresa.")
+        else:
             try:
-                supabase.table("grupos").insert(
-                    {
-                        "codigo_grupo": codigo_grupo,
-                        "empresa_id": empresa_id if session_state.role == "gestor" else None,
-                        "accion_formativa_id": acciones_dict.get(accion_sel),
-                        "fecha_inicio": fecha_inicio.isoformat(),
-                        "fecha_fin_prevista": fecha_fin_prevista.isoformat(),
-                        "localidad": localidad,
-                        "provincia": provincia,
-                        "cp": cp,
-                        "n_participantes_previstos": int(n_previstos),
-                        "observaciones": observaciones,
-                        "estado": "abierto",
-                    }
-                ).execute()
+                supabase.table("grupos").insert({
+                    "codigo_grupo": codigo_grupo,
+                    "empresa_id": empresa_id_sel,
+                    "accion_formativa_id": acciones_dict.get(accion_sel),
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin_prevista": fecha_fin_prevista.isoformat(),
+                    "localidad": localidad,
+                    "provincia": provincia,
+                    "cp": cp,
+                    "n_participantes_previstos": int(n_previstos),
+                    "observaciones": observaciones,
+                    "estado": "abierto",
+                }).execute()
                 st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
                 st.rerun()
             except Exception as e:
