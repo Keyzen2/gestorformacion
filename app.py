@@ -406,31 +406,56 @@ else:
             # MÉTRICAS DINÁMICAS POR ROL
             # ===============================
             if rol == "admin":
-                total_empresas = len(supabase_admin.table("empresas").select("id").execute().data or [])
-                total_usuarios = len(supabase_admin.table("usuarios").select("id").execute().data or [])
-                total_cursos = len(supabase_admin.table("acciones_formativas").select("id").execute().data or [])
+                try:
+                    total_empresas = len(supabase_admin.table("empresas").select("id").execute().data or [])
+                    total_usuarios = len(supabase_admin.table("usuarios").select("id").execute().data or [])
+                    total_cursos = len(supabase_admin.table("acciones_formativas").select("id").execute().data or [])
+                    total_grupos = len(supabase_admin.table("grupos").select("id").execute().data or [])
 
-                st.subheader("📊 Métricas globales del sistema")
-                col1, col2, col3 = st.columns(3)
-                col1.markdown(tarjeta("🏢", "Empresas", f"{total_empresas} registradas<br><small>{ajustes.get('tarjeta_admin_empresas')}</small>"), unsafe_allow_html=True)
-                col2.markdown(tarjeta("👥", "Usuarios", f"{total_usuarios} activos<br><small>{ajustes.get('tarjeta_admin_usuarios')}</small>"), unsafe_allow_html=True)
-                col3.markdown(tarjeta("📚", "Cursos", f"{total_cursos} disponibles<br><small>Acciones formativas activas</small>"), unsafe_allow_html=True)
-                st.markdown(tarjeta("⚙️", "Ajustes", f"<small>{ajustes.get('tarjeta_admin_ajustes')}</small>"), unsafe_allow_html=True)
+                    st.subheader("📊 Métricas globales del sistema")
+                    col1, col2, col3 = st.columns(3)
+                    col1.markdown(tarjeta("🏢", "Empresas", f"{total_empresas} registradas<br><small>{ajustes.get('tarjeta_admin_empresas')}</small>"), unsafe_allow_html=True)
+                    col2.markdown(tarjeta("👥", "Usuarios", f"{total_usuarios} activos<br><small>{ajustes.get('tarjeta_admin_usuarios')}</small>"), unsafe_allow_html=True)
+                    col3.markdown(tarjeta("📚", "Cursos", f"{total_cursos} disponibles<br><small>Acciones formativas activas</small>"), unsafe_allow_html=True)
+
+                    st.markdown(tarjeta("⚙️", "Ajustes", f"<small>{ajustes.get('tarjeta_admin_ajustes')}</small>"), unsafe_allow_html=True)
+
+                    if is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+                        st.markdown(tarjeta("📏", "ISO 9001", "<small>Auditorías, indicadores y calidad</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+                        st.markdown(tarjeta("🛡️", "RGPD", "<small>Tratamientos, cláusulas y derechos</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
+                        st.markdown(tarjeta("📁", "Documentación Avanzada", "<small>Gestión documental avanzada</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "crm", hoy, rol):
+                        st.markdown(tarjeta("📈", "CRM", "<small>Clientes, oportunidades y tareas</small>", activo=True), unsafe_allow_html=True)
+
+                except Exception as e:
+                    st.error(f"❌ Error al cargar métricas de administrador: {e}")
 
             elif rol == "gestor":
-                empresa_id = st.session_state.user.get("empresa_id")
-                total_grupos = len(supabase_admin.table("grupos").select("id").eq("empresa_id", empresa_id).execute().data or [])
-                total_participantes = len(supabase_admin.table("participantes").select("id").eq("empresa_id", empresa_id).execute().data or [])
-                total_documentos = len(supabase_admin.table("documentos").select("id").eq("empresa_id", empresa_id).execute().data or [])
+                try:
+                    empresa_id = st.session_state.user.get("empresa_id")
+                    total_grupos = len(supabase_admin.table("grupos").select("id").eq("empresa_id", empresa_id).execute().data or [])
+                    total_participantes = len(supabase_admin.table("participantes").select("id").eq("empresa_id", empresa_id).execute().data or [])
+                    total_documentos = len(supabase_admin.table("documentos").select("id").eq("empresa_id", empresa_id).execute().data or [])
 
-                st.subheader("📊 Actividad de tu empresa")
-                col1, col2, col3 = st.columns(3)
-                col1.markdown(tarjeta("👥", "Grupos", f"{total_grupos} creados<br><small>{ajustes.get('tarjeta_gestor_grupos')}</small>"), unsafe_allow_html=True)
-                col2.markdown(tarjeta("🧑‍🎓", "Participantes", f"{total_participantes} registrados"), unsafe_allow_html=True)
-                col3.markdown(tarjeta("📄", "Documentos", f"{total_documentos} subidos<br><small>{ajustes.get('tarjeta_gestor_documentos')}</small>"), unsafe_allow_html=True)
+                    st.subheader("📊 Actividad de tu empresa")
+                    col1, col2, col3 = st.columns(3)
+                    col1.markdown(tarjeta("👥", "Grupos", f"{total_grupos} creados<br><small>{ajustes.get('tarjeta_gestor_grupos')}</small>"), unsafe_allow_html=True)
+                    col2.markdown(tarjeta("🧑‍🎓", "Participantes", f"{total_participantes} registrados"), unsafe_allow_html=True)
+                    col3.markdown(tarjeta("📄", "Documentos", f"{total_documentos} subidos<br><small>{ajustes.get('tarjeta_gestor_documentos')}</small>"), unsafe_allow_html=True)
 
-                if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
-                    st.markdown(tarjeta("📁", "Documentación Avanzada", f"<small>{ajustes.get('tarjeta_gestor_docu_avanzada')}</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+                        st.markdown(tarjeta("📏", "ISO 9001", "<small>Auditorías, indicadores y calidad</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+                        st.markdown(tarjeta("🛡️", "RGPD", "<small>Tratamientos, cláusulas y derechos</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
+                        st.markdown(tarjeta("📁", "Documentación Avanzada", f"<small>{ajustes.get('tarjeta_gestor_docu_avanzada')}</small>", activo=True), unsafe_allow_html=True)
+                    if is_module_active(empresa, empresa_crm, "crm", hoy, rol):
+                        st.markdown(tarjeta("📈", "CRM", "<small>Clientes, oportunidades y tareas</small>", activo=True), unsafe_allow_html=True)
+
+                except Exception as e:
+                    st.error(f"❌ Error al cargar métricas del gestor: {e}")
 
             elif rol == "alumno":
                 st.subheader("📋 Área del Alumno")
@@ -446,3 +471,4 @@ else:
 
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
+
