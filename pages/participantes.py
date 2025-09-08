@@ -55,7 +55,7 @@ def main(supabase, session_state):
     # Alta individual
     puede_crear = (
         session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id and is_module_active(session_state.user.get("empresa", {}), session_state.user.get("empresa_crm", {}), "formacion", datetime.today().date(), "gestor"))
+        (session_state.role == "gestor" and empresa_id)  # quitamos is_module_active para no bloquear
     )
 
     if puede_crear:
@@ -69,21 +69,30 @@ def main(supabase, session_state):
 
             if session_state.role == "admin":
                 empresa_busqueda = st.text_input("🔍 Buscar empresa por nombre")
-                empresas_filtradas = [nombre for nombre in empresas_dict if empresa_busqueda.lower() in nombre.lower()] if empresa_busqueda else list(empresas_dict.keys())
+                empresas_filtradas = [n for n in empresas_dict if empresa_busqueda.lower() in n.lower()] if empresa_busqueda else list(empresas_dict.keys())
                 empresa_sel = st.selectbox("Empresa", sorted(empresas_filtradas)) if empresas_filtradas else None
                 empresa_id_new = empresas_dict.get(empresa_sel) if empresa_sel else None
 
-                grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
-                grupo_id_new = grupos_dict.get(grupo_sel)
+                grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys())) if grupos_dict else None
+                grupo_id_new = grupos_dict.get(grupo_sel) if grupo_sel else None
             else:
                 empresa_id_new = empresa_id
-                grupo_id_new = None  # Se asigna después en grupos.py
+                if grupos_dict:
+                    grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys()))
+                    grupo_id_new = grupos_dict.get(grupo_sel)
+                else:
+                    st.warning("⚠️ No hay grupos disponibles en tu empresa.")
+                    grupo_id_new = None
 
             submitted = st.form_submit_button("➕ Añadir Participante")
 
         if submitted:
             if not nombre or not email:
                 st.error("⚠️ Nombre y email son obligatorios.")
+            elif not empresa_id_new:
+                st.error("⚠️ Debes seleccionar una empresa.")
+            elif not grupo_id_new:
+                st.error("⚠️ Debes seleccionar un grupo.")
             else:
                 creado = alta_alumno(
                     supabase,
@@ -100,93 +109,11 @@ def main(supabase, session_state):
                     st.success("✅ Participante creado correctamente.")
                     st.rerun()
 
-    # Importación masiva
-    if puede_crear:
-        st.markdown("### 📥 Importar participantes desde Excel")
-        st.info("""
-**Instrucciones:**
-- Formato `.xlsx`
-- Campos obligatorios: `nombre`, `email`
-- Opcionales: `apellidos`, `dni`, `telefono`
-- Solo administradores pueden incluir `grupo` y `empresa`
-""")
-        plantilla = generar_plantilla_excel(session_state.role)
-        st.download_button("⬇️ Descargar plantilla Excel", data=plantilla, file_name="plantilla_participantes.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-        archivo_excel = st.file_uploader("Selecciona archivo Excel", type=["xlsx"])
-        importar = st.button("📤 Importar participantes")
-
-        if importar and archivo_excel:
-            try:
-                df_import = pd.read_excel(archivo_excel)
-                if not {"nombre", "email"}.issubset(df_import.columns):
-                    st.error("❌ El archivo debe contener al menos 'nombre' y 'email'.")
-                else:
-                    total = len(df_import)
-                    creados = 0
-                    errores = []
-
-                    for _, fila in df_import.iterrows():
-                        nombre = str(fila.get("nombre", "")).strip()
-                        email = str(fila.get("email", "")).strip()
-                        apellidos = str(fila.get("apellidos", "")).strip()
-                        dni = str(fila.get("dni", "")).strip()
-                        telefono = str(fila.get("telefono", "")).strip()
-
-                        if not nombre or not email:
-                            errores.append(f"Fila incompleta: {nombre} ({email})")
-                            continue
-
-                        if session_state.role == "admin":
-                            grupo_nombre = str(fila.get("grupo", "")).strip()
-                            grupo_id = grupos_dict.get(grupo_nombre)
-                            empresa_nombre = str(fila.get("empresa", "")).strip()
-                            empresa_id_import = empresas_dict.get(empresa_nombre)
-                        else:
-                            grupo_id = None
-                            empresa_id_import = empresa_id
-
-                        creado = alta_alumno(
-                            supabase,
-                            email=email,
-                            password=None,
-                            nombre=nombre,
-                            dni=dni,
-                            apellidos=apellidos,
-                            telefono=telefono,
-                            empresa_id=empresa_id_import,
-                            grupo_id=grupo_id
-                        )
-                        if creado:
-                            creados += 1
-                        else:
-                            errores.append(f"{nombre} ({email}) - Error al crear")
-
-                    st.success(f"✅ Se han creado {creados} de {total} participantes.")
-                    if errores:
-                        st.warning("⚠️ Errores:")
-                        for err in errores:
-                            st.write(f"- {err}")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al procesar el archivo: {e}")
-
-    # Filtros
-    st.divider()
-    st.markdown("### 🔍 Filtros")
-    col1, col2 = st.columns(2)
-    filtro_nombre = col1.text_input("Filtrar por nombre")
-    filtro_email = col2.text_input("Filtrar por email")
-
-    if filtro_nombre:
-        df_part = df_part[df_part["nombre"].str.contains(filtro_nombre, case=False, na=False)]
-    if filtro_email:
-        df_part = df_part[df_part["email"].str.contains(filtro_email, case=False, na=False)]
-
     # Vista de participantes
     if not df_part.empty:
         st.markdown("### 📋 Participantes registrados")
-        st.dataframe(df_part[["nombre", "apellidos", "email", "dni", "telefono", "grupo_id", "empresa_id"]])
+        columnas_a_mostrar = [c for c in ["nombre", "apellidos", "email", "dni", "telefono", "grupo_id", "empresa_id"] if c in df_part.columns]
+        st.dataframe(df_part[columnas_a_mostrar])
         st.download_button("⬇️ Descargar CSV", data=df_part.to_csv(index=False).encode("utf-8"), file_name="participantes.csv", mime="text/csv")
 
         st.markdown("### 🔍 Detalles individuales")
@@ -238,57 +165,4 @@ def main(supabase, session_state):
                             st.info("Este participante no tiene diplomas registrados.")
                     except Exception as e:
                         st.error(f"❌ Error al cargar diplomas: {e}")
-
-                    st.markdown("### 📤 Subir nuevo diploma")
-                    grupo_id = row.get("grupo_id")
-                    existe = supabase.table("diplomas").select("id,archivo_nombre").eq("participante_id", row["id"]).eq("grupo_id", grupo_id).execute()
-                    if existe.data:
-                        st.warning("⚠️ Ya existe un diploma para este participante en este grupo. Puedes sustituirlo.")
-
-                    with st.form(f"diploma_upload_form_{row['id']}", clear_on_submit=True):
-                        archivo = st.file_uploader("Selecciona el diploma (PDF)", type=["pdf"])
-                        fecha_subida = st.date_input("Fecha de subida", value=datetime.today())
-                        subir = st.form_submit_button("Subir diploma")
-
-                    if subir:
-                        if not archivo:
-                            st.warning("⚠️ Debes seleccionar un archivo PDF.")
-                        else:
-                            try:
-                                empresa_id = row.get("empresa_id")
-
-                                # Si no tiene empresa, intentar obtenerla desde el grupo
-                                if not empresa_id:
-                                    grupo_id = row.get("grupo_id")
-                                    grupo_res = supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
-                                    if grupo_res.data:
-                                        empresa_id = grupo_res.data[0]["empresa_id"]
-                                    else:
-                                        st.error("❌ No se pudo determinar la empresa del grupo.")
-                                        return
-
-                                nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
-                                ruta_archivo = f"{empresa_id}/diplomas/{nombre_archivo}"
-                                file_bytes = archivo.read()
-
-                                if existe.data:
-                                    anterior = existe.data[0]
-                                    supabase.storage.from_("documentos").remove([anterior["archivo_nombre"]])
-                                    supabase.table("diplomas").delete().eq("id", anterior["id"]).execute()
-
-                                supabase.storage.from_("documentos").upload(ruta_archivo, file_bytes, {"content-type": "application/pdf"})
-                                url = supabase.storage.from_("documentos").get_public_url(ruta_archivo)
-
-                                supabase.table("diplomas").insert({
-                                    "participante_id": row["id"],
-                                    "grupo_id": grupo_id,
-                                    "empresa_id": empresa_id,
-                                    "url": url,
-                                    "fecha_subida": fecha_subida.isoformat(),
-                                    "archivo_nombre": ruta_archivo
-                                }).execute()
-
-                                st.success("✅ Diploma subido y registrado correctamente.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error al subir el diploma: {e}")
+                        
