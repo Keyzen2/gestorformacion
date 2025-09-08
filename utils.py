@@ -245,7 +245,7 @@ def render_texto(texto: str, modo="markdown"):
     - markdown: usa st.markdown()
     - html: usa st.markdown(..., unsafe_allow_html=True)
     """
-    if not texto:
+    if not isinstance(texto, str) or not texto.strip():
         return
     try:
         if modo == "html":
@@ -268,7 +268,7 @@ def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date,
         return False
 
     # Verificación por configuración directa en empresa
-    mod_config = empresa.get("modulos_activos", {})
+    mod_config = empresa.get("modulos_activos") or {}
     activo = mod_config.get(modulo)
 
     if activo is True:
