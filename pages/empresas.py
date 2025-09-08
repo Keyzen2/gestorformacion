@@ -5,6 +5,21 @@ from datetime import datetime
 # -----------------------
 # FUNCIONES AUXILIARES
 # -----------------------
+def modulo_formacion(row=None):
+    st.markdown("#### 📚 Configuración Formación")
+    formacion_activo = st.checkbox("Activar módulo Formación", value=row.get("formacion_activo", False) if row else False)
+    formacion_inicio = st.date_input("Fecha de inicio Formación", value=pd.to_datetime(row.get("formacion_inicio"), errors="coerce").date() if row and row.get("formacion_inicio") else datetime.today().date())
+    formacion_fin = st.date_input("Fecha de fin Formación", value=pd.to_datetime(row.get("formacion_fin"), errors="coerce").date() if row and row.get("formacion_fin") else datetime.today().date())
+    return formacion_activo, formacion_inicio, formacion_fin
+
+def guardar_modulo_formacion(supabase, empresa_id, formacion):
+    formacion_activo, formacion_inicio, formacion_fin = formacion
+    supabase.table("empresas").update({
+        "formacion_activo": formacion_activo,
+        "formacion_inicio": formacion_inicio.isoformat() if formacion_inicio else None,
+        "formacion_fin": formacion_fin.isoformat() if formacion_fin else None
+    }).eq("id", empresa_id).execute()
+
 def modulo_iso(row=None):
     st.markdown("#### 🏷️ Configuración ISO 9001")
     iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False) if row else False)
