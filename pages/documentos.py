@@ -80,49 +80,59 @@ def main(supabase, session_state):
         if st.button("📤 Generar XML de Acción Formativa"):
             xml_str = generar_xml_accion_formativa(accion)
             xsd_url = st.secrets["FUNDAE"]["xsd_accion_formativa"]
-            xsd_string = requests.get(xsd_url).text
-            if not xsd_string:
-                st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
-            elif validar_xml(xml_str, xsd_string):
-                st.download_button(
-                    "⬇️ Descargar XML Acción Formativa",
-                    xml_str.encode("utf-8"),
-                    file_name=f"{accion['codigo_accion']}_accion_formativa.xml",
-                    mime="application/xml"
-                )
-            else:
-                st.error("❌ El XML no cumple con el esquema oficial de Fundae.")
+            try:
+                xsd_string = requests.get(xsd_url, verify=False).text
+                if not xsd_string.strip().startswith("<"):
+                    st.error("❌ El esquema XSD no se ha cargado correctamente. Verifica la URL o el archivo.")
+                elif validar_xml(xml_str, xsd_string):
+                    st.download_button(
+                        "⬇️ Descargar XML Acción Formativa",
+                        xml_str.encode("utf-8"),
+                        file_name=f"{accion['codigo_accion']}_accion_formativa.xml",
+                        mime="application/xml"
+                    )
+                else:
+                    st.error("❌ El XML no cumple con el esquema oficial de Fundae.")
+            except Exception as e:
+                st.error(f"⚠️ Error al cargar el esquema XSD: {e}")
 
         if grupo:
             if st.button("📤 Generar XML de Inicio de Grupo"):
                 xml_str = generar_xml_inicio_grupo(grupo)
                 xsd_url = st.secrets["FUNDAE"]["xsd_inicio_grupo"]
-                xsd_string = requests.get(xsd_url).text
-                if not xsd_string:
-                    st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
-                elif validar_xml(xml_str, xsd_string):
-                    st.download_button(
-                        "⬇️ Descargar XML Inicio Grupo",
-                        xml_str.encode("utf-8"),
-                        file_name=f"{grupo['codigo_grupo']}_inicio_grupo.xml",
-                        mime="application/xml"
-                    )
-                else:
-                    st.error("❌ El XML de inicio de grupo no cumple con el esquema oficial.")
+                try:
+                    xsd_string = requests.get(xsd_url, verify=False).text
+                    if not xsd_string.strip().startswith("<"):
+                        st.error("❌ El esquema XSD no se ha cargado correctamente. Verifica la URL o el archivo.")
+                    elif validar_xml(xml_str, xsd_string):
+                        st.download_button(
+                            "⬇️ Descargar XML Inicio Grupo",
+                            xml_str.encode("utf-8"),
+                            file_name=f"{grupo['codigo_grupo']}_inicio_grupo.xml",
+                            mime="application/xml"
+                        )
+                    else:
+                        st.error("❌ El XML de inicio de grupo no cumple con el esquema oficial.")
+                except Exception as e:
+                    st.error(f"⚠️ Error al cargar el esquema XSD: {e}")
 
             if st.button("📤 Generar XML de Finalización de Grupo"):
                 xml_str = generar_xml_finalizacion_grupo(grupo)
                 xsd_url = st.secrets["FUNDAE"]["xsd_finalizacion_grupo"]
-                xsd_string = requests.get(xsd_url).text
-                if not xsd_string:
-                    st.error("❌ No se pudo cargar el esquema XSD de Fundae.")
-                elif validar_xml(xml_str, xsd_string):
-                    st.download_button(
-                        "⬇️ Descargar XML Finalización Grupo",
-                        xml_str.encode("utf-8"),
-                        file_name=f"{grupo['codigo_grupo']}_finalizacion_grupo.xml",
-                        mime="application/xml"
-                    )
-                else:
-                    st.error("❌ El XML de finalización de grupo no cumple con el esquema oficial.")
+                try:
+                    xsd_string = requests.get(xsd_url, verify=False).text
+                    if not xsd_string.strip().startswith("<"):
+                        st.error("❌ El esquema XSD no se ha cargado correctamente. Verifica la URL o el archivo.")
+                    elif validar_xml(xml_str, xsd_string):
+                        st.download_button(
+                            "⬇️ Descargar XML Finalización Grupo",
+                            xml_str.encode("utf-8"),
+                            file_name=f"{grupo['codigo_grupo']}_finalizacion_grupo.xml",
+                            mime="application/xml"
+                        )
+                    else:
+                        st.error("❌ El XML de finalización de grupo no cumple con el esquema oficial.")
+                except Exception as e:
+                    st.error(f"⚠️ Error al cargar el esquema XSD: {e}")
+
                     
