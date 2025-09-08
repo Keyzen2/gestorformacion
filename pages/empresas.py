@@ -9,24 +9,42 @@ from datetime import datetime
 def modulo_formacion(row=None):
     st.markdown("#### 📚 Configuración Formación")
     formacion_activo = st.checkbox("Activar módulo Formación", value=row.get("formacion_activo", False) if row else False)
-    formacion_inicio = st.date_input("Fecha de inicio Formación", value=pd.to_datetime(row.get("formacion_inicio"), errors="coerce").date() if row and row.get("formacion_inicio") else datetime.today().date())
-    formacion_fin = st.date_input("Fecha de fin Formación", value=pd.to_datetime(row.get("formacion_fin"), errors="coerce").date() if row and row.get("formacion_fin") else datetime.today().date())
+    formacion_inicio = st.date_input(
+        "Fecha de inicio Formación",
+        value=pd.to_datetime(row.get("formacion_inicio"), errors="coerce").date() if row and row.get("formacion_inicio") else datetime.today().date()
+    )
+    formacion_fin = st.date_input(
+        "Fecha de fin Formación",
+        value=pd.to_datetime(row.get("formacion_fin"), errors="coerce").date() if row and row.get("formacion_fin") else datetime.today().date()
+    )
     return formacion_activo, formacion_inicio, formacion_fin
 
 
 def modulo_iso(row=None):
     st.markdown("#### 🏷️ Configuración ISO 9001")
     iso_activo = st.checkbox("Activar módulo ISO 9001", value=row.get("iso_activo", False) if row else False)
-    iso_inicio = st.date_input("Fecha de inicio ISO", value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date() if row and row.get("iso_inicio") else datetime.today().date())
-    iso_fin = st.date_input("Fecha de fin ISO", value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date() if row and row.get("iso_fin") else datetime.today().date())
+    iso_inicio = st.date_input(
+        "Fecha de inicio ISO",
+        value=pd.to_datetime(row.get("iso_inicio"), errors="coerce").date() if row and row.get("iso_inicio") else datetime.today().date()
+    )
+    iso_fin = st.date_input(
+        "Fecha de fin ISO",
+        value=pd.to_datetime(row.get("iso_fin"), errors="coerce").date() if row and row.get("iso_fin") else datetime.today().date()
+    )
     return iso_activo, iso_inicio, iso_fin
 
 
 def modulo_rgpd(row=None):
     st.markdown("#### 🛡️ Configuración RGPD")
     rgpd_activo = st.checkbox("Activar módulo RGPD", value=row.get("rgpd_activo", False) if row else False)
-    rgpd_inicio = st.date_input("Fecha de inicio RGPD", value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date() if row and row.get("rgpd_inicio") else datetime.today().date())
-    rgpd_fin = st.date_input("Fecha de fin RGPD (opcional)", value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date() if row and row.get("rgpd_fin") else None)
+    rgpd_inicio = st.date_input(
+        "Fecha de inicio RGPD",
+        value=pd.to_datetime(row.get("rgpd_inicio"), errors="coerce").date() if row and row.get("rgpd_inicio") else datetime.today().date()
+    )
+    rgpd_fin = st.date_input(
+        "Fecha de fin RGPD (opcional)",
+        value=pd.to_datetime(row.get("rgpd_fin"), errors="coerce").date() if row and row.get("rgpd_fin") else None
+    )
     return rgpd_activo, rgpd_inicio, rgpd_fin
 
 
@@ -49,8 +67,14 @@ def modulo_crm(supabase, empresa_id=None):
 def modulo_docu_avanzada(row=None):
     st.markdown("#### 📁 Configuración Documentación Avanzada")
     docu_activo = st.checkbox("Activar módulo Documentación Avanzada", value=row.get("docu_avanzada_activo", False) if row else False)
-    docu_inicio = st.date_input("Fecha de inicio Documentación", value=pd.to_datetime(row.get("docu_avanzada_inicio"), errors="coerce").date() if row and row.get("docu_avanzada_inicio") else datetime.today().date())
-    docu_fin = st.date_input("Fecha de fin Documentación", value=pd.to_datetime(row.get("docu_avanzada_fin"), errors="coerce").date() if row and row.get("docu_avanzada_fin") else datetime.today().date())
+    docu_inicio = st.date_input(
+        "Fecha de inicio Documentación",
+        value=pd.to_datetime(row.get("docu_avanzada_inicio"), errors="coerce").date() if row and row.get("docu_avanzada_inicio") else datetime.today().date()
+    )
+    docu_fin = st.date_input(
+        "Fecha de fin Documentación",
+        value=pd.to_datetime(row.get("docu_avanzada_fin"), errors="coerce").date() if row and row.get("docu_avanzada_fin") else datetime.today().date()
+    )
     return docu_activo, docu_inicio, docu_fin
 
 
@@ -121,9 +145,18 @@ def main(supabase, session_state):
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🏢 Total Empresas", len(df_empresas))
-    col2.metric("🆕 Nuevas este mes", len(df_empresas[pd.to_datetime(df_empresas.get("fecha_alta", pd.Series()), errors="coerce").dt.month == datetime.now().month]) if not df_empresas.empty else 0)
-    col3.metric("📍 Provincia más frecuente", df_empresas["provincia"].value_counts().idxmax() if "provincia" in df_empresas.columns and not df_empresas.empty else "N/D")
-    col4.metric("🌆 Ciudad más frecuente", df_empresas["ciudad"].value_counts().idxmax() if "ciudad" in df_empresas.columns and not df_empresas.empty else "N/D")
+    col2.metric(
+        "🆕 Nuevas este mes",
+        len(df_empresas[pd.to_datetime(df_empresas.get("fecha_alta", pd.Series()), errors="coerce").dt.month == datetime.now().month]) if not df_empresas.empty else 0
+    )
+    col3.metric(
+        "📍 Provincia más frecuente",
+        df_empresas["provincia"].value_counts().idxmax() if "provincia" in df_empresas.columns and not df_empresas.empty else "N/D"
+    )
+    col4.metric(
+        "🌆 Ciudad más frecuente",
+        df_empresas["ciudad"].value_counts().idxmax() if "ciudad" in df_empresas.columns and not df_empresas.empty else "N/D"
+    )
 
     st.divider()
     st.markdown("### 🔍 Buscar y Exportar")
@@ -151,27 +184,21 @@ def main(supabase, session_state):
                 st.write(f"**Código Postal:** {row.get('codigo_postal','')}")
                 st.write(f"**Fecha Alta:** {row.get('fecha_alta','')}")
 
-                # Estado módulos con fechas
                 st.markdown("#### ⚙️ Módulos activados")
-
                 st.write(f"📚 Formación: {'Activo' if row.get('formacion_activo') else 'Inactivo'}")
                 st.write(f"• Inicio: {row.get('formacion_inicio', '—')}")
                 st.write(f"• Fin: {row.get('formacion_fin', '—')}")
-
                 st.write(f"✅ ISO 9001: {'Activo' if row.get('iso_activo') else 'Inactivo'}")
                 st.write(f"• Inicio: {row.get('iso_inicio', '—')}")
                 st.write(f"• Fin: {row.get('iso_fin', '—')}")
-
                 st.write(f"🛡️ RGPD: {'Activo' if row.get('rgpd_activo') else 'Inactivo'}")
                 st.write(f"• Inicio: {row.get('rgpd_inicio', '—')}")
                 st.write(f"• Fin: {row.get('rgpd_fin', '—')}")
-
                 crm_res = supabase.table("crm_empresas").select("*").eq("empresa_id", row["id"]).execute()
                 crm_data = crm_res.data[0] if crm_res.data else {}
                 st.write(f"📈 CRM: {'Activo' if crm_data.get('crm_activo') else 'Inactivo'}")
                 st.write(f"• Inicio: {crm_data.get('crm_inicio', '—')}")
                 st.write(f"• Fin: {crm_data.get('crm_fin', '—')}")
-
                 st.write(f"📁 Documentación Avanzada: {'Activo' if row.get('docu_avanzada_activo') else 'Inactivo'}")
                 st.write(f"• Inicio: {row.get('docu_avanzada_inicio', '—')}")
                 st.write(f"• Fin: {row.get('docu_avanzada_fin', '—')}")
@@ -209,62 +236,7 @@ def main(supabase, session_state):
                         st.success("Datos generales actualizados ✅")
                         st.rerun()
 
-                # Módulo Formación
-                with st.form(f"editar_formacion_{row['id']}"):
-                    formacion = modulo_formacion(row)
-                    if st.form_submit_button("💾 Guardar Formación"):
-                        guardar_modulo_formacion(supabase, row["id"], formacion)
-                        st.success("Módulo Formación actualizado ✅")
-                        st.rerun()
-
-                # Módulo ISO
-                with st.form(f"editar_iso_{row['id']}"):
-                    iso = modulo_iso(row)
-                    if st.form_submit_button("💾 Guardar ISO"):
-                        guardar_modulo_iso(supabase, row["id"], iso)
-                        st.success("Módulo ISO actualizado ✅")
-                        st.rerun()
-
-                # Módulo RGPD
-                with st.form(f"editar_rgpd_{row['id']}"):
-                    rgpd = modulo_rgpd(row)
-                    if st.form_submit_button("💾 Guardar RGPD"):
-                        guardar_modulo_rgpd(supabase, row["id"], rgpd)
-                        st.success("Módulo RGPD actualizado ✅")
-                        st.rerun()
-
-                # Módulo CRM
-                with st.form(f"editar_crm_{row['id']}"):
-                    crm = modulo_crm(supabase, row["id"])
-                    if st.form_submit_button("💾 Guardar CRM"):
-                        guardar_modulo_crm(supabase, row["id"], crm)
-                        st.success("Módulo CRM actualizado ✅")
-                        st.rerun()
-
-                # Módulo Documentación Avanzada
-                with st.form(f"editar_docu_{row['id']}"):
-                    docu = modulo_docu_avanzada(row)
-                    if st.form_submit_button("💾 Guardar Documentación"):
-                        guardar_modulos(supabase, row["id"], iso, rgpd, crm, docu)
-                        st.success("Módulo Documentación actualizado ✅")
-                        st.rerun()
-
-                # Eliminar empresa
-                with st.form(f"eliminar_{row['id']}"):
-                    st.warning("⚠️ Esta acción eliminará la empresa permanentemente.")
-                    confirmar = st.checkbox("Confirmar la eliminación")
-                    eliminar = st.form_submit_button("🗑️ Eliminar empresa")
-                    if eliminar and confirmar:
-                        try:
-                            supabase.table("rgpd_empresas").delete().eq("empresa_id", row["id"]).execute()
-                            supabase.table("crm_empresas").delete().eq("empresa_id", row["id"]).execute()
-                            supabase.table("empresas").delete().eq("id", row["id"]).execute()
-                            st.success(f"Empresa '{row['nombre']}' eliminada ✅")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al eliminar la empresa: {str(e)}")
-
-    # -----------------------
+# -----------------------
 # CREAR NUEVA EMPRESA
 # -----------------------
 st.divider()
