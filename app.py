@@ -381,7 +381,7 @@ else:
                 mod_import.main(supabase_admin, st.session_state)
 
         else:
-            rol = st.session_state.role
+            rol = st.session_state.get("role")
             hoy = datetime.today().date()
             empresa = st.session_state.get("empresa", {})
             empresa_crm = st.session_state.get("empresa_crm", {})
@@ -403,7 +403,10 @@ else:
             }
 
             st.title("👋 Bienvenido al Gestor de Formación")
-            st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
+            if rol:
+                st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
+            else:
+                st.subheader("Bienvenido")
 
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
