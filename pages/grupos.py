@@ -18,14 +18,17 @@ def main(supabase, session_state):
     try:
         acciones_res = supabase.table("acciones_formativas").select("id,nombre").eq("empresa_id", empresa_id).execute() if session_state.role == "gestor" else supabase.table("acciones_formativas").select("id,nombre").execute()
         acciones_dict = {a["nombre"]: a["id"] for a in (acciones_res.data or [])}
+        acciones_id_to_nombre = {a["id"]: a["nombre"] for a in (acciones_res.data or [])}
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar las acciones formativas: {e}")
         acciones_dict = {}
+        acciones_id_to_nombre = {}
 
     # Cargar grupos
     try:
         grupos_res = supabase.table("grupos").select("*").eq("empresa_id", empresa_id).execute() if session_state.role == "gestor" else supabase.table("grupos").select("*").execute()
         df_grupos = pd.DataFrame(grupos_res.data or [])
+        df_grupos["accion_nombre"] = df_grupos["accion_formativa_id"].map(acciones_id_to_nombre)
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los grupos: {e}")
         df_grupos = pd.DataFrame()
@@ -38,7 +41,7 @@ def main(supabase, session_state):
     )
     st.divider()
 
-    # Crear grupo (inicio)
+    # Crear grupo
     puede_crear = (
         session_state.role == "admin" or
         (session_state.role == "gestor" and empresa_id and is_module_active(
@@ -86,9 +89,10 @@ def main(supabase, session_state):
 
     st.divider()
 
-    # Asignar participantes manualmente
+    # Asignar participantes
     if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
         st.markdown("### 👥 Asignar participantes a grupo")
+
         try:
             if session_state.role == "gestor":
                 part_res = supabase.table("participantes").select("id,nombre,email,dni").eq("empresa_id", empresa_id).execute()
@@ -99,29 +103,48 @@ def main(supabase, session_state):
             st.error(f"❌ Error al cargar participantes: {e}")
             df_part = pd.DataFrame()
 
-        if not df_part.empty:
-            grupo_sel = st.selectbox("Grupo", df_grupos["codigo_grupo"])
-            grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel]["id"].values[0]
-            participante_sel = st.selectbox("Participante", df_part["dni"] + " - " + df_part["nombre"])
-            participante_id = df_part[df_part["dni"] == participante_sel.split(" - ")[0]]["id"].values[0]
-            asignar = st.button("✅ Asignar")
+        grupo_query = st.text_input("🔍 Buscar grupo por código o curso")
+        df_grupos_filtrados = df_grupos[
+            df_grupos["codigo_grupo"].str.contains(grupo_query, case=False, na=False) |
+            df_grupos["accion_nombre"].str.contains(grupo_query, case=False, na=False)
+        ] if grupo_query else df_grupos
+
+        participante_query = st.text_input("🔍 Buscar participante por nombre, email o DNI")
+        df_part_filtrados = df_part[
+            df_part["nombre"].str.contains(participante_query, case=False, na=False) |
+            df_part["email"].str.contains(participante_query, case=False, na=False) |
+            df_part["dni"].str.contains(participante_query, case=False, na=False)
+        ] if participante_query else df_part
+
+        if not df_grupos_filtrados.empty and not df_part_filtrados.empty:
+            grupo_sel = st.selectbox("Grupo", df_grupos_filtrados.apply(lambda g: f"{g['codigo_grupo']} - {g['accion_nombre']}", axis=1))
+            grupo_id = df_grupos_filtrados[df_grupos_filtrados.apply(lambda g: f"{g['codigo_grupo']} - {g['accion_nombre']}", axis=1) == grupo_sel]["id"].values[0]
+
+            participante_sel = st.selectbox("Participante", df_part_filtrados.apply(lambda p: f"{p['dni']} - {p['nombre']}", axis=1))
+            participante_id = df_part_filtrados[df_part_filtrados["dni"] == participante_sel.split(" - ")[0]]["id"].values[0]
+
+            asignar = st.button("✅ Asignar participante")
 
             if asignar:
                 try:
-                    supabase.table("participantes_grupos").insert({
-                        "participante_id": participante_id,
-                        "grupo_id": grupo_id
-                    }).execute()
-                    st.success("✅ Participante asignado correctamente.")
-                    st.rerun()
+                    existe = supabase.table("participantes_grupos").select("id").eq("participante_id", participante_id).eq("grupo_id", grupo_id).execute()
+                    if existe.data:
+                        st.warning("⚠️ Este participante ya está asignado a este grupo.")
+                    else:
+                        supabase.table("participantes_grupos").insert({
+                            "participante_id": participante_id,
+                            "grupo_id": grupo_id
+                        }).execute()
+                        st.success("✅ Participante asignado correctamente.")
+                        st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al asignar: {e}")
 
     # Importar participantes por Excel
     st.markdown("### 📤 Importar participantes a grupo desde Excel")
     archivo_excel = st.file_uploader("Archivo Excel (.xlsx)", type=["xlsx"])
-    grupo_sel_excel = st.selectbox("Grupo destino", df_grupos["codigo_grupo"], key="grupo_excel")
-    grupo_id_excel = df_grupos[df_grupos["codigo_grupo"] == grupo_sel_excel]["id"].values[0]
+    grupo_sel_excel = st.selectbox("Grupo destino", df_grupos.apply(lambda g: f"{g['codigo_grupo']} - {g['accion_nombre']}", axis=1), key="grupo_excel")
+    grupo_id_excel = df_grupos[df_grupos.apply(lambda g: f"{g['codigo_grupo']} - {g['accion_nombre']}", axis=1) == grupo_sel_excel]["id"].values[0]
     importar_excel = st.button("📥 Importar Excel")
 
     if importar_excel and archivo_excel:
@@ -143,8 +166,14 @@ def main(supabase, session_state):
                     dni = str(fila.get("dni", "")).strip()
                     participante_id = participantes_existentes.get(dni)
 
-                    if not participante_id:
+                        if not participante_id:
                         errores.append(f"DNI {dni} no encontrado.")
+                        continue
+
+                    # Verificar duplicado
+                    ya_asignado = supabase.table("participantes_grupos").select("id").eq("participante_id", participante_id).eq("grupo_id", grupo_id_excel).execute()
+                    if ya_asignado.data:
+                        errores.append(f"DNI {dni} ya asignado.")
                         continue
 
                     try:
@@ -165,10 +194,17 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error al procesar el archivo: {e}")
 
-    # Vista de participantes por grupo + cierre
+    # Vista de participantes por grupo + cierre automático
     st.markdown("### 📋 Participantes por grupo")
-    for _, grupo in df_grupos.iterrows():
-        with st.expander(f"👥 {grupo['codigo_grupo']}"):
+
+    grupo_filtro = st.text_input("🔍 Filtrar grupos por código o curso", key="filtro_grupos")
+    df_grupos_vista = df_grupos[
+        df_grupos["codigo_grupo"].str.contains(grupo_filtro, case=False, na=False) |
+        df_grupos["accion_nombre"].str.contains(grupo_filtro, case=False, na=False)
+    ] if grupo_filtro else df_grupos
+
+    for _, grupo in df_grupos_vista.iterrows():
+        with st.expander(f"👥 {grupo['codigo_grupo']} - {grupo['accion_nombre']}"):
             try:
                 pg_res = supabase.table("participantes_grupos").select("id,participante_id").eq("grupo_id", grupo["id"]).execute()
                 pg_data = pg_res.data or []
@@ -192,7 +228,7 @@ def main(supabase, session_state):
             except Exception as e:
                 st.error(f"❌ Error al cargar participantes del grupo: {e}")
 
-            # 🧩 Cierre de grupo si está vencido y abierto
+            # Cierre automático si vencido
             try:
                 fecha_fin_prevista = pd.to_datetime(grupo.get("fecha_fin_prevista")).date() if grupo.get("fecha_fin_prevista") else None
                 estado = grupo.get("estado", "abierto")
