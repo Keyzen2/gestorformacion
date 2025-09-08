@@ -8,6 +8,7 @@ from lxml import etree
 import xml.etree.ElementTree as ET
 import re
 from datetime import datetime
+from datetime import date
 import uuid
 
 # =========================
