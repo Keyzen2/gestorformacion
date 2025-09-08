@@ -135,7 +135,7 @@ def main(supabase, session_state):
             with st.expander(f"{row['nombre']} ({row.get('cif','')})"):
                 st.write(f"**Dirección:** {row.get('direccion','')}")
                 st.write(f"**Teléfono:** {row.get('telefono','')}")
-                                st.write(f"**Email:** {row.get('email','')}")
+                st.write(f"**Email:** {row.get('email','')}")
                 st.write(f"**Representante:** {row.get('representante_nombre','')} ({row.get('representante_dni','')})")
                 st.write(f"**Ciudad:** {row.get('ciudad','')}")
                 st.write(f"**Provincia:** {row.get('provincia','')}")
