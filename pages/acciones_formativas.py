@@ -6,6 +6,7 @@ def main(supabase, session_state):
 
     empresa_id = session_state.user.get("empresa_id")
 
+    # Cargar áreas profesionales
     try:
         areas_res = supabase.table("areas_profesionales").select("*").order("familia", desc=False).execute()
         areas_dict = {f"{a.get('codigo','')} - {a.get('nombre','')}": a.get('codigo','') for a in (areas_res.data or [])}
@@ -13,6 +14,15 @@ def main(supabase, session_state):
         st.error(f"⚠️ No se pudieron cargar las áreas profesionales: {e}")
         areas_dict = {}
 
+    # Cargar grupos de acciones
+    try:
+        grupos_acciones_res = supabase.table("grupos_acciones").select("*").execute()
+        grupos_acciones_data = grupos_acciones_res.data or []
+    except Exception as e:
+        st.error(f"⚠️ No se pudieron cargar los grupos de acciones: {e}")
+        grupos_acciones_data = []
+
+    # Cargar acciones formativas
     try:
         acciones_res = supabase.table("acciones_formativas").select("*").eq("empresa_id", empresa_id).execute()
         df_acciones = pd.DataFrame(acciones_res.data or [])
@@ -48,6 +58,12 @@ def main(supabase, session_state):
         codigo_accion = st.text_input("Código de la acción *")
         nombre_accion = st.text_input("Nombre de la acción *")
         area_sel = st.selectbox("Área profesional", list(areas_dict.keys()) if areas_dict else [])
+
+        cod_area = areas_dict.get(area_sel, "")
+        grupos_filtrados = [g for g in grupos_acciones_data if g["cod_area_profesional"] == cod_area]
+        grupos_dict = {g["nombre"]: g["codigo"] for g in grupos_filtrados}
+        grupo_accion_sel = st.selectbox("Grupo de acciones", list(grupos_dict.keys()) if grupos_dict else ["No disponible"])
+
         sector = st.text_input("Sector")
         objetivos = st.text_area("Objetivos")
         contenidos = st.text_area("Contenidos")
@@ -67,8 +83,9 @@ def main(supabase, session_state):
                 supabase.table("acciones_formativas").insert({
                     "codigo_accion": codigo_accion,
                     "nombre": nombre_accion,
-                    "cod_area_profesional": areas_dict.get(area_sel, ""),
+                    "cod_area_profesional": cod_area,
                     "area_profesional": area_sel.split(" - ", 1)[1] if " - " in area_sel else area_sel,
+                    "codigo_grupo_accion": grupos_dict.get(grupo_accion_sel, ""),
                     "sector": sector,
                     "objetivos": objetivos,
                     "contenidos": contenidos,
@@ -77,7 +94,7 @@ def main(supabase, session_state):
                     "num_horas": int(num_horas),
                     "certificado_profesionalidad": certificado_profesionalidad,
                     "observaciones": observaciones,
-                    "empresa_id": empresa_id  # ✅ Asociación directa
+                    "empresa_id": empresa_id
                 }).execute()
 
                 st.session_state.accion_creada = True
@@ -90,7 +107,7 @@ def main(supabase, session_state):
     if not df_acciones.empty:
         for _, row in df_acciones.iterrows():
             with st.expander(f"{row.get('nombre','')} ({row.get('modalidad','')})"):
-                for campo in ["codigo_accion", "area_profesional", "sector", "objetivos", "contenidos", "nivel", "num_horas", "certificado_profesionalidad", "observaciones"]:
+                for campo in ["codigo_accion", "area_profesional", "codigo_grupo_accion", "sector", "objetivos", "contenidos", "nivel", "num_horas", "certificado_profesionalidad", "observaciones"]:
                     st.write(f"**{campo.replace('_',' ').capitalize()}:** {row.get(campo, '')}")
 
                 col1, col2 = st.columns(2)
@@ -108,6 +125,17 @@ def main(supabase, session_state):
                             list(areas_dict.keys()),
                             index=list(areas_dict.keys()).index(area_actual_key) if area_actual_key in areas_dict else 0
                         )
+
+                        cod_area_actual = areas_dict.get(nueva_area_sel, "")
+                        grupos_filtrados = [g for g in grupos_acciones_data if g["cod_area_profesional"] == cod_area_actual]
+                        grupos_dict = {g["nombre"]: g["codigo"] for g in grupos_filtrados}
+                        grupo_actual_key = next((k for k, v in grupos_dict.items() if v == row.get("codigo_grupo_accion")), "")
+                        nuevo_grupo_accion_sel = st.selectbox(
+                            "Grupo de acciones",
+                            list(grupos_dict.keys()),
+                            index=list(grupos_dict.keys()).index(grupo_actual_key) if grupo_actual_key in grupos_dict else 0
+                        )
+
                         nuevo_sector = st.text_input("Sector", value=row.get("sector", ""))
                         nuevos_objetivos = st.text_area("Objetivos", value=row.get("objetivos", ""))
                         nuevos_contenidos = st.text_area("Contenidos", value=row.get("contenidos", ""))
@@ -134,6 +162,7 @@ def main(supabase, session_state):
                                 "nombre": nuevo_nombre,
                                 "cod_area_profesional": areas_dict.get(nueva_area_sel, ""),
                                 "area_profesional": nueva_area_sel.split(" - ", 1)[1] if " - " in nueva_area_sel else nueva_area_sel,
+                                "codigo_grupo_accion": grupos_dict.get(nuevo_grupo_accion_sel, ""),
                                 "sector": nuevo_sector,
                                 "objetivos": nuevos_objetivos,
                                 "contenidos": nuevos_contenidos,
@@ -142,7 +171,7 @@ def main(supabase, session_state):
                                 "num_horas": int(nuevas_horas),
                                 "certificado_profesionalidad": nuevo_certificado,
                                 "observaciones": nuevas_obs,
-                                "empresa_id": empresa_id  # ✅ Refuerzo de asociación
+                                "empresa_id": empresa_id
                             }).eq("id", row["id"]).execute()
 
                             st.session_state[f"edit_done_{row['id']}"] = True
@@ -160,4 +189,3 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar: {e}")
-                            
