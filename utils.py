@@ -108,6 +108,7 @@ def generar_xml_accion_formativa(accion: dict) -> str:
     ET.SubElement(datos, "CODIGO_ACCION").text = str(accion.get("codigo_accion", ""))
     ET.SubElement(datos, "NOMBRE_ACCION").text = accion.get("nombre", "")
     ET.SubElement(datos, "CODIGO_AREA_PROFESIONAL").text = accion.get("cod_area_profesional", "")
+    ET.SubElement(datos, "CODIGO_GRUPO_ACCION").text = accion.get("codigo_grupo_accion", "")
     ET.SubElement(datos, "SECTOR").text = accion.get("sector") or "No especificado"
     ET.SubElement(datos, "OBJETIVOS").text = accion.get("objetivos") or "No especificado"
     ET.SubElement(datos, "CONTENIDOS").text = accion.get("contenidos") or "No especificado"
