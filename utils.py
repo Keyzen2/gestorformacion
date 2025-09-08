@@ -8,6 +8,7 @@ from lxml import etree
 import xml.etree.ElementTree as ET
 import re
 from datetime import datetime
+import uuid
 
 # =========================
 # Importar participantes desde Excel
@@ -99,8 +100,6 @@ def validar_xml(xml_string: str, xsd_string: str) -> bool:
 # =========================
 # Generador XML: Acción Formativa
 # =========================
-import xml.etree.ElementTree as ET
-
 def generar_xml_accion_formativa(accion: dict) -> str:
     root = ET.Element("ACCIONES_FORMATIVAS", xmlns="http://www.fundae.es/esquemas/accion_formativa")
     af = ET.SubElement(root, "ACCION_FORMATIVA")
@@ -190,8 +189,6 @@ def update_ajustes_app(supabase, data_dict):
 # =========================
 # Subida de archivos a Supabase Storage por empresa
 # =========================
-import uuid
-
 def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
     """
     Sube un archivo a Supabase Storage en una carpeta por empresa.
@@ -261,8 +258,6 @@ def render_texto(texto: str, modo="markdown"):
 # =========================
 # Verificación de módulo activo por empresa
 # =========================
-from datetime import date
-
 def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date, rol: str) -> bool:
     """
     Verifica si un módulo está activo para una empresa en una fecha determinada y para un rol específico.
