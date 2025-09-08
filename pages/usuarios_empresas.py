@@ -9,7 +9,7 @@ def main(supabase, session_state):
     st.caption("Consulta, creación, edición y eliminación de usuarios registrados en la plataforma.")
 
     # =========================
-    # Cargar usuarios
+    # Cargar usuarios y empresas
     # =========================
     usuarios_res = supabase.table("usuarios").select("*").execute()
     usuarios = pd.DataFrame(usuarios_res.data) if usuarios_res.data else pd.DataFrame()
@@ -22,7 +22,7 @@ def main(supabase, session_state):
         return
 
     # =========================
-    # Filtro y resumen
+    # Filtro y exportación
     # =========================
     search_query = st.text_input("🔍 Buscar por nombre o email")
     usuarios_filtrados = usuarios.copy()
@@ -39,6 +39,9 @@ def main(supabase, session_state):
         mime="text/csv"
     )
 
+    # =========================
+    # Listado de usuarios
+    # =========================
     st.markdown("### 📋 Usuarios registrados")
     for _, row in usuarios_filtrados.iterrows():
         rol_icon = {"admin": "🛠️", "gestor": "📋", "alumno": "🎓"}
@@ -69,7 +72,11 @@ def main(supabase, session_state):
                         grupo_id_new = row.get("grupo_id")
 
                         if rol_new == "gestor":
-                            empresa_nombre_sel = st.selectbox("Empresa asignada", sorted(empresas_dict.keys()), index=list(empresas_dict.values()).index(empresa_id_new) if empresa_id_new in empresas_dict.values() else 0)
+                            empresa_nombre_sel = st.selectbox(
+                                "Empresa asignada",
+                                sorted(empresas_dict.keys()),
+                                index=list(empresas_dict.values()).index(empresa_id_new) if empresa_id_new in empresas_dict.values() else 0
+                            )
                             empresa_id_new = empresas_dict.get(empresa_nombre_sel)
 
                         if rol_new == "alumno":
@@ -124,15 +131,15 @@ def main(supabase, session_state):
                 nombre_new = st.text_input("👤 Nombre *")
                 password_new = st.text_input("🔒 Contraseña *", type="password")
             with col2:
-                rol_new = st.selectbox("🎓 Rol", ["admin", "gestor", "alumno"], key="rol_creacion")
+                rol_new = st.selectbox("🎓 Rol", ["admin", "gestor", "alumno"])
                 empresa_id_new = None
                 grupo_id_new = None
 
-                if st.session_state.rol_creacion == "gestor":
-                    empresa_nombre_sel = st.selectbox("🏢 Empresa asignada", sorted(empresas_dict.keys()), key="empresa_sel")
+                if rol_new == "gestor":
+                    empresa_nombre_sel = st.selectbox("🏢 Empresa asignada", sorted(empresas_dict.keys()))
                     empresa_id_new = empresas_dict.get(empresa_nombre_sel)
 
-                if st.session_state.rol_creacion == "alumno":
+                if rol_new == "alumno":
                     grupo_id_new = st.text_input("👥 Grupo ID asignado (opcional)", help="Solo el ID. La gestión de grupos se realiza en grupos.py")
 
             submitted_user = st.form_submit_button("✅ Crear usuario")
@@ -140,20 +147,22 @@ def main(supabase, session_state):
             if submitted_user:
                 if not email_new or not nombre_new or not password_new:
                     st.error("⚠️ Todos los campos son obligatorios.")
-                elif st.session_state.rol_creacion == "gestor" and not empresa_id_new:
+                elif rol_new == "gestor" and not empresa_id_new:
                     st.error("⚠️ Debes seleccionar una empresa para el gestor.")
                 else:
                     try:
-                        if st.session_state.rol_creacion == "alumno":
+                        if rol_new == "alumno":
                             creado = alta_alumno(supabase, email=email_new, password=password_new, nombre=nombre_new, grupo_id=grupo_id_new)
                             if creado:
                                 st.success(f"✅ Usuario '{nombre_new}' creado correctamente.")
                                 st.rerun()
                         else:
+                            # Comprobar si ya existe en tabla usuarios
                             existe = supabase.table("usuarios").select("id").eq("email", email_new).execute()
                             if existe.data:
                                 st.error(f"⚠️ Ya existe un usuario con el email '{email_new}'.")
                             else:
+                                # Crear en Auth
                                 auth_res = supabase.auth.admin.create_user({
                                     "email": email_new,
                                     "password": password_new,
@@ -163,15 +172,17 @@ def main(supabase, session_state):
                                     st.error("❌ Error al crear el usuario en Auth.")
                                     return
 
+                                # Insertar en tabla usuarios
                                 insert_data = {
                                     "auth_id": auth_res.user.id,
                                     "email": email_new,
                                     "nombre": nombre_new,
-                                    "rol": st.session_state.rol_creacion
+                                    "rol": rol_new,
+                                    "created_at": datetime.utcnow().isoformat()
                                 }
-                                if empresa_id_new:
+                                if rol_new == "gestor" and empresa_id_new:
                                     insert_data["empresa_id"] = empresa_id_new
-                                if grupo_id_new:
+                                if rol_new == "alumno" and grupo_id_new:
                                     insert_data["grupo_id"] = grupo_id_new
 
                                 supabase.table("usuarios").insert(insert_data).execute()
