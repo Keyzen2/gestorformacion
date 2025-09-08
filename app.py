@@ -411,6 +411,7 @@ else:
     except Exception as e:
         st.error(f"❌ Error al cargar la página '{page or 'inicio'}': {e}")
 
+
 # ===============================
 # MÉTRICAS DINÁMICAS POR ROL
 # ===============================
