@@ -62,6 +62,9 @@ def main(supabase, session_state):
             provincia = st.text_input("Provincia")
             cp = st.text_input("Código postal")
             n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
+            n_finalizados = st.number_input("Nº participantes finalizados", min_value=0, step=1)
+            n_aptos = st.number_input("Nº participantes aptos", min_value=0, step=1)
+            n_no_aptos = st.number_input("Nº participantes no aptos", min_value=0, step=1)
             observaciones = st.text_area("Observaciones")
             submitted_new = st.form_submit_button("➕ Crear Grupo")
 
@@ -77,6 +80,9 @@ def main(supabase, session_state):
                     "provincia": provincia,
                     "cp": cp,
                     "n_participantes_previstos": int(n_previstos),
+                    "n_participantes_finalizados": int(n_finalizados),
+                    "n_aptos": int(n_aptos),
+                    "n_no_aptos": int(n_no_aptos),
                     "observaciones": observaciones
                 }).execute()
                 st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
@@ -187,3 +193,4 @@ def main(supabase, session_state):
                     st.info("ℹ️ Este grupo no tiene participantes asignados.")
             except Exception as e:
                 st.error(f"❌ Error al cargar participantes del grupo: {e}")
+
