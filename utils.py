@@ -67,10 +67,13 @@ def generar_pdf(nombre_archivo, contenido="Documento generado", encabezado=None)
 # =========================
 # Validación de XML con XSD
 # =========================
-from lxml import etree
-
 def validar_xml(xml_string: str, xsd_string: str) -> bool:
     try:
+        # Verificar que el esquema XSD comienza con una etiqueta válida
+        if not xsd_string.strip().startswith("<"):
+            st.error("❌ El esquema XSD no se ha cargado correctamente. Verifica la URL o el archivo.")
+            return False
+
         # Parsear el esquema XSD
         xsd_doc = etree.XML(xsd_string.encode("utf-8"))
         schema = etree.XMLSchema(xsd_doc)
@@ -121,7 +124,7 @@ def generar_xml_accion_formativa(accion: dict) -> str:
 # Generador XML: Inicio de Grupo
 # =========================
 def generar_xml_inicio_grupo(grupo: dict) -> str:
-    root = ET.Element("INICIO_GRUPO", xmlns="http://www.fundae.es/esquemas/inicio_grupo")
+    root = ET.Element("INICIO_GRUPO", xmlns="http://www.fundae.es/esquemas/InicioGrupos_Organizadora")
     datos = ET.SubElement(root, "DATOS_GRUPO")
 
     ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
@@ -141,7 +144,7 @@ def generar_xml_inicio_grupo(grupo: dict) -> str:
 # Generador XML: Finalización de Grupo
 # =========================
 def generar_xml_finalizacion_grupo(grupo: dict) -> str:
-    root = ET.Element("FINALIZACION_GRUPO", xmlns="http://www.fundae.es/esquemas/finalizacion_grupo")
+    root = ET.Element("FINALIZACION_GRUPO", xmlns="http://www.fundae.es/esquemas/FinalizacionGrupo_Organizadora")
     datos = ET.SubElement(root, "DATOS_FINALIZACION")
 
     ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
