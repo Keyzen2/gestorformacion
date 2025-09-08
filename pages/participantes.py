@@ -256,6 +256,17 @@ def main(supabase, session_state):
                         else:
                             try:
                                 empresa_id = row.get("empresa_id")
+
+                                # Si no tiene empresa, intentar obtenerla desde el grupo
+                                if not empresa_id:
+                                    grupo_id = row.get("grupo_id")
+                                    grupo_res = supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
+                                    if grupo_res.data:
+                                        empresa_id = grupo_res.data[0]["empresa_id"]
+                                    else:
+                                        st.error("❌ No se pudo determinar la empresa del grupo.")
+                                        return
+
                                 nombre_archivo = f"diploma_{row['id']}_{grupo_id}_{fecha_subida.isoformat()}.pdf"
                                 ruta_archivo = f"{empresa_id}/diplomas/{nombre_archivo}"
                                 file_bytes = archivo.read()
