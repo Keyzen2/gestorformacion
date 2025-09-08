@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from io import BytesIO
 from utils import is_module_active
 
 def main(supabase, session_state):
@@ -39,7 +38,7 @@ def main(supabase, session_state):
     )
     st.divider()
 
-    # Crear grupo
+    # Crear grupo (inicio)
     puede_crear = (
         session_state.role == "admin" or
         (session_state.role == "gestor" and empresa_id and is_module_active(
@@ -57,14 +56,11 @@ def main(supabase, session_state):
             codigo_grupo = st.text_input("Código del grupo *")
             accion_sel = st.selectbox("Acción formativa", sorted(acciones_dict.keys()))
             fecha_inicio = st.date_input("Fecha inicio")
-            fecha_fin = st.date_input("Fecha fin")
+            fecha_fin_prevista = st.date_input("Fecha fin prevista")
             localidad = st.text_input("Localidad")
             provincia = st.text_input("Provincia")
             cp = st.text_input("Código postal")
             n_previstos = st.number_input("Nº participantes previstos", min_value=0, step=1)
-            n_finalizados = st.number_input("Nº participantes finalizados", min_value=0, step=1)
-            n_aptos = st.number_input("Nº participantes aptos", min_value=0, step=1)
-            n_no_aptos = st.number_input("Nº participantes no aptos", min_value=0, step=1)
             observaciones = st.text_area("Observaciones")
             submitted_new = st.form_submit_button("➕ Crear Grupo")
 
@@ -75,15 +71,13 @@ def main(supabase, session_state):
                     "empresa_id": empresa_id if session_state.role == "gestor" else None,
                     "accion_formativa_id": acciones_dict.get(accion_sel),
                     "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin": fecha_fin.isoformat(),
+                    "fecha_fin_prevista": fecha_fin_prevista.isoformat(),
                     "localidad": localidad,
                     "provincia": provincia,
                     "cp": cp,
                     "n_participantes_previstos": int(n_previstos),
-                    "n_participantes_finalizados": int(n_finalizados),
-                    "n_aptos": int(n_aptos),
-                    "n_no_aptos": int(n_no_aptos),
-                    "observaciones": observaciones
+                    "observaciones": observaciones,
+                    "estado": "abierto"
                 }).execute()
                 st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente.")
                 st.rerun()
@@ -96,8 +90,10 @@ def main(supabase, session_state):
     if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
         st.markdown("### 👥 Asignar participantes a grupo")
         try:
-            filtro = {"empresa_id": empresa_id} if session_state.role == "gestor" else {}
-            part_res = supabase.table("participantes").select("id,nombre,email,dni").eq(**filtro).execute()
+            if session_state.role == "gestor":
+                part_res = supabase.table("participantes").select("id,nombre,email,dni").eq("empresa_id", empresa_id).execute()
+            else:
+                part_res = supabase.table("participantes").select("id,nombre,email,dni").execute()
             df_part = pd.DataFrame(part_res.data or [])
         except Exception as e:
             st.error(f"❌ Error al cargar participantes: {e}")
@@ -134,8 +130,10 @@ def main(supabase, session_state):
             if "dni" not in df_import.columns:
                 st.error("❌ El archivo debe contener la columna 'dni'.")
             else:
-                filtro = {"empresa_id": empresa_id} if session_state.role == "gestor" else {}
-                part_res = supabase.table("participantes").select("id,dni").eq(**filtro).execute()
+                if session_state.role == "gestor":
+                    part_res = supabase.table("participantes").select("id,dni").eq("empresa_id", empresa_id).execute()
+                else:
+                    part_res = supabase.table("participantes").select("id,dni").execute()
                 participantes_existentes = {p["dni"]: p["id"] for p in (part_res.data or [])}
 
                 creados = 0
@@ -167,7 +165,7 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error al procesar el archivo: {e}")
 
-    # Vista de participantes por grupo
+    # Vista de participantes por grupo + cierre
     st.markdown("### 📋 Participantes por grupo")
     for _, grupo in df_grupos.iterrows():
         with st.expander(f"👥 {grupo['codigo_grupo']}"):
@@ -194,3 +192,35 @@ def main(supabase, session_state):
             except Exception as e:
                 st.error(f"❌ Error al cargar participantes del grupo: {e}")
 
+            # 🧩 Cierre de grupo si está vencido y abierto
+            try:
+                fecha_fin_prevista = pd.to_datetime(grupo.get("fecha_fin_prevista")).date() if grupo.get("fecha_fin_prevista") else None
+                estado = grupo.get("estado", "abierto")
+
+                if estado == "abierto" and fecha_fin_prevista and fecha_fin_prevista < datetime.today().date():
+                    st.warning("⚠️ Este grupo ha vencido y aún no ha sido cerrado.")
+
+                    with st.form(f"cerrar_grupo_{grupo['id']}"):
+                        fecha_fin_real = st.date_input("Fecha real de fin", value=datetime.today().date())
+                        n_finalizados = st.number_input("Nº participantes finalizados", min_value=0, step=1)
+                        n_aptos = st.number_input("Nº participantes aptos", min_value=0, step=1)
+                        n_no_aptos = st.number_input("Nº participantes no aptos", min_value=0, step=1)
+                        observaciones_final = st.text_area("Observaciones de cierre", value=grupo.get("observaciones", ""))
+                        cerrar = st.form_submit_button("✅ Cerrar grupo")
+
+                        if cerrar:
+                            try:
+                                supabase.table("grupos").update({
+                                    "fecha_fin": fecha_fin_real.isoformat(),
+                                    "n_participantes_finalizados": int(n_finalizados),
+                                    "n_aptos": int(n_aptos),
+                                    "n_no_aptos": int(n_no_aptos),
+                                    "observaciones": observaciones_final,
+                                    "estado": "cerrado"
+                                }).eq("id", grupo["id"]).execute()
+                                st.success("✅ Grupo cerrado correctamente.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al cerrar el grupo: {e}")
+            except Exception as e:
+                st.error(f"❌ Error al evaluar vencimiento del grupo: {e}")
