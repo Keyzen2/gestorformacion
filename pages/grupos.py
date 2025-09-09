@@ -187,7 +187,7 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al actualizar el grupo: {e}")
-                                st.divider()
+                        st.divider()
 
     # Asignar participantes a grupo
     if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
@@ -252,7 +252,7 @@ def main(supabase, session_state):
                 except Exception as e:
                     st.error(f"❌ Error al asignar: {e}")
 
-    st.divider()
+                st.divider()
 
     # Importar participantes desde Excel
     st.markdown("### 📤 Importar participantes a grupo desde Excel")
@@ -325,7 +325,7 @@ def main(supabase, session_state):
             except Exception as e:
                 st.error(f"❌ Error al procesar el archivo: {e}")
 
-    st.divider()
+            st.divider()
 
     # Participantes por grupo
     st.markdown("### 📋 Participantes por grupo")
