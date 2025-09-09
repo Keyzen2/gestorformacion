@@ -1,18 +1,14 @@
 import streamlit as st
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-import pandas as pd
 
-def listado_crud(df, columnas_visibles, titulo, on_save, on_create, id_col="id"):
+def listado_crud(df, columnas_visibles, titulo, on_save, on_create, id_col="id", campos_select=None):
     """
     Muestra un listado interactivo con filtros, ficha editable y alta de nuevos registros.
     
-    df: DataFrame con los datos (incluyendo columna id_col para actualizaciones)
-    columnas_visibles: lista de columnas que se mostrarán en la tabla
-    titulo: título de la ficha
-    on_save: función que recibe (id, datos_editados) para guardar cambios
-    on_create: función que recibe (datos_nuevos) para crear un registro
-    id_col: nombre de la columna que contiene el identificador interno
+    campos_select: dict opcional con { "NombreColumna": ["Opción1", "Opción2", ...] }
     """
+    campos_select = campos_select or {}
+
     st.subheader(f"📋 {titulo}")
 
     # Tabla interactiva
@@ -39,7 +35,10 @@ def listado_crud(df, columnas_visibles, titulo, on_save, on_create, id_col="id")
             datos_editados = {}
             for col in columnas_visibles:
                 if col != id_col:
-                    datos_editados[col] = st.text_input(col, value=fila[col] or "")
+                    if col in campos_select:
+                        datos_editados[col] = st.selectbox(col, campos_select[col], index=campos_select[col].index(fila[col]) if fila[col] in campos_select[col] else 0)
+                    else:
+                        datos_editados[col] = st.text_input(col, value=fila[col] or "")
             if st.form_submit_button("💾 Guardar cambios"):
                 on_save(fila[id_col], datos_editados)
 
@@ -50,7 +49,10 @@ def listado_crud(df, columnas_visibles, titulo, on_save, on_create, id_col="id")
         datos_nuevos = {}
         for col in columnas_visibles:
             if col != id_col:
-                datos_nuevos[col] = st.text_input(col)
+                if col in campos_select:
+                    datos_nuevos[col] = st.selectbox(col, campos_select[col])
+                else:
+                    datos_nuevos[col] = st.text_input(col)
         if st.form_submit_button("✅ Crear"):
             on_create(datos_nuevos)
-          
+            
