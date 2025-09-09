@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from utils import export_csv
 
 def main(supabase, session_state):
     st.subheader("👨‍🏫 Tutores")
@@ -20,18 +21,26 @@ def main(supabase, session_state):
         return
 
     # =========================
+    # Exportar CSV completo
+    # =========================
+    if not df_tutores.empty:
+        export_csv(df_tutores, filename="tutores.csv")
+        st.divider()
+
+    # =========================
     # Filtros
     # =========================
     if not df_tutores.empty:
         st.markdown("### 🔍 Filtros")
         filtro_nombre = st.text_input("Buscar por nombre, apellidos o NIF")
-        tipo_filter = st.selectbox("Filtrar por tipo", ["Todos", "Interno", "Externo"])
+        tipo_filter   = st.selectbox("Filtrar por tipo", ["Todos", "Interno", "Externo"])
 
         if filtro_nombre:
+            sq = filtro_nombre.lower()
             df_tutores = df_tutores[
-                df_tutores["nombre"].str.contains(filtro_nombre, case=False, na=False) |
-                df_tutores["apellidos"].str.contains(filtro_nombre, case=False, na=False) |
-                df_tutores["nif"].str.contains(filtro_nombre, case=False, na=False)
+                df_tutores["nombre"].str.lower().str.contains(sq, na=False) |
+                df_tutores["apellidos"].str.lower().str.contains(sq, na=False) |
+                df_tutores["nif"].str.lower().str.contains(sq, na=False)
             ]
         if tipo_filter != "Todos":
             df_tutores = df_tutores[df_tutores["tipo_tutor"] == tipo_filter]
@@ -45,8 +54,8 @@ def main(supabase, session_state):
         # =========================
         # Paginación
         # =========================
-        page_size = st.selectbox("Registros por página", [5, 10, 20, 50], index=1)
-        total_rows = len(df_tutores)
+        page_size   = st.selectbox("Registros por página", [5, 10, 20, 50], index=1)
+        total_rows  = len(df_tutores)
         total_pages = (total_rows - 1) // page_size + 1
         page_actual = st.session_state.page_tutores
 
@@ -59,7 +68,7 @@ def main(supabase, session_state):
                 st.session_state.page_tutores += 1
 
         start_idx = (st.session_state.page_tutores - 1) * page_size
-        end_idx = start_idx + page_size
+        end_idx   = start_idx + page_size
         st.caption(f"Página {st.session_state.page_tutores} de {total_pages}")
 
         # =========================
@@ -80,9 +89,21 @@ def main(supabase, session_state):
                 # Mostrar grupos asignados
                 # =========================
                 try:
-                    grupos_asignados = supabase.table("tutores_grupos").select("grupo_id").eq("tutor_id", row["id"]).execute().data or []
+                    grupos_asignados = (
+                        supabase.table("tutores_grupos")
+                                 .select("grupo_id")
+                                 .eq("tutor_id", row["id"])
+                                 .execute()
+                                 .data
+                    ) or []
                     grupo_ids = [g["grupo_id"] for g in grupos_asignados]
-                    grupos_info = supabase.table("grupos").select("id, codigo_grupo").in_("id", grupo_ids).execute().data or []
+                    grupos_info = (
+                        supabase.table("grupos")
+                                 .select("id,codigo_grupo")
+                                 .in_("id", grupo_ids)
+                                 .execute()
+                                 .data
+                    ) or []
 
                     if grupos_info:
                         st.write("**Grupos asignados:**")
@@ -100,55 +121,58 @@ def main(supabase, session_state):
                 # =========================
                 with col1:
                     with st.form(f"edit_form_{row['id']}", clear_on_submit=True):
-                        nuevo_nombre = st.text_input("Nombre", value=row["nombre"])
+                        nuevo_nombre     = st.text_input("Nombre", value=row["nombre"])
                         nuevos_apellidos = st.text_input("Apellidos", value=row["apellidos"])
-                        nuevo_email = st.text_input("Email", value=row.get("email", ""))
-                        nuevo_telefono = st.text_input("Teléfono", value=row.get("telefono", ""))
-                        nuevo_nif = st.text_input("NIF/DNI", value=row.get("nif", ""))
-                        tipos = ["Interno", "Externo"]
-                        tipo_actual = row.get("tipo_tutor") if row.get("tipo_tutor") in tipos else "Interno"
-                        nuevo_tipo = st.selectbox("Tipo de Tutor", tipos, index=tipos.index(tipo_actual))
-                        nueva_direccion = st.text_input("Dirección", value=row.get("direccion", ""))
-                        nueva_ciudad = st.text_input("Ciudad", value=row.get("ciudad", ""))
-                        nueva_provincia = st.text_input("Provincia", value=row.get("provincia", ""))
-                        nuevo_cp = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
-
+                        nuevo_email      = st.text_input("Email", value=row.get("email", ""))
+                        nuevo_telefono   = st.text_input("Teléfono", value=row.get("telefono", ""))
+                        nuevo_nif        = st.text_input("NIF/DNI", value=row.get("nif", ""))
+                        tipos            = ["Interno", "Externo"]
+                        tipo_actual      = row.get("tipo_tutor") if row.get("tipo_tutor") in tipos else "Interno"
+                        nuevo_tipo       = st.selectbox("Tipo de Tutor", tipos, index=tipos.index(tipo_actual))
+                        nueva_direccion  = st.text_input("Dirección", value=row.get("direccion", ""))
+                        nueva_ciudad     = st.text_input("Ciudad", value=row.get("ciudad", ""))
+                        nueva_provincia  = st.text_input("Provincia", value=row.get("provincia", ""))
+                        nuevo_cp         = st.text_input("Código Postal", value=row.get("codigo_postal", ""))
                         guardar = st.form_submit_button("💾 Guardar cambios")
-                        if guardar:
-                            try:
-                                supabase.table("tutores").update({
-                                    "nombre": nuevo_nombre,
-                                    "apellidos": nuevos_apellidos,
-                                    "email": nuevo_email,
-                                    "telefono": nuevo_telefono,
-                                    "nif": nuevo_nif,
-                                    "tipo_tutor": nuevo_tipo,
-                                    "direccion": nueva_direccion,
-                                    "ciudad": nueva_ciudad,
-                                    "provincia": nueva_provincia,
-                                    "codigo_postal": nuevo_cp
-                                }).eq("id", row["id"]).execute()
-                                st.success("✅ Cambios guardados correctamente.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error al actualizar: {str(e)}")
+                    if guardar:
+                        try:
+                            supabase.table("tutores").update({
+                                "nombre":       nuevo_nombre,
+                                "apellidos":    nuevos_apellidos,
+                                "email":        nuevo_email,
+                                "telefono":     nuevo_telefono,
+                                "nif":          nuevo_nif,
+                                "tipo_tutor":   nuevo_tipo,
+                                "direccion":    nueva_direccion,
+                                "ciudad":       nueva_ciudad,
+                                "provincia":    nueva_provincia,
+                                "codigo_postal": nuevo_cp
+                            }).eq("id", row["id"]).execute()
+                            st.success("✅ Cambios guardados correctamente.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar: {e}")
 
                 # =========================
                 # Formulario de eliminación
                 # =========================
                 with col2:
-                    with st.form(f"delete_form_{row['id']}"):
-                        st.warning(f"⚠️ Vas a eliminar al tutor '{row['nombre']} {row['apellidos']}'. Esta acción no se puede deshacer.")
+                    with st.form(f"delete_form_{row['id']}", clear_on_submit=True):
+                        st.warning(
+                            f"⚠️ Vas a eliminar al tutor "
+                            f"'{row['nombre']} {row['apellidos']}'. "
+                            "Esta acción no se puede deshacer."
+                        )
                         confirmar = st.checkbox("✅ Confirmo que quiero eliminar este tutor")
-                        eliminar = st.form_submit_button("🗑️ Eliminar definitivamente")
+                        eliminar  = st.form_submit_button("🗑️ Eliminar definitivamente")
 
-                        if eliminar and confirmar:
-                            try:
-                                supabase.table("tutores").delete().eq("id", row["id"]).execute()
-                                st.success("✅ Tutor eliminado.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"❌ Error al eliminar: {str(e)}")
+                    if eliminar and confirmar:
+                        try:
+                            supabase.table("tutores").delete().eq("id", row["id"]).execute()
+                            st.success("✅ Tutor eliminado.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {e}")
 
     else:
         st.info("ℹ️ No hay tutores registrados.")
