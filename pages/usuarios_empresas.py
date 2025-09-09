@@ -16,7 +16,7 @@ def main(supabase, session_state):
     # Cargar datos y opciones
     # =========================
     usuarios_res = supabase.table("usuarios").select(
-        "id, auth_id, nombre, email, rol, empresa:empresa_id(nombre), grupo:grupo_id(codigo_grupo), created_at, dni"
+        "id, auth_id, nombre, email, rol, empresa:empresa_id!fk_empresa(nombre), grupo:grupo_id(codigo_grupo), created_at, dni"
     ).execute()
     df = pd.DataFrame(usuarios_res.data or [])
 
@@ -155,4 +155,4 @@ def main(supabase, session_state):
             "Empresa": empresas_opciones,
             "Grupo": grupos_opciones
         }
-            )
+    )
