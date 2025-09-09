@@ -33,18 +33,30 @@ def main(supabase, session_state):
     # =========================
     # Construir consultas filtradas
     # =========================
-    grupos_query = supabase.table("grupos").select("id, codigo_grupo, fecha_fin, empresa_id, tutor_id")
+    grupos_query = supabase.table("grupos").select("id, codigo_grupo, fecha_fin, empresa_id")
+
     if empresa_sel != "Todas":
         empresa_id = next(i for i, n in empresas_dict.items() if n == empresa_sel)
         grupos_query = grupos_query.eq("empresa_id", empresa_id)
+
     if tutor_sel != "Todos":
         tutor_id = next(i for i, n in tutores_dict.items() if n == tutor_sel)
-        grupos_query = grupos_query.eq("tutor_id", tutor_id)
+        # Buscar grupos asociados a este tutor en la tabla intermedia
+        grupos_ids_res = supabase.table("tutores_grupos").select("grupo_id").eq("tutor_id", tutor_id).execute().data or []
+        grupos_ids = [g["grupo_id"] for g in grupos_ids_res]
+        if grupos_ids:
+            grupos_query = grupos_query.in_("id", grupos_ids)
+        else:
+            # Si no hay grupos para este tutor, devolvemos lista vacía
+            grupos_res = []
+            grupos_query = None
+
     if fecha_inicio:
-        grupos_query = grupos_query.gte("fecha_fin", fecha_inicio.isoformat())
+        grupos_query = grupos_query.gte("fecha_fin", fecha_inicio.isoformat()) if grupos_query else None
     if fecha_fin:
-        grupos_query = grupos_query.lte("fecha_fin", fecha_fin.isoformat())
-    grupos_res = grupos_query.execute().data or []
+        grupos_query = grupos_query.lte("fecha_fin", fecha_fin.isoformat()) if grupos_query else None
+
+    grupos_res = grupos_query.execute().data if grupos_query else []
 
     # Otras tablas (sin filtros de fecha salvo que aplique)
     diplomas_res = supabase.table("diplomas").select("id, url, participante_id, grupo_id").execute().data or []
@@ -150,4 +162,3 @@ def main(supabase, session_state):
 
     st.divider()
     st.caption("Este panel se actualiza automáticamente cada vez que accedes.")
-    
