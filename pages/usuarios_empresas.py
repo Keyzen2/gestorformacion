@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from services.users import create_user, update_user, delete_user
-from utils import ROLES
+from utils import ROLES, export_csv, validar_dni_cif
 
 def main(supabase, session_state):
     st.title("👥 Gestión de Usuarios")
@@ -18,12 +18,10 @@ def main(supabase, session_state):
     usuarios = pd.DataFrame(usuarios_res.data or [])
 
     empresas_res = supabase.table("empresas").select("id,nombre").execute()
-    empresas = empresas_res.data or []
-    empresas_dict = {e["nombre"]: e["id"] for e in empresas}
+    empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
 
     grupos_res = supabase.table("grupos").select("id,codigo_grupo").execute()
-    grupos = grupos_res.data or []
-    grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos}
+    grupos_dict = {g["codigo_grupo"]: g["id"] for g in (grupos_res.data or [])}
 
     # Búsqueda y exportación CSV
     search = st.text_input("🔍 Buscar por nombre o email")
@@ -36,13 +34,7 @@ def main(supabase, session_state):
         usuarios_filtrados = usuarios_filtrados[mask]
 
     if not usuarios_filtrados.empty:
-        csv = usuarios_filtrados.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "⬇️ Descargar CSV",
-            data=csv,
-            file_name="usuarios.csv",
-            mime="text/csv"
-        )
+        export_csv(usuarios_filtrados, filename="usuarios.csv")
     else:
         st.info("ℹ️ No hay usuarios para mostrar.")
 
@@ -50,19 +42,25 @@ def main(supabase, session_state):
     st.markdown("### 📋 Usuarios registrados")
 
     for _, row in usuarios_filtrados.iterrows():
-        icon = {"admin":"🛠️","gestor":"📋","alumno":"🎓"}.get(row["rol"], "👤")
+        icon = {"admin": "🛠️", "gestor": "📋", "alumno": "🎓"}.get(row["rol"], "👤")
         with st.expander(f"{icon}  {row['nombre']}  ({row['email']})"):
             # Detalles
             st.markdown(f"**🆔 ID:** {row['id']}")
             st.markdown(f"**📧 Email:** {row['email']}")
             st.markdown(f"**🎓 Rol:** {row['rol'].capitalize()}")
             if row.get("empresa_id"):
-                emp_name = next((n for n,i in empresas_dict.items() if i==row["empresa_id"]), row["empresa_id"])
+                emp_name = next((n for n, i in empresas_dict.items() if i == row["empresa_id"]), row["empresa_id"])
                 st.markdown(f"**🏢 Empresa:** {emp_name}")
             if row.get("grupo_id"):
-                grp_name = next((n for n,i in grupos_dict.items() if i==row["grupo_id"]), row["grupo_id"])
+                grp_name = next((n for n, i in grupos_dict.items() if i == row["grupo_id"]), row["grupo_id"])
                 st.markdown(f"**👥 Grupo:** {grp_name}")
-            st.markdown(f"**📅 Alta:** {row.get('created_at','—')}")
+            fecha_alta = row.get('created_at')
+            if fecha_alta:
+                try:
+                    fecha_alta = datetime.fromisoformat(fecha_alta).strftime("%d/%m/%Y")
+                except Exception:
+                    pass
+            st.markdown(f"**📅 Alta:** {fecha_alta or '—'}")
 
             # Pestañas Editar / Eliminar
             tab_edit, tab_delete = st.tabs(["✏️ Editar", "🗑️ Eliminar"])
@@ -70,9 +68,9 @@ def main(supabase, session_state):
             # ----- EDITAR -----
             with tab_edit:
                 with st.form(f"form_edit_{row['id']}", clear_on_submit=True):
-                    nombre_new = st.text_input("Nombre *", value=row.get("nombre",""))
-                    email_new  = st.text_input("Email *",  value=row.get("email",""))
-                    rol_new    = st.selectbox("Rol *", sorted(ROLES), index=list(sorted(ROLES)).index(row["rol"]))
+                    nombre_new = st.text_input("Nombre *", value=row.get("nombre", ""))
+                    email_new = st.text_input("Email *", value=row.get("email", ""))
+                    rol_new = st.selectbox("Rol *", sorted(ROLES), index=list(sorted(ROLES)).index(row["rol"]))
                     emp_id_new = row.get("empresa_id")
                     grp_id_new = row.get("grupo_id")
 
@@ -81,7 +79,7 @@ def main(supabase, session_state):
                             "Empresa asignada *",
                             sorted(empresas_dict.keys()),
                             index=list(empresas_dict.keys()).index(
-                                next((n for n,i in empresas_dict.items() if i==emp_id_new), "")
+                                next((n for n, i in empresas_dict.items() if i == emp_id_new), "")
                             ) if emp_id_new else 0
                         )
                         emp_id_new = empresas_dict[sel]
@@ -92,7 +90,7 @@ def main(supabase, session_state):
                             "Grupo asignado *",
                             sorted(grupos_dict.keys()),
                             index=list(grupos_dict.keys()).index(
-                                next((n for n,i in grupos_dict.items() if i==grp_id_new), "")
+                                next((n for n, i in grupos_dict.items() if i == grp_id_new), "")
                             ) if grp_id_new else 0
                         )
                         grp_id_new = grupos_dict[sel]
@@ -150,6 +148,7 @@ def main(supabase, session_state):
         rol_new      = st.selectbox("🎓 Rol *", sorted(ROLES))
         emp_id_new   = None
         grp_id_new   = None
+        dni_new      = st.text_input("🆔 DNI/NIE/CIF (opcional)")
 
         if rol_new == "gestor":
             sel = st.selectbox("🏢 Empresa asignada *", sorted(empresas_dict.keys()))
@@ -167,6 +166,8 @@ def main(supabase, session_state):
             st.error("⚠️ Debes seleccionar una empresa para el gestor.")
         elif rol_new == "alumno" and not grp_id_new:
             st.error("⚠️ Debes seleccionar un grupo para el alumno.")
+        elif dni_new and not validar_dni_cif(dni_new):
+            st.error("⚠️ El DNI/NIE/CIF no es válido.")
         else:
             try:
                 create_user(
@@ -176,7 +177,8 @@ def main(supabase, session_state):
                     nombre=nombre_new,
                     rol=rol_new,
                     empresa_id=emp_id_new,
-                    grupo_id=grp_id_new
+                    grupo_id=grp_id_new,
+                    dni=dni_new or None
                 )
                 st.success(f"✅ Usuario '{nombre_new}' creado correctamente.")
                 st.rerun()
