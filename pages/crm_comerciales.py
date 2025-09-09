@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import re
 from datetime import datetime
 
 def main(supabase, session_state):
@@ -14,20 +15,35 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
 
+    # --- Selector de empresa para admin ---
+    if rol == "admin":
+        try:
+            empresas_res = supabase.table("empresas").select("id,nombre").execute().data or []
+            empresas_dict = {e["nombre"]: e["id"] for e in empresas_res}
+            empresa_sel = st.selectbox("Empresa", list(empresas_dict.keys()))
+            empresa_id_sel = empresas_dict[empresa_sel]
+        except Exception as e:
+            st.error(f"❌ Error al cargar empresas: {e}")
+            return
+    else:
+        empresa_id_sel = empresa_id
+
     # --- Cargar comerciales ---
     try:
-        if rol == "gestor":
-            comerciales_res = supabase.table("comerciales").select("*").eq("empresa_id", empresa_id).execute()
-        else:  # admin ve todos
-            comerciales_res = supabase.table("comerciales").select("*").execute()
-
+        comerciales_res = supabase.table("comerciales")\
+                                   .select("*")\
+                                   .eq("empresa_id", empresa_id_sel)\
+                                   .execute()
         comerciales = comerciales_res.data or []
         if comerciales:
             df = pd.DataFrame(comerciales)
             st.markdown("### 📋 Comerciales registrados")
-            st.dataframe(df[["nombre", "email", "telefono", "activo", "fecha_alta"]])
+            columnas = ["nombre", "email", "telefono", "activo", "fecha_alta"]
+            if rol == "admin":
+                columnas.insert(0, "empresa_id")
+            st.dataframe(df[columnas])
         else:
-            st.info("No hay comerciales registrados.")
+            st.info("No hay comerciales registrados para esta empresa.")
     except Exception as e:
         st.error(f"❌ Error al cargar comerciales: {e}")
         comerciales = []
@@ -46,34 +62,42 @@ def main(supabase, session_state):
     if enviar:
         if not nombre or not email:
             st.warning("⚠️ Nombre y email son obligatorios.")
+        elif not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+            st.error("⚠️ El email no tiene un formato válido.")
         else:
-            try:
-                usuario_id = None
-                if crear_usuario:
-                    # Crear usuario en tabla usuarios con rol 'comercial'
-                    # Nota: Aquí asumimos que la contraseña se gestiona aparte o se envía invitación
-                    usuario_res = supabase.table("usuarios").insert({
-                        "email": email,
-                        "nombre": nombre,
-                        "rol": "comercial",
-                        "empresa_id": empresa_id if rol == "gestor" else None
-                    }).execute()
-                    if usuario_res.data:
-                        usuario_id = usuario_res.data[0]["id"]
+            # Evitar duplicados
+            existe = supabase.table("comerciales")\
+                             .select("id")\
+                             .eq("email", email)\
+                             .execute().data
+            if existe:
+                st.error("⚠️ Ya existe un comercial con este email.")
+            else:
+                try:
+                    usuario_id = None
+                    if crear_usuario:
+                        usuario_res = supabase.table("usuarios").insert({
+                            "email": email,
+                            "nombre": nombre,
+                            "rol": "comercial",
+                            "empresa_id": empresa_id_sel
+                        }).execute()
+                        if usuario_res.data:
+                            usuario_id = usuario_res.data[0]["id"]
 
-                supabase.table("comerciales").insert({
-                    "empresa_id": empresa_id if rol == "gestor" else None,
-                    "usuario_id": usuario_id,
-                    "nombre": nombre,
-                    "email": email,
-                    "telefono": telefono,
-                    "fecha_alta": datetime.utcnow().isoformat(),
-                    "activo": True
-                }).execute()
-                st.success("✅ Comercial registrado correctamente.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al registrar comercial: {e}")
+                    supabase.table("comerciales").insert({
+                        "empresa_id": empresa_id_sel,
+                        "usuario_id": usuario_id,
+                        "nombre": nombre,
+                        "email": email,
+                        "telefono": telefono,
+                        "fecha_alta": datetime.utcnow(),
+                        "activo": True
+                    }).execute()
+                    st.success("✅ Comercial registrado correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al registrar comercial: {e}")
 
     st.divider()
 
@@ -92,4 +116,4 @@ def main(supabase, session_state):
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al actualizar estado: {e}")
-              
+                
