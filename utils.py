@@ -18,9 +18,7 @@ def validar_cif(cif: str) -> bool:
     cif = (cif or "").strip().upper()
     if not re.match(r"^[A-HJNP-SUVW]\d{7}[0-9A-J]$", cif):
         return False
-    # Suma pares
     even_sum = sum(int(cif[i]) for i in range(2, 8, 2))
-    # Suma impares (cada dígito * 2, luego descomponer)
     odd_sum = 0
     for i in range(1, 8, 2):
         v = 2 * int(cif[i])
@@ -41,6 +39,17 @@ def validar_nif(nif: str) -> bool:
     letters = "TRWAGMYFPDXBNJZSQVHLCKE"
     number = int(nif[:8])
     return letters[number % 23] == nif[-1]
+
+def get_ajustes_app(supabase) -> dict:
+    res = supabase.table("ajustes_app").select("*").eq("id", 1).execute()
+    return res.data[0] if res.data else {}
+
+def update_ajustes_app(supabase, nuevos: dict) -> None:
+    supabase.table("ajustes_app").update(nuevos).eq("id", 1).execute()
+
+def export_csv(df, filename="data.csv"):
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("💾 Descargar CSV", data=csv, file_name=filename, mime="text/csv")
 
 # —————————————
 # Ajustes de la aplicación
