@@ -366,7 +366,7 @@ else:
 
         if page and page != "home":
             if page == "panel_gestor":
-                from panel_gestor import main as panel_gestor_main
+                from pages.panel_gestor import main as panel_gestor_main
                 panel_gestor_main(supabase_admin, st.session_state)
             else:
                 mod = page.replace("-", "_")
