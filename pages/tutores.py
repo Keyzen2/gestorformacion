@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import export_csv, validar_dni_cif
+from utils import export_csv
 from components.listado_crud import listado_crud
 import uuid
 from datetime import datetime
@@ -106,7 +106,7 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear tutor: {e}")
 
     # =========================
-    # Llamada al CRUD
+    # Llamada al CRUD con campo de archivo
     # =========================
     listado_crud(
         df,
