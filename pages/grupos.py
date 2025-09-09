@@ -145,18 +145,18 @@ def main(supabase, session_state):
                         ) if grupo.get("accion_formativa_id") in acciones_id_to_nombre else 0
                     )
                     fecha_inicio_new = st.date_input(
-                        "Fecha inicio", 
+                        "Fecha inicio",
                         value=pd.to_datetime(grupo.get("fecha_inicio"), errors="coerce").date() if grupo.get("fecha_inicio") else datetime.today().date()
                     )
                     fecha_fin_prevista_new = st.date_input(
-                        "Fecha fin prevista", 
+                        "Fecha fin prevista",
                         value=pd.to_datetime(grupo.get("fecha_fin_prevista"), errors="coerce").date() if grupo.get("fecha_fin_prevista") else datetime.today().date()
                     )
                     localidad_new = st.text_input("Localidad", value=grupo.get("localidad", ""))
                     provincia_new = st.text_input("Provincia", value=grupo.get("provincia", ""))
                     cp_new = st.text_input("Código postal", value=grupo.get("cp", ""))
                     n_previstos_new = st.number_input(
-                        "Nº participantes previstos", 
+                        "Nº participantes previstos",
                         min_value=0, step=1, value=int(grupo.get("n_participantes_previstos") or 0)
                     )
                     observaciones_new = st.text_area("Observaciones", value=grupo.get("observaciones", ""))
@@ -187,7 +187,7 @@ def main(supabase, session_state):
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al actualizar el grupo: {e}")
-                        st.divider()
+                st.divider()
 
     # Asignar participantes a grupo
     if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
@@ -251,8 +251,7 @@ def main(supabase, session_state):
                         st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al asignar: {e}")
-
-                st.divider()
+            st.divider()
 
     # Importar participantes desde Excel
     st.markdown("### 📤 Importar participantes a grupo desde Excel")
@@ -324,7 +323,6 @@ def main(supabase, session_state):
                     st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al procesar el archivo: {e}")
-
             st.divider()
 
     # Participantes por grupo
