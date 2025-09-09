@@ -1,5 +1,3 @@
-# pages/usuarios_empresas.py
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -120,7 +118,7 @@ def main(supabase, session_state):
                                     grupo_id=grp_id_new
                                 )
                                 st.success("✅ Usuario actualizado correctamente.")
-                                st.experimental_rerun()
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error al actualizar usuario: {e}")
 
@@ -138,7 +136,7 @@ def main(supabase, session_state):
                         try:
                             delete_user(supabase, auth_id=row["auth_id"])
                             st.success("✅ Usuario eliminado correctamente.")
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"❌ Error al eliminar usuario: {e}")
 
@@ -181,6 +179,6 @@ def main(supabase, session_state):
                     grupo_id=grp_id_new
                 )
                 st.success(f"✅ Usuario '{nombre_new}' creado correctamente.")
-                st.experimental_rerun()
+                st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al crear usuario: {e}")
