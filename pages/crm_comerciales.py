@@ -65,13 +65,14 @@ def main(supabase, session_state):
         elif not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             st.error("⚠️ El email no tiene un formato válido.")
         else:
-            # Evitar duplicados
+            # Evitar duplicados por empresa
             existe = supabase.table("comerciales")\
                              .select("id")\
+                             .eq("empresa_id", empresa_id_sel)\
                              .eq("email", email)\
                              .execute().data
             if existe:
-                st.error("⚠️ Ya existe un comercial con este email.")
+                st.error("⚠️ Ya existe un comercial con este email en esta empresa.")
             else:
                 try:
                     usuario_id = None
@@ -97,7 +98,11 @@ def main(supabase, session_state):
                     st.success("✅ Comercial registrado correctamente.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error al registrar comercial: {e}")
+                    # Captura de error por violación de UNIQUE en base de datos
+                    if "duplicate key value violates unique constraint" in str(e):
+                        st.error("⚠️ Ya existe un comercial con este email en esta empresa.")
+                    else:
+                        st.error(f"❌ Error al registrar comercial: {e}")
 
     st.divider()
 
