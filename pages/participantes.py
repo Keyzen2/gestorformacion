@@ -3,7 +3,8 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 from services.alumnos import alta_alumno
-from utils import is_module_active
+from utils import is_module_active, validar_dni_cif, export_csv, subir_archivo_supabase
+
 
 def generar_plantilla_excel(rol):
     columnas = ["nombre", "email"]
@@ -15,6 +16,7 @@ def generar_plantilla_excel(rol):
     df.to_excel(buffer, index=False)
     buffer.seek(0)
     return buffer
+
 
 def main(supabase, session_state):
     st.markdown("## 🧑‍🎓 Participantes")
@@ -30,14 +32,9 @@ def main(supabase, session_state):
     # Cargar empresas
     try:
         if session_state.role == "gestor":
-            empresas_res = supabase.table("empresas")\
-                                  .select("id,nombre")\
-                                  .eq("id", empresa_id)\
-                                  .execute()
+            empresas_res = supabase.table("empresas").select("id,nombre").eq("id", empresa_id).execute()
         else:
-            empresas_res = supabase.table("empresas")\
-                                  .select("id,nombre")\
-                                  .execute()
+            empresas_res = supabase.table("empresas").select("id,nombre").execute()
         empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar las empresas: {e}")
@@ -46,14 +43,9 @@ def main(supabase, session_state):
     # Cargar grupos
     try:
         if session_state.role == "gestor":
-            grupos_res = supabase.table("grupos")\
-                                 .select("id,codigo_grupo")\
-                                 .eq("empresa_id", empresa_id)\
-                                 .execute()
+            grupos_res = supabase.table("grupos").select("id,codigo_grupo").eq("empresa_id", empresa_id).execute()
         else:
-            grupos_res = supabase.table("grupos")\
-                                 .select("id,codigo_grupo")\
-                                 .execute()
+            grupos_res = supabase.table("grupos").select("id,codigo_grupo").execute()
         grupos_dict = {g["codigo_grupo"]: g["id"] for g in (grupos_res.data or [])}
         grupos_nombre_por_id = {g["id"]: g["codigo_grupo"] for g in (grupos_res.data or [])}
     except Exception as e:
@@ -64,14 +56,9 @@ def main(supabase, session_state):
     # Cargar participantes
     try:
         if session_state.role == "gestor":
-            part_res = supabase.table("participantes")\
-                               .select("*")\
-                               .eq("empresa_id", empresa_id)\
-                               .execute()
+            part_res = supabase.table("participantes").select("*").eq("empresa_id", empresa_id).execute()
         else:
-            part_res = supabase.table("participantes")\
-                               .select("*")\
-                               .execute()
+            part_res = supabase.table("participantes").select("*").execute()
         df_part = pd.DataFrame(part_res.data or [])
     except Exception as e:
         st.error(f"⚠️ No se pudieron cargar los participantes: {e}")
@@ -81,7 +68,16 @@ def main(supabase, session_state):
     puede_crear = (
         session_state.role == "admin" or
         (session_state.role == "gestor" and empresa_id)
+        # Si quieres controlar por módulo activo, sustituye la línea anterior por:
+        # (session_state.role == "gestor" and empresa_id and is_module_active(
+        #     session_state.user.get("empresa", {}),
+        #     session_state.user.get("empresa_crm", {}),
+        #     "formacion",
+        #     datetime.today().date(),
+        #     "gestor"
+        # ))
     )
+
     if puede_crear:
         st.markdown("### ➕ Añadir Participante")
         with st.form("crear_participante", clear_on_submit=True):
@@ -90,22 +86,17 @@ def main(supabase, session_state):
             dni = st.text_input("DNI/NIF")
             email = st.text_input("Email *")
             telefono = st.text_input("Teléfono")
+
             if session_state.role == "admin":
                 empresa_busq = st.text_input("🔍 Buscar empresa por nombre")
                 empresas_filtradas = (
                     [n for n in empresas_dict if empresa_busq.lower() in n.lower()]
                     if empresa_busq else list(empresas_dict.keys())
                 )
-                empresa_sel = (
-                    st.selectbox("Empresa", sorted(empresas_filtradas))
-                    if empresas_filtradas else None
-                )
+                empresa_sel = st.selectbox("Empresa", sorted(empresas_filtradas)) if empresas_filtradas else None
                 empresa_id_new = empresas_dict.get(empresa_sel) if empresa_sel else None
 
-                grupo_sel = (
-                    st.selectbox("Grupo", sorted(grupos_dict.keys()))
-                    if grupos_dict else None
-                )
+                grupo_sel = st.selectbox("Grupo", sorted(grupos_dict.keys())) if grupos_dict else None
                 grupo_id_new = grupos_dict.get(grupo_sel) if grupo_sel else None
             else:
                 empresa_id_new = empresa_id
@@ -121,6 +112,8 @@ def main(supabase, session_state):
         if submitted:
             if not nombre or not email:
                 st.error("⚠️ Nombre y email son obligatorios.")
+            elif dni and not validar_dni_cif(dni):
+                st.error("⚠️ El DNI/NIE/CIF no es válido.")
             elif not empresa_id_new:
                 st.error("⚠️ Debes seleccionar una empresa.")
             elif not grupo_id_new:
@@ -144,17 +137,8 @@ def main(supabase, session_state):
     # Vista de participantes
     if not df_part.empty:
         st.markdown("### 📋 Participantes registrados")
-        columnas = [c for c in [
-            "nombre", "apellidos", "email", "dni", "telefono",
-            "grupo_id", "empresa_id"
-        ] if c in df_part.columns]
-        st.dataframe(df_part[columnas])
-        st.download_button(
-            "⬇️ Descargar CSV",
-            data=df_part.to_csv(index=False).encode("utf-8"),
-            file_name="participantes.csv",
-            mime="text/csv"
-        )
+        columnas = [c for c in ["nombre", "apellidos", "email", "dni", "telefono", "grupo_id", "empresa_id"] if c in df_part.columns]
+        export_csv(df_part[columnas], filename="participantes.csv")
 
         st.markdown("### 🔍 Detalles individuales")
         for _, row in df_part.iterrows():
@@ -170,58 +154,39 @@ def main(supabase, session_state):
                 if session_state.role == "admin":
                     with st.form(f"edit_part_{row['id']}", clear_on_submit=True):
                         nuevo_nombre = st.text_input("Nombre", value=row.get("nombre", ""))
-                        nuevos_apellidos = st.text_input(
-                            "Apellidos", value=row.get("apellidos", "")
-                        )
-                        nuevo_email = st.text_input(
-                            "Email", value=row.get("email", "")
-                        )
+                        nuevos_apellidos = st.text_input("Apellidos", value=row.get("apellidos", ""))
+                        nuevo_email = st.text_input("Email", value=row.get("email", ""))
                         guardar = st.form_submit_button("💾 Guardar cambios")
                     if guardar:
-                        try:
-                            if nuevo_email != row.get("email", ""):
-                                usuario_res = supabase.table("usuarios")\
-                                                      .select("auth_id")\
-                                                      .eq("email", row.get("email",""))\
-                                                      .execute()
-                                if usuario_res.data:
-                                    auth_id = usuario_res.data[0]["auth_id"]
-                                    supabase.auth.admin.update_user_by_id(
-                                        auth_id, {"email": nuevo_email}
-                                    )
-                                    supabase.table("usuarios")\
-                                            .update({"email": nuevo_email})\
-                                            .eq("auth_id", auth_id)\
-                                            .execute()
-                            supabase.table("participantes")\
-                                    .update({
-                                        "nombre": nuevo_nombre,
-                                        "apellidos": nuevos_apellidos,
-                                        "email": nuevo_email
-                                    })\
-                                    .eq("id", row["id"])\
-                                    .execute()
-                            st.success("✅ Cambios guardados.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al actualizar: {e}")
+                        if row.get("dni") and not validar_dni_cif(row.get("dni")):
+                            st.error("⚠️ El DNI/NIE/CIF no es válido.")
+                        else:
+                            try:
+                                if nuevo_email != row.get("email", ""):
+                                    usuario_res = supabase.table("usuarios").select("auth_id").eq("email", row.get("email", "")).execute()
+                                    if usuario_res.data:
+                                        auth_id = usuario_res.data[0]["auth_id"]
+                                        supabase.auth.admin.update_user_by_id(auth_id, {"email": nuevo_email})
+                                        supabase.table("usuarios").update({"email": nuevo_email}).eq("auth_id", auth_id).execute()
+                                supabase.table("participantes").update({
+                                    "nombre": nuevo_nombre,
+                                    "apellidos": nuevos_apellidos,
+                                    "email": nuevo_email
+                                }).eq("id", row["id"]).execute()
+                                st.success("✅ Cambios guardados.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar: {e}")
 
                 # Diplomas para admin y gestor
                 if session_state.role in ["admin", "gestor"]:
                     st.markdown("### 🏅 Diplomas del participante")
                     try:
-                        diplomas_res = (
-                            supabase.table("diplomas")
-                                     .select("*")
-                                     .eq("participante_id", row["id"])
-                                     .execute()
-                        )
+                        diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", row["id"]).execute()
                         diplomas = diplomas_res.data or []
                         if diplomas:
                             for d in diplomas:
-                                grupo_nombre = grupos_nombre_por_id.get(
-                                    d["grupo_id"], "Grupo desconocido"
-                                )
+                                grupo_nombre = grupos_nombre_por_id.get(d["grupo_id"], "Grupo desconocido")
                                 st.markdown(
                                     f"- 📄 [Diploma]({d['url']}) "
                                     f"({grupo_nombre}, {d.get('fecha_subida','')})"
@@ -231,6 +196,7 @@ def main(supabase, session_state):
                     except Exception as e:
                         st.error(f"❌ Error al cargar diplomas: {e}")
 
+                    # Subida de diploma
                     diploma_file = st.file_uploader(
                         "Subir diploma (PDF)",
                         type=["pdf"],
@@ -238,22 +204,23 @@ def main(supabase, session_state):
                     )
                     if diploma_file:
                         try:
-                            grupo_id = row["grupo_id"]
-                            ruta = f"diplomas/{grupo_id}/{row['id']}/{diploma_file.name}"
-                            supabase.storage.from_("diplomas")\
-                                    .upload(ruta, diploma_file.getvalue(), overwrite=True)
-                            url = supabase.storage.from_("diplomas")\
-                                    .get_public_url(ruta).public_url
-                            supabase.table("diplomas")\
-                                    .insert({
-                                        "participante_id": row["id"],
-                                        "grupo_id":        grupo_id,
-                                        "url":             url,
-                                        "fecha_subida":    datetime.today().isoformat()
-                                    })\
-                                    .execute()
-                            st.success("✅ Diploma subido correctamente.")
-                            st.rerun()
+                            # Usamos la utilidad de utils.py para subir y obtener URL
+                            url = subir_archivo_supabase(
+                                supabase,
+                                diploma_file,
+                                empresa_id=session_state.user.get("empresa_id"),
+                                bucket="diplomas"
+                            )
+                            if url:
+                                supabase.table("diplomas").insert({
+                                    "participante_id": row["id"],
+                                    "grupo_id": row["grupo_id"],
+                                    "url": url,
+                                    "fecha_subida": datetime.today().isoformat()
+                                }).execute()
+                                st.success("✅ Diploma subido correctamente.")
+                                st.rerun()
+                            else:
+                                st.error("❌ No se pudo obtener la URL del diploma.")
                         except Exception as e:
                             st.error(f"❌ Error al subir diploma: {e}")
-                        
