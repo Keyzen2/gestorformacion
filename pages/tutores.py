@@ -65,10 +65,14 @@ def main(supabase, session_state):
     # =========================
     def guardar_tutor(tutor_id, datos):
         try:
-            # Si hay archivo de CV, subirlo
+            # Subida de CV si se adjunta archivo
             if "cv_file" in datos and datos["cv_file"] is not None:
                 file_path = f"{tutor_id}.pdf"
-                supabase.storage.from_("currículums").upload(file_path, datos["cv_file"].getvalue(), {"upsert": True})
+                supabase.storage.from_("currículums").upload(
+                    file_path,
+                    datos["cv_file"].getvalue(),
+                    {"upsert": True}
+                )
                 public_url = supabase.storage.from_("currículums").get_public_url(file_path)
                 datos["cv_url"] = public_url
                 del datos["cv_file"]
@@ -84,7 +88,11 @@ def main(supabase, session_state):
             tutor_id = str(uuid.uuid4())
             if "cv_file" in datos and datos["cv_file"] is not None:
                 file_path = f"{tutor_id}.pdf"
-                supabase.storage.from_("currículums").upload(file_path, datos["cv_file"].getvalue(), {"upsert": True})
+                supabase.storage.from_("currículums").upload(
+                    file_path,
+                    datos["cv_file"].getvalue(),
+                    {"upsert": True}
+                )
                 public_url = supabase.storage.from_("currículums").get_public_url(file_path)
                 datos["cv_url"] = public_url
                 del datos["cv_file"]
@@ -102,13 +110,19 @@ def main(supabase, session_state):
     # =========================
     listado_crud(
         df,
-        columnas_visibles=["id", "nombre", "apellidos", "email", "telefono", "nif", "tipo_tutor", "especialidad", "cv_url"],
+        columnas_visibles=[
+            "id", "nombre", "apellidos", "email", "telefono",
+            "nif", "tipo_tutor", "especialidad", "cv_url"
+        ],
         titulo="Tutor",
         on_save=guardar_tutor,
         on_create=crear_tutor,
         id_col="id",
         campos_select={
             "tipo_tutor": ["Interno", "Externo"]
+        },
+        campos_file={
+            "cv_file": {"label": "📄 Subir CV (PDF)", "type": ["pdf"]}
         }
     )
     
