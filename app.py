@@ -265,6 +265,7 @@ def route():
             "Acciones Formativas": "acciones_formativas",
             "Grupos": "grupos",
             "Participantes": "participantes",
+            "Tutores": "tutores",
             "Documentos": "documentos"
         }
         for label, page_key in formacion_menu.items():
