@@ -23,4 +23,8 @@ rich>=10.14.0,<14
 # Visualizaciones opcionales
 altair>=5.5.0
 
+# Tablas interactivas tipo Excel
+streamlit-aggrid>=0.3.4.post3
+
+
 
