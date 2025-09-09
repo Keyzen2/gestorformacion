@@ -1,5 +1,5 @@
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import pandas as pd
 
 def listado_crud(
     df,
@@ -7,83 +7,68 @@ def listado_crud(
     titulo,
     on_save,
     on_create,
-    id_col="id",
-    campos_select=None
+    id_col,
+    campos_select=None,
+    campos_file=None
 ):
     """
-    Componente CRUD reutilizable con listado interactivo y ficha editable.
-
-    Parámetros:
-    -----------
-    df : pandas.DataFrame
-        DataFrame con los datos a mostrar. Debe incluir la columna id_col para actualizaciones.
-    columnas_visibles : list
-        Lista de columnas que se mostrarán en la tabla y en los formularios.
-    titulo : str
-        Título de la entidad (ej. "Usuario", "Participante").
-    on_save : function
-        Función que recibe (id, datos_editados) para guardar cambios.
-    on_create : function
-        Función que recibe (datos_nuevos) para crear un registro.
-    id_col : str
-        Nombre de la columna que contiene el identificador interno.
-    campos_select : dict opcional
-        Diccionario con { "NombreColumna": ["Opción1", "Opción2", ...] } para renderizar selects.
+    df: DataFrame con los datos
+    columnas_visibles: lista de columnas a mostrar
+    titulo: título del CRUD
+    on_save: función(id, datos_editados)
+    on_create: función(datos_nuevos)
+    id_col: nombre de la columna que actúa como ID
+    campos_select: dict {columna: [opciones]}
+    campos_file: dict {columna: {"label": str, "type": [extensiones]}}
     """
-    campos_select = campos_select or {}
 
-    st.subheader(f"📋 {titulo}s registrados")
+    st.markdown(f"### 📋 {titulo}s registrados")
 
-    # =========================
-    # Tabla interactiva
-    # =========================
-    gb = GridOptionsBuilder.from_dataframe(df[columnas_visibles])
-    gb.configure_default_column(filter=True, sortable=True, resizable=True)
-    gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
-    gb.configure_selection('single', use_checkbox=True)
-    grid_options = gb.build()
+    # Tabla de datos
+    st.dataframe(df[columnas_visibles], use_container_width=True)
 
-    grid_response = AgGrid(
-        df[columnas_visibles],
-        gridOptions=grid_options,
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
-        theme="balham",
-        allow_unsafe_jscode=True
-    )
+    st.divider()
+    st.markdown(f"### ➕ Crear nuevo {titulo}")
 
-    # =========================
-    # Ficha de edición
-    # =========================
-    if grid_response["selected_rows"]:
-        fila = grid_response["selected_rows"][0]
-        st.markdown("---")
-        st.subheader(f"✏️ Editar {titulo.lower()}: {fila[columnas_visibles[0]]}")
-        with st.form("form_editar"):
-            datos_editados = {}
-            for col in columnas_visibles:
-                if col != id_col:
-                    if col in campos_select:
-                        opciones = campos_select[col]
-                        idx = opciones.index(fila[col]) if fila[col] in opciones else 0
-                        datos_editados[col] = st.selectbox(col, opciones, index=idx)
-                    else:
-                        datos_editados[col] = st.text_input(col, value=fila[col] or "")
-            if st.form_submit_button("💾 Guardar cambios"):
-                on_save(fila[id_col], datos_editados)
-
-    # =========================
-    # Alta de nuevo registro
-    # =========================
-    st.markdown("---")
-    st.subheader(f"➕ Nuevo {titulo.lower()}")
-    with st.form("form_crear"):
+    # Formulario de creación
+    with st.form(f"create_{titulo}", clear_on_submit=True):
         datos_nuevos = {}
         for col in columnas_visibles:
-            if col != id_col:
-                if col in campos_select:
-                    datos_nuevos[col] = st.selectbox(col, campos_select[col])
-                else:
-                    datos_nuevos[col] = st.text_input(col)
-        if st.form_submit_button("✅ Crear"):
-            on_create(datos_nuevos)
-            
+            if col == id_col:
+                continue
+            if campos_select and col in campos_select:
+                datos_nuevos[col] = st.selectbox(col, campos_select[col])
+            elif campos_file and col in campos_file:
+                cfg = campos_file[col]
+                datos_nuevos[col] = st.file_uploader(cfg["label"], type=cfg.get("type", None))
+            else:
+                datos_nuevos[col] = st.text_input(col)
+        submitted = st.form_submit_button("Crear")
+    if submitted:
+        on_create(datos_nuevos)
+
+    st.divider()
+    st.markdown(f"### ✏️ Editar {titulo}")
+
+    # Formulario de edición por cada fila
+    for _, row in df.iterrows():
+        with st.expander(f"{row[id_col]} - {row[columnas_visibles[1]]}"):
+            with st.form(f"edit_{titulo}_{row[id_col]}", clear_on_submit=True):
+                datos_editados = {}
+                for col in columnas_visibles:
+                    if col == id_col:
+                        continue
+                    valor_actual = row[col] if col in row else ""
+                    if campos_select and col in campos_select:
+                        opciones = campos_select[col]
+                        idx = opciones.index(valor_actual) if valor_actual in opciones else 0
+                        datos_editados[col] = st.selectbox(col, opciones, index=idx)
+                    elif campos_file and col in campos_file:
+                        cfg = campos_file[col]
+                        datos_editados[col] = st.file_uploader(cfg["label"], type=cfg.get("type", None), key=f"{col}_{row[id_col]}")
+                    else:
+                        datos_editados[col] = st.text_input(col, value=valor_actual or "")
+                guardar = st.form_submit_button("Guardar cambios")
+            if guardar:
+                on_save(row[id_col], datos_editados)
+                
