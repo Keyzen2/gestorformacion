@@ -1,5 +1,3 @@
-# utils.py
-
 import re
 import io
 from datetime import date, datetime
