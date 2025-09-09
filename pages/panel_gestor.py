@@ -4,6 +4,7 @@ import altair as alt
 from datetime import datetime
 from utils import is_module_active
 
+
 def main(supabase, session_state):
     st.title("📊 Panel del Gestor")
     st.caption("Resumen estadístico de tu actividad formativa.")
@@ -21,19 +22,22 @@ def main(supabase, session_state):
         return
 
     # =========================
-    # Cargar datos
+    # Cargar datos filtrados por empresa
     # =========================
     try:
-        acciones_res = supabase.table("acciones_formativas").select("id,nombre").eq("empresa_id", empresa_id).execute()
-        total_acciones = len(acciones_res.data or [])
-    except:
+        total_acciones = len(
+            supabase.table("acciones_formativas").select("id").eq("empresa_id", empresa_id).execute().data or []
+        )
+    except Exception as e:
+        st.error(f"❌ Error al cargar acciones: {e}")
         total_acciones = 0
 
     try:
         grupos_res = supabase.table("grupos").select("id,codigo_grupo").eq("empresa_id", empresa_id).execute()
         df_grupos = pd.DataFrame(grupos_res.data or [])
         total_grupos = len(df_grupos)
-    except:
+    except Exception as e:
+        st.error(f"❌ Error al cargar grupos: {e}")
         df_grupos = pd.DataFrame()
         total_grupos = 0
 
@@ -41,14 +45,17 @@ def main(supabase, session_state):
         part_res = supabase.table("participantes").select("*").eq("empresa_id", empresa_id).execute()
         df_part = pd.DataFrame(part_res.data or [])
         total_participantes = len(df_part)
-    except:
+    except Exception as e:
+        st.error(f"❌ Error al cargar participantes: {e}")
         df_part = pd.DataFrame()
         total_participantes = 0
 
     try:
-        diplomas_res = supabase.table("diplomas").select("id").eq("empresa_id", empresa_id).execute()
-        total_diplomas = len(diplomas_res.data or [])
-    except:
+        total_diplomas = len(
+            supabase.table("diplomas").select("id").eq("empresa_id", empresa_id).execute().data or []
+        )
+    except Exception as e:
+        st.error(f"❌ Error al cargar diplomas: {e}")
         total_diplomas = 0
 
     # =========================
@@ -66,14 +73,14 @@ def main(supabase, session_state):
     # =========================
     # Evolución de participantes
     # =========================
-    if "fecha_alta" in df_part.columns:
+    if "fecha_alta" in df_part.columns and not df_part.empty:
         st.subheader("📈 Nuevos participantes por fecha")
         df_part["fecha_alta"] = pd.to_datetime(df_part["fecha_alta"], errors="coerce")
         df_evol = df_part.groupby(df_part["fecha_alta"].dt.date).size().reset_index(name="nuevos")
         chart = alt.Chart(df_evol).mark_bar().encode(
             x=alt.X("fecha_alta:T", title="Fecha"),
             y=alt.Y("nuevos:Q", title="Participantes"),
-            tooltip=["fecha_alta", "nuevos"]
+            tooltip=["fecha_alta", "nuevos"],
         ).properties(height=300)
         st.altair_chart(chart, use_container_width=True)
 
@@ -101,20 +108,33 @@ def main(supabase, session_state):
     st.subheader("📋 Participantes asignados por grupo")
 
     try:
-        pg_res = supabase.table("participantes_grupos").select("id,participante_id,grupo_id").execute()
-        pg_data = pd.DataFrame(pg_res.data or [])
+        if not df_grupos.empty:
+            pg_res = (
+                supabase.table("participantes_grupos")
+                .select("id,participante_id,grupo_id")
+                .in_("grupo_id", df_grupos["id"].tolist())
+                .execute()
+            )
+            pg_data = pd.DataFrame(pg_res.data or [])
+        else:
+            pg_data = pd.DataFrame()
     except Exception as e:
         st.error(f"❌ Error al cargar asignaciones: {e}")
         pg_data = pd.DataFrame()
 
     if not df_grupos.empty and not pg_data.empty:
         for _, grupo in df_grupos.iterrows():
-            grupo_id = grupo["id"]
-            participantes_ids = pg_data[pg_data["grupo_id"] == grupo_id]["participante_id"].tolist()
+            participantes_ids = pg_data[pg_data["grupo_id"] == grupo["id"]]["participante_id"].tolist()
 
             if participantes_ids:
                 try:
-                    part_res = supabase.table("participantes").select("id,nombre,email,dni").in_("id", participantes_ids).execute()
+                    part_res = (
+                        supabase.table("participantes")
+                        .select("id,nombre,email,dni")
+                        .in_("id", participantes_ids)
+                        .eq("empresa_id", empresa_id)
+                        .execute()
+                    )
                     df_part_grupo = pd.DataFrame(part_res.data or [])
                     with st.expander(f"👥 {grupo['codigo_grupo']} ({len(df_part_grupo)} participantes)"):
                         st.table(df_part_grupo[["nombre", "email", "dni"]])
