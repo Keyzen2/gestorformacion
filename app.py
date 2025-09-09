@@ -267,7 +267,7 @@ def route():
         for label, page_key in panel_menu.items():
             if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
                 st.session_state.page = page_key
-                
+
     # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
@@ -366,7 +366,7 @@ else:
 
         if page and page != "home":
             if page == "panel_gestor":
-                from pages.panel_gestor import main as panel_gestor_main
+                from panel_gestor import main as panel_gestor_main
                 panel_gestor_main(supabase_admin, st.session_state)
             else:
                 mod = page.replace("-", "_")
