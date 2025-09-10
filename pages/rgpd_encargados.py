@@ -10,7 +10,6 @@ def main(supabase, session_state):
     st.caption("Gestión de encargados RGPD vinculados a empresas.")
     st.divider()
 
-    # Permisos
     if session_state.role not in {"admin", "gestor"}:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         st.stop()
@@ -20,31 +19,38 @@ def main(supabase, session_state):
     # =========================
     try:
         base_select = (
-            "id, nombre, email, telefono, empresa:empresas(nombre)"
+            "id, nombre, servicio, contrato_url, fecha_contrato, fecha_registro, email, empresa:empresas(nombre)"
         )
 
         if session_state.role == "gestor":
             query = supabase.table("rgpd_encargados").select(base_select).eq(
                 "empresa_id", session_state.user.get("empresa_id")
             )
-        else:  # admin
+        else:
             query = supabase.table("rgpd_encargados").select(base_select)
 
         encargados_res = query.execute().data
         df = pd.DataFrame(encargados_res) if encargados_res else pd.DataFrame()
+
+        # Aplanar columna empresa
+        if "empresa" in df.columns:
+            df["empresa"] = df["empresa"].apply(
+                lambda x: x.get("nombre") if isinstance(x, dict) else x
+            )
+
     except Exception as e:
         st.error(f"❌ Error al cargar encargados: {e}")
         return
 
     if df.empty:
         st.info("ℹ️ No hay encargados registrados.")
+        return
 
     # =========================
     # Exportar CSV
     # =========================
-    if not df.empty:
-        export_csv(df, filename="encargados_filtrados.csv")
-        st.divider()
+    export_csv(df, filename="encargados_filtrados.csv")
+    st.divider()
 
     # =========================
     # Funciones CRUD
@@ -74,12 +80,12 @@ def main(supabase, session_state):
                     datos["empresa_id"] = empresas_dict[datos["empresa_id"]]
 
             datos["id"] = encargado_id
-            datos["created_at"] = datetime.utcnow().isoformat()
+            datos["fecha_registro"] = datetime.utcnow().isoformat()
 
             supabase.table("rgpd_encargados").insert(datos).execute()
             st.success("✅ Encargado creado correctamente.")
 
-            # Limpiar campos para evitar reenvío
+            # Limpiar campos de formulario
             for key in list(datos.keys()):
                 if key in st.session_state:
                     del st.session_state[key]
@@ -103,7 +109,7 @@ def main(supabase, session_state):
     listado_crud(
         df,
         columnas_visibles=[
-            "id", "nombre", "email", "telefono", "empresa"
+            "id", "nombre", "servicio", "contrato_url", "fecha_contrato", "fecha_registro", "email", "empresa"
         ],
         titulo="Encargado",
         on_save=guardar_encargado,
@@ -111,4 +117,3 @@ def main(supabase, session_state):
         id_col="id",
         campos_select=campos_select
     )
-    
