@@ -33,6 +33,13 @@ def main(supabase, session_state):
 
         tutores_res = query.execute().data
         df = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
+
+        # Aplanar la columna empresa para mostrar solo el nombre
+        if "empresa" in df.columns:
+            df["empresa"] = df["empresa"].apply(
+                lambda x: x.get("nombre") if isinstance(x, dict) else x
+            )
+
     except Exception as e:
         st.error(f"❌ Error al cargar tutores: {e}")
         return
@@ -74,9 +81,20 @@ def main(supabase, session_state):
     # =========================
     def guardar_tutor(tutor_id, datos):
         try:
+            # Determinar empresa_id para la ruta del CV
+            if session_state.role == "gestor":
+                empresa_id = session_state.user.get("empresa_id")
+                datos["empresa_id"] = empresa_id
+            else:
+                if "empresa_id" in datos and datos["empresa_id"]:
+                    empresa_id = empresas_dict[datos["empresa_id"]]
+                    datos["empresa_id"] = empresa_id
+                else:
+                    empresa_id = None
+
             # Subida de CV si se adjunta archivo
-            if "cv_file" in datos and datos["cv_file"] is not None:
-                file_path = f"{tutor_id}.pdf"
+            if "cv_file" in datos and datos["cv_file"] is not None and empresa_id:
+                file_path = f"{empresa_id}/{tutor_id}.pdf"
                 supabase.storage.from_("currículums").upload(
                     file_path,
                     datos["cv_file"].getvalue(),
@@ -96,17 +114,20 @@ def main(supabase, session_state):
         try:
             tutor_id = str(uuid.uuid4())
 
-            # Asignar empresa según rol
+            # Determinar empresa_id para la ruta del CV
             if session_state.role == "gestor":
-                datos["empresa_id"] = session_state.user.get("empresa_id")
+                empresa_id = session_state.user.get("empresa_id")
+                datos["empresa_id"] = empresa_id
             else:
-                # admin: convertir nombre de empresa a id
                 if "empresa_id" in datos and datos["empresa_id"]:
-                    datos["empresa_id"] = empresas_dict[datos["empresa_id"]]
+                    empresa_id = empresas_dict[datos["empresa_id"]]
+                    datos["empresa_id"] = empresa_id
+                else:
+                    empresa_id = None
 
             # Subida de CV
-            if "cv_file" in datos and datos["cv_file"] is not None:
-                file_path = f"{tutor_id}.pdf"
+            if "cv_file" in datos and datos["cv_file"] is not None and empresa_id:
+                file_path = f"{empresa_id}/{tutor_id}.pdf"
                 supabase.storage.from_("currículums").upload(
                     file_path,
                     datos["cv_file"].getvalue(),
@@ -127,8 +148,15 @@ def main(supabase, session_state):
     # =========================
     # Campos select según rol
     # =========================
+    especialidades_genericas = [
+        "Matemáticas", "Lengua", "Inglés", "Informática", "Ciencias",
+        "Historia", "Arte", "Educación Física", "Música",
+        "Formación Profesional", "Otro"
+    ]
+
     campos_select = {
-        "tipo_tutor": ["Interno", "Externo"]
+        "tipo_tutor": ["Interno", "Externo"],
+        "especialidad": especialidades_genericas
     }
 
     if session_state.role == "admin":
@@ -153,5 +181,4 @@ def main(supabase, session_state):
         campos_file={
             "cv_file": {"label": "📄 Subir CV (PDF)", "type": ["pdf"]}
         }
-    )
-    
+                )
