@@ -5,6 +5,7 @@ from utils import get_ajustes_app
 from supabase import create_client
 from datetime import datetime
 import pandas as pd
+from services.data_service import cached_get_ajustes_app
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
@@ -27,6 +28,10 @@ SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+# Guardar clientes en session_state para que cached_get_ajustes_app pueda usarlos
+st.session_state.supabase_public = supabase_public
+st.session_state.supabase_admin = supabase_admin
 
 # =========================
 # Estado inicial
@@ -138,8 +143,9 @@ def login_view():
     """Pantalla de login con tarjetas de módulos."""
 
     # ✅ Obtener mensaje de login desde ajustes
-    ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login"])
+    ajustes = cached_get_ajustes_app(["mensaje_login"])
     mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales.")
+    st.markdown(f"### {mensaje_login}")
 
     st.markdown("""
     <style>
@@ -402,8 +408,12 @@ def route():
                 st.session_state.page = page_key
 
     # --- Footer dinámico desde ajustes_app ---
-    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
-    mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
+    ajustes = cached_get_ajustes_app(["mensaje_footer"])
+    if ajustes.get("mensaje_footer"):
+        st.markdown(
+            f"<div style='text-align:center; font-size:0.8em; color:gray;'>{ajustes['mensaje_footer']}</div>",
+            unsafe_allow_html=True
+        )
 
     st.sidebar.markdown("---")
     st.sidebar.caption(mensaje_footer)
