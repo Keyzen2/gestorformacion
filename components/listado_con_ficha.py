@@ -1,50 +1,58 @@
+"""
+Componente reutilizable para mostrar un listado con ficha editable.
+Versión mejorada con corrección de errores y nuevas funcionalidades.
+"""
+
 import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from typing import Dict, List, Callable, Optional, Any
 
 def listado_con_ficha(
-    df: pd.DataFrame,
-    columnas_visibles: List[str],
-    titulo: str,
-    on_save: Callable[[str, Dict[str, Any]], None],
-    id_col: str = "id",
-    on_create: Optional[Callable[[Dict[str, Any]], None]] = None,
-    campos_select: Optional[Dict[str, List]] = None,
-    campos_textarea: Optional[Dict[str, Dict[str, Any]]] = None,
-    campos_file: Optional[Dict[str, Dict[str, Any]]] = None,
-    campos_readonly: Optional[List[str]] = None,
-    campos_dinamicos: Optional[Callable[[Dict[str, Any]], List[str]]] = None,
-    campos_password: Optional[List[str]] = None,
-    allow_creation: bool = True,
-    campos_help: Optional[Dict[str, str]] = None,
-    reactive_fields: Optional[Dict[str, List[str]]] = None
+    df,
+    columnas_visibles,
+    titulo,
+    on_save,
+    id_col="id",
+    on_create=None,
+    on_delete=None,  # Nuevo parámetro para función de eliminación
+    campos_select=None,
+    campos_textarea=None,
+    campos_file=None,
+    campos_readonly=None,
+    campos_dinamicos=None,
+    campos_password=None,
+    allow_creation=True,
+    campos_help=None,
+    reactive_fields=None,
+    search_columns=None,  # Nuevo parámetro para búsqueda
+    campos_obligatorios=None  # Nuevo parámetro para campos obligatorios
 ):
     """
-    Componente optimizado para listados con ficha de edición.
-    
-    Versión mejorada que soluciona problemas de renderizado y performance.
-    
+    Muestra un listado interactivo y, al seleccionar un registro, abre una ficha editable.
+    También permite crear nuevos registros si se especifica on_create.
+
     Parámetros:
     -----------
-    df: DataFrame con los datos (debe incluir columna id_col)
+    df: DataFrame con los datos (incluyendo columna id_col)
     columnas_visibles: columnas que se muestran en la tabla
     titulo: título de la ficha
     on_save: función que recibe (id, datos_editados)
-    id_col: columna identificadora (default: "id")
+    id_col: columna identificadora
     on_create: función que recibe (datos_nuevos) para crear registros
-    campos_select: dict {columna: [opciones]} para selectboxes
-    campos_textarea: dict {columna: {"label": str, "height": int}} para áreas de texto
-    campos_file: dict {columna: {"label": str, "type": [extensiones]}} para archivos
+    on_delete: función que recibe (id) para eliminar registros
+    campos_select: dict {columna: [opciones]} para selects
+    campos_textarea: dict {columna: {"label": str}} para áreas de texto
+    campos_file: dict {columna: {"label": str, "type": [extensiones]}} para subida de archivos
     campos_readonly: lista de columnas que no se pueden editar
     campos_dinamicos: función que recibe datos y devuelve lista de campos visibles
     campos_password: lista de campos que son contraseñas (solo para creación)
     allow_creation: bool para mostrar/ocultar formulario de creación
-    campos_help: dict {columna: "texto de ayuda"} para ayuda contextual
+    campos_help: dict {columna: "texto de ayuda"} para mostrar ayuda contextual
     reactive_fields: dict {campo_trigger: [campos_dependientes]} para campos reactivos
+    search_columns: lista de columnas para búsqueda rápida
+    campos_obligatorios: lista de campos que son obligatorios
     """
-    
-    # Inicializar parámetros opcionales
+    # Inicializar valores por defecto
     campos_select = campos_select or {}
     campos_textarea = campos_textarea or {}
     campos_file = campos_file or {}
@@ -52,25 +60,13 @@ def listado_con_ficha(
     campos_password = campos_password or []
     campos_help = campos_help or {}
     reactive_fields = reactive_fields or {}
+    search_columns = search_columns or []
+    campos_obligatorios = campos_obligatorios or []
 
-    # Validaciones básicas
-    if df.empty:
-        st.info(f"ℹ️ No hay {titulo.lower()}s registrados.")
-        if allow_creation and on_create:
-            _mostrar_formulario_creacion(
-                titulo, on_create, columnas_visibles, campos_select, 
-                campos_textarea, campos_file, campos_readonly,
-                campos_password, campos_help, id_col
-            )
-        return
-
-    if id_col not in df.columns:
-        st.error(f"❌ La columna '{id_col}' no existe en los datos.")
-        return
-
-    # CSS optimizado
+    # CSS mejorado para mejor visualización
     st.markdown("""
     <style>
+    /* Estilos para el componente listado_con_ficha */
     .ficha-container {
         border: 2px solid #e1e5e9;
         border-radius: 12px;
@@ -86,11 +82,18 @@ def listado_con_ficha(
         box-shadow: 0 6px 12px rgba(66, 133, 244, 0.15);
     }
     
-    .tabla-container {
-        margin: 1rem 0;
-        border-radius: 8px;
+    .campo-dinamico {
+        transition: all 0.3s ease-in-out;
+        opacity: 1;
+    }
+    
+    .campo-oculto {
+        opacity: 0.3;
+        pointer-events: none;
+        max-height: 0;
         overflow: hidden;
-        border: 1px solid #e1e5e9;
+        margin: 0;
+        padding: 0;
     }
     
     .campo-obligatorio label {
@@ -111,410 +114,435 @@ def listado_con_ficha(
     </style>
     """, unsafe_allow_html=True)
 
-    # ===============================
-    # PREPARAR DATOS PARA LA TABLA
-    # ===============================
-    try:
-        # Asegurar que las columnas visibles existen
-        columnas_existentes = [col for col in columnas_visibles if col in df.columns]
-        if not columnas_existentes:
-            st.error("❌ Ninguna de las columnas especificadas existe en los datos.")
-            return
+    # Añadir buscador rápido si se especifican columnas de búsqueda
+    if search_columns and not df.empty:
+        query = st.text_input("🔍 Buscar", placeholder=f"Buscar por {', '.join(search_columns)}")
+        if query:
+            # Filtrar dataframe por texto de búsqueda en las columnas especificadas
+            mask = False
+            for col in search_columns:
+                if col in df.columns:
+                    # Convertir a string y buscar coincidencias ignorando mayúsculas/minúsculas
+                    mask = mask | df[col].astype(str).str.lower().str.contains(query.lower(), na=False)
+            
+            # Aplicar filtro
+            filtered_df = df[mask]
+            if filtered_df.empty:
+                st.info(f"No se encontraron resultados para '{query}'")
+            else:
+                df = filtered_df
 
-        # Preparar DataFrame para mostrar
-        df_display = df[columnas_existentes].copy()
+    # ===============================
+    # TABLA CON AGGRID MEJORADA
+    # ===============================
+    if not df.empty:
+        # Preparar opciones de la tabla
+        gb = GridOptionsBuilder.from_dataframe(df[columnas_visibles])
+        gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=10)
+        gb.configure_selection(selection_mode="single", use_checkbox=False)
         
-        # Limpiar datos para visualización
-        for col in df_display.columns:
-            if df_display[col].dtype == 'object':
-                df_display[col] = df_display[col].fillna("")
-            elif df_display[col].dtype == 'bool':
-                df_display[col] = df_display[col].map({True: "✅ Sí", False: "❌ No", None: ""})
-            elif pd.api.types.is_datetime64_any_dtype(df_display[col]):
-                df_display[col] = df_display[col].dt.strftime('%d/%m/%Y').fillna("")
-
-        # Renombrar columnas para mejor visualización
-        column_mapping = {
-            'nombre': 'Nombre',
-            'email': 'Email',
-            'cif': 'CIF/NIF',
-            'telefono': 'Teléfono',
-            'ciudad': 'Ciudad',
-            'provincia': 'Provincia',
-            'formacion_activo': 'Formación',
-            'iso_activo': 'ISO 9001',
-            'rgpd_activo': 'RGPD',
-            'crm_activo': 'CRM',
-            'created_at': 'Fecha Creación',
-            'updated_at': 'Última Actualización'
-        }
+        # Configurar estilos condicionales para mejorar la visualización
+        for col in columnas_visibles:
+            if col in df.columns:
+                if df[col].dtype == bool:
+                    # Colorear celdas booleanas
+                    gb.configure_column(col, cellStyle={"styleConditions": [
+                        {"condition": "params.value === true", "style": {"backgroundColor": "#e6f7e6", "color": "#1a841a"}},
+                        {"condition": "params.value === false", "style": {"backgroundColor": "#f8d7da", "color": "#721c24"}}
+                    ]})
+                elif 'fecha' in col.lower() or 'date' in col.lower():
+                    # Formatear fechas
+                    gb.configure_column(col, type=["dateColumnFilter", "customDateTimeFormat"], custom_format_string="dd/MM/yyyy")
+                elif 'activo' in col.lower() or 'active' in col.lower():
+                    # Colorear estados activos
+                    gb.configure_column(col, cellStyle={"styleConditions": [
+                        {"condition": "params.value === true", "style": {"backgroundColor": "#e6f7e6", "color": "#1a841a"}},
+                        {"condition": "params.value === false", "style": {"backgroundColor": "#f8d7da", "color": "#721c24"}}
+                    ]})
         
-        df_display = df_display.rename(columns=column_mapping)
-
-    except Exception as e:
-        st.error(f"❌ Error al preparar datos para la tabla: {e}")
-        return
-
-    # ===============================
-    # CONFIGURAR Y MOSTRAR TABLA
-    # ===============================
-    st.markdown(f"### 📋 {titulo}s registrados ({len(df)} total)")
-    
-    try:
-        # Configurar AgGrid
-        gb = GridOptionsBuilder.from_dataframe(df_display)
-        gb.configure_pagination(paginationAutoPageSize=True)
-        gb.configure_selection('single', use_checkbox=False, rowMultiSelectWithClick=False)
+        # Opciones adicionales
         gb.configure_default_column(
-            filterable=True,
-            sorteable=True,
             resizable=True,
-            minWidth=100
+            filterable=True,
+            sortable=True,
+            editable=False
         )
-        
-        # Configurar columnas específicas
-        for col in df_display.columns:
-            if 'email' in col.lower():
-                gb.configure_column(col, minWidth=200)
-            elif col in ['✅ Sí', '❌ No'] or any(x in col.lower() for x in ['activo', 'estado']):
-                gb.configure_column(col, maxWidth=120, cellStyle={'textAlign': 'center'})
-
         grid_options = gb.build()
-
-        # Mostrar tabla con contenedor estilizado
-        st.markdown('<div class="tabla-container">', unsafe_allow_html=True)
         
+        # Mostrar tabla mejorada
         grid_response = AgGrid(
-            df_display,
+            df[columnas_visibles],
             gridOptions=grid_options,
             update_mode=GridUpdateMode.SELECTION_CHANGED,
             theme="balham",
             allow_unsafe_jscode=True,
-            height=min(400, max(200, len(df_display) * 35 + 100)),
-            width='100%'
+            height=400
         )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
 
-    except Exception as e:
-        st.error(f"❌ Error al mostrar la tabla: {e}")
-        # Fallback a tabla simple
-        st.dataframe(df_display, use_container_width=True)
-        grid_response = {"selected_rows": []}
-
-    # ===============================
-    # FICHA DE EDICIÓN
-    # ===============================
-    if grid_response.get("selected_rows"):
-        selected_row = grid_response["selected_rows"][0]
-        
-        # Encontrar el registro original usando el índice
-        try:
-            # Obtener el índice de la fila seleccionada en el DataFrame original
-            selected_index = df_display.index[df_display.iloc[:, 0] == selected_row[df_display.columns[0]]].tolist()[0]
-            fila_original = df.iloc[selected_index].to_dict()
+        # ===============================
+        # FICHA DE EDICIÓN CON MEJORAS VISUALES
+        # ===============================
+        if grid_response["selected_rows"]:
+            fila = grid_response["selected_rows"][0]
             
-        except Exception as e:
-            st.error(f"❌ Error al obtener datos de la fila seleccionada: {e}")
-            return
+            # Contenedor con estilo mejorado
+            st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
+            st.subheader(f"✏️ Editar {titulo}")
+            st.caption(f"Modificando: {fila.get('nombre', fila.get('nombre_completo', fila[columnas_visibles[0]]))}")
 
-        _mostrar_formulario_edicion(
-            fila_original, titulo, on_save, id_col, columnas_visibles,
-            campos_select, campos_textarea, campos_file, campos_readonly,
-            campos_dinamicos, campos_help, reactive_fields
-        )
+            # Determinar campos visibles dinámicamente
+            campos_a_mostrar = columnas_visibles.copy()
+            if campos_dinamicos:
+                try:
+                    campos_a_mostrar = campos_dinamicos(fila)
+                    if id_col not in campos_a_mostrar:
+                        campos_a_mostrar.insert(0, id_col)
+                except Exception as e:
+                    st.error(f"❌ Error en campos dinámicos: {e}")
 
-    # ===============================
-    # FORMULARIO DE CREACIÓN
-    # ===============================
-    if allow_creation and on_create:
-        st.divider()
-        _mostrar_formulario_creacion(
-            titulo, on_create, columnas_visibles, campos_select,
-            campos_textarea, campos_file, campos_readonly,
-            campos_password, campos_help, id_col
-        )
-
-def _mostrar_formulario_edicion(
-    fila: Dict[str, Any],
-    titulo: str,
-    on_save: Callable,
-    id_col: str,
-    columnas_visibles: List[str],
-    campos_select: Dict,
-    campos_textarea: Dict,
-    campos_file: Dict,
-    campos_readonly: List[str],
-    campos_dinamicos: Optional[Callable],
-    campos_help: Dict,
-    reactive_fields: Dict
-):
-    """Muestra el formulario de edición optimizado."""
-    
-    st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
-    st.subheader(f"✏️ Editar {titulo}")
-    
-    # Mostrar identificador del registro
-    nombre_display = (fila.get('nombre') or fila.get('nombre_completo') or 
-                     fila.get('email') or str(fila.get(id_col, '')))
-    st.caption(f"Modificando: {nombre_display}")
-
-    # Determinar campos a mostrar
-    campos_a_mostrar = columnas_visibles.copy()
-    if campos_dinamicos:
-        try:
-            campos_a_mostrar = campos_dinamicos(fila)
-            if id_col not in campos_a_mostrar:
-                campos_a_mostrar.insert(0, id_col)
-        except Exception as e:
-            st.error(f"❌ Error en campos dinámicos: {e}")
-
-    with st.form(f"form_editar_{fila[id_col]}", clear_on_submit=False):
-        datos_editados = {}
-        
-        # Organizar campos en columnas si hay muchos
-        if len(campos_a_mostrar) > 6:
-            col1, col2 = st.columns(2)
-            cols = [col1, col2]
-        else:
-            cols = [st]
-        
-        col_idx = 0
-        
-        for campo in campos_a_mostrar:
-            if campo == id_col:
-                continue
+            with st.form("form_editar", clear_on_submit=False):
+                datos_editados = {}
                 
-            # Determinar columna actual
-            current_col = cols[col_idx % len(cols)] if len(cols) > 1 else cols[0]
-            col_idx += 1
-            
-            with current_col:
-                _crear_campo_formulario(
-                    campo, fila, datos_editados, campos_select,
-                    campos_textarea, campos_file, campos_readonly,
-                    campos_help, is_creation=False
-                )
-
-        # Botones de acción
-        col_guardar, col_cancelar = st.columns([1, 1])
-        
-        with col_guardar:
-            guardar_clicked = st.form_submit_button("💾 Guardar cambios", use_container_width=True)
-        
-        with col_cancelar:
-            cancelar_clicked = st.form_submit_button("🚫 Cancelar", use_container_width=True)
-        
-        if guardar_clicked:
-            try:
-                # Filtrar solo los campos que realmente cambiaron
-                cambios = {k: v for k, v in datos_editados.items() 
-                          if v != fila.get(k) and v is not None}
-                
-                if cambios:
-                    on_save(fila[id_col], cambios)
+                # Organizar campos en secciones si hay muchos
+                if len(campos_a_mostrar) > 8:
+                    st.markdown("#### 📝 Información básica")
+                    col1, col2 = st.columns(2)
+                    cols = [col1, col2]
+                    col_idx = 0
                 else:
-                    st.info("ℹ️ No se detectaron cambios para guardar.")
-            except Exception as e:
-                st.error(f"❌ Error al guardar: {e}")
-        
-        if cancelar_clicked:
-            st.rerun()
+                    cols = [st]
+                    col_idx = 0
+                
+                for i, col in enumerate(campos_a_mostrar):
+                    if col == id_col:
+                        continue
 
-    st.markdown('</div>', unsafe_allow_html=True)
+                    valor_actual = fila.get(col, "")
+                    if valor_actual is None:
+                        valor_actual = ""
 
-def _mostrar_formulario_creacion(
-    titulo: str,
-    on_create: Callable,
-    columnas_visibles: List[str],
-    campos_select: Dict,
-    campos_textarea: Dict,
-    campos_file: Dict,
-    campos_readonly: List[str],
-    campos_password: List[str],
-    campos_help: Dict,
-    id_col: str
-):
-    """Muestra el formulario de creación optimizado."""
-    
-    with st.expander(f"➕ Crear nuevo {titulo.lower()}", expanded=False):
-        st.markdown(f"### ➕ Nuevo {titulo}")
+                    # Determinar columna para organización visual
+                    if len(cols) > 1:
+                        current_col = cols[col_idx % 2]
+                        col_idx += 1
+                    else:
+                        current_col = cols[0]
+
+                    with current_col:
+                        # Verificar si el campo es obligatorio para aplicar estilo
+                        es_obligatorio = col in campos_obligatorios
+                        campo_class = "campo-obligatorio" if es_obligatorio else ""
+                        
+                        # Verificar si es campo reactivo (se muestra/oculta según otros campos)
+                        es_reactivo = False
+                        for trigger_field, dependent_fields in reactive_fields.items():
+                            if col in dependent_fields:
+                                es_reactivo = True
+                                campo_class += " campo-dinamico"
+                                # Determinar si debe mostrarse u ocultarse según el valor del campo trigger
+                                mostrar_campo = fila.get(trigger_field, False)
+                                if not mostrar_campo:
+                                    campo_class += " campo-oculto"
+                        
+                        # Aplicar clase CSS si es obligatorio o reactivo
+                        if campo_class:
+                            st.markdown(f'<div class="{campo_class}">', unsafe_allow_html=True)
+                        
+                        # Label formateado
+                        label = col.replace('_', ' ').title()
+                        help_text = campos_help.get(col, "")
+                        
+                        # Determinar tipo de campo y mostrarlo
+                        if col in campos_readonly:
+                            # Campo de solo lectura
+                            st.text_input(
+                                label,
+                                value=str(valor_actual),
+                                disabled=True,
+                                key=f"readonly_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif col in campos_select:
+                            # Campo de selección
+                            datos_editados[col] = st.selectbox(
+                                label,
+                                options=campos_select[col],
+                                index=campos_select[col].index(valor_actual) if valor_actual in campos_select[col] else 0,
+                                key=f"select_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif col in campos_textarea:
+                            # Campo de texto multilínea
+                            cfg = campos_textarea[col]
+                            datos_editados[col] = st.text_area(
+                                cfg.get("label", label),
+                                value=str(valor_actual),
+                                height=cfg.get("height", 100),
+                                key=f"textarea_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif col in campos_file:
+                            # Campo de archivo
+                            cfg = campos_file[col]
+                            
+                            # Mostrar archivo actual si existe
+                            if valor_actual:
+                                st.caption(f"Archivo actual: {valor_actual}")
+                            
+                            datos_editados[col] = st.file_uploader(
+                                cfg.get("label", label),
+                                type=cfg.get("type", None),
+                                key=f"file_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif 'fecha' in col.lower() or 'date' in col.lower() or 'inicio' in col.lower() or 'fin' in col.lower():
+                            # Campo de fecha
+                            try:
+                                # Intentar convertir a fecha si es string
+                                if isinstance(valor_actual, str) and valor_actual:
+                                    fecha_val = pd.to_datetime(valor_actual).date()
+                                elif isinstance(valor_actual, pd.Timestamp):
+                                    fecha_val = valor_actual.date()
+                                else:
+                                    fecha_val = None
+                                
+                                datos_editados[col] = st.date_input(
+                                    label,
+                                    value=fecha_val,
+                                    key=f"date_{col}_{fila[id_col]}",
+                                    help=help_text
+                                )
+                            except Exception:
+                                # Si falla, mostrar como texto
+                                datos_editados[col] = st.text_input(
+                                    label,
+                                    value=str(valor_actual),
+                                    key=f"text_{col}_{fila[id_col]}",
+                                    help=help_text
+                                )
+                        elif isinstance(valor_actual, bool) or col.endswith('_activo'):
+                            # Campo booleano
+                            datos_editados[col] = st.checkbox(
+                                label,
+                                value=bool(valor_actual),
+                                key=f"check_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif 'email' in col.lower():
+                            # Campo de email
+                            datos_editados[col] = st.text_input(
+                                label,
+                                value=str(valor_actual),
+                                key=f"email_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        elif 'telefono' in col.lower() or 'movil' in col.lower():
+                            # Campo de teléfono
+                            datos_editados[col] = st.text_input(
+                                label,
+                                value=str(valor_actual),
+                                key=f"tel_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        else:
+                            # Campo de texto genérico
+                            datos_editados[col] = st.text_input(
+                                label,
+                                value=str(valor_actual),
+                                key=f"text_{col}_{fila[id_col]}",
+                                help=help_text
+                            )
+                        
+                        # Cerrar div de clase si aplicamos alguna
+                        if campo_class:
+                            st.markdown('</div>', unsafe_allow_html=True)
+                
+                # Botones de acción
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("💾 Guardar cambios", use_container_width=True):
+                        try:
+                            on_save(fila[id_col], datos_editados)
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar: {e}")
+                
+                with col2:
+                    if st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
+                        st.session_state[f'confirm_delete_{fila[id_col]}'] = True
+                        st.rerun()
+
+            # Confirmación de eliminación
+            if st.session_state.get(f'confirm_delete_{fila[id_col]}', False):
+                st.error("⚠️ ¿Estás seguro de que quieres eliminar este registro?")
+                st.caption("Esta acción no se puede deshacer.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Sí, eliminar", key=f"confirm_yes_{fila[id_col]}", type="primary"):
+                        if on_delete:  # Usar la función de eliminación si se proporciona
+                            try:
+                                on_delete(fila[id_col])
+                            except Exception as e:
+                                st.error(f"❌ Error al eliminar: {e}")
+                        else:
+                            st.error("❌ Función de eliminación no configurada.")
+                        
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Cancelar", key=f"confirm_no_{fila[id_col]}"):
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    else:
+        st.info(f"ℹ️ No hay {titulo.lower()}s registrados en el sistema.")
+
+    # ===============================
+    # FORMULARIO DE CREACIÓN MEJORADO
+    # ===============================
+    if on_create and allow_creation:
+        st.divider()
         
-        with st.form(f"form_crear_{titulo.lower()}", clear_on_submit=True):
+        # Contenedor con estilo
+        st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
+        st.subheader(f"➕ Crear nuevo {titulo}")
+        st.caption("Completa los campos para crear un nuevo registro.")
+        
+        with st.form("form_crear", clear_on_submit=True):
             datos_nuevos = {}
             
-            # Filtrar campos para creación (excluir readonly excepto passwords)
-            campos_creacion = [col for col in columnas_visibles 
-                             if col not in campos_readonly or col in campos_password]
-            
-            # Excluir id_col de la creación
-            if id_col in campos_creacion:
-                campos_creacion.remove(id_col)
-            
-            # Organizar en columnas
-            if len(campos_creacion) > 6:
+            # Usar campos dinámicos para creación si está definido
+            campos_crear = columnas_visibles.copy()
+            if campos_dinamicos:
+                try:
+                    # Para creación, pasamos datos vacíos para determinar campos base
+                    campos_crear = campos_dinamicos({})
+                except Exception:
+                    pass  # Usar columnas_visibles por defecto
+
+            # Organizar campos en columnas si son muchos
+            if len(campos_crear) > 6:
+                st.markdown("#### 📝 Información del nuevo registro")
                 col1, col2 = st.columns(2)
                 cols = [col1, col2]
+                col_idx = 0
             else:
                 cols = [st]
-            
-            col_idx = 0
-            
-            for campo in campos_creacion:
-                current_col = cols[col_idx % len(cols)] if len(cols) > 1 else cols[0]
-                col_idx += 1
-                
+                col_idx = 0
+
+            for col in campos_crear:
+                if col == id_col:
+                    continue
+
+                # Alternar entre columnas si hay más de 6 campos
+                if len(cols) > 1:
+                    current_col = cols[col_idx % 2]
+                    col_idx += 1
+                else:
+                    current_col = cols[0]
+
                 with current_col:
-                    _crear_campo_formulario(
-                        campo, {}, datos_nuevos, campos_select,
-                        campos_textarea, campos_file, campos_readonly,
-                        campos_help, is_creation=True, campos_password=campos_password
-                    )
+                    # Verificar si es campo obligatorio
+                    es_obligatorio = col in campos_obligatorios
+                    campo_class = "campo-obligatorio" if es_obligatorio else ""
+                    
+                    if campo_class:
+                        st.markdown(f'<div class="{campo_class}">', unsafe_allow_html=True)
+                        
+                    label = col.replace('_', ' ').title()
+                    help_text = campos_help.get(col, "")
+
+                    # Campo select
+                    if col in campos_select:
+                        datos_nuevos[col] = st.selectbox(
+                            label,
+                            options=campos_select[col],
+                            key=f"create_select_{col}",
+                            help=help_text
+                        )
+
+                    # Campo textarea
+                    elif col in campos_textarea:
+                        cfg = campos_textarea[col]
+                        datos_nuevos[col] = st.text_area(
+                            cfg.get("label", label),
+                            height=cfg.get("height", 100),
+                            key=f"create_textarea_{col}",
+                            help=help_text
+                        )
+
+                    # Campo file
+                    elif col in campos_file:
+                        cfg = campos_file[col]
+                        datos_nuevos[col] = st.file_uploader(
+                            cfg.get("label", label),
+                            type=cfg.get("type", None),
+                            key=f"create_file_{col}",
+                            help=help_text
+                        )
+
+                    # Campo password
+                    elif col in campos_password:
+                        datos_nuevos[col] = st.text_input(
+                            label,
+                            type="password",
+                            key=f"create_password_{col}",
+                            help=help_text or "Se generará automáticamente si se deja vacío"
+                        )
+
+                    # Campos específicos por tipo
+                    elif 'fecha' in col.lower() or 'date' in col.lower() or 'inicio' in col.lower() or 'fin' in col.lower():
+                        datos_nuevos[col] = st.date_input(
+                            label,
+                            key=f"create_date_{col}",
+                            help=help_text
+                        )
+                    elif col.endswith('_activo') or 'activo' in col.lower():
+                        datos_nuevos[col] = st.checkbox(
+                            label,
+                            value=False,
+                            key=f"create_check_{col}",
+                            help=help_text
+                        )
+                    elif 'email' in col.lower():
+                        datos_nuevos[col] = st.text_input(
+                            label,
+                            key=f"create_email_{col}",
+                            placeholder="usuario@ejemplo.com",
+                            help=help_text
+                        )
+                    elif 'telefono' in col.lower() or 'movil' in col.lower():
+                        datos_nuevos[col] = st.text_input(
+                            label,
+                            key=f"create_tel_{col}",
+                            placeholder="600123456",
+                            help=help_text
+                        )
+                    else:
+                        datos_nuevos[col] = st.text_input(
+                            label,
+                            key=f"create_text_{col}",
+                            help=help_text
+                        )
+                        
+                    # Cerrar div de clase si aplicamos alguna
+                    if campo_class:
+                        st.markdown('</div>', unsafe_allow_html=True)
 
             # Botón de creación
-            crear_clicked = st.form_submit_button(f"➕ Crear {titulo.lower()}", use_container_width=True)
-            
-            if crear_clicked:
+            if st.form_submit_button("✅ Crear", use_container_width=True):
                 try:
-                    # Filtrar datos vacíos
-                    datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                                   if v is not None and v != ""}
+                    # Verificar campos obligatorios
+                    campos_vacios = [col for col in campos_obligatorios if col in datos_nuevos and not datos_nuevos[col]]
                     
-                    if datos_limpios:
-                        on_create(datos_limpios)
+                    if campos_vacios:
+                        st.error(f"⚠️ Completa los campos obligatorios: {', '.join(campos_vacios)}")
                     else:
-                        st.warning("⚠️ Por favor, completa al menos los campos obligatorios.")
+                        on_create(datos_nuevos)
                 except Exception as e:
                     st.error(f"❌ Error al crear: {e}")
+            
+            st.markdown('</div>', unsafe_allow_html=True)
 
-def _crear_campo_formulario(
-    campo: str,
-    datos_actuales: Dict[str, Any],
-    datos_form: Dict[str, Any],
-    campos_select: Dict,
-    campos_textarea: Dict,
-    campos_file: Dict,
-    campos_readonly: List[str],
-    campos_help: Dict,
-    is_creation: bool = False,
-    campos_password: List[str] = None
-):
-    """Crea un campo individual del formulario."""
-    
-    campos_password = campos_password or []
-    valor_actual = datos_actuales.get(campo, "")
-    
-    # Determinar etiqueta
-    label = campo.replace('_', ' ').title()
-    
-    # Agregar ayuda si existe
-    help_text = campos_help.get(campo, "")
-    
-    # Campo readonly
-    if campo in campos_readonly and not (is_creation and campo in campos_password):
-        st.text_input(f"{label} (solo lectura)", value=str(valor_actual), disabled=True, help=help_text)
-        return
-
-    # Campo select
-    if campo in campos_select:
-        opciones = campos_select[campo]
-        if valor_actual in opciones:
-            index = opciones.index(valor_actual)
-        else:
-            index = 0
-        datos_form[campo] = st.selectbox(
-            label, 
-            options=opciones, 
-            index=index,
-            help=help_text,
-            key=f"{campo}_{'create' if is_creation else 'edit'}"
-        )
-    
-    # Campo textarea
-    elif campo in campos_textarea:
-        config = campos_textarea[campo]
-        datos_form[campo] = st.text_area(
-            config.get("label", label),
-            value=str(valor_actual),
-            height=config.get("height", 100),
-            help=help_text,
-            key=f"{campo}_{'create' if is_creation else 'edit'}"
-        )
-    
-    # Campo file
-    elif campo in campos_file:
-        config = campos_file[campo]
-        if valor_actual and not is_creation:
-            st.caption(f"Archivo actual: {valor_actual}")
-        datos_form[campo] = st.file_uploader(
-            config.get("label", label),
-            type=config.get("type", None),
-            help=help_text,
-            key=f"{campo}_{'create' if is_creation else 'edit'}"
-        )
-    
-    # Campo password (solo en creación)
-    elif campo in campos_password and is_creation:
-        datos_form[campo] = st.text_input(
-            label,
-            type="password",
-            help=help_text,
-            key=f"{campo}_create"
-        )
-    
-    # Campos específicos por tipo
-    else:
-        if 'fecha' in campo.lower():
-            try:
-                if valor_actual:
-                    valor_fecha = pd.to_datetime(valor_actual).date()
-                else:
-                    valor_fecha = None
-            except Exception:
-                valor_fecha = None
-            datos_form[campo] = st.date_input(
-                label,
-                value=valor_fecha,
-                help=help_text,
-                key=f"{campo}_{'create' if is_creation else 'edit'}"
-            )
-        
-        elif campo.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'horas']:
-            try:
-                valor_num = float(valor_actual) if valor_actual else 0.0
-            except (ValueError, TypeError):
-                valor_num = 0.0
-            datos_form[campo] = st.number_input(
-                label,
-                value=valor_num,
-                min_value=0.0,
-                step=0.01 if any(x in campo.lower() for x in ['precio', 'importe']) else 1.0,
-                help=help_text,
-                key=f"{campo}_{'create' if is_creation else 'edit'}"
-            )
-        
-        elif 'email' in campo.lower():
-            datos_form[campo] = st.text_input(
-                label,
-                value=str(valor_actual),
-                help=help_text,
-                key=f"{campo}_{'create' if is_creation else 'edit'}"
-            )
-        
-        elif campo.lower() in ['activo', 'activado', 'habilitado'] or '_activo' in campo:
-            valor_bool = bool(valor_actual) if valor_actual is not None else False
-            datos_form[campo] = st.checkbox(
-                label,
-                value=valor_bool,
-                help=help_text,
-                key=f"{campo}_{'create' if is_creation else 'edit'}"
-            )
-        
-        else:
-            # Campo de texto genérico
-            datos_form[campo] = st.text_input(
-                label,
-                value=str(valor_actual),
-                help=help_text,
-                key=f"{campo}_{'create' if is_creation else 'edit'}"
-            )
+    return df  # Devolver el dataframe (posiblemente filtrado)
