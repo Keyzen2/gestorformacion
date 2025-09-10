@@ -1,4 +1,101 @@
-import streamlit as st
+# FICHA DE EDICIÓN CON MEJORAS VISUALES
+        # ===============================
+        if grid_response["selected_rows"]:
+            fila = grid_response["selected_rows"][0]
+            
+            # Contenedor con estilo mejorado
+            st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
+            st.subheader(f"✏️ Editar {titulo}")
+            st.caption(f"Modificando: {fila.get('nombre', fila.get('nombre_completo', fila[columnas_visibles[0]]))}")
+
+            # Determinar campos visibles dinámicamente
+            campos_a_mostrar = columnas_visibles.copy()
+            if campos_dinamicos:
+                try:
+                    campos_a_mostrar = campos_dinamicos(fila)
+                    if id_col not in campos_a_mostrar:
+                        campos_a_mostrar.insert(0, id_col)
+                except Exception as e:
+                    st.error(f"❌ Error en campos dinámicos: {e}")
+
+            with st.form("form_editar", clear_on_submit=False):
+                datos_editados = {}
+                
+                # Organizar campos en secciones si hay muchos
+                if len(campos_a_mostrar) > 8:
+                    st.markdown("#### 📝 Información básica")
+                    col1, col2 = st.columns(2)
+                    cols = [col1, col2]
+                    col_idx = 0
+                else:
+                    cols = [st]
+                    col_idx = 0
+                
+                for i, col in enumerate(campos_a_mostrar):
+                    if col == id_col:
+                        continue
+
+                    valor_actual = fila.get(col, "")
+                    if valor_actual is None:
+                        valor_actual = ""
+
+                    # Determinar columna para organización visual
+                    if len(cols) > 1:
+                        current_col = cols[col_idx % 2]
+                        col_idx += 1
+                    else:
+                        current_col = cols[0]
+
+                    with current_col:
+                        # Crear contenedor dinámico para campos reactivos
+                        campo_container = st.container()
+                        
+                        with campo_container:
+                            label = col.replace('_', ' ').title()
+                            help_text = campos_help.get(col, "")
+                            
+                            # Campo readonly
+                            if col in campos_readonly:
+                                st.text_input(
+                                    label, 
+                                    value=str(valor_actual), 
+                                    disabled=True,
+                                    key=f"readonly_{col}",
+                                    help=help_text
+                                )
+                                continue
+
+                            # Campo select con mejoras visuales
+                            elif col in campos_select:
+                                opciones = campos_select[col]
+                                try:
+                                    idx = opciones.index(valor_actual) if valor_actual in opciones else 0
+                                except (ValueError, TypeError):
+                                    idx = 0
+                                
+                                # Campo select reactivo
+                                datos_editados[col] = st.selectbox(
+                                    label, 
+                                    options=opciones, 
+                                    index=idx,
+                                    key=f"select_{col}",
+                                    help=help_text,
+                                    on_change=lambda: _handle_reactive_change(col, reactive_fields) if col in reactive_fields else None
+                                )
+
+                            # Campo textarea
+                            elif col in campos_textarea:
+                                datos_editados[col] = st.text_area(
+                                    campos_textarea[col].get("label", label),
+                                    value=str(valor_actual),
+                                    height=campos_textarea[col].get("height", 100),
+                                    key=f"textarea_{col}",
+                                    help=help_text
+                                )
+
+                            # Campo file con preview
+                            elif col in campos_file:
+                                st.markdown(fimport streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
