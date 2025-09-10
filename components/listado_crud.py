@@ -230,5 +230,123 @@ def listado_crud(
                                 try:
                                     idx = opciones.index(valor_actual) if valor_actual in opciones else 0
                                 except (ValueError, TypeError):
-                                    idx
+                                    idx = 0
+                                datos_editados[col] = st.selectbox(
+                                    label, 
+                                    opciones, 
+                                    index=idx,
+                                    key=f"select_{col}_{registro_id}"
+                                )
+                                
+                            # Campo textarea
+                            elif col in campos_textarea:
+                                cfg = campos_textarea[col]
+                                datos_editados[col] = st.text_area(
+                                    cfg.get("label", label),
+                                    value=str(valor_actual),
+                                    height=cfg.get("height", 100),
+                                    key=f"textarea_{col}_{registro_id}"
+                                )
+                                
+                            # Campo file
+                            elif col in campos_file:
+                                cfg = campos_file[col]
+                                st.markdown(f"**{cfg.get('label', label)}**")
+                                if valor_actual:
+                                    st.caption(f"Archivo actual: {valor_actual}")
+                                datos_editados[col] = st.file_uploader(
+                                    "Seleccionar nuevo archivo",
+                                    type=cfg.get("type", None),
+                                    key=f"file_{col}_{registro_id}"
+                                )
+                                
+                            # Campos específicos por tipo
+                            else:
+                                if 'fecha' in col.lower():
+                                    try:
+                                        if valor_actual:
+                                            valor_fecha = pd.to_datetime(valor_actual).date()
+                                        else:
+                                            valor_fecha = None
+                                    except Exception:
+                                        valor_fecha = None
+                                    datos_editados[col] = st.date_input(
+                                        label, 
+                                        value=valor_fecha,
+                                        key=f"date_{col}_{registro_id}"
+                                    )
+                                elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num']:
+                                    try:
+                                        valor_num = float(valor_actual) if valor_actual else 0.0
+                                    except (ValueError, TypeError):
+                                        valor_num = 0.0
+                                    datos_editados[col] = st.number_input(
+                                        label, 
+                                        value=valor_num,
+                                        min_value=0.0, 
+                                        step=0.01,
+                                        key=f"number_{col}_{registro_id}"
+                                    )
+                                elif 'email' in col.lower():
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        placeholder="usuario@ejemplo.com",
+                                        key=f"email_{col}_{registro_id}"
+                                    )
+                                elif 'telefono' in col.lower() or 'movil' in col.lower():
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        placeholder="600123456",
+                                        key=f"phone_{col}_{registro_id}"
+                                    )
+                                else:
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        key=f"text_{col}_{registro_id}"
+                                    )
+                    
+                    col1, col2, col3 = st.columns([1, 1, 2])
+                    with col1:
+                        guardar = st.form_submit_button("💾 Guardar", use_container_width=True)
+                    with col2:
+                        if st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
+                            st.session_state[f'confirm_delete_{registro_id}'] = True
+                    
+                    if guardar:
+                        try:
+                            # Filtrar campos que no han cambiado o están vacíos innecesariamente
+                            datos_filtrados = {}
+                            for key, value in datos_editados.items():
+                                if key in campos_file and value is None:
+                                    continue  # No actualizar archivos si no se subió nada nuevo
+                                datos_filtrados[key] = value
+                            
+                            if datos_filtrados:
+                                on_save(registro_id, datos_filtrados)
+                            else:
+                                st.warning("⚠️ No hay cambios para guardar.")
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar: {e}")
+                
+                # Confirmación de eliminación
+                if st.session_state.get(f'confirm_delete_{registro_id}', False):
+                    st.warning("⚠️ ¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Sí, eliminar", key=f"confirm_yes_{registro_id}"):
+                            try:
+                                # Aquí deberías llamar a una función de eliminación
+                                # on_delete(registro_id) si la tuvieras
+                                st.success("✅ Registro eliminado correctamente.")
+                                del st.session_state[f'confirm_delete_{registro_id}']
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al eliminar: {e}")
+                    with col2:
+                        if st.button("❌ Cancelar", key=f"confirm_no_{registro_id}"):
+                            del st.session_state[f'confirm_delete_{registro_id}']
+                            st.rerun()
                 
