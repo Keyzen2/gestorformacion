@@ -25,6 +25,8 @@ altair>=5.5.0
 
 # Tablas interactivas tipo Excel
 streamlit-aggrid>=0.3.4.post3
+XlsxWriter>=3.0.0
+
 
 
 
