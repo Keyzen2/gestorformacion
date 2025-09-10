@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime
+from datetime import datetime
 from utils import validar_dni_cif, export_csv
 from components.listado_con_ficha import listado_con_ficha
 
@@ -33,21 +33,28 @@ def main(supabase, session_state):
     # 4) Métricas
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🏢 Total Empresas", len(df_emp))
-    col2.metric(
-        "🆕 Nuevas este mes",
-        len(df_emp[pd.to_datetime(df_emp.get("fecha_alta"), errors="coerce").dt.month == datetime.now().month])
-        if not df_emp.empty else 0
-    )
-    col3.metric(
-        "📍 Provincia más frecuente",
-        df_emp["provincia"].value_counts().idxmax()
-        if "provincia" in df_emp.columns and not df_emp.empty else "N/D"
-    )
-    col4.metric(
-        "🌆 Ciudad más frecuente",
-        df_emp["ciudad"].value_counts().idxmax()
-        if "ciudad" in df_emp.columns and not df_emp.empty else "N/D"
-    )
+
+    # Nuevas este mes
+    if "fecha_alta" in df_emp.columns and not df_emp.empty:
+        fecha_alta_mes = pd.to_datetime(df_emp["fecha_alta"], errors="coerce").dt.month
+        nuevas_mes = (fecha_alta_mes == datetime.now().month).sum()
+    else:
+        nuevas_mes = 0
+    col2.metric("🆕 Nuevas este mes", nuevas_mes)
+
+    # Provincia más frecuente
+    if "provincia" in df_emp.columns and not df_emp.empty and df_emp["provincia"].notna().any():
+        provincia_frec = df_emp["provincia"].value_counts().idxmax()
+    else:
+        provincia_frec = "N/D"
+    col3.metric("📍 Provincia más frecuente", provincia_frec)
+
+    # Ciudad más frecuente
+    if "ciudad" in df_emp.columns and not df_emp.empty and df_emp["ciudad"].notna().any():
+        ciudad_frec = df_emp["ciudad"].value_counts().idxmax()
+    else:
+        ciudad_frec = "N/D"
+    col4.metric("🌆 Ciudad más frecuente", ciudad_frec)
 
     st.divider()
 
@@ -152,7 +159,7 @@ def main(supabase, session_state):
             st.error("⚠️ CIF inválido.")
         else:
             try:
-                res = supabase.table("empresas").insert({
+                supabase.table("empresas").insert({
                     "nombre": nombre,
                     "cif": cif,
                     "direccion": direccion,
