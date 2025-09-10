@@ -173,7 +173,148 @@
 
                     # Campo textarea
                     elif col in campos_textarea:
-                        cfg = campos_textarea[col        # FICHA DE EDICIÓN CON MEJORAS VISUALES
+                        cfg = campos_textarea[col]
+                        datos_nuevos[col] = st.text_area(
+                            cfg.get("label", label),
+                            height=cfg.get("height", 100),
+                            key=f"create_textarea_{col}",
+                            help=help_text
+                        )
+
+                    # Campo file
+                    elif col in campos_file:
+                        cfg = campos_file[col]
+                        datos_nuevos[col] = st.file_uploader(
+                            cfg.get("label", label),
+                            type=cfg.get("type", None),
+                            key=f"create_file_{col}",
+                            help=help_text
+                        )
+
+                    # Campo password
+                    elif col in campos_password:
+                        datos_nuevos[col] = st.text_input(
+                            label,
+                            type="password",
+                            key=f"create_password_{col}",
+                            help=help_text or "Se generará automáticamente si se deja vacío"
+                        )
+
+                    # Campos específicos por tipo
+                    else:
+                        if 'fecha' in col.lower():
+                            datos_nuevos[col] = st.date_input(
+                                label,
+                                key=f"create_date_{col}",
+                                help=help_text
+                            )
+                        elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
+                            datos_nuevos[col] = st.number_input(
+                                label,
+                                min_value=0.0,
+                                step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
+                                key=f"create_number_{col}",
+                                help=help_text
+                            )
+                        elif 'email' in col.lower():
+                            datos_nuevos[col] = st.text_input(
+                                label,
+                                placeholder="usuario@ejemplo.com",
+                                key=f"create_email_{col}",
+                                help=help_text
+                            )
+                        elif 'telefono' in col.lower() or 'movil' in col.lower():
+                            datos_nuevos[col] = st.text_input(
+                                label,
+                                placeholder="600123456",
+                                key=f"create_phone_{col}",
+                                help=help_text
+                            )
+                        elif 'cif' in col.lower() or 'dni' in col.lower():
+                            datos_nuevos[col] = st.text_input(
+                                label,
+                                placeholder="12345678A" if 'dni' in col.lower() else "A12345678",
+                                key=f"create_doc_{col}",
+                                help=help_text
+                            )
+                        else:
+                            datos_nuevos[col] = st.text_input(
+                                label,
+                                key=f"create_input_{col}",
+                                help=help_text
+                            )
+                    
+                    # Mostrar texto de ayuda
+                    if help_text:
+                        st.caption(f"💡 {help_text}")
+
+            # Botones de creación
+            st.markdown("#### 🔧 Crear registro")
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.form_submit_button(f"✅ Crear {titulo}", use_container_width=True, type="primary"):
+                    # Filtrar campos vacíos excepto los obligatorios
+                    datos_filtrados = {k: v for k, v in datos_nuevos.items() if v or k in campos_password}
+                    try:
+                        on_create(datos_filtrados)
+                    except Exception as e:
+                        st.error(f"❌ Error al crear {titulo.lower()}: {e}")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ===============================
+    # JavaScript para campos reactivos mejorado
+    # ===============================
+    if reactive_fields:
+        st.markdown(f"""
+        <script>
+        // Función para manejar campos reactivos
+        function handleReactiveFields() {{
+            const reactiveConfig = {reactive_fields};
+            
+            Object.keys(reactiveConfig).forEach(triggerField => {{
+                const selectors = document.querySelectorAll(`[data-testid*="${triggerField}"] select, [data-testid*="${triggerField}"] input`);
+                
+                selectors.forEach(element => {{
+                    element.addEventListener('change', function() {{
+                        const value = this.value;
+                        const dependentFields = reactiveConfig[triggerField];
+                        
+                        dependentFields.forEach(fieldName => {{
+                            const fieldElements = document.querySelectorAll(`[data-testid*="${fieldName}"]`);
+                            
+                            fieldElements.forEach(fieldEl => {{
+                                // Lógica específica para mostrar/ocultar campos
+                                if (triggerField === 'rol') {{
+                                    if (fieldName === 'empresa' && value !== 'gestor') {{
+                                        fieldEl.style.display = 'none';
+                                        fieldEl.classList.add('campo-oculto');
+                                    }} else if (fieldName === 'grupo' && value !== 'alumno') {{
+                                        fieldEl.style.display = 'none';
+                                        fieldEl.classList.add('campo-oculto');
+                                    }} else {{
+                                        fieldEl.style.display = 'block';
+                                        fieldEl.classList.remove('campo-oculto');
+                                        fieldEl.classList.add('campo-aparece');
+                                    }}
+                                }}
+                            }});
+                        }});
+                    }});
+                }});
+            }});
+        }}
+        
+        // Ejecutar cuando se carga la página y periódicamente
+        setTimeout(handleReactiveFields, 1000);
+        setInterval(handleReactiveFields, 3000);
+        </script>
+        """, unsafe_allow_html=True)
+
+def _handle_reactive_change(field, reactive_config):
+    """Función auxiliar para manejar cambios en campos reactivos."""
+    # Esta función se puede expandir para lógica más compleja
+    pass        # FICHA DE EDICIÓN CON MEJORAS VISUALES
         # ===============================
         if grid_response["selected_rows"]:
             fila = grid_response["selected_rows"][0]
