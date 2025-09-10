@@ -1,790 +1,548 @@
+"""
+Funciones de utilidad para el gestor de formación.
+Versión mejorada con validaciones robustas y funciones optimizadas.
+"""
+
 import streamlit as st
 import pandas as pd
 import re
-from datetime import datetime, date
-from typing import Dict, Any, Optional, List
 import base64
-import io
+from datetime import datetime, date
+from io import BytesIO
 
 # =========================
-# CONFIGURACIÓN Y CONSTANTES
+# VALIDACIONES
 # =========================
-EMAIL_REGEX = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-DNI_REGEX = r'^[0-9]{8}[TRWAGMYFPDXBNJZSQVHLCKE]$'
-NIE_REGEX = r'^[XYZ][0-9]{7}[TRWAGMYFPDXBNJZSQVHLCKE]$'
-CIF_REGEX = r'^[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J]$'
-
-# =========================
-# VALIDACIONES OPTIMIZADAS
-# =========================
-def validar_email(email: str) -> bool:
-    """Valida formato de email."""
-    if not email:
-        return False
-    return bool(re.match(EMAIL_REGEX, email.strip()))
 
 def validar_dni_cif(documento: str) -> bool:
     """
-    Valida DNI, NIE o CIF español.
-    Optimizado y simplificado.
+    Valida DNI, NIE o CIF.
+    
+    Args:
+        documento: String con el documento a validar
+        
+    Returns:
+        bool: True si es válido, False en caso contrario
     """
     if not documento:
         return False
+        
+    documento = documento.upper().replace('-', '').replace(' ', '')
     
-    doc = documento.upper().strip()
-    
-    # Validar DNI
-    if re.match(DNI_REGEX, doc):
+    # Validar DNI (8 números + letra)
+    if re.match(r'^[0-9]{8}[A-Z]$', documento):
         letras = 'TRWAGMYFPDXBNJZSQVHLCKE'
-        numero = int(doc[:8])
-        letra = doc[8]
+        numero = int(documento[0:8])
+        letra = documento[8]
         return letras[numero % 23] == letra
-    
-    # Validar NIE
-    if re.match(NIE_REGEX, doc):
+        
+    # Validar NIE (X/Y/Z + 7 números + letra)
+    elif re.match(r'^[XYZ][0-9]{7}[A-Z]$', documento):
+        tabla = {'X': 0, 'Y': 1, 'Z': 2}
         letras = 'TRWAGMYFPDXBNJZSQVHLCKE'
-        # Convertir primera letra a número
-        primer_caracter = {'X': '0', 'Y': '1', 'Z': '2'}[doc[0]]
-        numero = int(primer_caracter + doc[1:8])
-        letra = doc[8]
+        
+        # Sustituir la letra inicial por su valor numérico
+        numero = int(str(tabla[documento[0]]) + documento[1:8])
+        letra = documento[8]
         return letras[numero % 23] == letra
-    
-    # Validar CIF
-    if re.match(CIF_REGEX, doc):
-        return True  # Validación básica de formato
+        
+    # Validar CIF (letra + 7 números + dígito control/letra)
+    elif re.match(r'^[ABCDEFGHJKLMNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
+        letra_ini = documento[0]
+        numeros = documento[1:8]
+        control = documento[8]
+        
+        # Algoritmo de validación de CIF
+        suma_a = 0
+        for i in [1, 3, 5, 7]:
+            if i < len(numeros):
+                suma_a += int(numeros[i-1])
+                
+        suma_b = 0
+        for i in [2, 4, 6, 8]:
+            if i-1 < len(numeros):
+                digit = 2 * int(numeros[i-1])
+                if digit > 9:
+                    digit = digit - 9
+                suma_b += digit
+                
+        suma = suma_a + suma_b
+        unidad = 10 - (suma % 10)
+        if unidad == 10:
+            unidad = 0
+            
+        # Para CIFs que deben tener letra de control
+        letras_control = 'JABCDEFGHI'
+        if letra_ini in 'KPQRSNW':
+            return letras_control[unidad] == control
+        else:
+            # Para CIFs que pueden tener número o letra
+            return str(unidad) == control or letras_control[unidad] == control
     
     return False
 
+def validar_email(email: str) -> bool:
+    """
+    Valida un email utilizando una expresión regular.
+    
+    Args:
+        email: Email a validar
+        
+    Returns:
+        bool: True si es válido, False en caso contrario
+    """
+    if not email:
+        return False
+    
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return bool(re.match(pattern, email))
+
 def validar_telefono(telefono: str) -> bool:
-    """Valida formato de teléfono español básico."""
+    """
+    Valida un número de teléfono español.
+    
+    Args:
+        telefono: Número a validar
+        
+    Returns:
+        bool: True si es válido, False en caso contrario
+    """
     if not telefono:
-        return True  # Campo opcional
+        return False
     
-    # Limpiar espacios y caracteres especiales
-    tel = re.sub(r'[\s\-\(\)]', '', telefono)
+    # Eliminar espacios y guiones
+    telefono = telefono.replace(' ', '').replace('-', '')
     
-    # Validar formato español básico
-    return bool(re.match(r'^[6789]\d{8}$', tel) or re.match(r'^\+34[6789]\d{8}$', tel))
+    # Teléfono español: 9 dígitos empezando por 6, 7, 8 o 9
+    return bool(re.match(r'^[6789]\d{8}$', telefono))
 
-# =========================
-# CACHE Y OPTIMIZACIÓN
-# =========================
-@st.cache_data(ttl=300)
-def get_ajustes_app(supabase, campos: Optional[List[str]] = None) -> Dict[str, Any]:
+def es_fecha_valida(fecha_str: str) -> bool:
     """
-    Obtiene ajustes de la aplicación con cache optimizado.
+    Verifica si una cadena se puede convertir a fecha.
     
     Args:
-        supabase: Cliente de Supabase
-        campos: Lista específica de campos a obtener (None = todos)
-    
+        fecha_str: Fecha en formato string
+        
     Returns:
-        Dict con los ajustes de la aplicación
+        bool: True si es una fecha válida, False en caso contrario
     """
+    if not fecha_str:
+        return False
+        
     try:
-        query = supabase.table("ajustes_app").select("*")
-        
-        # Si se especifican campos, optimizar la consulta
-        if campos:
-            campos_str = ",".join(campos)
-            query = supabase.table("ajustes_app").select(campos_str)
-        
-        res = query.execute()
-        
-        if res.data and len(res.data) > 0:
-            return res.data[0]
-        else:
-            # Valores por defecto si no existen ajustes
-            return {
-                "nombre_app": "Gestor de Formación",
-                "color_primario": "#4285F4",
-                "color_secundario": "#5f6368",
-                "mensaje_login": "Accede al gestor con tus credenciales.",
-                "mensaje_footer": "© 2025 Gestor de Formación · Streamlit + Supabase"
-            }
-    except Exception as e:
-        st.error(f"⚠️ Error al cargar ajustes: {e}")
-        return {}
-
-def update_ajustes_app(supabase, datos: Dict[str, Any]) -> bool:
-    """
-    Actualiza ajustes de la aplicación y limpia cache.
-    
-    Args:
-        supabase: Cliente de Supabase
-        datos: Diccionario con los datos a actualizar
-    
-    Returns:
-        bool: True si se actualizó correctamente
-    """
-    try:
-        # Preparar datos para actualización
-        datos_limpios = {k: v for k, v in datos.items() if v is not None}
-        datos_limpios["updated_at"] = datetime.now().isoformat()
-        
-        # Intentar actualizar primero
-        res = supabase.table("ajustes_app").update(datos_limpios).execute()
-        
-        # Si no existe registro, crear uno nuevo
-        if not res.data:
-            datos_limpios["created_at"] = datetime.now().isoformat()
-            supabase.table("ajustes_app").insert(datos_limpios).execute()
-        
-        # Limpiar cache
-        get_ajustes_app.clear()
-        
+        # Intentar convertir a formato fecha
+        if isinstance(fecha_str, (date, datetime)):
+            return True
+            
+        # Si es string, intentar convertir
+        pd.to_datetime(fecha_str)
         return True
-        
-    except Exception as e:
-        st.error(f"❌ Error al actualizar ajustes: {e}")
+    except:
         return False
 
 # =========================
-# FUNCIONES DE EXPORTACIÓN
+# EXPORTACIÓN DE DATOS
 # =========================
-def export_csv(df: pd.DataFrame, filename: str = "datos.csv") -> None:
+
+def export_csv(df: pd.DataFrame, filename: str = "export.csv"):
     """
-    Crea botón de descarga optimizado para CSV.
+    Genera un botón para exportar un DataFrame a CSV.
     
     Args:
         df: DataFrame a exportar
-        filename: Nombre del archivo
-    """
-    if df.empty:
-        return
-    
-    try:
-        # Preparar CSV
-        csv_buffer = io.StringIO()
-        df.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
-        csv_data = csv_buffer.getvalue()
+        filename: Nombre del archivo a generar
         
-        # Crear botón de descarga
-        st.download_button(
-            label=f"📥 Exportar {len(df)} registros a CSV",
-            data=csv_data,
-            file_name=filename,
-            mime="text/csv",
-            help=f"Descarga {len(df)} registros en formato CSV"
-        )
-        
-    except Exception as e:
-        st.error(f"⚠️ Error al exportar: {e}")
-
-def export_excel(df: pd.DataFrame, filename: str = "datos.xlsx", sheet_name: str = "Datos") -> None:
-    """
-    Crea botón de descarga para Excel.
-    
-    Args:
-        df: DataFrame a exportar
-        filename: Nombre del archivo
-        sheet_name: Nombre de la hoja
-    """
-    if df.empty:
-        return
-    
-    try:
-        # Crear archivo Excel en memoria
-        excel_buffer = io.BytesIO()
-        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
-            df.to_excel(writer, sheet_name=sheet_name, index=False)
-        
-        excel_data = excel_buffer.getvalue()
-        
-        # Crear botón de descarga
-        st.download_button(
-            label=f"📊 Exportar {len(df)} registros a Excel",
-            data=excel_data,
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            help=f"Descarga {len(df)} registros en formato Excel"
-        )
-        
-    except Exception as e:
-        st.error(f"⚠️ Error al exportar Excel: {e}")
-
-# =========================
-# FUNCIONES DE FORMATEO
-# =========================
-def format_date(fecha: Any, formato: str = "%d/%m/%Y") -> str:
-    """
-    Formatea fechas de manera segura.
-    
-    Args:
-        fecha: Fecha en cualquier formato
-        formato: Formato de salida
-    
     Returns:
-        str: Fecha formateada o cadena vacía si hay error
+        None
+    """
+    if df is None or df.empty:
+        return
+    
+    # Preparar datos para descarga
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Descargar CSV</a>'
+    st.markdown(href, unsafe_allow_html=True)
+
+def export_excel(df: pd.DataFrame, filename: str = "export.xlsx"):
+    """
+    Genera un botón para exportar un DataFrame a Excel.
+    
+    Args:
+        df: DataFrame a exportar
+        filename: Nombre del archivo a generar
+        
+    Returns:
+        None
+    """
+    if df is None or df.empty:
+        return
+    
+    # Crear buffer y guardar Excel
+    output = BytesIO()
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    df.to_excel(writer, index=False, sheet_name='Sheet1')
+    
+    # Autoajustar columnas
+    worksheet = writer.sheets['Sheet1']
+    for i, col in enumerate(df.columns):
+        # Establecer ancho basado en el contenido
+        max_len = max(df[col].astype(str).str.len().max(), len(str(col))) + 2
+        worksheet.set_column(i, i, max_len)
+    
+    writer.close()
+    
+    # Preparar para descarga
+    excel_data = output.getvalue()
+    b64 = base64.b64encode(excel_data).decode('utf-8')
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">📥 Descargar Excel</a>'
+    st.markdown(href, unsafe_allow_html=True)
+
+# =========================
+# FORMATEO DE DATOS
+# =========================
+
+def formato_fecha(fecha, formato: str = "%d/%m/%Y"):
+    """
+    Formatea una fecha para mostrar.
+    
+    Args:
+        fecha: Fecha a formatear (str, datetime, date)
+        formato: Formato deseado
+        
+    Returns:
+        str: Fecha formateada o cadena vacía si no es válida
     """
     if not fecha:
         return ""
-    
+        
     try:
         if isinstance(fecha, str):
-            # Intentar parsear string
-            fecha_obj = pd.to_datetime(fecha, errors='coerce')
-            if pd.isna(fecha_obj):
-                return ""
-            return fecha_obj.strftime(formato)
-        elif isinstance(fecha, (date, datetime)):
-            return fecha.strftime(formato)
-        else:
-            return str(fecha)
-    except Exception:
-        return ""
+            fecha = pd.to_datetime(fecha)
+        return fecha.strftime(formato)
+    except:
+        return str(fecha)
 
-def format_currency(amount: Any, currency: str = "€") -> str:
+def formato_moneda(valor, simbolo: str = "€"):
     """
-    Formatea cantidades monetarias.
+    Formatea un valor como moneda.
     
     Args:
-        amount: Cantidad a formatear
-        currency: Símbolo de moneda
-    
+        valor: Valor numérico
+        simbolo: Símbolo de la moneda
+        
     Returns:
-        str: Cantidad formateada
+        str: Valor formateado como moneda
     """
     try:
-        if amount is None or amount == "":
-            return "0,00 " + currency
-        
-        amount_float = float(amount)
-        return f"{amount_float:,.2f} {currency}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except (ValueError, TypeError):
-        return "0,00 " + currency
+        valor_num = float(valor)
+        return f"{valor_num:,.2f} {simbolo}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return str(valor)
 
-def format_percentage(value: Any, decimals: int = 1) -> str:
+def formato_porcentaje(valor):
     """
-    Formatea porcentajes.
+    Formatea un valor como porcentaje.
     
     Args:
-        value: Valor a formatear
-        decimals: Número de decimales
-    
+        valor: Valor numérico (0-1)
+        
     Returns:
-        str: Porcentaje formateado
+        str: Valor formateado como porcentaje
     """
     try:
-        if value is None or value == "":
-            return "0%"
-        
-        value_float = float(value)
-        return f"{value_float:.{decimals}f}%"
-    except (ValueError, TypeError):
-        return "0%"
+        valor_num = float(valor)
+        return f"{valor_num * 100:.1f}%"
+    except:
+        return str(valor)
 
 # =========================
-# FUNCIONES DE UI
+# UTILIDADES DE CACHE
 # =========================
-def show_success(message: str, icon: str = "✅") -> None:
-    """Muestra mensaje de éxito estandarizado."""
-    st.success(f"{icon} {message}")
 
-def show_error(message: str, icon: str = "❌") -> None:
-    """Muestra mensaje de error estandarizado."""
-    st.error(f"{icon} {message}")
-
-def show_warning(message: str, icon: str = "⚠️") -> None:
-    """Muestra mensaje de advertencia estandarizado."""
-    st.warning(f"{icon} {message}")
-
-def show_info(message: str, icon: str = "ℹ️") -> None:
-    """Muestra mensaje informativo estandarizado."""
-    st.info(f"{icon} {message}")
-
-def create_metric_card(title: str, value: Any, delta: Any = None, icon: str = "📊") -> str:
+def clear_cache_by_prefix(prefix: str):
     """
-    Crea tarjeta de métrica HTML personalizada.
+    Limpia el cache para funciones que comienzan con cierto prefijo.
     
     Args:
-        title: Título de la métrica
-        value: Valor principal
-        delta: Cambio o valor secundario
-        icon: Icono a mostrar
-    
+        prefix: Prefijo para identificar funciones en cache
+        
     Returns:
-        str: HTML de la tarjeta
+        int: Número de funciones limpiadas
     """
-    delta_html = ""
-    if delta is not None:
-        delta_html = f'<p style="font-size: 0.8em; color: #666; margin: 0;">{delta}</p>'
-    
-    return f"""
-    <div style="
-        border: 1px solid #e1e5e9;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        background: white;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    ">
-        <h3 style="margin: 0; font-size: 1.2em; color: #1f2937;">
-            {icon} {title}
-        </h3>
-        <p style="margin: 0.5rem 0 0 0; font-size: 1.8em; font-weight: bold; color: #4285f4;">
-            {value}
-        </p>
-        {delta_html}
-    </div>
-    """
-
-# =========================
-# FUNCIONES DE SESIÓN
-# =========================
-def init_session_state() -> None:
-    """Inicializa variables de sesión por defecto."""
-    defaults = {
-        "authenticated": False,
-        "role": None,
-        "user": {},
-        "empresa": {},
-        "empresa_crm": {},
-        "page": "home",
-        "last_activity": datetime.now()
-    }
-    
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-def clear_session_state() -> None:
-    """Limpia todas las variables de sesión."""
+    count = 0
     for key in list(st.session_state.keys()):
-        del st.session_state[key]
+        if key.startswith(f"_cache_data_{prefix}"):
+            del st.session_state[key]
+            count += 1
+    return count
 
-def check_session_timeout(timeout_minutes: int = 30) -> bool:
+def optimize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Verifica si la sesión ha caducado.
-    
-    Args:
-        timeout_minutes: Minutos de timeout
-    
-    Returns:
-        bool: True si ha caducado
-    """
-    if "last_activity" not in st.session_state:
-        return True
-    
-    last_activity = st.session_state.get("last_activity")
-    if not last_activity:
-        return True
-    
-    now = datetime.now()
-    time_diff = (now - last_activity).total_seconds() / 60
-    
-    return time_diff > timeout_minutes
-
-def update_last_activity() -> None:
-    """Actualiza timestamp de última actividad."""
-    st.session_state.last_activity = datetime.now()
-
-# =========================
-# FUNCIONES DE DATOS
-# =========================
-def safe_get(data: Dict[str, Any], key: str, default: Any = None) -> Any:
-    """
-    Obtiene valor de diccionario de manera segura.
-    
-    Args:
-        data: Diccionario de datos
-        key: Clave a buscar
-        default: Valor por defecto
-    
-    Returns:
-        Valor encontrado o default
-    """
-    try:
-        return data.get(key, default) if data else default
-    except (AttributeError, TypeError):
-        return default
-
-def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Limpia DataFrame eliminando valores nulos y optimizando tipos.
-    
-    Args:
-        df: DataFrame a limpiar
-    
-    Returns:
-        DataFrame limpio
-    """
-    if df.empty:
-        return df
-    
-    try:
-        # Limpiar valores nulos
-        df_clean = df.copy()
-        
-        # Reemplazar None y NaN por valores apropiados
-        for col in df_clean.columns:
-            if df_clean[col].dtype == 'object':
-                df_clean[col] = df_clean[col].fillna("")
-            elif df_clean[col].dtype in ['int64', 'float64']:
-                df_clean[col] = df_clean[col].fillna(0)
-            elif df_clean[col].dtype == 'bool':
-                df_clean[col] = df_clean[col].fillna(False)
-        
-        return df_clean
-    except Exception as e:
-        st.error(f"⚠️ Error al limpiar datos: {e}")
-        return df
-
-def optimize_dataframe_memory(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Optimiza uso de memoria del DataFrame.
+    Optimiza un DataFrame para reducir uso de memoria.
     
     Args:
         df: DataFrame a optimizar
-    
-    Returns:
-        DataFrame optimizado
-    """
-    if df.empty:
-        return df
-    
-    try:
-        df_opt = df.copy()
         
-        for col in df_opt.columns:
-            col_type = df_opt[col].dtype
+    Returns:
+        pd.DataFrame: DataFrame optimizado
+    """
+    if df is None or df.empty:
+        return df
+        
+    df_optimized = df.copy()
+    
+    # Optimizar tipos de datos
+    for col in df_optimized.columns:
+        # Convertir a categoría columnas con pocos valores únicos
+        if df_optimized[col].dtype == 'object':
+            num_unique = df_optimized[col].nunique()
+            num_total = len(df_optimized)
+            if num_unique / num_total < 0.5:  # Si menos del 50% son únicos
+                df_optimized[col] = df_optimized[col].astype('category')
+                
+        # Optimizar enteros
+        elif df_optimized[col].dtype == 'int64':
+            if df_optimized[col].min() >= 0:
+                if df_optimized[col].max() < 255:
+                    df_optimized[col] = df_optimized[col].astype('uint8')
+                elif df_optimized[col].max() < 65535:
+                    df_optimized[col] = df_optimized[col].astype('uint16')
+                else:
+                    df_optimized[col] = df_optimized[col].astype('uint32')
+                    
+        # Optimizar flotantes
+        elif df_optimized[col].dtype == 'float64':
+            df_optimized[col] = df_optimized[col].astype('float32')
             
-            if col_type != 'object':
-                c_min = df_opt[col].min()
-                c_max = df_opt[col].max()
-                
-                if str(col_type)[:3] == 'int':
-                    if c_min > -128 and c_max < 127:
-                        df_opt[col] = df_opt[col].astype('int8')
-                    elif c_min > -32768 and c_max < 32767:
-                        df_opt[col] = df_opt[col].astype('int16')
-                    elif c_min > -2147483648 and c_max < 2147483647:
-                        df_opt[col] = df_opt[col].astype('int32')
-                
-                elif str(col_type)[:5] == 'float':
-                    df_opt[col] = df_opt[col].astype('float32')
-        
-        return df_opt
-    except Exception as e:
-        st.error(f"⚠️ Error al optimizar memoria: {e}")
-        return df
+    return df_optimized
 
 # =========================
-# FUNCIONES DE LOGGING
+# DEBUGGING Y DESARROLLO
 # =========================
-def log_user_action(action: str, details: str = "", user_id: str = None) -> None:
-    """
-    Registra acciones del usuario (simplificado para desarrollo).
-    
-    Args:
-        action: Tipo de acción realizada
-        details: Detalles adicionales
-        user_id: ID del usuario (opcional)
-    """
-    try:
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user = user_id or st.session_state.get("user", {}).get("id", "unknown")
-        
-        # En desarrollo, solo log en consola
-        print(f"[{timestamp}] USER:{user} ACTION:{action} DETAILS:{details}")
-        
-        # En producción, aquí se guardaría en base de datos
-        # supabase.table("user_logs").insert({
-        #     "user_id": user,
-        #     "action": action,
-        #     "details": details,
-        #     "timestamp": timestamp
-        # }).execute()
-        
-    except Exception as e:
-        print(f"Error logging action: {e}")
 
-# =========================
-# FUNCIONES DE NOTIFICACIÓN
-# =========================
-def send_notification(
-    tipo: str,
-    titulo: str, 
-    mensaje: str,
-    user_id: str = None,
-    email: str = None
-) -> bool:
+def debug_dataframe(df: pd.DataFrame, nombre: str = "DataFrame"):
     """
-    Sistema de notificaciones simplificado.
-    
-    Args:
-        tipo: Tipo de notificación (info, success, warning, error)
-        titulo: Título de la notificación
-        mensaje: Mensaje completo
-        user_id: ID del usuario destinatario
-        email: Email del destinatario
-    
-    Returns:
-        bool: True si se envió correctamente
-    """
-    try:
-        # Por ahora solo mostramos en UI
-        icon_map = {
-            "info": "ℹ️",
-            "success": "✅", 
-            "warning": "⚠️",
-            "error": "❌"
-        }
-        
-        icon = icon_map.get(tipo, "📢")
-        
-        if tipo == "success":
-            st.success(f"{icon} **{titulo}** - {mensaje}")
-        elif tipo == "warning":
-            st.warning(f"{icon} **{titulo}** - {mensaje}")
-        elif tipo == "error":
-            st.error(f"{icon} **{titulo}** - {mensaje}")
-        else:
-            st.info(f"{icon} **{titulo}** - {mensaje}")
-        
-        # Log de la notificación
-        log_user_action(
-            action="notification_sent",
-            details=f"Tipo:{tipo} Titulo:{titulo}",
-            user_id=user_id
-        )
-        
-        return True
-        
-    except Exception as e:
-        st.error(f"❌ Error al enviar notificación: {e}")
-        return False
-
-# =========================
-# FUNCIONES DE SEGURIDAD
-# =========================
-def sanitize_input(text: str, max_length: int = 1000) -> str:
-    """
-    Sanitiza entrada de texto del usuario.
-    
-    Args:
-        text: Texto a sanitizar
-        max_length: Longitud máxima permitida
-    
-    Returns:
-        str: Texto sanitizado
-    """
-    if not text:
-        return ""
-    
-    # Limpiar texto básico
-    sanitized = str(text).strip()[:max_length]
-    
-    # Eliminar caracteres potencialmente peligrosos
-    sanitized = re.sub(r'[<>"\']', '', sanitized)
-    
-    return sanitized
-
-def check_permission(required_role: str, user_role: str = None) -> bool:
-    """
-    Verifica permisos de usuario.
-    
-    Args:
-        required_role: Rol requerido
-        user_role: Rol actual del usuario
-    
-    Returns:
-        bool: True si tiene permisos
-    """
-    if not user_role:
-        user_role = st.session_state.get("role")
-    
-    if not user_role:
-        return False
-    
-    # Jerarquía de roles
-    role_hierarchy = {
-        "admin": 4,
-        "gestor": 3,
-        "comercial": 2,
-        "alumno": 1
-    }
-    
-    user_level = role_hierarchy.get(user_role, 0)
-    required_level = role_hierarchy.get(required_role, 99)
-    
-    return user_level >= required_level
-
-# =========================
-# FUNCIONES DE MÉTRICAS BÁSICAS
-# =========================
-@st.cache_data(ttl=300)
-def get_metricas_admin() -> Dict[str, int]:
-    """Obtiene métricas para el panel de admin (versión simplificada)."""
-    try:
-        # Esta función se debe implementar según la estructura de tu BD
-        # Por ahora retornamos valores de ejemplo
-        return {
-            "empresas": 25,
-            "usuarios": 150,
-            "cursos": 42,
-            "grupos": 67
-        }
-    except Exception as e:
-        st.error(f"⚠️ Error al cargar métricas de admin: {e}")
-        return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
-
-@st.cache_data(ttl=300)
-def get_metricas_gestor(empresa_id: str) -> Dict[str, int]:
-    """Obtiene métricas para el panel del gestor."""
-    try:
-        # Esta función se debe implementar según la estructura de tu BD
-        # Por ahora retornamos valores de ejemplo
-        return {
-            "grupos": 8,
-            "participantes": 45,
-            "documentos": 23,
-            "diplomas": 12
-        }
-    except Exception as e:
-        st.error(f"⚠️ Error al cargar métricas de gestor: {e}")
-        return {"grupos": 0, "participantes": 0, "documentos": 0, "diplomas": 0}
-
-# =========================
-# FUNCIONES AUXILIARES
-# =========================
-def truncate_text(text: str, max_length: int = 50, suffix: str = "...") -> str:
-    """
-    Trunca texto a longitud específica.
-    
-    Args:
-        text: Texto a truncar
-        max_length: Longitud máxima
-        suffix: Sufijo para texto truncado
-    
-    Returns:
-        str: Texto truncado
-    """
-    if not text:
-        return ""
-    
-    text_str = str(text)
-    if len(text_str) <= max_length:
-        return text_str
-    
-    return text_str[:max_length - len(suffix)] + suffix
-
-def generate_slug(text: str) -> str:
-    """
-    Genera slug URL-friendly desde texto.
-    
-    Args:
-        text: Texto original
-    
-    Returns:
-        str: Slug generado
-    """
-    if not text:
-        return ""
-    
-    # Convertir a minúsculas y reemplazar espacios/caracteres especiales
-    slug = str(text).lower()
-    slug = re.sub(r'[àáâãäå]', 'a', slug)
-    slug = re.sub(r'[èéêë]', 'e', slug)
-    slug = re.sub(r'[ìíîï]', 'i', slug)
-    slug = re.sub(r'[òóôõö]', 'o', slug)
-    slug = re.sub(r'[ùúûü]', 'u', slug)
-    slug = re.sub(r'[ñ]', 'n', slug)
-    slug = re.sub(r'[ç]', 'c', slug)
-    slug = re.sub(r'[^a-z0-9]+', '-', slug)
-    slug = slug.strip('-')
-    
-    return slug
-
-def get_file_extension(filename: str) -> str:
-    """
-    Obtiene extensión de archivo.
-    
-    Args:
-        filename: Nombre del archivo
-    
-    Returns:
-        str: Extensión del archivo
-    """
-    if not filename or '.' not in filename:
-        return ""
-    
-    return filename.split('.')[-1].lower()
-
-def is_valid_file_type(filename: str, allowed_types: List[str]) -> bool:
-    """
-    Verifica si el tipo de archivo está permitido.
-    
-    Args:
-        filename: Nombre del archivo
-        allowed_types: Lista de extensiones permitidas
-    
-    Returns:
-        bool: True si está permitido
-    """
-    if not filename or not allowed_types:
-        return False
-    
-    extension = get_file_extension(filename)
-    return extension in [t.lower() for t in allowed_types]
-
-# =========================
-# FUNCIONES DE DEBUGGING
-# =========================
-def debug_session_state() -> None:
-    """Muestra información de depuración del estado de sesión."""
-    if st.checkbox("🐛 Mostrar debug info"):
-        st.subheader("Debug - Session State")
-        st.json(dict(st.session_state))
-
-def debug_dataframe(df: pd.DataFrame, name: str = "DataFrame") -> None:
-    """
-    Muestra información de depuración de un DataFrame.
+    Muestra información detallada sobre un DataFrame para debugging.
     
     Args:
         df: DataFrame a analizar
-        name: Nombre descriptivo
+        nombre: Nombre para identificar el DataFrame
+        
+    Returns:
+        None
     """
-    if st.checkbox(f"🐛 Debug {name}"):
-        st.subheader(f"Debug - {name}")
+    if df is None:
+        st.warning(f"⚠️ {nombre} es None")
+        return
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Filas", len(df))
-        with col2:
-            st.metric("Columnas", len(df.columns))
-        with col3:
-            memory_usage = df.memory_usage(deep=True).sum() / 1024**2
-            st.metric("Memoria (MB)", f"{memory_usage:.2f}")
+    if df.empty:
+        st.warning(f"⚠️ {nombre} está vacío")
+        return
         
-        st.subheader("Tipos de datos")
-        st.dataframe(df.dtypes.to_frame("Tipo"))
+    # Crear expander para mostrar debug info
+    with st.expander(f"🔍 Debug: {nombre}"):
+        st.write(f"Filas: {len(df)}, Columnas: {len(df.columns)}")
         
-        st.subheader("Valores nulos")
-        nulls = df.isnull().sum()
-        if nulls.sum() > 0:
-            st.dataframe(nulls[nulls > 0].to_frame("Nulos"))
-        else:
-            st.success("No hay valores nulos")
+        # Información de tipos
+        st.write("Tipos de datos:")
+        st.write(df.dtypes)
         
-        if not df.empty:
-            st.subheader("Muestra de datos")
-            st.dataframe(df.head())
+        # Valores nulos
+        nulos = df.isna().sum()
+        if nulos.sum() > 0:
+            st.write("Valores nulos:")
+            st.write(nulos[nulos > 0])
+            
+        # Muestra primeras filas
+        st.write("Primeras filas:")
+        st.dataframe(df.head(3))
+        
+        # Estadísticas para columnas numéricas
+        if any(df.select_dtypes(include=['number']).columns):
+            st.write("Estadísticas numéricas:")
+            st.write(df.describe())
 
-# =========================
-# INICIALIZACIÓN
-# =========================
-def init_utils():
-    """Inicializa utilidades básicas al cargar el módulo."""
-    # Configurar pandas para mejor rendimiento
-    pd.options.mode.chained_assignment = None
-    pd.options.display.max_columns = None
-    pd.options.display.max_colwidth = 100
+def log_accion(accion: str, usuario_id: str, detalles: dict = None):
+    """
+    Registra una acción en el log de la aplicación.
     
-    # Inicializar session state si no existe
-    init_session_state()
+    Args:
+        accion: Nombre de la acción
+        usuario_id: ID del usuario que realizó la acción
+        detalles: Diccionario con detalles adicionales
+        
+    Returns:
+        None
+    """
+    if not hasattr(st.session_state, "log_acciones"):
+        st.session_state.log_acciones = []
+        
+    # Crear entrada de log
+    log_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "accion": accion,
+        "usuario_id": usuario_id,
+        "detalles": detalles or {}
+    }
+    
+    # Añadir al log
+    st.session_state.log_acciones.append(log_entry)
+    
+    # Limitar tamaño del log
+    if len(st.session_state.log_acciones) > 1000:
+        st.session_state.log_acciones = st.session_state.log_acciones[-1000:]
 
-# Llamar inicialización automáticamente
-init_utils()
+# =========================
+# SEGURIDAD Y PERMISOS
+# =========================
 
+def verificar_permiso(rol: str, modulos_requeridos: list = None) -> bool:
+    """
+    Verifica si un rol tiene permiso para acceder a ciertos módulos.
+    
+    Args:
+        rol: Rol del usuario (admin, gestor, alumno)
+        modulos_requeridos: Lista de módulos requeridos
+        
+    Returns:
+        bool: True si tiene permiso, False en caso contrario
+    """
+    if not rol:
+        return False
+        
+    # Admin tiene acceso a todo
+    if rol == "admin":
+        return True
+        
+    # Sin módulos especificados, verificar solo rol
+    if not modulos_requeridos:
+        return rol in ["admin", "gestor"]
+        
+    # Verificar permisos específicos por rol
+    permisos_por_rol = {
+        "gestor": ["formacion", "iso", "rgpd", "documentos"],
+        "alumno": ["cursos", "diplomas"],
+        "tutor": ["grupos", "evaluaciones"],
+        "comercial": ["clientes", "oportunidades"]
+    }
+    
+    if rol not in permisos_por_rol:
+        return False
+        
+    # Verificar si todos los módulos requeridos están permitidos
+    return all(modulo in permisos_por_rol[rol] for modulo in modulos_requeridos)
 
+def generar_password_segura(longitud: int = 10) -> str:
+    """
+    Genera una contraseña segura aleatoria.
+    
+    Args:
+        longitud: Longitud de la contraseña
+        
+    Returns:
+        str: Contraseña generada
+    """
+    import random
+    import string
+    
+    # Definir conjuntos de caracteres
+    minusculas = string.ascii_lowercase
+    mayusculas = string.ascii_uppercase
+    numeros = string.digits
+    especiales = "!@#$%&*-_+=?"
+    
+    # Asegurar al menos un carácter de cada tipo
+    pwd = [
+        random.choice(minusculas),
+        random.choice(mayusculas),
+        random.choice(numeros),
+        random.choice(especiales)
+    ]
+    
+    # Completar hasta la longitud deseada
+    caracteres = minusculas + mayusculas + numeros + especiales
+    pwd.extend(random.choice(caracteres) for _ in range(longitud - 4))
+    
+    # Mezclar y convertir a string
+    random.shuffle(pwd)
+    return ''.join(pwd)
+
+# =========================
+# NOTIFICACIONES Y MENSAJES
+# =========================
+
+def mostrar_notificacion(tipo: str, mensaje: str, duracion: int = 3):
+    """
+    Muestra una notificación estilizada.
+    
+    Args:
+        tipo: Tipo de notificación (success, info, warning, error)
+        mensaje: Texto de la notificación
+        duracion: Duración en segundos
+        
+    Returns:
+        None
+    """
+    # Mapeo de tipos a iconos y colores
+    estilos = {
+        "success": {"icono": "✅", "color": "#28a745"},
+        "info": {"icono": "ℹ️", "color": "#17a2b8"},
+        "warning": {"icono": "⚠️", "color": "#ffc107"},
+        "error": {"icono": "❌", "color": "#dc3545"}
+    }
+    
+    estilo = estilos.get(tipo, estilos["info"])
+    
+    # Crear HTML para notificación
+    html = f"""
+    <div style="
+        padding: 10px 15px;
+        border-radius: 5px;
+        background-color: {estilo['color']}22;
+        border-left: 5px solid {estilo['color']};
+        margin-bottom: 10px;
+        animation: fadeOut {duracion}s forwards {duracion-0.5}s;
+    ">
+        <div style="display: flex; align-items: center;">
+            <div style="font-size: 1.2rem; margin-right: 10px;">{estilo['icono']}</div>
+            <div>{mensaje}</div>
+        </div>
+    </div>
+    <style>
+    @keyframes fadeOut {{
+        from {{ opacity: 1; }}
+        to {{ opacity: 0; display: none; }}
+    }}
+    </style>
+    """
+    
+    st.markdown(html, unsafe_allow_html=True)
+
+def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancelar: str = "Cancelar"):
+    """
+    Muestra un diálogo de confirmación.
+    
+    Args:
+        mensaje: Mensaje de confirmación
+        btn_confirmar: Texto del botón de confirmación
+        btn_cancelar: Texto del botón de cancelación
+        
+    Returns:
+        bool: True si se confirma, False si se cancela
+    """
+    st.warning(mensaje)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        confirmar = st.button(btn_confirmar, type="primary")
+    with col2:
+        cancelar = st.button(btn_cancelar)
+        
+    if confirmar:
+        return True
+    if cancelar:
+        return False
+        
+    # Si no se ha pulsado ningún botón, devolver None
+    return None
