@@ -1,176 +1,293 @@
-"""
-Módulo para la gestión de empresas.
-Integrado con DataService y el componente listado_con_ficha.
-"""
-
 import streamlit as st
+import pandas as pd
+from datetime import datetime
+from utils import validar_dni_cif, export_csv, format_percentage
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
-    st.caption("Administración de empresas y configuración de módulos activos.")
+    st.caption("Administración de empresas cliente y configuración de módulos.")
 
-    # Permisos: solo admin
-    if session_state.role != "admin":
-        st.warning("🔒 Solo los administradores pueden acceder a esta sección.")
+    if session_state.role not in ["admin", "gestor"]:
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
-    ds = get_data_service(supabase, session_state)
+    # Inicializar servicio de datos
+    data_service = get_data_service(supabase, session_state)
 
     # =========================
-    # Carga de datos y métricas
+    # MÉTRICAS PRINCIPALES
     # =========================
-    with st.spinner("Cargando empresas..."):
-        df_empresas = ds.get_empresas_con_modulos()
-        metricas = ds.get_metricas_empresas()
-
-    # =========================
-    # Métricas rápidas
-    # =========================
-    if not df_empresas.empty:
+    try:
+        metricas = data_service.get_metricas_empresas()
+        
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("🏢 Total empresas", metricas.get("total_empresas", 0))
+            st.metric("🏢 Total Empresas", metricas.get("total_empresas", 0))
         with col2:
-            st.metric("🆕 Nuevas este mes", metricas.get("nuevas_mes", 0))
+            st.metric("📅 Nuevas (30 días)", metricas.get("nuevas_mes", 0))
         with col3:
-            st.metric("🌍 Provincia principal", metricas.get("provincia_top", "N/D"))
+            st.metric("🎓 Con Formación", metricas.get("con_formacion", 0))
         with col4:
-            st.metric("📊 Módulos activos", metricas.get("modulos_activos", 0))
+            porcentaje = metricas.get("porcentaje_activas", 0)
+            st.metric("📊 % Activas", f"{porcentaje}%")
+            
+    except Exception as e:
+        st.error(f"❌ Error al cargar métricas: {e}")
+        # Métricas por defecto en caso de error
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🏢 Total Empresas", "0")
+        with col2:
+            st.metric("📅 Nuevas (30 días)", "0")
+        with col3:
+            st.metric("🎓 Con Formación", "0")
+        with col4:
+            st.metric("📊 % Activas", "0%")
+
+    # =========================
+    # ESTADÍSTICAS DE MÓDULOS
+    # =========================
+    if session_state.role == "admin":
+        st.divider()
+        st.markdown("### 📊 Uso de Módulos por Empresa")
+        
+        try:
+            stats_modulos = data_service.get_estadisticas_modulos()
+            
+            if stats_modulos:
+                cols = st.columns(len(stats_modulos))
+                for i, (modulo, data) in enumerate(stats_modulos.items()):
+                    with cols[i]:
+                        activos = data.get("activos", 0)
+                        porcentaje = data.get("porcentaje", 0)
+                        st.metric(
+                            f"📋 {modulo}", 
+                            f"{activos}",
+                            delta=f"{format_percentage(porcentaje)}"
+                        )
+        except Exception as e:
+            st.warning(f"No se pudieron cargar las estadísticas de módulos: {e}")
+
+    # =========================
+    # CARGAR DATOS PRINCIPALES
+    # =========================
+    try:
+        df_empresas = data_service.get_empresas_con_modulos()
+    except Exception as e:
+        st.error(f"❌ Error al cargar empresas: {e}")
+        return
+
+    # =========================
+    # FILTROS DE BÚSQUEDA
+    # =========================
+    st.divider()
+    st.markdown("### 🔍 Buscar y Filtrar Empresas")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        query = st.text_input("🔍 Buscar por nombre, CIF o ciudad")
+    with col2:
+        modulo_filter = st.selectbox(
+            "Filtrar por módulo activo",
+            ["Todos", "Formación", "ISO 9001", "RGPD", "CRM", "Sin módulos"]
+        )
+
+    # Aplicar filtros
+    df_filtered = df_empresas.copy()
+    
+    if query:
+        q_lower = query.lower()
+        df_filtered = df_filtered[
+            df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
+            df_filtered["cif"].str.lower().str.contains(q_lower, na=False) |
+            df_filtered["ciudad"].fillna("").str.lower().str.contains(q_lower, na=False)
+        ]
+    
+    if modulo_filter != "Todos":
+        if modulo_filter == "Sin módulos":
+            # Empresas sin ningún módulo activo
+            modulos = ["formacion_activo", "iso_activo", "rgpd_activo", "crm_activo"]
+            mask = pd.Series([True] * len(df_filtered))
+            for modulo in modulos:
+                if modulo in df_filtered.columns:
+                    mask &= (df_filtered[modulo] != True)
+            df_filtered = df_filtered[mask]
+        else:
+            # Filtrar por módulo específico
+            modulo_mapping = {
+                "Formación": "formacion_activo",
+                "ISO 9001": "iso_activo",
+                "RGPD": "rgpd_activo",
+                "CRM": "crm_activo"
+            }
+            campo_modulo = modulo_mapping.get(modulo_filter)
+            if campo_modulo and campo_modulo in df_filtered.columns:
+                df_filtered = df_filtered[df_filtered[campo_modulo] == True]
+
+    # Botón de exportación
+    if not df_filtered.empty:
+        export_csv(df_filtered, filename="empresas.csv")
 
     st.divider()
 
     # =========================
-    # Filtros
+    # DEFINIR CAMPOS PARA FORMULARIOS
     # =========================
-    st.markdown("### 🔍 Buscar y filtrar")
-    colf1, colf2 = st.columns(2)
-    with colf1:
-        query = st.text_input("Buscar por nombre, CIF, email, provincia o ciudad")
-    with colf2:
-        modulo_filter = st.selectbox(
-            "Filtrar por módulo activo",
-            ["Todos", "Formación", "ISO 9001", "RGPD", "CRM", "Doc. Avanzada"]
-        )
-
-    df_filtered = ds.filter_empresas(df_empresas, query, modulo_filter)
-
-    # =========================
-    # CRUD callbacks
-    # =========================
-    def guardar_empresa(empresa_id, datos_editados):
-        try:
-            ok = ds.update_empresa(empresa_id, datos_editados)
-            if ok:
-                st.success("✅ Empresa actualizada correctamente.")
-                st.rerun()
-            else:
-                st.error("⚠️ Revisa los datos. No se pudo actualizar.")
-        except Exception as e:
-            st.error(f"❌ Error al actualizar: {e}")
-
-    def crear_empresa(datos_nuevos):
-        try:
-            ok = ds.create_empresa(datos_nuevos)
-            if ok:
-                st.success("✅ Empresa creada correctamente.")
-                st.rerun()
-            else:
-                st.error("⚠️ Revisa los datos. No se pudo crear.")
-        except Exception as e:
-            st.error(f"❌ Error al crear: {e}")
-
-    def eliminar_empresa(empresa_id):
-        try:
-            ok = ds.delete_empresa(empresa_id)
-            if ok:
-                st.success("✅ Empresa eliminada.")
-                st.rerun()
-            else:
-                st.error("⚠️ No se pudo eliminar. Revisa dependencias (usuarios, grupos).")
-        except Exception as e:
-            st.error(f"❌ Error al eliminar: {e}")
-
-    # =========================
-    # Configuración de formulario
-    # =========================
-    def get_campos_dinamicos(_fila_o_vacio):
+    def get_campos_dinamicos(datos):
+        """Define campos visibles según el contexto."""
         campos_base = [
-            "nombre", "cif", "direccion", "telefono", "email",
-            "representante_nombre", "representante_dni",
-            "ciudad", "provincia", "codigo_postal"
+            "id", "nombre", "cif", "direccion", "ciudad", "provincia", 
+            "codigo_postal", "telefono", "email", "web"
         ]
-        campos_modulos = [
-            "formacion_activo", "formacion_inicio", "formacion_fin",
-            "iso_activo", "iso_inicio", "iso_fin",
-            "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-            "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin",
-            "crm_activo", "crm_inicio", "crm_fin"
-        ]
-        # Añade CRM si no existe en DF (por seguridad visual)
-        return [c for c in (campos_base + campos_modulos) if c in df_empresas.columns or c in campos_modulos]
+        
+        # Solo admin puede ver/editar módulos
+        if session_state.role == "admin":
+            campos_base.extend([
+                "formacion_activo", "iso_activo", "rgpd_activo", 
+                "crm_activo", "docu_avanzada_activo"
+            ])
+        
+        return campos_base
 
-    campos_select = {
-        "formacion_activo": [True, False],
-        "iso_activo": [True, False],
-        "rgpd_activo": [True, False],
-        "docu_avanzada_activo": [True, False],
-        "crm_activo": [True, False]
-    }
+    # Campos para select (solo admin puede modificar módulos)
+    campos_select = {}
+    if session_state.role == "admin":
+        campos_select.update({
+            "formacion_activo": [True, False],
+            "iso_activo": [True, False],
+            "rgpd_activo": [True, False],
+            "crm_activo": [True, False],
+            "docu_avanzada_activo": [True, False]
+        })
 
-    campos_readonly = ["id", "fecha_alta", "created_at"]
-
+    # Campos de ayuda
     campos_help = {
-        "nombre": "Nombre completo de la empresa (obligatorio)",
-        "cif": "CIF válido (obligatorio y único)",
-        "email": "Email de contacto",
-        "telefono": "Teléfono de contacto",
-        "representante_nombre": "Nombre del representante legal",
-        "representante_dni": "DNI del representante legal",
-        "formacion_activo": "Activa el módulo de formación",
-        "iso_activo": "Activa el módulo ISO 9001",
-        "rgpd_activo": "Activa el módulo RGPD",
-        "docu_avanzada_activo": "Activa documentación avanzada",
-        "crm_activo": "Activa CRM comercial"
+        "nombre": "Nombre o razón social de la empresa",
+        "cif": "CIF, NIF o NIE de la empresa (obligatorio)",
+        "direccion": "Dirección completa de la empresa",
+        "telefono": "Teléfono de contacto principal",
+        "email": "Email de contacto principal",
+        "web": "Página web (opcional, incluir https://)",
+        "formacion_activo": "Activa el módulo de gestión de formación",
+        "iso_activo": "Activa el módulo de gestión ISO 9001",
+        "rgpd_activo": "Activa el módulo de gestión RGPD",
+        "crm_activo": "Activa el módulo de gestión comercial (CRM)"
     }
 
+    # Campos obligatorios
     campos_obligatorios = ["nombre", "cif"]
 
-    reactive_fields = {
-        "formacion_activo": ["formacion_inicio", "formacion_fin"],
-        "iso_activo": ["iso_inicio", "iso_fin"],
-        "rgpd_activo": ["rgpd_inicio", "rgpd_fin"],
-        "docu_avanzada_activo": ["docu_avanzada_inicio", "docu_avanzada_fin"],
-        "crm_activo": ["crm_inicio", "crm_fin"]
-    }
+    # Columnas visibles en la tabla
+    columnas_visibles = ["nombre", "cif", "ciudad", "telefono", "email"]
+    if session_state.role == "admin":
+        columnas_visibles.extend(["formacion_activo", "crm_activo"])
 
     # =========================
-    # Interfaz principal
+    # FUNCIONES CRUD
     # =========================
-    if df_empresas.empty:
-        st.info("ℹ️ No hay empresas registradas.")
+    def guardar_empresa(empresa_id, datos_editados):
+        """Función para guardar cambios en una empresa."""
+        try:
+            # Validaciones básicas
+            if not datos_editados.get("nombre") or not datos_editados.get("cif"):
+                st.error("⚠️ Nombre y CIF son obligatorios.")
+                return
+                
+            if not validar_dni_cif(datos_editados["cif"]):
+                st.error("⚠️ El CIF no es válido.")
+                return
+
+            # Usar el servicio de datos para actualizar
+            if data_service.update_empresa(empresa_id, datos_editados):
+                st.success("✅ Empresa actualizada correctamente.")
+                st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Error al guardar empresa: {e}")
+
+    def crear_empresa(datos_nuevos):
+        """Función para crear una nueva empresa."""
+        try:
+            # Usar el servicio de datos para crear
+            if data_service.create_empresa(datos_nuevos):
+                st.success("✅ Empresa creada correctamente.")
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"❌ Error al crear empresa: {e}")
+
+    def eliminar_empresa(empresa_id):
+        """Función para eliminar una empresa."""
+        try:
+            if data_service.delete_empresa(empresa_id):
+                st.success("✅ Empresa eliminada correctamente.")
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"❌ Error al eliminar empresa: {e}")
+
+    # =========================
+    # RENDERIZAR COMPONENTE PRINCIPAL
+    # =========================
+    if df_filtered.empty and query:
+        st.warning(f"🔍 No se encontraron empresas que coincidan con '{query}'.")
     elif df_filtered.empty:
-        st.warning("🔍 No hay resultados con los filtros aplicados.")
+        st.info("ℹ️ No hay empresas registradas. Crea la primera empresa usando el formulario de abajo.")
+    else:
+        # Usar el componente listado_con_ficha corregido
+        listado_con_ficha(
+            df=df_filtered,
+            columnas_visibles=columnas_visibles,
+            titulo="Empresa",
+            on_save=guardar_empresa,
+            on_create=crear_empresa if data_service.can_modify_data() else None,
+            on_delete=eliminar_empresa if session_state.role == "admin" else None,
+            id_col="id",
+            campos_select=campos_select,
+            campos_dinamicos=get_campos_dinamicos,
+            allow_creation=data_service.can_modify_data(),
+            campos_help=campos_help,
+            campos_obligatorios=campos_obligatorios,
+            search_columns=["nombre", "cif", "ciudad"]
+        )
 
-    columnas_visibles = [c for c in [
-        "nombre", "cif", "ciudad", "provincia", "email", "telefono",
-        "formacion_activo", "iso_activo", "rgpd_activo", "docu_avanzada_activo"
-    ] if c in df_empresas.columns]
+    st.divider()
+    st.caption("💡 Las empresas son la unidad organizativa principal. Cada empresa puede tener múltiples módulos activos y usuarios asignados.")
 
-    listado_con_ficha(
-        df=df_filtered if not df_filtered.empty else df_empresas,
-        columnas_visibles=columnas_visibles,
-        titulo="Empresa",
-        on_save=guardar_empresa,
-        on_create=crear_empresa,
-        on_delete=eliminar_empresa,
-        id_col="id",
-        campos_select=campos_select,
-        campos_readonly=campos_readonly,
-        campos_dinamicos=get_campos_dinamicos,
-        campos_help=campos_help,
-        campos_obligatorios=campos_obligatorios,
-        reactive_fields=reactive_fields,
-        search_columns=["nombre", "cif", "ciudad", "provincia", "email", "telefono"]
-    )
+    # =========================
+    # INFORMACIÓN ADICIONAL PARA ADMIN
+    # =========================
+    if session_state.role == "admin":
+        with st.expander("ℹ️ Información sobre Módulos"):
+            st.markdown("""
+            **Módulos disponibles:**
+            - **🎓 Formación**: Gestión de acciones formativas, grupos, participantes y diplomas
+            - **📋 ISO 9001**: Auditorías, informes y seguimiento de calidad
+            - **🔐 RGPD**: Consentimientos, documentación legal y trazabilidad
+            - **📈 CRM**: Gestión de clientes, oportunidades y tareas comerciales
+            - **📄 Doc. Avanzada**: Gestión documental avanzada y workflows
+            
+            **Nota**: Solo los administradores pueden activar/desactivar módulos para las empresas.
+            """)
+
+        # Acciones rápidas para admin
+        st.markdown("### ⚡ Acciones Rápidas")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🗑️ Limpiar Cache", help="Limpia el cache para actualizar datos"):
+                st.cache_data.clear()
+                st.success("Cache limpiada correctamente")
+                st.rerun()
+        
+        with col2:
+            if st.button("📊 Recalcular Métricas", help="Fuerza el recálculo de métricas"):
+                data_service.get_metricas_empresas.clear()
+                st.success("Métricas recalculadas")
+                st.rerun()
+        
+        with col3:
+            empresas_activas = len(df_empresas[df_empresas.get("formacion_activo", pd.Series([False])) == True])
+            st.metric("🎯 Empresas con Formación", empresas_activas)
