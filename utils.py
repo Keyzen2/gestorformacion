@@ -224,21 +224,29 @@ def formato_fecha(fecha, formato: str = "%d/%m/%Y"):
     except:
         return str(fecha)
 
-def formato_moneda(valor, simbolo: str = "€"):
+def formato_moneda(valor):
     """
-    Formatea un valor como moneda.
+    Formatea un valor como moneda usando el símbolo configurado en ajustes_app.
     
     Args:
         valor: Valor numérico
-        simbolo: Símbolo de la moneda
         
     Returns:
         str: Valor formateado como moneda
     """
     try:
+        # Import diferido para evitar importación circular
+        from services.data_service import cached_get_ajustes_app
+        ajustes = cached_get_ajustes_app()
+        simbolo = ajustes.get("moneda_simbolo", "€")
+    except Exception:
+        # Si no se puede importar o no hay ajustes, usar €
+        simbolo = "€"
+
+    try:
         valor_num = float(valor)
         return f"{valor_num:,.2f} {simbolo}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except:
+    except Exception:
         return str(valor)
 
 def formato_porcentaje(valor):
@@ -554,6 +562,8 @@ def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] 
     Ignora el cliente de Supabase que se le pase y usa la caché segura.
     """
     try:
+        # Import diferido para evitar importación circular
+        from services.data_service import cached_get_ajustes_app
         return cached_get_ajustes_app(campos)
     except Exception as e:
         st.error(f"⚠️ Error al cargar ajustes: {e}")
