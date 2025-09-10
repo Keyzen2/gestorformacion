@@ -9,8 +9,6 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any
 from datetime import date
-from utils import validar_dni_cif
-
 
 # -------------------------------------------------------------------
 # Caché segura para ajustes (no pasa objetos no-hasheables a cache_data)
