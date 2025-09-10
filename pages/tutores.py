@@ -19,9 +19,18 @@ def main(supabase, session_state):
     # Cargar tutores
     # =========================
     try:
-        query = supabase.table("tutores").select("*")
+        base_select = (
+            "id, nombre, apellidos, email, telefono, nif, tipo_tutor, "
+            "especialidad, cv_url, empresa:empresas(nombre)"
+        )
+
         if session_state.role == "gestor":
-            query = query.eq("empresa_id", session_state.user.get("empresa_id"))
+            query = supabase.table("tutores").select(base_select).eq(
+                "empresa_id", session_state.user.get("empresa_id")
+            )
+        else:  # admin
+            query = supabase.table("tutores").select(base_select)
+
         tutores_res = query.execute().data
         df = pd.DataFrame(tutores_res) if tutores_res else pd.DataFrame()
     except Exception as e:
@@ -37,7 +46,7 @@ def main(supabase, session_state):
     # =========================
     st.markdown("### 🔍 Filtros")
     filtro_nombre = st.text_input("Buscar por nombre, apellidos o NIF")
-    tipo_filter   = st.selectbox("Filtrar por tipo", ["Todos", "Interno", "Externo"])
+    tipo_filter = st.selectbox("Filtrar por tipo", ["Todos", "Interno", "Externo"])
     especialidades = ["Todas"] + sorted(df["especialidad"].dropna().unique()) if "especialidad" in df else ["Todas"]
     especialidad_filter = st.selectbox("Filtrar por especialidad", especialidades)
 
@@ -86,6 +95,16 @@ def main(supabase, session_state):
     def crear_tutor(datos):
         try:
             tutor_id = str(uuid.uuid4())
+
+            # Asignar empresa según rol
+            if session_state.role == "gestor":
+                datos["empresa_id"] = session_state.user.get("empresa_id")
+            else:
+                # admin: convertir nombre de empresa a id
+                if "empresa_id" in datos and datos["empresa_id"]:
+                    datos["empresa_id"] = empresas_dict[datos["empresa_id"]]
+
+            # Subida de CV
             if "cv_file" in datos and datos["cv_file"] is not None:
                 file_path = f"{tutor_id}.pdf"
                 supabase.storage.from_("currículums").upload(
@@ -106,21 +125,31 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear tutor: {e}")
 
     # =========================
-    # Llamada al CRUD con campo de archivo
+    # Campos select según rol
+    # =========================
+    campos_select = {
+        "tipo_tutor": ["Interno", "Externo"]
+    }
+
+    if session_state.role == "admin":
+        empresas_res = supabase.table("empresas").select("id, nombre").execute()
+        empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data}
+        campos_select["empresa_id"] = list(empresas_dict.keys())
+
+    # =========================
+    # Llamada al CRUD
     # =========================
     listado_crud(
         df,
         columnas_visibles=[
             "id", "nombre", "apellidos", "email", "telefono",
-            "nif", "tipo_tutor", "especialidad", "cv_url"
+            "nif", "tipo_tutor", "especialidad", "cv_url", "empresa"
         ],
         titulo="Tutor",
         on_save=guardar_tutor,
         on_create=crear_tutor,
         id_col="id",
-        campos_select={
-            "tipo_tutor": ["Interno", "Externo"]
-        },
+        campos_select=campos_select,
         campos_file={
             "cv_file": {"label": "📄 Subir CV (PDF)", "type": ["pdf"]}
         }
