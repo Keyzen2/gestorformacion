@@ -262,7 +262,7 @@ def route():
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📊 Panel de Formación")
         panel_menu = {
-            "Panel del Gestor": "pages.panel_gestor"
+            "Panel del Gestor": "panel_gestor"
         }
         for label, page_key in panel_menu.items():
             if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
