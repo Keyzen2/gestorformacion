@@ -363,17 +363,16 @@ else:
     try:
         route()
         page = st.session_state.get("page", None)
-        
-if page and page != "home":
-    if page == "panel_gestor" and st.session_state.role == "gestor":
-        from pages.panel_gestor import main as panel_gestor_main
-        panel_gestor_main(supabase_admin, st.session_state)
-    else:
-        mod = page.replace("-", "_")
-        mod_path = f"pages.{mod}"
-        mod_import = __import__(mod_path, fromlist=["main"])
-        mod_import.main(supabase_admin, st.session_state)
 
+        if page and page != "home":
+            if page == "panel_gestor" and st.session_state.role == "gestor":
+                from pages.panel_gestor import main as panel_gestor_main
+                panel_gestor_main(supabase_admin, st.session_state)
+            else:
+                mod = page.replace("-", "_")
+                mod_path = f"pages.{mod}"
+                mod_import = __import__(mod_path, fromlist=["main"])
+                mod_import.main(supabase_admin, st.session_state)
         else:
             rol = st.session_state.role
             hoy = datetime.today().date()
