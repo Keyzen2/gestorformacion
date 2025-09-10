@@ -206,10 +206,11 @@ class DataService:
                 return False
 
             # Validar CIF
-            cif = datos_empresa.get("cif", "")
-            if not validar_dni_cif(cif):
-                st.error(f"⚠️ El CIF {cif} no es válido.")
-                return False
+from utils import validar_dni_cif  # import diferido para evitar bucle
+cif = datos_empresa.get("cif", "")
+if not validar_dni_cif(cif):
+    st.error(f"⚠️ El CIF {cif} no es válido.")
+    return False
 
             # Verificar duplicados
             check = _self.supabase.table("empresas").select("id").eq("cif", cif).execute()
@@ -259,10 +260,11 @@ class DataService:
 
             # Validar CIF si se actualiza
             if "cif" in datos_empresa and datos_empresa["cif"]:
-                cif = datos_empresa["cif"]
-                if not validar_dni_cif(cif):
-                    st.error(f"⚠️ El CIF {cif} no es válido.")
-                    return False
+    from utils import validar_dni_cif  # import diferido para evitar bucle
+    cif = datos_empresa["cif"]
+    if not validar_dni_cif(cif):
+        st.error(f"⚠️ El CIF {cif} no es válido.")
+        return False
 
                 # Verificar duplicados (excluyendo esta empresa)
                 check = (
