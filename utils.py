@@ -9,6 +9,8 @@ import re
 import base64
 from datetime import datetime, date
 from io import BytesIO
+from typing import Optional, List, Dict, Any
+from services.data_service import cached_get_ajustes_app
 
 # =========================
 # VALIDACIONES
@@ -546,3 +548,14 @@ def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancela
         
     # Si no se ha pulsado ningún botón, devolver None
     return None
+
+def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, Any]:
+    """
+    Versión de compatibilidad para llamadas antiguas.
+    Ignora el cliente de Supabase que se le pase y usa la caché segura.
+    """
+    try:
+        return cached_get_ajustes_app(campos)
+    except Exception as e:
+        st.error(f"⚠️ Error al cargar ajustes: {e}")
+        return {}
