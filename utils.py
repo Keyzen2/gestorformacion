@@ -430,141 +430,78 @@ def verificar_permiso(rol: str, modulos_requeridos: list = None) -> bool:
         
     # Verificar permisos específicos por rol
     permisos_por_rol = {
-        "gestor": ["formacion", "iso", "rgpd", "documentos"],
-        "alumno": ["cursos", "diplomas"],
-        "tutor": ["grupos", "evaluaciones"],
-        "comercial": ["clientes", "oportunidades"]
+        "gestor": ["cursos", "alumnos", "reportes"],
+        "alumno": ["cursos", "mis_datos"]
     }
     
-    if rol not in permisos_por_rol:
-        return False
-        
-    # Verificar si todos los módulos requeridos están permitidos
-    return all(modulo in permisos_por_rol[rol] for modulo in modulos_requeridos)
-
-def generar_password_segura(longitud: int = 10) -> str:
-    """
-    Genera una contraseña segura aleatoria.
-    
-    Args:
-        longitud: Longitud de la contraseña
-        
-    Returns:
-        str: Contraseña generada
-    """
-    import random
-    import string
-    
-    # Definir conjuntos de caracteres
-    minusculas = string.ascii_lowercase
-    mayusculas = string.ascii_uppercase
-    numeros = string.digits
-    especiales = "!@#$%&*-_+=?"
-    
-    # Asegurar al menos un carácter de cada tipo
-    pwd = [
-        random.choice(minusculas),
-        random.choice(mayusculas),
-        random.choice(numeros),
-        random.choice(especiales)
-    ]
-    
-    # Completar hasta la longitud deseada
-    caracteres = minusculas + mayusculas + numeros + especiales
-    pwd.extend(random.choice(caracteres) for _ in range(longitud - 4))
-    
-    # Mezclar y convertir a string
-    random.shuffle(pwd)
-    return ''.join(pwd)
+    modulos_permitidos = permisos_por_rol.get(rol, [])
+    return all(modulo in modulos_permitidos for modulo in modulos_requeridos)
 
 # =========================
-# NOTIFICACIONES Y MENSAJES
+# FUNCIONES VARIAS
 # =========================
 
-def mostrar_notificacion(tipo: str, mensaje: str, duracion: int = 3):
+def limpiar_texto(texto: str) -> str:
     """
-    Muestra una notificación estilizada.
+    Limpia un texto eliminando espacios extra y caracteres no deseados.
     
     Args:
-        tipo: Tipo de notificación (success, info, warning, error)
-        mensaje: Texto de la notificación
-        duracion: Duración en segundos
+        texto: Texto a limpiar
         
     Returns:
-        None
+        str: Texto limpio
     """
-    # Mapeo de tipos a iconos y colores
-    estilos = {
-        "success": {"icono": "✅", "color": "#28a745"},
-        "info": {"icono": "ℹ️", "color": "#17a2b8"},
-        "warning": {"icono": "⚠️", "color": "#ffc107"},
-        "error": {"icono": "❌", "color": "#dc3545"}
-    }
-    
-    estilo = estilos.get(tipo, estilos["info"])
-    
-    # Crear HTML para notificación
-    html = f"""
-    <div style="
-        padding: 10px 15px;
-        border-radius: 5px;
-        background-color: {estilo['color']}22;
-        border-left: 5px solid {estilo['color']};
-        margin-bottom: 10px;
-        animation: fadeOut {duracion}s forwards {duracion-0.5}s;
-    ">
-        <div style="display: flex; align-items: center;">
-            <div style="font-size: 1.2rem; margin-right: 10px;">{estilo['icono']}</div>
-            <div>{mensaje}</div>
-        </div>
-    </div>
-    <style>
-    @keyframes fadeOut {{
-        from {{ opacity: 1; }}
-        to {{ opacity: 0; display: none; }}
-    }}
-    </style>
-    """
-    
-    st.markdown(html, unsafe_allow_html=True)
+    if not texto:
+        return ""
+    texto = texto.strip()
+    texto = re.sub(r'\s+', ' ', texto)
+    return texto
 
-def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancelar: str = "Cancelar"):
+def obtener_fecha_hoy() -> date:
     """
-    Muestra un diálogo de confirmación.
+    Devuelve la fecha actual.
+    
+    Returns:
+        date: Fecha de hoy
+    """
+    return datetime.now().date()
+
+def calcular_edad(fecha_nacimiento: str) -> Optional[int]:
+    """
+    Calcula la edad a partir de la fecha de nacimiento.
     
     Args:
-        mensaje: Mensaje de confirmación
-        btn_confirmar: Texto del botón de confirmación
-        btn_cancelar: Texto del botón de cancelación
-        
-    Returns:
-        bool: True si se confirma, False si se cancela
-    """
-    st.warning(mensaje)
+        fecha_nacimiento: Fecha en formato string o datetime
     
-    col1, col2 = st.columns(2)
-    with col1:
-        confirmar = st.button(btn_confirmar, type="primary")
-    with col2:
-        cancelar = st.button(btn_cancelar)
-        
-    if confirmar:
-        return True
-    if cancelar:
-        return False
-        
-    # Si no se ha pulsado ningún botón, devolver None
-    return None
-
-def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, Any]:
-    """
-    Versión de compatibilidad para llamadas antiguas.
-    Ignora el cliente de Supabase que se le pase y usa la caché segura.
+    Returns:
+        int: Edad en años o None si no es válida
     """
     try:
-        # Import diferido para evitar importación circular
-        from services.data_service import cached_get_ajustes_app
-        return cached_get_ajustes_app(campos)
-    except Exception as e:
-        st.error(f"⚠️ Error al cargar ajustes: {e}")
-        return {}
+        if isinstance(fecha_nacimiento, str):
+            fecha_nacimiento = pd.to_datetime(fecha_nacimiento).date()
+        hoy = obtener_fecha_hoy()
+        edad = hoy.year - fecha_nacimiento.year - ((hoy.month, hoy.day) < (fecha_nacimiento.month, fecha_nacimiento.day))
+        return edad
+    except Exception:
+        return None
+
+def formatear_nombre_completo(nombre: str, apellido1: str, apellido2: str = "") -> str:
+    """
+    Formatea un nombre completo estándar.
+    
+    Args:
+        nombre: Nombre(s)
+        apellido1: Primer apellido
+        apellido2: Segundo apellido (opcional)
+        
+    Returns:
+        str: Nombre completo formateado
+    """
+    partes = [nombre.strip(), apellido1.strip()]
+    if apellido2.strip():
+        partes.append(apellido2.strip())
+    return " ".join(partes)
+
+# =========================
+# FIN DEL ARCHIVO
+# =========================
