@@ -1,6 +1,6 @@
 """
-Módulo para la gestión de usuarios empresariales.
-Versión mejorada con integración completa de DataService y listado_con_ficha.
+Módulo para gestión de usuarios empresariales.
+Integrado con DataService y el componente listado_con_ficha.
 """
 
 import streamlit as st
@@ -12,204 +12,199 @@ from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
     st.title("👥 Gestión de Usuarios")
-    st.caption("Consulta, creación y edición de usuarios registrados en la plataforma.")
+    st.caption("Consulta, creación y edición de usuarios.")
 
+    # Permisos: solo admin
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden acceder a esta sección.")
         return
 
-    # Inicializar servicio de datos
-    data_service = get_data_service(supabase, session_state)
+    ds = get_data_service(supabase, session_state)
 
     # =========================
-    # Cargar datos y opciones
+    # Carga de datos
     # =========================
-    with st.spinner("Cargando datos..."):
+    with st.spinner("Cargando usuarios..."):
+        df_usuarios = ds.get_usuarios(include_empresa=True)
+        # Normalizar nombre de columna rol por coherencia con UI
+        if "rol" not in df_usuarios.columns and "role" in df_usuarios.columns:
+            df_usuarios["rol"] = df_usuarios["role"]
+        empresas_dict = ds.get_empresas_dict()
+
         try:
-            # Obtener usuarios con información de empresa
-            df_usuarios = data_service.get_usuarios(include_empresa=True)
-            
-            # Obtener diccionarios para selects
-            empresas_dict = data_service.get_empresas_dict()
-            empresas_opciones = [""] + sorted(empresas_dict.keys())
-            
-            # Obtener grupos para la selección
-            try:
-                df_grupos = data_service.get_grupos_completos()
-                grupos_dict = {row["codigo_grupo"]: row["id"] for _, row in df_grupos.iterrows()} if not df_grupos.empty else {}
-                grupos_opciones = [""] + sorted(grupos_dict.keys())
-            except Exception:
-                grupos_dict = {}
-                grupos_opciones = [""]
-                st.warning("⚠️ No se pudieron cargar los grupos. Algunos usuarios no podrán ser asignados a grupos.")
-
-        except Exception as e:
-            st.error(f"❌ Error al cargar datos: {e}")
-            return
+            df_grupos = ds.get_grupos_completos()
+            grupos_dict = {row["codigo_grupo"]: row["id"] for _, row in df_grupos.iterrows()} if not df_grupos.empty else {}
+        except Exception:
+            grupos_dict = {}
+            st.warning("⚠️ No se pudieron cargar los grupos.")
 
     # =========================
-    # Métricas rápidas
+    # Métricas rápidas + export
     # =========================
     if not df_usuarios.empty:
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("👥 Total Usuarios", len(df_usuarios))
-        with col2:
-            st.metric("🔧 Administradores", len(df_usuarios[df_usuarios['rol'] == 'admin']))
-        with col3:
-            st.metric("👨‍💼 Gestores", len(df_usuarios[df_usuarios['rol'] == 'gestor']))
-        with col4:
-            st.metric("🎓 Alumnos", len(df_usuarios[df_usuarios['rol'] == 'alumno']))
+        colm1, colm2, colm3, colm4 = st.columns(4)
+        with colm1:
+            st.metric("👥 Total", len(df_usuarios))
+        with colm2:
+            st.metric("👑 Admin", int((df_usuarios["rol"] == "admin").sum()) if "rol" in df_usuarios.columns else 0)
+        with colm3:
+            st.metric("🏢 Gestor", int((df_usuarios["rol"] == "gestor").sum()) if "rol" in df_usuarios.columns else 0)
+        with colm4:
+            st.metric("🎓 Alumno", int((df_usuarios["rol"] == "alumno").sum()) if "rol" in df_usuarios.columns else 0)
 
-    # Exportar datos
-    if not df_usuarios.empty:
-        col1, col2 = st.columns(2)
-        with col1:
+        colx1, colx2 = st.columns(2)
+        with colx1:
             export_csv(df_usuarios, filename="usuarios.csv")
-        with col2:
+        with colx2:
             export_excel(df_usuarios, filename="usuarios.xlsx")
 
     st.divider()
 
     # =========================
-    # Filtros de búsqueda
+    # Filtros
     # =========================
-    st.markdown("### 🔍 Buscar y Filtrar")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        query = st.text_input("🔍 Buscar por nombre, email o teléfono")
-    with col2:
-        rol_filter = st.selectbox(
-            "Filtrar por rol", 
-            ["Todos", "Administrador", "Gestor", "Alumno", "Tutor"]
-        )
+    st.markdown("### 🔍 Buscar y filtrar")
+    colf1, colf2 = st.columns(2)
+    with colf1:
+        query = st.text_input("Buscar por nombre, email o teléfono")
+    with colf2:
+        rol_filter = st.selectbox("Rol", ["Todos", "Administrador", "Gestor", "Alumno", "Tutor", "Comercial"])
 
-    # Aplicar filtros
     df_filtered = df_usuarios.copy()
+
     if query:
-        query_lower = query.lower()
+        q = query.lower()
         mask = False
         for col in ["nombre_completo", "email", "telefono", "empresa_nombre"]:
             if col in df_filtered.columns:
-                mask = mask | df_filtered[col].astype(str).str.lower().str.contains(query_lower, na=False)
+                mask = mask | df_filtered[col].astype(str).str.lower().str.contains(q, na=False)
         df_filtered = df_filtered[mask]
-    
-    if rol_filter != "Todos":
-        # Mapear la selección a los valores de la columna
-        rol_map = {
+
+    if rol_filter != "Todos" and "rol" in df_filtered.columns:
+        map_rol = {
             "Administrador": "admin",
-            "Gestor": "gestor", 
+            "Gestor": "gestor",
             "Alumno": "alumno",
-            "Tutor": "tutor"
+            "Tutor": "tutor",
+            "Comercial": "comercial"
         }
-        if rol_filter in rol_map:
-            df_filtered = df_filtered[df_filtered["rol"] == rol_map[rol_filter]]
+        if rol_filter in map_rol:
+            df_filtered = df_filtered[df_filtered["rol"] == map_rol[rol_filter]]
 
     # =========================
-    # Funciones CRUD
+    # CRUD callbacks
     # =========================
     def guardar_usuario(usuario_id, datos_editados):
-        """Función para guardar cambios en un usuario."""
-        try:
-            # Validar email si se ha modificado
-            if "email" in datos_editados and not validar_email(datos_editados["email"]):
-                st.error("⚠️ El email no es válido.")
-                return
-                
-            # Validar DNI/NIE si se ha modificado
-            if "dni" in datos_editados and datos_editados["dni"] and not validar_dni_cif(datos_editados["dni"]):
-                st.error("⚠️ El DNI/NIE no es válido.")
-                return
-                
-            # Convertir nombres de empresa y grupo a sus IDs
-            if "empresa_nombre" in datos_editados and datos_editados["empresa_nombre"]:
-                if datos_editados["empresa_nombre"] in empresas_dict:
-                    datos_editados["empresa_id"] = empresas_dict[datos_editados["empresa_nombre"]]
-                    del datos_editados["empresa_nombre"]
-                else:
-                    st.error(f"⚠️ No se encontró la empresa {datos_editados['empresa_nombre']}")
-                    return
-                    
-            if "codigo_grupo" in datos_editados and datos_editados["codigo_grupo"]:
-                if datos_editados["codigo_grupo"] in grupos_dict:
-                    datos_editados["grupo_id"] = grupos_dict[datos_editados["codigo_grupo"]]
-                    del datos_editados["codigo_grupo"]
-                else:
-                    st.error(f"⚠️ No se encontró el grupo {datos_editados['codigo_grupo']}")
-                    return
-                    
-            # Obtener el auth_id del usuario
-            usuario = df_usuarios[df_usuarios["id"] == usuario_id].iloc[0]
-            auth_id = usuario["auth_id"]
-            
-            # Actualizar usuario
-            try:
-                # Si hay cambio de email, actualizar en Auth
-                if "email" in datos_editados and datos_editados["email"] != usuario["email"]:
-                    supabase.auth.admin.update_user_by_id(
-                        auth_id, 
-                        {"email": datos_editados["email"]}
-                    )
-                
-                # Actualizar en tabla usuarios
-                supabase.table("usuarios").update(datos_editados).eq("id", usuario_id).execute()
-                
-                st.success("✅ Usuario actualizado correctamente.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"⚠️ Error al actualizar usuario: {e}")
-                
-        except Exception as e:
-            st.error(f"⚠️ Error al procesar datos: {e}")
-
-    def crear_usuario(datos_nuevos):
-        """Función para crear un nuevo usuario."""
         try:
             # Validaciones
-            if not datos_nuevos.get("email") or not datos_nuevos.get("nombre_completo") or not datos_nuevos.get("rol"):
-                st.error("⚠️ Email, nombre y rol son obligatorios.")
+            if "email" in datos_editados and datos_editados["email"]:
+                if not validar_email(datos_editados["email"]):
+                    st.error("⚠️ Email inválido.")
+                    return
+            if "dni" in datos_editados and datos_editados["dni"]:
+                if not validar_dni_cif(datos_editados["dni"]):
+                    st.error("⚠️ DNI/NIE/CIF inválido.")
+                    return
+
+            # Convertir empresa_nombre -> empresa_id
+            if "empresa_nombre" in datos_editados:
+                nombre = datos_editados.pop("empresa_nombre")
+                if nombre:
+                    if nombre in empresas_dict:
+                        datos_editados["empresa_id"] = empresas_dict[nombre]
+                    else:
+                        st.error(f"⚠️ Empresa '{nombre}' no encontrada.")
+                        return
+                else:
+                    datos_editados["empresa_id"] = None
+
+            # Convertir codigo_grupo -> grupo_id
+            if "codigo_grupo" in datos_editados:
+                codigo = datos_editados.pop("codigo_grupo")
+                if codigo:
+                    if codigo in grupos_dict:
+                        datos_editados["grupo_id"] = grupos_dict[codigo]
+                    else:
+                        st.error(f"⚠️ Grupo '{codigo}' no encontrado.")
+                        return
+                else:
+                    datos_editados["grupo_id"] = None
+
+            # Normalizar campo rol (UI usa 'rol')
+            if "rol" in datos_editados and datos_editados["rol"] == "":
+                datos_editados.pop("rol")
+            # Asegurar que no se intenta escribir un campo inexistente 'role'
+            if "role" in datos_editados:
+                # mapear a 'rol' por coherencia con el schema
+                datos_editados["rol"] = datos_editados.pop("role")
+
+            # Obtener auth_id para cambios en Auth si es necesario
+            row = df_usuarios[df_usuarios["id"] == usuario_id].iloc[0]
+            auth_id = row.get("auth_id")
+
+            # Si cambia el email, actualizar también en Auth
+            if "email" in datos_editados and auth_id and datos_editados["email"] != row.get("email"):
+                try:
+                    supabase.auth.admin.update_user_by_id(auth_id, {"email": datos_editados["email"]})
+                except Exception as e:
+                    st.error(f"⚠️ Error actualizando email en Auth: {e}")
+                    return
+
+            # Persistir en tabla usuarios (usar columnas del schema)
+            allowed_cols = {"email", "nombre_completo", "telefono", "dni", "rol", "empresa_id", "grupo_id"}
+            update_payload = {k: v for k, v in datos_editados.items() if k in allowed_cols}
+
+            if not update_payload:
+                st.info("ℹ️ No hay cambios válidos para guardar.")
                 return
-                
+
+            supabase.table("usuarios").update(update_payload).eq("id", usuario_id).execute()
+            st.success("✅ Usuario actualizado.")
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ Error al guardar: {e}")
+
+    def crear_usuario(datos_nuevos):
+        try:
+            # Validaciones básicas
+            required = ["email", "nombre_completo", "rol"]
+            faltan = [c for c in required if not datos_nuevos.get(c)]
+            if faltan:
+                st.error(f"⚠️ Faltan campos obligatorios: {', '.join(faltan)}")
+                return
+
             if not validar_email(datos_nuevos["email"]):
-                st.error("⚠️ El email no es válido.")
+                st.error("⚠️ Email inválido.")
                 return
-                
+
             if datos_nuevos.get("dni") and not validar_dni_cif(datos_nuevos["dni"]):
-                st.error("⚠️ El DNI/NIE no es válido.")
+                st.error("⚠️ DNI/NIE/CIF inválido.")
                 return
-                
-            # Generar contraseña si no se proporciona
-            password = datos_nuevos.get("password")
-            if not password:
-                password = generar_password_segura()
-                
-            # Convertir nombres de empresa y grupo a sus IDs
+
+            # Password
+            password = datos_nuevos.get("password") or generar_password_segura()
+
+            # Mapear empresa_nombre -> empresa_id
             empresa_id = None
             if datos_nuevos.get("empresa_nombre"):
-                if datos_nuevos["empresa_nombre"] in empresas_dict:
-                    empresa_id = empresas_dict[datos_nuevos["empresa_nombre"]]
+                nombre = datos_nuevos["empresa_nombre"]
+                if nombre in empresas_dict:
+                    empresa_id = empresas_dict[nombre]
                 else:
-                    st.error(f"⚠️ No se encontró la empresa {datos_nuevos['empresa_nombre']}")
+                    st.error(f"⚠️ Empresa '{nombre}' no encontrada.")
                     return
-                    
+
+            # Mapear codigo_grupo -> grupo_id
             grupo_id = None
             if datos_nuevos.get("codigo_grupo"):
-                if datos_nuevos["codigo_grupo"] in grupos_dict:
-                    grupo_id = grupos_dict[datos_nuevos["codigo_grupo"]]
+                codigo = datos_nuevos["codigo_grupo"]
+                if codigo in grupos_dict:
+                    grupo_id = grupos_dict[codigo]
                 else:
-                    st.error(f"⚠️ No se encontró el grupo {datos_nuevos['codigo_grupo']}")
+                    st.error(f"⚠️ Grupo '{codigo}' no encontrado.")
                     return
-            
-            # Validaciones adicionales por rol
-            if datos_nuevos["rol"] == "gestor" and not empresa_id:
-                st.error("⚠️ Los gestores deben tener una empresa asignada.")
-                return
-                
-            if datos_nuevos["rol"] == "alumno" and not grupo_id:
-                st.error("⚠️ Los alumnos deben tener un grupo asignado.")
-                return
-            
+
             # Crear usuario en Auth
             try:
                 auth_res = supabase.auth.admin.create_user({
@@ -217,117 +212,105 @@ def main(supabase, session_state):
                     "password": password,
                     "email_confirm": True
                 })
-                
                 if not getattr(auth_res, "user", None):
-                    st.error("⚠️ Error al crear usuario en Auth.")
+                    st.error("⚠️ No se pudo crear el usuario en Auth.")
                     return
-                    
                 auth_id = auth_res.user.id
-                
-                # Insertar en tabla usuarios
-                usuario_data = {
-                    "auth_id": auth_id,
-                    "email": datos_nuevos["email"],
-                    "nombre_completo": datos_nuevos["nombre_completo"],
-                    "rol": datos_nuevos["rol"],
-                    "created_at": datetime.now().isoformat()
-                }
-                
-                if datos_nuevos.get("telefono"):
-                    usuario_data["telefono"] = datos_nuevos["telefono"]
-                    
-                if datos_nuevos.get("dni"):
-                    usuario_data["dni"] = datos_nuevos["dni"]
-                    
-                if empresa_id:
-                    usuario_data["empresa_id"] = empresa_id
-                    
-                if grupo_id:
-                    usuario_data["grupo_id"] = grupo_id
-                
-                supabase.table("usuarios").insert(usuario_data).execute()
-                
-                # Mostrar mensaje con la contraseña generada
-                if not datos_nuevos.get("password"):
-                    st.success(f"✅ Usuario creado con éxito. Contraseña generada: **{password}**")
-                else:
-                    st.success("✅ Usuario creado correctamente.")
-                    
-                st.rerun()
-                
             except Exception as e:
-                st.error(f"⚠️ Error al crear usuario: {e}")
-                
+                st.error(f"❌ Error creando en Auth: {e}")
+                return
+
+            # Insertar en tabla usuarios
+            payload = {
+                "auth_id": auth_id,
+                "email": datos_nuevos["email"],
+                "nombre_completo": datos_nuevos["nombre_completo"],
+                "rol": datos_nuevos["rol"],  # usar 'rol' (schema)
+                "created_at": datetime.now().isoformat()
+            }
+            if datos_nuevos.get("telefono"):
+                payload["telefono"] = datos_nuevos["telefono"]
+            if datos_nuevos.get("dni"):
+                payload["dni"] = datos_nuevos["dni"]
+            if empresa_id:
+                payload["empresa_id"] = empresa_id
+            if grupo_id:
+                payload["grupo_id"] = grupo_id
+
+            supabase.table("usuarios").insert(payload).execute()
+
+            if "password" not in datos_nuevos or not datos_nuevos["password"]:
+                st.success(f"✅ Usuario creado. Contraseña generada: {password}")
+            else:
+                st.success("✅ Usuario creado.")
+
+            st.rerun()
+
         except Exception as e:
-            st.error(f"⚠️ Error al procesar datos: {e}")
+            st.error(f"❌ Error al crear: {e}")
 
     def eliminar_usuario(usuario_id):
-        """Función para eliminar un usuario."""
         try:
-            # Obtener el auth_id del usuario
-            usuario = df_usuarios[df_usuarios["id"] == usuario_id].iloc[0]
-            auth_id = usuario["auth_id"]
-            
-            # Eliminar usuario
-            try:
-                # Primero de la tabla usuarios
-                supabase.table("usuarios").delete().eq("id", usuario_id).execute()
-                
-                # Luego de Auth
-                supabase.auth.admin.delete_user(auth_id)
-                
-                st.success("✅ Usuario eliminado correctamente.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"⚠️ Error al eliminar usuario: {e}")
-                
+            row = df_usuarios[df_usuarios["id"] == usuario_id].iloc[0]
+            auth_id = row.get("auth_id")
+
+            # Primero eliminar de la tabla
+            supabase.table("usuarios").delete().eq("id", usuario_id).execute()
+
+            # Luego eliminar en Auth
+            if auth_id:
+                try:
+                    supabase.auth.admin.delete_user(auth_id)
+                except Exception as e:
+                    st.warning(f"⚠️ Usuario eliminado en BD, pero no en Auth: {e}")
+
+            st.success("✅ Usuario eliminado.")
+            st.rerun()
+
         except Exception as e:
-            st.error(f"⚠️ Error al obtener datos del usuario: {e}")
+            st.error(f"❌ Error al eliminar: {e}")
 
     # =========================
-    # Configuración de campos para listado_con_ficha
+    # Configuración de formulario
     # =========================
+    empresas_opciones = [""] + sorted(empresas_dict.keys())
+    grupos_opciones = [""] + (sorted(grupos_dict.keys()) if grupos_dict else [])
+
     campos_select = {
         "rol": ["admin", "gestor", "alumno", "tutor", "comercial"],
         "empresa_nombre": empresas_opciones,
         "codigo_grupo": grupos_opciones
     }
-
     campos_readonly = ["id", "auth_id", "created_at"]
-
     campos_password = ["password"]
-
     campos_help = {
-        "email": "Email del usuario (obligatorio)",
-        "nombre_completo": "Nombre completo del usuario (obligatorio)",
-        "rol": "Rol del usuario en el sistema (obligatorio)",
-        "empresa_nombre": "Empresa a la que pertenece el usuario",
-        "codigo_grupo": "Grupo formativo al que pertenece el usuario",
-        "dni": "DNI/NIE del usuario",
-        "telefono": "Teléfono de contacto",
-        "password": "Contraseña (se generará automáticamente si se deja vacío)"
+        "email": "Obligatorio. Se validará el formato.",
+        "nombre_completo": "Obligatorio.",
+        "rol": "Rol del usuario en el sistema.",
+        "empresa_nombre": "Empresa a la que pertenece (opcional salvo gestores).",
+        "codigo_grupo": "Grupo formativo (obligatorio para alumnos).",
+        "dni": "DNI/NIE/CIF (opcional, se validará formato).",
+        "telefono": "Teléfono de contacto (opcional).",
+        "password": "Si se deja vacío, se generará automáticamente."
     }
-
     campos_obligatorios = ["email", "nombre_completo", "rol"]
-
-    # Campos reactivos según el rol
     reactive_fields = {
         "rol": ["empresa_nombre", "codigo_grupo"]
     }
 
-    # =========================
-    # Mostrar interfaz principal
-    # =========================
-    if df_filtered.empty:
-        if df_usuarios.empty:
-            st.info("ℹ️ No hay usuarios registrados en el sistema.")
-        else:
-            st.warning("🔍 No se encontraron usuarios que coincidan con los filtros aplicados.")
-    
-    # Mostrar el listado con ficha
+    # Columnas visibles coherentes con DF
+    columnas_visibles = [c for c in [
+        "nombre_completo", "email", "telefono", "rol", "empresa_nombre"
+    ] if c in df_usuarios.columns]
+
+    if df_usuarios.empty:
+        st.info("ℹ️ No hay usuarios registrados.")
+    elif df_filtered.empty:
+        st.warning("🔍 No hay resultados con los filtros aplicados.")
+
     listado_con_ficha(
-        df=df_filtered,
-        columnas_visibles=["nombre_completo", "email", "telefono", "rol", "empresa_nombre", "dni"],
+        df=df_filtered if not df_filtered.empty else df_usuarios,
+        columnas_visibles=columnas_visibles,
         titulo="Usuario",
         on_save=guardar_usuario,
         on_create=crear_usuario,
@@ -339,5 +322,5 @@ def main(supabase, session_state):
         campos_help=campos_help,
         campos_obligatorios=campos_obligatorios,
         reactive_fields=reactive_fields,
-        search_columns=["nombre_completo", "email", "dni"]
+        search_columns=["nombre_completo", "email", "telefono", "empresa_nombre"]
     )
