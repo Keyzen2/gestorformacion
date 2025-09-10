@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime
-from utils import get_ajustes_app, update_ajustes_app
+# Dejamos de usar utils.get_ajustes_app para evitar cache con objetos no-hasheables
+from services.data_service import cached_get_ajustes_app
+from utils import update_ajustes_app
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
@@ -10,9 +12,9 @@ def main(supabase, session_state):
         st.warning("🔒 Solo el administrador global puede acceder a esta sección.")
         return
 
-    # Cargar ajustes actuales con manejo de errores
+    # Cargar ajustes actuales con manejo de errores (caché segura)
     try:
-        ajustes = get_ajustes_app(supabase)
+        ajustes = cached_get_ajustes_app()
         if not ajustes:
             ajustes = {}
     except Exception as e:
@@ -494,32 +496,6 @@ def main(supabase, session_state):
             st.caption(preview_ajustes.get('mensaje_footer', '© 2025 Gestor de Formación · Streamlit + Supabase'))
 
     # =========================
-    # Información de ayuda
-    # =========================
-    st.divider()
-    with st.expander("ℹ️ Información sobre personalización"):
-        st.markdown("""
-        **🎨 Branding:**
-        - Los colores se aplican automáticamente en toda la interfaz
-        - El logo aparece en el header y sidebar (si está habilitado)
-        - Los cambios de tema se aplican inmediatamente
-
-        **📝 Textos dinámicos:**
-        - Los textos se cargan automáticamente según el rol del usuario
-        - Se pueden usar variables básicas como {nombre} en algunos campos
-        - Los cambios se reflejan inmediatamente en la interfaz
-
-        **🔄 Cache y rendimiento:**
-        - Los ajustes se cargan al inicio y se cachean para mejorar el rendimiento
-        - Los cambios requieren recarga de página para verse completamente
-        - Se recomienda hacer cambios en horarios de menor uso
-
-        **📧 Soporte:**
-        - El email de soporte aparece en mensajes de error
-        - El teléfono se muestra en la página de ayuda
-        """)
-
-    # =========================
     # Acciones masivas
     # =========================
     st.divider()
@@ -530,8 +506,8 @@ def main(supabase, session_state):
     with col1:
         if st.button("🔄 Recargar ajustes", help="Recarga la configuración desde la base de datos"):
             try:
-                if hasattr(get_ajustes_app, 'clear'):
-                    get_ajustes_app.clear()
+                if hasattr(cached_get_ajustes_app, 'clear'):
+                    cached_get_ajustes_app.clear()
                 st.success("✅ Ajustes recargados correctamente.")
                 st.rerun()
             except Exception as e:
@@ -570,8 +546,10 @@ def main(supabase, session_state):
                         "bienvenida_comercial": "Área Comercial - CRM"
                     }
                     update_ajustes_app(supabase, defaults)
+                    # Invalidar caché para que se recojan los nuevos valores
+                    if hasattr(cached_get_ajustes_app, 'clear'):
+                        cached_get_ajustes_app.clear()
                     st.success("✅ Configuración restablecida a valores por defecto.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al restablecer: {e}")
-            
