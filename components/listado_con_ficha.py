@@ -9,6 +9,7 @@ def listado_con_ficha(
     id_col="id",
     campos_select=None,
     campos_textarea=None,
+    campos_file=None,
     campos_readonly=None
 ):
     """
@@ -21,12 +22,15 @@ def listado_con_ficha(
     id_col: columna identificadora
     campos_select: dict {columna: [opciones]} para selects
     campos_textarea: dict {columna: {"label": str}} para áreas de texto
+    campos_file: dict {columna: {"label": str, "type": [extensiones]}} para subida de archivos
     campos_readonly: lista de columnas que no se pueden editar
     """
     campos_select = campos_select or {}
     campos_textarea = campos_textarea or {}
+    campos_file = campos_file or {}
     campos_readonly = campos_readonly or []
 
+    # Configuración de la tabla
     gb = GridOptionsBuilder.from_dataframe(df[columnas_visibles])
     gb.configure_default_column(filter=True, sortable=True, resizable=True)
     gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
@@ -42,6 +46,7 @@ def listado_con_ficha(
         allow_unsafe_jscode=True
     )
 
+    # Mostrar ficha si hay selección
     if grid_response["selected_rows"]:
         fila = grid_response["selected_rows"][0]
         st.subheader(f"✏️ {titulo}: {fila.get('nombre', fila[columnas_visibles[0]])}")
@@ -56,14 +61,23 @@ def listado_con_ficha(
 
                 if col in campos_readonly:
                     st.text_input(col, value=valor_actual, disabled=True)
+
                 elif col in campos_select:
-                    datos_editados[col] = st.selectbox(
-                        col, options=campos_select[col], index=campos_select[col].index(valor_actual) if valor_actual in campos_select[col] else 0
-                    )
+                    opciones = campos_select[col]
+                    idx = opciones.index(valor_actual) if valor_actual in opciones else 0
+                    datos_editados[col] = st.selectbox(col, options=opciones, index=idx)
+
                 elif col in campos_textarea:
                     datos_editados[col] = st.text_area(
                         campos_textarea[col].get("label", col), value=valor_actual
                     )
+
+                elif col in campos_file:
+                    datos_editados[col] = st.file_uploader(
+                        campos_file[col].get("label", col),
+                        type=campos_file[col].get("type", None)
+                    )
+
                 else:
                     datos_editados[col] = st.text_input(col, value=valor_actual)
 
