@@ -43,12 +43,40 @@ def main(supabase, session_state):
         st.error(f"❌ Error al cargar tutores: {e}")
         return
 
+    # =========================
+    # Filtros
+    # =========================
+    if not df.empty:
+        st.markdown("### 🔍 Filtros")
+        filtro_nombre = st.text_input("Buscar por nombre, apellidos o NIF")
+        tipo_filter = st.selectbox("Filtrar por tipo", ["Todos", "Interno", "Externo"])
+        especialidades = ["Todas"] + sorted(df["especialidad"].dropna().unique()) if "especialidad" in df else ["Todas"]
+        especialidad_filter = st.selectbox("Filtrar por especialidad", especialidades)
+
+        if filtro_nombre:
+            sq = filtro_nombre.lower()
+            df = df[
+                df["nombre"].str.lower().str.contains(sq, na=False) |
+                df["apellidos"].str.lower().str.contains(sq, na=False) |
+                df["nif"].str.lower().str.contains(sq, na=False)
+            ]
+        if tipo_filter != "Todos":
+            df = df[df["tipo_tutor"] == tipo_filter]
+        if especialidad_filter != "Todas":
+            df = df[df["especialidad"] == especialidad_filter]
+
+    # =========================
+    # Si no hay datos tras filtrar
+    # =========================
     if df.empty:
-        st.info("ℹ️ No hay tutores registrados.")
+        st.info("ℹ️ No hay tutores que coincidan con los filtros.")
+        if session_state.role in {"admin", "gestor"}:
+            if st.button("➕ Crear nuevo tutor"):
+                st.session_state["crear_tutor"] = True
         return
 
     # =========================
-    # Exportar CSV
+    # Exportar CSV filtrado
     # =========================
     export_csv(df, filename="tutores_filtrados.csv")
     st.divider()
@@ -58,7 +86,6 @@ def main(supabase, session_state):
     # =========================
     def guardar_tutor(tutor_id, datos):
         try:
-            # Determinar empresa_id para la ruta del CV
             if session_state.role == "gestor":
                 empresa_id = session_state.user.get("empresa_id")
                 datos["empresa_id"] = empresa_id
@@ -69,7 +96,6 @@ def main(supabase, session_state):
                 else:
                     empresa_id = None
 
-            # Subida de CV si se adjunta archivo
             if "cv_file" in datos and datos["cv_file"] is not None and empresa_id:
                 file_path = f"{empresa_id}/{tutor_id}.pdf"
                 supabase.storage.from_("currículums").upload(
@@ -107,7 +133,7 @@ def main(supabase, session_state):
         empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data}
         campos_select["empresa_id"] = list(empresas_dict.keys())
     else:
-        campos_readonly.append("empresa")  # Gestor no edita empresa
+        campos_readonly.append("empresa")
 
     campos_file = {
         "cv_file": {"label": "📄 Subir/Actualizar CV (PDF)", "type": ["pdf"]}
