@@ -1,5 +1,3 @@
-# Fragmento de utils.py - Funciones XML corregidas
-
 def generar_xml_accion_formativa(accion, namespace="http://www.fundae.es/esquemas"):
     """
     Genera XML de acción formativa para FUNDAE con el namespace correcto
