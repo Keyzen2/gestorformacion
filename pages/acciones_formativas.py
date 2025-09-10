@@ -20,20 +20,29 @@ def main(supabase, session_state):
     # =========================
     # Cargar datos
     # =========================
-    with st.spinner("Cargando datos..."):
-        df_acciones = data_service.get_acciones_formativas()
-        areas_dict = data_service.get_areas_dict()
-        grupos_acciones_df = data_service.get_grupos_acciones()
+    with st.spinner("Cargando acciones formativas..."):
+        ds = get_data_service(supabase, session_state)
+
+        df_acciones = ds.get_acciones_formativas_completas()
+        empresas_dict = ds.get_empresas_dict()
+
+        empresas_opciones = [""] + sorted(empresas_dict.keys())
+
+    # Fallback de columnas de fecha si faltan
+    if "fecha_inicio" not in df_acciones.columns:
+        df_acciones["fecha_inicio"] = None
+    if "fecha_fin" not in df_acciones.columns:
+        df_acciones["fecha_fin"] = None
 
     # =========================
     # Métricas
     # =========================
     if not df_acciones.empty:
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             st.metric("📚 Total Acciones", len(df_acciones))
-        
+
         with col2:
             # Acciones creadas este mes
             if "fecha_creacion" in df_acciones.columns:
@@ -43,7 +52,7 @@ def main(supabase, session_state):
                 st.metric("🆕 Nuevas este mes", len(este_mes))
             else:
                 st.metric("🆕 Nuevas este mes", 0)
-        
+
         with col3:
             # Modalidad más común
             if "modalidad" in df_acciones.columns:
@@ -59,12 +68,12 @@ def main(supabase, session_state):
     # =========================
     st.markdown("### 🔍 Buscar y Filtrar")
     col1, col2 = st.columns(2)
-    
+
     with col1:
         query = st.text_input("🔍 Buscar por nombre o código")
     with col2:
         modalidad_filter = st.selectbox(
-            "Filtrar por modalidad", 
+            "Filtrar por modalidad",
             ["Todas", "Presencial", "Online", "Mixta"]
         )
 
@@ -77,79 +86,80 @@ def main(supabase, session_state):
             df_filtered["codigo_accion"].str.lower().str.contains(q_lower, na=False) |
             df_filtered.get("area_profesional", pd.Series()).str.lower().str.contains(q_lower, na=False)
         ]
-    
+
     if modalidad_filter != "Todas":
         df_filtered = df_filtered[df_filtered.get("modalidad") == modalidad_filter]
 
     # Exportar CSV
     if not df_filtered.empty:
         export_csv(df_filtered, filename="acciones_formativas.csv")
-    
+
     st.divider()
 
     # =========================
     # Funciones CRUD
     # =========================
-    def guardar_accion(accion_id, datos_editados):
-        """Función para guardar cambios en una acción formativa."""
+    def guardar_accion_formativa(accion_id, datos_editados):
         try:
-            # Procesar área profesional
-            if "area_profesional_sel" in datos_editados:
-                area_sel = datos_editados.pop("area_profesional_sel")
-                datos_editados["cod_area_profesional"] = areas_dict.get(area_sel, "")
-                datos_editados["area_profesional"] = area_sel.split(" - ", 1)[1] if " - " in area_sel else area_sel
+            if "empresa_nombre" in datos_editados and datos_editados["empresa_nombre"]:
+                nombre = datos_editados.pop("empresa_nombre")
+                if nombre in empresas_dict:
+                    datos_editados["empresa_id"] = empresas_dict[nombre]
+                else:
+                    st.error(f"⚠️ Empresa '{nombre}' no encontrada.")
+                    return
 
-            # Procesar grupo de acciones
-            if "grupo_accion_sel" in datos_editados:
-                grupo_sel = datos_editados.pop("grupo_accion_sel")
-                cod_area = datos_editados.get("cod_area_profesional", "")
-                grupos_filtrados = grupos_acciones_df[
-                    grupos_acciones_df["cod_area_profesional"] == cod_area
-                ]
-                grupos_dict = {g["nombre"]: g["codigo"] for _, g in grupos_filtrados.iterrows()}
-                datos_editados["codigo_grupo_accion"] = grupos_dict.get(grupo_sel, "")
-
-            success = data_service.update_accion_formativa(accion_id, datos_editados)
-            if success:
-                st.success("✅ Acción formativa actualizada correctamente.")
-                st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error al actualizar: {e}")
-
-    def crear_accion(datos_nuevos):
-        """Función para crear una nueva acción formativa."""
-        try:
-            # Validaciones
-            if not datos_nuevos.get("codigo_accion") or not datos_nuevos.get("nombre"):
-                st.error("⚠️ Código y nombre son obligatorios.")
+            # Validar coherencia de fechas
+            inicio = datos_editados.get("fecha_inicio")
+            fin = datos_editados.get("fecha_fin")
+            if inicio and fin and inicio > fin:
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
 
-            # Procesar área profesional
-            if "area_profesional_sel" in datos_nuevos:
-                area_sel = datos_nuevos.pop("area_profesional_sel")
-                datos_nuevos["cod_area_profesional"] = areas_dict.get(area_sel, "")
-                datos_nuevos["area_profesional"] = area_sel.split(" - ", 1)[1] if " - " in area_sel else area_sel
+            supabase.table("acciones_formativas").update(datos_editados).eq("id", accion_id).execute()
+            st.success("✅ Acción formativa actualizada correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"⚠️ Error al actualizar acción formativa: {e}")
 
-            # Procesar grupo de acciones
-            if "grupo_accion_sel" in datos_nuevos:
-                grupo_sel = datos_nuevos.pop("grupo_accion_sel")
-                cod_area = datos_nuevos.get("cod_area_profesional", "")
-                grupos_filtrados = grupos_acciones_df[
-                    grupos_acciones_df["cod_area_profesional"] == cod_area
-                ]
-                grupos_dict = {g["nombre"]: g["codigo"] for _, g in grupos_filtrados.iterrows()}
-                datos_nuevos["codigo_grupo_accion"] = grupos_dict.get(grupo_sel, "")
+    def crear_accion_formativa(datos_nuevos):
+        try:
+            if not datos_nuevos.get("nombre"):
+                st.error("⚠️ El nombre de la acción formativa es obligatorio.")
+                return
 
-            # Asegurar que tiene empresa_id si es gestor
-            if session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
+            empresa_id = None
+            if datos_nuevos.get("empresa_nombre"):
+                if datos_nuevos["empresa_nombre"] in empresas_dict:
+                    empresa_id = empresas_dict[datos_nuevos["empresa_nombre"]]
+                else:
+                    st.error(f"⚠️ Empresa '{datos_nuevos['empresa_nombre']}' no encontrada.")
+                    return
 
-            success = data_service.create_accion_formativa(datos_nuevos)
-            if success:
+            inicio = datos_nuevos.get("fecha_inicio")
+            fin = datos_nuevos.get("fecha_fin")
+            if inicio and fin and inicio > fin:
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
+                return
+
+            payload = {
+                "nombre": datos_nuevos["nombre"],
+                "descripcion": datos_nuevos.get("descripcion"),
+                "empresa_id": empresa_id,
+                "fecha_inicio": inicio,
+                "fecha_fin": fin,
+                "modalidad": datos_nuevos.get("modalidad"),
+                "horas": datos_nuevos.get("horas")
+            }
+
+            res = supabase.table("acciones_formativas").insert(payload).execute()
+            if res.data:
                 st.success("✅ Acción formativa creada correctamente.")
                 st.rerun()
+            else:
+                st.error("⚠️ No se pudo crear la acción formativa.")
         except Exception as e:
-            st.error(f"❌ Error al crear: {e}")
+            st.error(f"⚠️ Error al crear acción formativa: {e}")
 
     # =========================
     # Campos dinámicos para el formulario
@@ -158,7 +168,7 @@ def main(supabase, session_state):
         """Determina campos a mostrar dinámicamente."""
         campos = [
             "codigo_accion", "nombre", "area_profesional_sel", "grupo_accion_sel",
-            "sector", "objetivos", "contenidos", "nivel", "modalidad", 
+            "sector", "objetivos", "contenidos", "nivel", "modalidad",
             "num_horas", "certificado_profesionalidad", "observaciones"
         ]
         return campos
@@ -189,7 +199,7 @@ def main(supabase, session_state):
     else:
         # Añadir campos calculados para mostrar mejor información
         df_display = df_filtered.copy()
-        
+
         # Preparar área profesional para mostrar
         if "cod_area_profesional" in df_display.columns:
             df_display["area_profesional_sel"] = df_display.apply(
@@ -203,7 +213,7 @@ def main(supabase, session_state):
         if "codigo_grupo_accion" in df_display.columns:
             df_display["grupo_accion_sel"] = df_display.apply(
                 lambda row: next(
-                    (g["nombre"] for _, g in grupos_acciones_df.iterrows() 
+                    (g["nombre"] for _, g in grupos_acciones_df.iterrows()
                      if g["codigo"] == row.get("codigo_grupo_accion")),
                     ""
                 ), axis=1
@@ -212,12 +222,12 @@ def main(supabase, session_state):
         listado_con_ficha(
             df_display,
             columnas_visibles=[
-                "id", "codigo_accion", "nombre", "area_profesional_sel", 
+                "id", "codigo_accion", "nombre", "area_profesional_sel",
                 "modalidad", "nivel", "num_horas", "certificado_profesionalidad"
             ],
             titulo="Acción Formativa",
-            on_save=guardar_accion,
-            on_create=crear_accion,
+            on_save=guardar_accion_formativa,
+            on_create=crear_accion_formativa,
             id_col="id",
             campos_select=campos_select,
             campos_textarea=campos_textarea,
