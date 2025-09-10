@@ -280,33 +280,6 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Callback para reaccionar a cambios de rol
-    # =========================
-    def on_rol_change():
-        """Función que se ejecuta cuando cambia el rol (para futuras mejoras)."""
-        pass
-
-    # =========================
-    # Llamada al componente mejorado
-    # =========================
-    listado_con_ficha(
-        df_fil,
-        columnas_visibles=[
-            "id", "nombre_completo", "email", "rol", 
-            "empresa", "grupo", "dni", "telefono"
-        ],
-        titulo="Usuario",
-        on_save=guardar_usuario,
-        on_create=crear_usuario,
-        id_col="id",
-        campos_select=campos_select,
-        campos_readonly=campos_readonly,
-        campos_dinamicos=campos_visibles_dinamicos,
-        campos_password=campos_password,
-        allow_creation=True
-    )
-
-    # =========================
     # JavaScript para campos dinámicos (mejorado)
     # =========================
     st.markdown("""
