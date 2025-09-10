@@ -1,314 +1,215 @@
-import streamlit as st
-import pandas as pd
-from io import BytesIO
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import cm
-from lxml import etree
-import xml.etree.ElementTree as ET
-import re
-from datetime import datetime, date
-import uuid
-import requests
+# Fragmento de utils.py - Funciones XML corregidas
 
-# =========================
-# Importar participantes desde Excel
-# =========================
-def importar_participantes_excel(file):
+def generar_xml_accion_formativa(accion, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de acción formativa para FUNDAE con el namespace correcto
+    """
+    from lxml import etree
+    
+    # Definir namespaces
+    nsmap = {
+        None: namespace,  # Default namespace
+        'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+    }
+    
+    # Crear elemento raíz con el namespace correcto
+    root = etree.Element(
+        "ACCIONES_FORMATIVAS",  # Sin prefijo de namespace en el nombre
+        nsmap=nsmap
+    )
+    
+    # Añadir atributo schemaLocation si es necesario
+    root.set(
+        "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+        f"{namespace} AAFF_Inicio.xsd"
+    )
+    
+    # Crear estructura del XML
+    accion_elem = etree.SubElement(root, "ACCION_FORMATIVA")
+    
+    # Añadir elementos obligatorios
+    etree.SubElement(accion_elem, "CODIGO_ACCION").text = str(accion.get('codigo', ''))
+    etree.SubElement(accion_elem, "DENOMINACION").text = str(accion.get('denominacion', ''))
+    etree.SubElement(accion_elem, "MODALIDAD").text = str(accion.get('modalidad', 'PRESENCIAL'))
+    etree.SubElement(accion_elem, "HORAS").text = str(accion.get('horas', 0))
+    
+    # Elementos opcionales
+    if accion.get('area_profesional'):
+        etree.SubElement(accion_elem, "AREA_PROFESIONAL").text = str(accion['area_profesional'])
+    
+    if accion.get('fecha_inicio'):
+        etree.SubElement(accion_elem, "FECHA_INICIO").text = str(accion['fecha_inicio'])
+    
+    if accion.get('fecha_fin'):
+        etree.SubElement(accion_elem, "FECHA_FIN").text = str(accion['fecha_fin'])
+    
+    if accion.get('contenidos'):
+        etree.SubElement(accion_elem, "CONTENIDOS").text = str(accion['contenidos'])
+    
+    # Convertir a string con formato bonito
+    xml_string = etree.tostring(
+        root,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding='UTF-8'
+    )
+    
+    return xml_string.decode('utf-8')
+
+
+def generar_xml_inicio_grupo(grupo, participantes, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de inicio de grupo para FUNDAE
+    """
+    from lxml import etree
+    
+    nsmap = {
+        None: namespace,
+        'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+    }
+    
+    root = etree.Element(
+        "INICIO_GRUPOS",
+        nsmap=nsmap
+    )
+    
+    root.set(
+        "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+        f"{namespace} InicioGrupos_Organizadora.xsd"
+    )
+    
+    # Información del grupo
+    grupo_elem = etree.SubElement(root, "GRUPO")
+    
+    etree.SubElement(grupo_elem, "CODIGO_GRUPO").text = str(grupo.get('codigo_grupo', ''))
+    etree.SubElement(grupo_elem, "FECHA_INICIO").text = str(grupo.get('fecha_inicio', ''))
+    etree.SubElement(grupo_elem, "FECHA_FIN").text = str(grupo.get('fecha_fin', ''))
+    etree.SubElement(grupo_elem, "MODALIDAD").text = str(grupo.get('modalidad', 'PRESENCIAL'))
+    
+    if grupo.get('horario'):
+        etree.SubElement(grupo_elem, "HORARIO").text = str(grupo['horario'])
+    
+    if grupo.get('lugar_imparticion'):
+        etree.SubElement(grupo_elem, "LUGAR_IMPARTICION").text = str(grupo['lugar_imparticion'])
+    
+    # Añadir participantes
+    if participantes:
+        participantes_elem = etree.SubElement(grupo_elem, "PARTICIPANTES")
+        
+        for p in participantes:
+            part_elem = etree.SubElement(participantes_elem, "PARTICIPANTE")
+            
+            etree.SubElement(part_elem, "DNI").text = str(p.get('dni', ''))
+            etree.SubElement(part_elem, "NOMBRE").text = str(p.get('nombre', ''))
+            etree.SubElement(part_elem, "APELLIDOS").text = str(p.get('apellidos', ''))
+            
+            if p.get('email'):
+                etree.SubElement(part_elem, "EMAIL").text = str(p['email'])
+            
+            if p.get('telefono'):
+                etree.SubElement(part_elem, "TELEFONO").text = str(p['telefono'])
+    
+    xml_string = etree.tostring(
+        root,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding='UTF-8'
+    )
+    
+    return xml_string.decode('utf-8')
+
+
+def generar_xml_finalizacion_grupo(grupo, participantes, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de finalización de grupo para FUNDAE
+    """
+    from lxml import etree
+    
+    nsmap = {
+        None: namespace,
+        'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+    }
+    
+    root = etree.Element(
+        "FINALIZACION_GRUPOS",
+        nsmap=nsmap
+    )
+    
+    root.set(
+        "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+        f"{namespace} FinalizacionGrupo_Organizadora.xsd"
+    )
+    
+    # Información del grupo
+    grupo_elem = etree.SubElement(root, "GRUPO")
+    
+    etree.SubElement(grupo_elem, "CODIGO_GRUPO").text = str(grupo.get('codigo_grupo', ''))
+    etree.SubElement(grupo_elem, "FECHA_FINALIZACION").text = str(grupo.get('fecha_fin', ''))
+    
+    # Resultados de participantes
+    if participantes:
+        resultados_elem = etree.SubElement(grupo_elem, "RESULTADOS")
+        
+        for p in participantes:
+            part_elem = etree.SubElement(resultados_elem, "PARTICIPANTE")
+            
+            etree.SubElement(part_elem, "DNI").text = str(p.get('dni', ''))
+            etree.SubElement(part_elem, "NOMBRE").text = str(p.get('nombre', ''))
+            etree.SubElement(part_elem, "APELLIDOS").text = str(p.get('apellidos', ''))
+            
+            # Resultado: APTO o NO APTO
+            resultado = p.get('resultado', 'NO APTO')
+            if resultado not in ['APTO', 'NO APTO']:
+                resultado = 'NO APTO'
+            etree.SubElement(part_elem, "RESULTADO").text = resultado
+            
+            # Horas realizadas
+            etree.SubElement(part_elem, "HORAS_REALIZADAS").text = str(p.get('horas_realizadas', 0))
+    
+    xml_string = etree.tostring(
+        root,
+        pretty_print=True,
+        xml_declaration=True,
+        encoding='UTF-8'
+    )
+    
+    return xml_string.decode('utf-8')
+
+
+def validar_xml(xml_content, xsd_url):
+    """
+    Valida un XML contra un esquema XSD desde una URL
+    """
+    from lxml import etree
+    import requests
+    
     try:
-        if not file:
-            st.warning("⚠️ No se ha proporcionado ningún archivo.")
-            return pd.DataFrame()
-        return pd.read_excel(file)
-    except Exception as e:
-        st.error(f"❌ Error al leer el Excel: {e}")
-        return pd.DataFrame()
-
-# =========================
-# Generar PDF profesional
-# =========================
-def generar_pdf(nombre_archivo, contenido="Documento generado", encabezado=None):
-    """
-    Genera un PDF en memoria con el contenido indicado.
-    Devuelve un BytesIO listo para subir o descargar.
-    El encabezado es opcional.
-    """
-    try:
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        y = height - 2 * cm
-
-        if encabezado:
-            c.setFont("Helvetica-Bold", 14)
-            c.drawString(2 * cm, y, encabezado)
-            y -= 0.7 * cm
-            c.setFont("Helvetica", 10)
-            c.drawString(2 * cm, y, f"Generado el {datetime.today().strftime('%d/%m/%Y')}")
-            y -= 1.3 * cm
-
-        c.setFont("Helvetica", 10)
-        for linea in contenido.split("\n"):
-            if y < 2 * cm:
-                c.showPage()
-                y = height - 2 * cm
-                c.setFont("Helvetica", 10)
-            c.drawString(2 * cm, y, linea.strip())
-            y -= 0.5 * cm
-
-        c.save()
-        buffer.seek(0)
-        return buffer
-    except Exception as e:
-        st.error(f"❌ Error al generar el PDF: {e}")
-        return None
-
-# =========================
-# Validación de XML con XSD (desde string o URL)
-# =========================
-def validar_xml(xml_string: str, xsd_string: str = None, xsd_url: str = None) -> bool:
-    try:
-        if xsd_url:
-            r = requests.get(xsd_url)
-            xsd_string = r.text
-
-        if not xsd_string or not xsd_string.strip().startswith("<"):
-            st.error("❌ El esquema XSD no se ha cargado correctamente.")
-            return False
-
-        xsd_doc = etree.XML(xsd_string.encode("utf-8"))
-        schema = etree.XMLSchema(xsd_doc)
-        xml_doc = etree.XML(xml_string.encode("utf-8"))
-        schema.assertValid(xml_doc)
-        return True
-
-    except etree.DocumentInvalid:
-        errores = schema.error_log
-        st.error("❌ El XML no es válido según el esquema XSD.")
-        for err in errores:
-            st.markdown(f"- 🛑 Línea {err.line}: `{err.message}`")
-        return False
-    except Exception as e:
-        st.error(f"⚠️ Error técnico al validar XML: {e}")
-        return False
-
-# =========================
-# Generadores XML Fundae
-# =========================
-def generar_xml_accion_formativa(accion: dict) -> str:
-    root = ET.Element("ACCIONES_FORMATIVAS", xmlns="http://www.fundae.es/esquemas/accion_formativa")
-    af = ET.SubElement(root, "ACCION_FORMATIVA")
-    datos = ET.SubElement(af, "DATOS_GENERALES")
-    ET.SubElement(datos, "CODIGO_ACCION").text = str(accion.get("codigo_accion", ""))
-    ET.SubElement(datos, "NOMBRE_ACCION").text = accion.get("nombre", "")
-    ET.SubElement(datos, "CODIGO_AREA_PROFESIONAL").text = accion.get("cod_area_profesional", "")
-    ET.SubElement(datos, "CODIGO_GRUPO_ACCION").text = accion.get("codigo_grupo_accion", "")
-    ET.SubElement(datos, "SECTOR").text = accion.get("sector") or "No especificado"
-    ET.SubElement(datos, "OBJETIVOS").text = accion.get("objetivos") or "No especificado"
-    ET.SubElement(datos, "CONTENIDOS").text = accion.get("contenidos") or "No especificado"
-    ET.SubElement(datos, "MODALIDAD").text = accion.get("modalidad", "")
-    ET.SubElement(datos, "NIVEL").text = accion.get("nivel", "")
-    ET.SubElement(datos, "DURACION").text = str(accion.get("num_horas") or accion.get("duracion_horas") or 0)
-    ET.SubElement(datos, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado_profesionalidad") else "N"
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
-
-def generar_xml_inicio_grupo(grupo: dict) -> str:
-    root = ET.Element("INICIO_GRUPO", xmlns="http://www.fundae.es/esquemas/InicioGrupos_Organizadora")
-    datos = ET.SubElement(root, "DATOS_GRUPO")
-    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(datos, "FECHA_INICIO").text = grupo.get("fecha_inicio", "")
-    ET.SubElement(datos, "AULA_VIRTUAL").text = "S" if grupo.get("aula_virtual") else "N"
-    ET.SubElement(datos, "LOCALIDAD").text = grupo.get("localidad") or "No especificado"
-    ET.SubElement(datos, "PROVINCIA").text = grupo.get("provincia") or "No especificado"
-    ET.SubElement(datos, "CP").text = grupo.get("cp") or "00000"
-    ET.SubElement(datos, "N_PARTICIPANTES_PREVISTOS").text = str(grupo.get("n_participantes_previstos") or 0)
-    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
-
-def generar_xml_finalizacion_grupo(grupo: dict) -> str:
-    root = ET.Element("FINALIZACION_GRUPO", xmlns="http://www.fundae.es/esquemas/FinalizacionGrupo_Organizadora")
-    datos = ET.SubElement(root, "DATOS_FINALIZACION")
-    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(datos, "FECHA_FIN").text = grupo.get("fecha_fin", "")
-    ET.SubElement(datos, "N_PARTICIPANTES_FINALIZADOS").text = str(grupo.get("n_participantes_finalizados") or 0)
-    ET.SubElement(datos, "N_APTOS").text = str(grupo.get("n_aptos") or 0)
-    ET.SubElement(datos, "N_NO_APTOS").text = str(grupo.get("n_no_aptos") or 0)
-    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
-
-# =========================
-# Ajustes globales de la app
-# =========================
-def get_ajustes_app(supabase, campos=None):
-    try:
-        query = supabase.table("ajustes_app")
-        query = query.select(",".join(campos)) if campos else query.select("*")
-        res = query.eq("id", 1).execute()
-        return res.data[0] if res.data else {}
-    except Exception as e:
-        st.error(f"❌ Error al cargar ajustes de la app: {e}")
-        return {}
-
-def update_ajustes_app(supabase, data_dict):
-    """
-    Actualiza los ajustes globales en la tabla ajustes_app.
-    """
-    try:
-        data_dict["updated_at"] = datetime.utcnow().isoformat()
-        supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
-    except Exception as e:
-        st.error(f"❌ Error al guardar ajustes de la app: {e}")
-
-# =========================
-# Subida de archivos a Supabase Storage por empresa
-# =========================
-def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
-    """
-    Sube un archivo a Supabase Storage en una carpeta por empresa.
-    Devuelve la URL pública del archivo o None si falla.
-    """
-    try:
-        nombre_original = archivo.name
-        extension = nombre_original.split(".")[-1]
-        nombre_unico = f"{uuid.uuid4()}.{extension}"
-        ruta = f"empresa_{empresa_id}/{nombre_unico}"
-
-        res = supabase.storage.from_(bucket).upload(ruta, archivo)
-        if isinstance(res, dict) and res.get("error"):
-            st.error("❌ Error al subir el archivo a Supabase Storage.")
-            return None
-
-        url = supabase.storage.from_(bucket).get_public_url(ruta)
-        return url
-    except Exception as e:
-        st.error(f"❌ Error al subir archivo: {e}")
-        return None
-
-# =========================
-# Eliminación de archivos en Supabase Storage
-# =========================
-def eliminar_archivo_supabase(supabase, url, bucket="documentos"):
-    """
-    Elimina un archivo de Supabase Storage a partir de su URL pública.
-    """
-    try:
-        base_url = supabase.storage.from_(bucket).get_public_url("")
-        if not url.startswith(base_url):
-            st.warning("⚠️ La URL no pertenece al bucket especificado.")
-            return False
-
-        ruta = url.replace(base_url, "")
-        res = supabase.storage.from_(bucket).remove([ruta])
-        if isinstance(res, dict) and res.get("error"):
-            st.error("❌ Error al eliminar el archivo de Supabase Storage.")
-            return False
-
-        return True
-    except Exception as e:
-        st.error(f"❌ Error al procesar la eliminación del archivo: {e}")
-        return False
-
-# =========================
-# Renderizado seguro de textos
-# =========================
-def render_texto(texto: str, modo="markdown"):
-    """
-    Renderiza texto en Streamlit según el modo indicado.
-    - markdown: usa st.markdown()
-    - html: usa st.markdown(..., unsafe_allow_html=True)
-    """
-    if not isinstance(texto, str) or not texto.strip():
-        return
-    try:
-        if modo == "html":
-            st.markdown(texto, unsafe_allow_html=True)
+        # Descargar el XSD
+        response = requests.get(xsd_url, timeout=10)
+        response.raise_for_status()
+        
+        # Parsear el XSD
+        xsd_doc = etree.fromstring(response.content)
+        xsd_schema = etree.XMLSchema(xsd_doc)
+        
+        # Parsear el XML
+        xml_doc = etree.fromstring(xml_content.encode('utf-8'))
+        
+        # Validar
+        es_valido = xsd_schema.validate(xml_doc)
+        
+        if es_valido:
+            return True, []
         else:
-            st.markdown(texto)
+            # Obtener errores
+            errores = []
+            for error in xsd_schema.error_log:
+                errores.append(f"Línea {error.line}: {error.message}")
+            return False, errores
+            
+    except requests.exceptions.RequestException as e:
+        return False, [f"Error al descargar esquema XSD: {str(e)}"]
+    except etree.XMLSyntaxError as e:
+        return False, [f"Error de sintaxis XML: {str(e)}"]
     except Exception as e:
-        st.error(f"❌ Error al renderizar texto: {e}")
-
-# =========================
-# Verificación de módulo activo por empresa
-# =========================
-def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date, rol: str) -> bool:
-    """
-    Verifica si un módulo está activo para una empresa en una fecha determinada y para un rol específico.
-    """
-    if rol == "alumno":
-        return False
-    if not empresa or not modulo:
-        return False
-
-    if empresa.get(f"{modulo}_activo") is True:
-        fecha_inicio = empresa.get(f"{modulo}_inicio")
-        if fecha_inicio:
-            try:
-                inicio = pd.to_datetime(fecha_inicio).date()
-                if inicio > fecha:
-                    return False
-            except Exception:
-                return False
-        return True
-
-    fecha_inicio = empresa.get(f"{modulo}_inicio")
-    fecha_fin = empresa.get(f"{modulo}_fin")
-    if fecha_inicio and fecha_fin:
-        try:
-            inicio = pd.to_datetime(fecha_inicio).date()
-            fin = pd.to_datetime(fecha_fin).date()
-            return inicio <= fecha <= fin
-        except Exception:
-            return False
-
-    if modulo == "crm" and empresa_crm:
-        if empresa_crm.get("crm_activo") is True:
-            crm_inicio = empresa_crm.get("crm_inicio")
-            if crm_inicio:
-                try:
-                    inicio = pd.to_datetime(crm_inicio).date()
-                    if inicio > fecha:
-                        return False
-                except Exception:
-                    return False
-            return True
-
-    return False
-
-# =========================
-# Validación de DNI/NIE/CIF español
-# =========================
-def validar_dni_cif(valor: str) -> bool:
-    if not valor:
-        return False
-    valor = valor.upper().strip()
-
-    dni_regex = r'^\d{8}[A-Z]$'
-    nie_regex = r'^[XYZ]\d{7}[A-Z]$'
-    cif_regex = r'^[ABCDEFGHJKLMNPQRSUVW]\d{7}[0-9A-J]$'
-
-    letras_dni = "TRWAGMYFPDXBNJZSQVHLCKE"
-
-    if re.match(dni_regex, valor):
-        numero = int(valor[:-1])
-        letra = valor[-1]
-        return letras_dni[numero % 23] == letra
-
-    elif re.match(nie_regex, valor):
-        mapa = {'X': '0', 'Y': '1', 'Z': '2'}
-        numero = int(mapa[valor[0]] + valor[1:-1])
-        letra = valor[-1]
-        return letras_dni[numero % 23] == letra
-
-    elif re.match(cif_regex, valor):
-        return True
-
-    return False
-
-# =========================
-# Export CSV helper
-# =========================
-def export_csv(df, filename="data.csv"):
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button("💾 Descargar CSV", data=csv, file_name=filename, mime="text/csv")
+        return False, [f"Error de validación: {str(e)}"]
