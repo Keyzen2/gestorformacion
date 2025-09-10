@@ -1,4 +1,179 @@
-# FICHA DE EDICIÓN CON MEJORAS VISUALES
+# Campo file con preview
+                            elif col in campos_file:
+                                st.markdown(f"**{campos_file[col].get('label', label)}**")
+                                if valor_actual:
+                                    st.caption(f"📎 Archivo actual: {valor_actual}")
+                                datos_editados[col] = st.file_uploader(
+                                    "Seleccionar nuevo archivo",
+                                    type=campos_file[col].get("type", None),
+                                    key=f"file_{col}",
+                                    help=help_text
+                                )
+
+                            # Campos específicos por tipo con mejoras
+                            else:
+                                if 'fecha' in col.lower():
+                                    try:
+                                        if valor_actual:
+                                            valor_fecha = pd.to_datetime(valor_actual).date()
+                                        else:
+                                            valor_fecha = None
+                                    except Exception:
+                                        valor_fecha = None
+                                    datos_editados[col] = st.date_input(
+                                        label, 
+                                        value=valor_fecha,
+                                        key=f"date_{col}",
+                                        help=help_text
+                                    )
+                                elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
+                                    try:
+                                        valor_num = float(valor_actual) if valor_actual else 0.0
+                                    except (ValueError, TypeError):
+                                        valor_num = 0.0
+                                    datos_editados[col] = st.number_input(
+                                        label, 
+                                        value=valor_num,
+                                        min_value=0.0, 
+                                        step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
+                                        key=f"number_{col}",
+                                        help=help_text
+                                    )
+                                elif 'email' in col.lower():
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        placeholder="usuario@ejemplo.com",
+                                        key=f"email_{col}",
+                                        help=help_text
+                                    )
+                                elif 'telefono' in col.lower() or 'movil' in col.lower():
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        placeholder="600123456",
+                                        key=f"phone_{col}",
+                                        help=help_text
+                                    )
+                                elif col in campos_password:
+                                    # Los campos de contraseña no se muestran en edición
+                                    pass
+                                else:
+                                    datos_editados[col] = st.text_input(
+                                        label, 
+                                        value=str(valor_actual),
+                                        key=f"text_{col}",
+                                        help=help_text
+                                    )
+                            
+                            # Mostrar texto de ayuda si existe
+                            if help_text:
+                                st.caption(f"💡 {help_text}")
+
+                # Botones de acción con estilos mejorados
+                st.markdown("#### 🔧 Acciones")
+                col1, col2, col3 = st.columns([1, 1, 2])
+                
+                with col1:
+                    if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
+                        # Filtrar campos que no han cambiado o están vacíos innecesariamente
+                        datos_filtrados = {}
+                        for key, value in datos_editados.items():
+                            if key in campos_file and value is None:
+                                continue  # No actualizar archivos si no se subió nada nuevo
+                            datos_filtrados[key] = value
+                        
+                        if datos_filtrados:
+                            on_save(fila[id_col], datos_filtrados)
+                        else:
+                            st.warning("⚠️ No hay cambios para guardar.")
+                
+                with col2:
+                    if st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
+                        st.session_state[f'confirm_delete_{fila[id_col]}'] = True
+                        st.rerun()
+
+            # Confirmación de eliminación
+            if st.session_state.get(f'confirm_delete_{fila[id_col]}', False):
+                st.error("⚠️ ¿Estás seguro de que quieres eliminar este registro?")
+                st.caption("Esta acción no se puede deshacer.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Sí, eliminar", key=f"confirm_yes_{fila[id_col]}", type="primary"):
+                        # Aquí iría la función de eliminación si estuviera implementada
+                        st.success("✅ Funcionalidad de eliminación pendiente de implementar.")
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Cancelar", key=f"confirm_no_{fila[id_col]}"):
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    else:
+        st.info(f"ℹ️ No hay {titulo.lower()}s registrados en el sistema.")
+
+    # ===============================
+    # FORMULARIO DE CREACIÓN MEJORADO
+    # ===============================
+    if on_create and allow_creation:
+        st.divider()
+        
+        # Contenedor con estilo
+        st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
+        st.subheader(f"➕ Crear nuevo {titulo}")
+        st.caption("Completa los campos para crear un nuevo registro.")
+        
+        with st.form("form_crear", clear_on_submit=True):
+            datos_nuevos = {}
+            
+            # Usar campos dinámicos para creación si está definido
+            campos_crear = columnas_visibles.copy()
+            if campos_dinamicos:
+                try:
+                    # Para creación, pasamos datos vacíos para determinar campos base
+                    campos_crear = campos_dinamicos({})
+                except Exception:
+                    pass  # Usar columnas_visibles por defecto
+
+            # Organizar campos en columnas si son muchos
+            if len(campos_crear) > 6:
+                st.markdown("#### 📝 Información del nuevo registro")
+                col1, col2 = st.columns(2)
+                cols = [col1, col2]
+                col_idx = 0
+            else:
+                cols = [st]
+                col_idx = 0
+
+            for col in campos_crear:
+                if col == id_col:
+                    continue
+
+                # Alternar entre columnas si hay más de 6 campos
+                if len(cols) > 1:
+                    current_col = cols[col_idx % 2]
+                    col_idx += 1
+                else:
+                    current_col = cols[0]
+
+                with current_col:
+                    label = col.replace('_', ' ').title()
+                    help_text = campos_help.get(col, "")
+
+                    # Campo select
+                    if col in campos_select:
+                        datos_nuevos[col] = st.selectbox(
+                            label,
+                            options=campos_select[col],
+                            key=f"create_select_{col}",
+                            help=help_text
+                        )
+
+                    # Campo textarea
+                    elif col in campos_textarea:
+                        cfg = campos_textarea[col        # FICHA DE EDICIÓN CON MEJORAS VISUALES
         # ===============================
         if grid_response["selected_rows"]:
             fila = grid_response["selected_rows"][0]
