@@ -6,7 +6,7 @@ Versión mejorada con integración completa de DataService y listado_con_ficha.
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
-from utils import export_csv, export_excel, formato_fecha, formato_moneda
+from utils import export_csv, export_excel, formato_fecha, formato_moneda, validar_dni_cif
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
@@ -26,26 +26,26 @@ def main(supabase, session_state):
     # Cargar datos
     # =========================
     with st.spinner("Cargando datos..."):
-        ds = get_data_service(supabase, session_state)
-
-        df_grupos = ds.get_grupos_completos()
-        acciones_dict = ds.get_acciones_dict()
-        empresas_dict = ds.get_empresas_dict()
-        df_participantes = ds.get_participantes_completos()
-        df_tutores = ds.get_tutores()
-
+        df_grupos = data_service.get_grupos_completos()
+        acciones_dict = data_service.get_acciones_dict()
+        empresas_dict = data_service.get_empresas_dict()
+        df_participantes = data_service.get_participantes_completos()
+        df_tutores = data_service.get_tutores()
+        
+        # Preparar opciones para selects
         acciones_opciones = [""] + sorted(acciones_dict.keys())
         empresas_opciones = [""] + sorted(empresas_dict.keys())
-
+        
+        # Crear diccionario de tutores
         tutores_dict = {}
         if not df_tutores.empty:
             tutores_dict = {
-                f"{row.get('nombre','')} {row.get('apellidos','')}".strip(): row["id"]
+                f"{row.get('nombre','')} {row.get('apellidos','')}".strip(): row['id'] 
                 for _, row in df_tutores.iterrows()
             }
         tutores_opciones = [""] + sorted(tutores_dict.keys())
 
-    # Fallback de columnas de fecha si faltan
+    # Fallback de fechas si faltan en DF (schema: fecha_inicio, fecha_fin_prevista)
     if "fecha_inicio_prevista" not in df_grupos.columns and "fecha_inicio" in df_grupos.columns:
         df_grupos["fecha_inicio_prevista"] = df_grupos["fecha_inicio"]
     if "fecha_fin_prevista" not in df_grupos.columns:
@@ -61,8 +61,8 @@ def main(supabase, session_state):
             st.metric("👥 Total Grupos", len(df_grupos))
         
         with col2:
-            total_previstos = df_grupos["n_participantes_previstos"].fillna(0).sum()
-            st.metric("🎯 Participantes Previstos", int(total_previstos))
+            total_previstos = df_grupos.get("n_participantes_previstos", pd.Series()).fillna(0).sum()
+            st.metric("🎯 Participantes Previstos", int(total_previstos or 0))
         
         with col3:
             hoy = date.today()
@@ -71,9 +71,10 @@ def main(supabase, session_state):
                     pd.to_datetime(df_grupos["fecha_fin_prevista"], errors="coerce").dt.date >= hoy
                 ]
                 st.metric("🟢 Grupos Activos", len(grupos_activos))
-            except:
+            except Exception:
                 st.metric("🟢 Grupos Activos", "N/D")
 
+    # Exportar datos
     if not df_grupos.empty:
         col1, col2 = st.columns(2)
         with col1:
@@ -102,8 +103,8 @@ def main(supabase, session_state):
     if query:
         q_lower = query.lower()
         df_filtered = df_filtered[
-            df_filtered["codigo_grupo"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["accion_nombre"].str.lower().str.contains(q_lower, na=False)
+            df_filtered.get("codigo_grupo", pd.Series(dtype=str)).str.lower().str.contains(q_lower, na=False) |
+            df_filtered.get("accion_nombre", pd.Series(dtype=str)).str.lower().str.contains(q_lower, na=False)
         ]
     
     if estado_filter != "Todos":
@@ -125,42 +126,42 @@ def main(supabase, session_state):
     # Funciones CRUD
     # =========================
     def guardar_grupo(grupo_id, datos_editados):
+        """Función para guardar cambios en un grupo."""
         try:
+            # Convertir acción a su ID (schema: accion_formativa_id)
             if "accion_nombre" in datos_editados and datos_editados["accion_nombre"]:
                 nombre = datos_editados.pop("accion_nombre")
                 if nombre in acciones_dict:
                     datos_editados["accion_formativa_id"] = acciones_dict[nombre]
                 else:
-                    st.error(f"⚠️ Acción formativa '{nombre}' no encontrada.")
+                    st.error(f"⚠️ No se encontró la acción formativa {nombre}")
                     return
-
+            
+            # Convertir empresa a su ID
             if "empresa_nombre" in datos_editados and datos_editados["empresa_nombre"]:
                 nombre = datos_editados.pop("empresa_nombre")
                 if nombre in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[nombre]
                 else:
-                    st.error(f"⚠️ Empresa '{nombre}' no encontrada.")
+                    st.error(f"⚠️ No se encontró la empresa {nombre}")
                     return
+            
+            # Nota: no escribimos tutor_id en la tabla grupos (no existe en schema).
+            # La asignación de tutores se gestiona en la sección específica (tutores_grupos).
 
-            if "tutor_nombre" in datos_editados and datos_editados["tutor_nombre"]:
-                nombre = datos_editados.pop("tutor_nombre")
-                if nombre in tutores_dict:
-                    datos_editados["tutor_id"] = tutores_dict[nombre]
-                else:
-                    st.error(f"⚠️ Tutor '{nombre}' no encontrado.")
-                    return
-
+            # Normalizar fecha_inicio_prevista -> fecha_inicio (según schema)
             if "fecha_inicio_prevista" in datos_editados:
-                fi = datos_editados.pop("fecha_inicio_prevista")
-                if fi:
-                    datos_editados["fecha_inicio"] = fi
+                inicio_prev = datos_editados.pop("fecha_inicio_prevista")
+                if inicio_prev:
+                    datos_editados["fecha_inicio"] = inicio_prev
 
+            # Validar fechas
             fin = datos_editados.get("fecha_fin_prevista")
             inicio = datos_editados.get("fecha_inicio")
             if inicio and fin and inicio > fin:
-                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin prevista.")
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
-
+            
             supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
             st.success("✅ Grupo actualizado correctamente.")
             st.rerun()
@@ -168,67 +169,106 @@ def main(supabase, session_state):
             st.error(f"⚠️ Error al actualizar grupo: {e}")
 
     def crear_grupo(datos_nuevos):
+        """Función para crear un nuevo grupo."""
         try:
+            # Validaciones
             if not datos_nuevos.get("codigo_grupo") or not datos_nuevos.get("accion_nombre"):
                 st.error("⚠️ Código de grupo y acción formativa son obligatorios.")
                 return
-
-            existe = supabase.table("grupos").select("id").eq("codigo_grupo", datos_nuevos["codigo_grupo"]).execute()
-            if existe.data:
+            
+            # Verificar que el código no exista ya
+            check_codigo = supabase.table("grupos").select("id").eq("codigo_grupo", datos_nuevos["codigo_grupo"]).execute()
+            if check_codigo.data:
                 st.error(f"⚠️ Ya existe un grupo con el código {datos_nuevos['codigo_grupo']}.")
                 return
-
+                
+            # Convertir acción a su ID (schema: accion_formativa_id)
             accion_formativa_id = None
-            if datos_nuevos.get("accion_nombre") in acciones_dict:
-                accion_formativa_id = acciones_dict[datos_nuevos["accion_nombre"]]
-            else:
-                st.error(f"⚠️ Acción formativa '{datos_nuevos.get('accion_nombre','')}' no encontrada.")
-                return
-
+            if datos_nuevos.get("accion_nombre"):
+                if datos_nuevos["accion_nombre"] in acciones_dict:
+                    accion_formativa_id = acciones_dict[datos_nuevos["accion_nombre"]]
+                else:
+                    st.error(f"⚠️ No se encontró la acción formativa {datos_nuevos['accion_nombre']}")
+                    return
+            
+            # Convertir empresa a su ID
+            empresa_id = None
             if datos_nuevos.get("empresa_nombre"):
                 if datos_nuevos["empresa_nombre"] in empresas_dict:
                     empresa_id = empresas_dict[datos_nuevos["empresa_nombre"]]
                 else:
-                    st.error(f"⚠️ Empresa '{datos_nuevos['empresa_nombre']}' no encontrada.")
+                    st.error(f"⚠️ No se encontró la empresa {datos_nuevos['empresa_nombre']}")
                     return
-            else:
-                empresa_id = session_state.user.get("empresa_id") if session_state.role == "gestor" else None
+            elif session_state.role == "gestor":
+                # Usar la empresa del gestor
+                empresa_id = session_state.user.get("empresa_id")
+            
+            # Nota: no escribimos tutor_id en grupos (no existe en schema).
+            # La asignación de tutor se realiza en tutores_grupos (sección inferior).
 
-            tutor_id = None
-            if datos_nuevos.get("tutor_nombre"):
-                if datos_nuevos["tutor_nombre"] in tutores_dict:
-                    tutor_id = tutores_dict[datos_nuevos["tutor_nombre"]]
-                else:
-                    st.error(f"⚠️ Tutor '{datos_nuevos['tutor_nombre']}' no encontrado.")
-                    return
-
+            # Normalizar y validar fechas
             fecha_inicio = datos_nuevos.get("fecha_inicio_prevista") or datos_nuevos.get("fecha_inicio")
             fecha_fin_prevista = datos_nuevos.get("fecha_fin_prevista")
-
             if fecha_inicio and fecha_fin_prevista and fecha_inicio > fecha_fin_prevista:
-                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin prevista.")
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
-
-            payload = {
+            
+            # Preparar datos para insertar (schema: sin updated_at manual)
+            grupo_data = {
                 "codigo_grupo": datos_nuevos["codigo_grupo"],
-                "accion_formativa_id": accion_formativa_id,
-                "empresa_id": empresa_id,
-                "tutor_id": tutor_id,
-                "fecha_inicio": fecha_inicio,
-                "fecha_fin_prevista": fecha_fin_prevista,
-                "n_participantes_previstos": datos_nuevos.get("n_participantes_previstos"),
-                "estado": datos_nuevos.get("estado"),
-                "observaciones": datos_nuevos.get("observaciones")
+                "accion_formativa_id": accion_formativa_id
             }
-
-            res = supabase.table("grupos").insert(payload).execute()
-            if res.data:
+            
+            if empresa_id:
+                grupo_data["empresa_id"] = empresa_id
+                
+            if fecha_inicio:
+                grupo_data["fecha_inicio"] = fecha_inicio
+                
+            if fecha_fin_prevista:
+                grupo_data["fecha_fin_prevista"] = fecha_fin_prevista
+                
+            if datos_nuevos.get("n_participantes_previstos"):
+                grupo_data["n_participantes_previstos"] = datos_nuevos["n_participantes_previstos"]
+                
+            # estado no existe en schema de grupos; no lo guardamos
+            if datos_nuevos.get("observaciones"):
+                grupo_data["observaciones"] = datos_nuevos["observaciones"]
+            
+            # Insertar grupo
+            result = supabase.table("grupos").insert(grupo_data).execute()
+            if result.data:
                 st.success("✅ Grupo creado correctamente.")
                 st.rerun()
             else:
-                st.error("⚠️ No se pudo crear el grupo.")
+                st.error("⚠️ Error al crear grupo.")
         except Exception as e:
             st.error(f"⚠️ Error al crear grupo: {e}")
+
+    def eliminar_grupo(grupo_id):
+        """Función para eliminar un grupo."""
+        try:
+            # Comprobar si tiene participantes asignados
+            check_participantes = supabase.table("participantes").select("id").eq("grupo_id", grupo_id).execute()
+            if check_participantes.data:
+                st.error(f"⚠️ No se puede eliminar el grupo porque tiene participantes asignados.")
+                return
+                
+            # Comprobar si tiene asignaciones en participantes_grupos
+            check_asignaciones = supabase.table("participantes_grupos").select("id").eq("grupo_id", grupo_id).execute()
+            if check_asignaciones.data:
+                # Eliminar asignaciones primero
+                supabase.table("participantes_grupos").delete().eq("grupo_id", grupo_id).execute()
+            
+            # Eliminar grupo
+            result = supabase.table("grupos").delete().eq("id", grupo_id).execute()
+            if result.data:
+                st.success("✅ Grupo eliminado correctamente.")
+                st.rerun()
+            else:
+                st.error("⚠️ Error al eliminar grupo.")
+        except Exception as e:
+            st.error(f"⚠️ Error al eliminar grupo: {e}")
 
     # =========================
     # Configuración de campos para listado_con_ficha
@@ -236,29 +276,41 @@ def main(supabase, session_state):
     campos_select = {
         "accion_nombre": acciones_opciones,
         "empresa_nombre": empresas_opciones,
-        "tutor_nombre": tutores_opciones,
-        "estado": ["En preparación", "En curso", "Finalizado", "Cancelado", "Pausado"]
+        # "tutor_nombre": tutores_opciones,  # se gestiona en la sección inferior
     }
 
-    campos_readonly = ["id", "created_at"]
+    # Incluir 'estado' solo si existe en el DF (no está en schema por defecto)
+    if "estado" in df_grupos.columns:
+        campos_select["estado"] = ["En preparación", "En curso", "Finalizado", "Cancelado", "Pausado"]
+
+    campos_readonly = ["id", "created_at"] if "created_at" in df_grupos.columns else ["id"]
 
     campos_help = {
         "codigo_grupo": "Código único del grupo (obligatorio)",
         "accion_nombre": "Acción formativa asignada (obligatorio)",
         "empresa_nombre": "Empresa a la que pertenece el grupo",
-        "tutor_nombre": "Tutor asignado al grupo",
         "fecha_inicio_prevista": "Fecha prevista de inicio del grupo",
         "fecha_fin_prevista": "Fecha prevista de finalización del grupo",
         "n_participantes_previstos": "Número de participantes previstos",
-        "estado": "Estado actual del grupo",
         "observaciones": "Notas adicionales sobre el grupo"
     }
+    if "estado" in df_grupos.columns:
+        campos_help["estado"] = "Estado actual del grupo"
 
     campos_obligatorios = ["codigo_grupo", "accion_nombre"]
 
     campos_textarea = {
         "observaciones": {"label": "Observaciones", "height": 100}
     }
+
+    columnas_base = [
+        "codigo_grupo", "accion_nombre", "empresa_nombre", 
+        "fecha_inicio_prevista", "fecha_fin_prevista", 
+        "n_participantes_previstos"
+    ]
+    if "estado" in df_grupos.columns:
+        columnas_base.append("estado")
+    columnas_visibles = [c for c in columnas_base if c in df_grupos.columns]
 
     # =========================
     # Mostrar interfaz principal
@@ -272,7 +324,7 @@ def main(supabase, session_state):
     # Mostrar el listado con ficha
     listado_con_ficha(
         df=df_filtered,
-        columnas_visibles=["codigo_grupo", "accion_nombre", "empresa_nombre", "fecha_inicio_prevista", "fecha_fin_prevista", "n_participantes_previstos", "estado"],
+        columnas_visibles=columnas_visibles,
         titulo="Grupo",
         on_save=guardar_grupo,
         on_create=crear_grupo,
@@ -308,11 +360,11 @@ def main(supabase, session_state):
             # Mostrar información del grupo
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Acción Formativa", grupo_info["accion_nombre"])
+                st.metric("Acción Formativa", grupo_info.get("accion_nombre", ""))
             with col2:
-                st.metric("Fecha Inicio", formato_fecha(grupo_info["fecha_inicio_prevista"]))
+                st.metric("Fecha Inicio", formato_fecha(grupo_info.get("fecha_inicio_prevista")))
             with col3:
-                st.metric("Fecha Fin", formato_fecha(grupo_info["fecha_fin_prevista"]))
+                st.metric("Fecha Fin", formato_fecha(grupo_info.get("fecha_fin_prevista")))
             
             # Obtener participantes del grupo
             participantes_grupo = df_participantes[df_participantes["grupo_id"] == grupo_id]
@@ -322,7 +374,7 @@ def main(supabase, session_state):
                 st.write(f"**Participantes asignados al grupo ({len(participantes_grupo)}):**")
                 
                 # Mostrar tabla de participantes
-                cols_display = ["nombre", "apellidos", "dni", "email", "telefono", "asistencia", "evaluacion"]
+                cols_display = [c for c in ["nombre", "apellidos", "dni", "email", "telefono", "asistencia", "evaluacion"] if c in participantes_grupo.columns]
                 st.dataframe(participantes_grupo[cols_display])
                 
                 # Botón para gestionar asistencia y evaluación
@@ -336,26 +388,27 @@ def main(supabase, session_state):
                         
                         # Crear campos para cada participante
                         datos_evaluacion = {}
-                        
                         for i, row in participantes_grupo.iterrows():
-                            st.write(f"**{row['nombre']} {row['apellidos']}** ({row['dni']})")
+                            st.write(f"**{row.get('nombre','')} {row.get('apellidos','')}** ({row.get('dni','')})")
                             col1, col2 = st.columns(2)
                             
                             with col1:
+                                asistencia_val = float(row.get("asistencia", 0.0) or 0.0)
                                 asistencia = st.number_input(
                                     "% Asistencia",
                                     min_value=0.0,
                                     max_value=100.0,
-                                    value=float(row["asistencia"] or 0.0),
+                                    value=asistencia_val,
                                     key=f"asistencia_{row['id']}"
                                 )
                             
                             with col2:
+                                evaluacion_val = float(row.get("evaluacion", 0.0) or 0.0)
                                 evaluacion = st.number_input(
                                     "Calificación",
                                     min_value=0.0,
                                     max_value=100.0,
-                                    value=float(row["evaluacion"] or 0.0),
+                                    value=evaluacion_val,
                                     key=f"evaluacion_{row['id']}"
                                 )
                             
@@ -369,7 +422,8 @@ def main(supabase, session_state):
                         submit = st.form_submit_button("💾 Guardar Evaluaciones")
                         
                         if submit:
-                            # Actualizar cada participante
+                            # Intentar actualizar cada participante (nota: columnas no existen en schema por defecto)
+                            errores = 0
                             for participante_id, datos in datos_evaluacion.items():
                                 try:
                                     supabase.table("participantes").update({
@@ -378,9 +432,11 @@ def main(supabase, session_state):
                                         "updated_at": datetime.now().isoformat()
                                     }).eq("id", participante_id).execute()
                                 except Exception as e:
-                                    st.error(f"⚠️ Error al actualizar participante {participante_id}: {e}")
+                                    errores += 1
+                                    st.warning(f"⚠️ No se pudo actualizar asistencia/evaluación del participante {participante_id}. Verifica que las columnas existan en la tabla participantes.")
                             
-                            st.success("✅ Evaluaciones guardadas correctamente.")
+                            if errores == 0:
+                                st.success("✅ Evaluaciones guardadas correctamente.")
                             st.rerun()
             else:
                 st.info("ℹ️ No hay participantes asignados a este grupo.")
@@ -390,13 +446,11 @@ def main(supabase, session_state):
                 
                 # Obtener participantes disponibles (sin grupo o de la misma empresa)
                 if session_state.role == "admin":
-                    # Administrador puede ver todos los participantes
                     participantes_disponibles = df_participantes[
                         (df_participantes["grupo_id"].isna()) | 
                         (df_participantes["grupo_id"] == grupo_id)
                     ]
                 else:
-                    # Gestor solo ve participantes de su empresa
                     empresa_id = session_state.user.get("empresa_id")
                     participantes_disponibles = df_participantes[
                         ((df_participantes["grupo_id"].isna()) | 
@@ -405,7 +459,6 @@ def main(supabase, session_state):
                     ]
                 
                 if not participantes_disponibles.empty:
-                    # Crear multiselect para seleccionar participantes
                     participantes_seleccionados = st.multiselect(
                         "Selecciona participantes para asignar al grupo",
                         options=participantes_disponibles["id"].tolist(),
@@ -413,10 +466,8 @@ def main(supabase, session_state):
                     )
                     
                     if participantes_seleccionados and st.button("✅ Asignar Participantes"):
-                        # Asignar participantes al grupo
                         for participante_id in participantes_seleccionados:
                             try:
-                                # Actualizar participante
                                 supabase.table("participantes").update({
                                     "grupo_id": grupo_id,
                                     "updated_at": datetime.now().isoformat()
@@ -440,59 +491,45 @@ def main(supabase, session_state):
             )
             
             if dnis_input and st.button("🔍 Buscar y Asignar Participantes"):
-                # Procesar DNIs
                 dnis_raw = dnis_input.replace(",", " ").replace(";", " ").split()
                 dnis = [dni.strip().upper() for dni in dnis_raw if dni.strip()]
                 
                 if not dnis:
                     st.error("⚠️ No se encontraron DNIs válidos.")
                 else:
-                    # Verificar DNIs
                     dnis_validos = [dni for dni in dnis if validar_dni_cif(dni)]
                     dnis_invalidos = set(dnis) - set(dnis_validos)
                     
                     if dnis_invalidos:
                         st.warning(f"⚠️ DNIs inválidos detectados: {', '.join(dnis_invalidos)}")
                     
-                    # Buscar participantes por DNI
-                    encontrados = []
-                    no_encontrados = []
-                    ya_asignados = []
-                    asignados = []
+                    ya_asignados, asignados, no_encontrados = [], [], []
                     
                     for dni in dnis_validos:
-                        # Buscar participante
                         participante_res = supabase.table("participantes").select("id, nombre, apellidos, grupo_id").eq("dni", dni).execute()
-                        
                         if not participante_res.data:
                             no_encontrados.append(dni)
                             continue
                         
                         participante = participante_res.data[0]
                         
-                        # Verificar si ya está asignado al grupo
-                        if participante["grupo_id"] == grupo_id:
-                            ya_asignados.append(f"{participante['nombre']} {participante['apellidos']} ({dni})")
+                        if participante.get("grupo_id") == grupo_id:
+                            ya_asignados.append(f"{participante.get('nombre','')} {participante.get('apellidos','')} ({dni})")
                             continue
                         
-                        # Asignar al grupo
                         try:
                             supabase.table("participantes").update({
                                 "grupo_id": grupo_id,
                                 "updated_at": datetime.now().isoformat()
                             }).eq("id", participante["id"]).execute()
-                            
-                            asignados.append(f"{participante['nombre']} {participante['apellidos']} ({dni})")
+                            asignados.append(f"{participante.get('nombre','')} {participante.get('apellidos','')} ({dni})")
                         except Exception as e:
                             st.error(f"⚠️ Error al asignar participante con DNI {dni}: {e}")
                     
-                    # Mostrar resultados
                     if asignados:
                         st.success(f"✅ {len(asignados)} participantes asignados correctamente.")
-                    
                     if ya_asignados:
                         st.info(f"ℹ️ {len(ya_asignados)} participantes ya estaban asignados al grupo.")
-                    
                     if no_encontrados:
                         st.warning(f"⚠️ {len(no_encontrados)} DNIs no encontrados en el sistema: {', '.join(no_encontrados)}")
                     
