@@ -90,7 +90,7 @@ def main(supabase, session_state):
     # =========================
     def guardar_usuario(id_usuario, datos_editados):
         try:
-            # Validaciones
+            # Validaciones básicas
             if not datos_editados.get("nombre_completo") or not datos_editados.get("email"):
                 st.error("⚠️ Nombre completo y email son obligatorios.")
                 return
@@ -103,7 +103,7 @@ def main(supabase, session_state):
                 st.error("⚠️ El DNI/NIE/CIF no es válido.")
                 return
 
-            # Obtener IDs de empresa y grupo
+            # Obtener IDs de empresa y grupo según el rol
             empresa_id = None
             grupo_id = None
             
@@ -130,7 +130,7 @@ def main(supabase, session_state):
             # Preparar datos para actualizar
             update_data = {
                 "nombre_completo": datos_editados["nombre_completo"],
-                "nombre": datos_editados["nombre_completo"],  # sincronizar
+                "nombre": datos_editados["nombre_completo"],
                 "email": datos_editados["email"],
                 "rol": datos_editados["rol"],
                 "empresa_id": empresa_id,
@@ -231,26 +231,33 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear el usuario: {e}")
 
     # =========================
-    # Función para campos dinámicos
+    # Función para campos dinámicos MEJORADA
     # =========================
     def campos_visibles_dinamicos(datos):
-        """Determina qué campos mostrar según el rol."""
+        """
+        Determina qué campos mostrar según el rol seleccionado.
+        Se ejecuta tanto para edición como para creación.
+        """
+        # Campos base que siempre aparecen
         campos_base = ["nombre_completo", "email", "rol", "dni", "telefono"]
         
-        rol = datos.get("rol", "")
-        if rol == "gestor":
+        # Obtener el rol actual
+        rol_actual = datos.get("rol", "")
+        
+        # Añadir campos específicos según el rol
+        if rol_actual == "gestor":
             campos_base.append("empresa")
-        elif rol == "alumno":
+        elif rol_actual == "alumno":
             campos_base.append("grupo")
-            
-        # Para creación, añadir campo contraseña
-        if not datos or datos == {}:  # datos vacíos = formulario de creación
+        
+        # Para formulario de creación (datos vacíos), añadir campo contraseña
+        if not datos or not datos.get("id"):
             campos_base.append("contraseña")
             
         return campos_base
 
     # =========================
-    # Configuración de campos
+    # Configuración de campos con mejoras visuales
     # =========================
     campos_select = {
         "rol": ["admin", "gestor", "alumno", "comercial"],
@@ -262,7 +269,25 @@ def main(supabase, session_state):
     campos_readonly = ["created_at"]
 
     # =========================
-    # Llamada al componente
+    # Campos con ayuda contextual
+    # =========================
+    campos_help = {
+        "rol": "Selecciona el rol del usuario. Gestor requiere empresa, Alumno requiere grupo.",
+        "empresa": "Solo para gestores. Empresa que administrará el usuario.",
+        "grupo": "Solo para alumnos. Grupo al que pertenece el participante.",
+        "dni": "DNI, NIE o CIF válido (opcional)",
+        "contraseña": "Déjalo vacío para generar automáticamente"
+    }
+
+    # =========================
+    # Callback para reaccionar a cambios de rol
+    # =========================
+    def on_rol_change():
+        """Función que se ejecuta cuando cambia el rol (para futuras mejoras)."""
+        pass
+
+    # =========================
+    # Llamada al componente mejorado
     # =========================
     listado_con_ficha(
         df_fil,
@@ -277,5 +302,126 @@ def main(supabase, session_state):
         campos_select=campos_select,
         campos_readonly=campos_readonly,
         campos_dinamicos=campos_visibles_dinamicos,
-        campos_password=campos_password
+        campos_password=campos_password,
+        allow_creation=True
     )
+
+    # =========================
+    # JavaScript para campos dinámicos (mejorado)
+    # =========================
+    st.markdown("""
+    <script>
+    // Función para mostrar/ocultar campos según el rol seleccionado
+    function toggleFieldsByRole() {
+        const roleSelects = document.querySelectorAll('select[data-baseweb="select"]');
+        
+        roleSelects.forEach(select => {
+            select.addEventListener('change', function() {
+                const selectedRole = this.value;
+                const form = this.closest('form');
+                
+                if (form) {
+                    // Ocultar campos de empresa y grupo por defecto
+                    const empresaField = form.querySelector('[data-testid*="empresa"]');
+                    const grupoField = form.querySelector('[data-testid*="grupo"]');
+                    
+                    if (empresaField) {
+                        empresaField.style.display = selectedRole === 'gestor' ? 'block' : 'none';
+                    }
+                    
+                    if (grupoField) {
+                        grupoField.style.display = selectedRole === 'alumno' ? 'block' : 'none';
+                    }
+                }
+            });
+        });
+    }
+    
+    // Ejecutar cuando se carga la página
+    setTimeout(toggleFieldsByRole, 1000);
+    
+    // Ejecutar periódicamente para capturar nuevos formularios
+    setInterval(toggleFieldsByRole, 2000);
+    </script>
+    """, unsafe_allow_html=True)
+
+    # =========================
+    # CSS para mejorar la visualización
+    # =========================
+    st.markdown("""
+    <style>
+    /* Estilos para campos condicionales */
+    .campo-condicional {
+        transition: opacity 0.3s ease-in-out;
+    }
+    
+    .campo-oculto {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    
+    /* Mejorar visualización de formularios */
+    .stForm {
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 1rem;
+        background-color: #fafafa;
+    }
+    
+    /* Estilos para métricas */
+    [data-testid="metric-container"] {
+        background-color: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Botones de acción */
+    .stButton > button {
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    /* Alertas mejoradas */
+    .stAlert {
+        border-radius: 8px;
+        border-left: 4px solid;
+    }
+    
+    /* Inputs mejorados */
+    .stTextInput > div > div > input {
+        border-radius: 6px;
+    }
+    
+    .stSelectbox > div > div > div {
+        border-radius: 6px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # =========================
+    # Información adicional
+    # =========================
+    with st.expander("ℹ️ Información sobre roles"):
+        st.markdown("""
+        **Roles disponibles:**
+        
+        - **👑 Admin**: Acceso total al sistema, puede gestionar todas las empresas
+        - **👨‍💼 Gestor**: Administra una empresa específica y sus datos
+        - **🎓 Alumno**: Acceso limitado a sus grupos y diplomas
+        - **💼 Comercial**: Gestión de CRM y clientes de la empresa
+        
+        **Campos dinámicos:**
+        - Los **gestores** deben tener una **empresa** asignada
+        - Los **alumnos** deben tener un **grupo** asignado
+        - Los campos se muestran/ocultan automáticamente según el rol seleccionado
+        """)
+
+    st.divider()
+    st.caption("💡 Los usuarios gestores administran empresas, los alumnos pertenecen a grupos específicos.")
