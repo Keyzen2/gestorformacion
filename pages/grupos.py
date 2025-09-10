@@ -26,24 +26,30 @@ def main(supabase, session_state):
     # Cargar datos
     # =========================
     with st.spinner("Cargando datos..."):
-        df_grupos = data_service.get_grupos_completos()
-        acciones_dict = data_service.get_acciones_dict()
-        empresas_dict = data_service.get_empresas_dict()
-        df_participantes = data_service.get_participantes_completos()
-        df_tutores = data_service.get_tutores()
-        
-        # Preparar opciones para selects
+        ds = get_data_service(supabase, session_state)
+
+        df_grupos = ds.get_grupos_completos()
+        acciones_dict = ds.get_acciones_dict()
+        empresas_dict = ds.get_empresas_dict()
+        df_participantes = ds.get_participantes_completos()
+        df_tutores = ds.get_tutores()
+
         acciones_opciones = [""] + sorted(acciones_dict.keys())
         empresas_opciones = [""] + sorted(empresas_dict.keys())
-        
-        # Crear diccionario de tutores
+
         tutores_dict = {}
         if not df_tutores.empty:
             tutores_dict = {
-                f"{row['nombre']} {row['apellidos']}": row['id'] 
+                f"{row.get('nombre','')} {row.get('apellidos','')}".strip(): row["id"]
                 for _, row in df_tutores.iterrows()
             }
         tutores_opciones = [""] + sorted(tutores_dict.keys())
+
+    # Fallback de columnas de fecha si faltan
+    if "fecha_inicio_prevista" not in df_grupos.columns and "fecha_inicio" in df_grupos.columns:
+        df_grupos["fecha_inicio_prevista"] = df_grupos["fecha_inicio"]
+    if "fecha_fin_prevista" not in df_grupos.columns:
+        df_grupos["fecha_fin_prevista"] = None
 
     # =========================
     # Métricas
@@ -59,7 +65,6 @@ def main(supabase, session_state):
             st.metric("🎯 Participantes Previstos", int(total_previstos))
         
         with col3:
-            # Grupos activos (fecha fin no pasada)
             hoy = date.today()
             try:
                 grupos_activos = df_grupos[
@@ -69,7 +74,6 @@ def main(supabase, session_state):
             except:
                 st.metric("🟢 Grupos Activos", "N/D")
 
-    # Exportar datos
     if not df_grupos.empty:
         col1, col2 = st.columns(2)
         with col1:
@@ -105,18 +109,15 @@ def main(supabase, session_state):
     if estado_filter != "Todos":
         hoy = date.today()
         if estado_filter == "Activos":
-            # Grupos que ya han comenzado pero no han terminado
             mask = (
                 (pd.to_datetime(df_filtered["fecha_inicio_prevista"], errors="coerce").dt.date <= hoy) &
                 (pd.to_datetime(df_filtered["fecha_fin_prevista"], errors="coerce").dt.date >= hoy)
             )
             df_filtered = df_filtered[mask]
         elif estado_filter == "Finalizados":
-            # Grupos que ya han terminado
             mask = pd.to_datetime(df_filtered["fecha_fin_prevista"], errors="coerce").dt.date < hoy
             df_filtered = df_filtered[mask]
         elif estado_filter == "Próximos":
-            # Grupos que aún no han comenzado
             mask = pd.to_datetime(df_filtered["fecha_inicio_prevista"], errors="coerce").dt.date > hoy
             df_filtered = df_filtered[mask]
 
@@ -124,182 +125,110 @@ def main(supabase, session_state):
     # Funciones CRUD
     # =========================
     def guardar_grupo(grupo_id, datos_editados):
-        """Función para guardar cambios en un grupo."""
         try:
-            # Convertir acción a su ID
             if "accion_nombre" in datos_editados and datos_editados["accion_nombre"]:
-                if datos_editados["accion_nombre"] in acciones_dict:
-                    datos_editados["accion_id"] = acciones_dict[datos_editados["accion_nombre"]]
-                    del datos_editados["accion_nombre"]
+                nombre = datos_editados.pop("accion_nombre")
+                if nombre in acciones_dict:
+                    datos_editados["accion_formativa_id"] = acciones_dict[nombre]
                 else:
-                    st.error(f"⚠️ No se encontró la acción formativa {datos_editados['accion_nombre']}")
+                    st.error(f"⚠️ Acción formativa '{nombre}' no encontrada.")
                     return
-            
-            # Convertir empresa a su ID
+
             if "empresa_nombre" in datos_editados and datos_editados["empresa_nombre"]:
-                if datos_editados["empresa_nombre"] in empresas_dict:
-                    datos_editados["empresa_id"] = empresas_dict[datos_editados["empresa_nombre"]]
-                    del datos_editados["empresa_nombre"]
+                nombre = datos_editados.pop("empresa_nombre")
+                if nombre in empresas_dict:
+                    datos_editados["empresa_id"] = empresas_dict[nombre]
                 else:
-                    st.error(f"⚠️ No se encontró la empresa {datos_editados['empresa_nombre']}")
+                    st.error(f"⚠️ Empresa '{nombre}' no encontrada.")
                     return
-            
-            # Convertir tutor a su ID
+
             if "tutor_nombre" in datos_editados and datos_editados["tutor_nombre"]:
-                if datos_editados["tutor_nombre"] in tutores_dict:
-                    datos_editados["tutor_id"] = tutores_dict[datos_editados["tutor_nombre"]]
-                    del datos_editados["tutor_nombre"]
+                nombre = datos_editados.pop("tutor_nombre")
+                if nombre in tutores_dict:
+                    datos_editados["tutor_id"] = tutores_dict[nombre]
                 else:
-                    st.error(f"⚠️ No se encontró el tutor {datos_editados['tutor_nombre']}")
+                    st.error(f"⚠️ Tutor '{nombre}' no encontrado.")
                     return
-            
-            # Validar fechas
-            if "fecha_inicio_prevista" in datos_editados and "fecha_fin_prevista" in datos_editados:
-                inicio = datos_editados["fecha_inicio_prevista"]
-                fin = datos_editados["fecha_fin_prevista"]
-                if inicio and fin and inicio > fin:
-                    st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
-                    return
-            
-            # Actualizar grupo
-            try:
-                # Añadir fecha de actualización
-                datos_editados["updated_at"] = datetime.now().isoformat()
-                
-                # Actualizar en tabla grupos
-                supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
-                
-                st.success("✅ Grupo actualizado correctamente.")
-                st.rerun()
-            except Exception as e:
-                st.error(f"⚠️ Error al actualizar grupo: {e}")
-                
+
+            if "fecha_inicio_prevista" in datos_editados:
+                fi = datos_editados.pop("fecha_inicio_prevista")
+                if fi:
+                    datos_editados["fecha_inicio"] = fi
+
+            fin = datos_editados.get("fecha_fin_prevista")
+            inicio = datos_editados.get("fecha_inicio")
+            if inicio and fin and inicio > fin:
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin prevista.")
+                return
+
+            supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
+            st.success("✅ Grupo actualizado correctamente.")
+            st.rerun()
         except Exception as e:
-            st.error(f"⚠️ Error al procesar datos: {e}")
+            st.error(f"⚠️ Error al actualizar grupo: {e}")
 
     def crear_grupo(datos_nuevos):
-        """Función para crear un nuevo grupo."""
         try:
-            # Validaciones
             if not datos_nuevos.get("codigo_grupo") or not datos_nuevos.get("accion_nombre"):
                 st.error("⚠️ Código de grupo y acción formativa son obligatorios.")
                 return
-            
-            # Verificar que el código no exista ya
-            check_codigo = supabase.table("grupos").select("id").eq("codigo_grupo", datos_nuevos["codigo_grupo"]).execute()
-            if check_codigo.data:
+
+            existe = supabase.table("grupos").select("id").eq("codigo_grupo", datos_nuevos["codigo_grupo"]).execute()
+            if existe.data:
                 st.error(f"⚠️ Ya existe un grupo con el código {datos_nuevos['codigo_grupo']}.")
                 return
-                
-            # Convertir acción a su ID
-            accion_id = None
-            if datos_nuevos.get("accion_nombre"):
-                if datos_nuevos["accion_nombre"] in acciones_dict:
-                    accion_id = acciones_dict[datos_nuevos["accion_nombre"]]
-                else:
-                    st.error(f"⚠️ No se encontró la acción formativa {datos_nuevos['accion_nombre']}")
-                    return
-            
-            # Convertir empresa a su ID
-            empresa_id = None
+
+            accion_formativa_id = None
+            if datos_nuevos.get("accion_nombre") in acciones_dict:
+                accion_formativa_id = acciones_dict[datos_nuevos["accion_nombre"]]
+            else:
+                st.error(f"⚠️ Acción formativa '{datos_nuevos.get('accion_nombre','')}' no encontrada.")
+                return
+
             if datos_nuevos.get("empresa_nombre"):
                 if datos_nuevos["empresa_nombre"] in empresas_dict:
                     empresa_id = empresas_dict[datos_nuevos["empresa_nombre"]]
                 else:
-                    st.error(f"⚠️ No se encontró la empresa {datos_nuevos['empresa_nombre']}")
+                    st.error(f"⚠️ Empresa '{datos_nuevos['empresa_nombre']}' no encontrada.")
                     return
-            elif session_state.role == "gestor":
-                # Usar la empresa del gestor
-                empresa_id = session_state.user.get("empresa_id")
-            
-            # Convertir tutor a su ID
+            else:
+                empresa_id = session_state.user.get("empresa_id") if session_state.role == "gestor" else None
+
             tutor_id = None
             if datos_nuevos.get("tutor_nombre"):
                 if datos_nuevos["tutor_nombre"] in tutores_dict:
                     tutor_id = tutores_dict[datos_nuevos["tutor_nombre"]]
                 else:
-                    st.error(f"⚠️ No se encontró el tutor {datos_nuevos['tutor_nombre']}")
+                    st.error(f"⚠️ Tutor '{datos_nuevos['tutor_nombre']}' no encontrado.")
                     return
-            
-            # Validar fechas
-            if datos_nuevos.get("fecha_inicio_prevista") and datos_nuevos.get("fecha_fin_prevista"):
-                inicio = datos_nuevos["fecha_inicio_prevista"]
-                fin = datos_nuevos["fecha_fin_prevista"]
-                if inicio > fin:
-                    st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
-                    return
-            
-            # Preparar datos para insertar
-            grupo_data = {
-                "codigo_grupo": datos_nuevos["codigo_grupo"],
-                "accion_id": accion_id,
-                "created_at": datetime.now().isoformat(),
-                "updated_at": datetime.now().isoformat()
-            }
-            
-            if empresa_id:
-                grupo_data["empresa_id"] = empresa_id
-                
-            if tutor_id:
-                grupo_data["tutor_id"] = tutor_id
-                
-            if datos_nuevos.get("fecha_inicio_prevista"):
-                grupo_data["fecha_inicio_prevista"] = datos_nuevos["fecha_inicio_prevista"]
-                
-            if datos_nuevos.get("fecha_fin_prevista"):
-                grupo_data["fecha_fin_prevista"] = datos_nuevos["fecha_fin_prevista"]
-                
-            if datos_nuevos.get("n_participantes_previstos"):
-                grupo_data["n_participantes_previstos"] = datos_nuevos["n_participantes_previstos"]
-                
-            if datos_nuevos.get("estado"):
-                grupo_data["estado"] = datos_nuevos["estado"]
-                
-            if datos_nuevos.get("observaciones"):
-                grupo_data["observaciones"] = datos_nuevos["observaciones"]
-            
-            # Insertar grupo
-            try:
-                result = supabase.table("grupos").insert(grupo_data).execute()
-                
-                if result.data:
-                    st.success("✅ Grupo creado correctamente.")
-                    st.rerun()
-                else:
-                    st.error("⚠️ Error al crear grupo.")
-                    
-            except Exception as e:
-                st.error(f"⚠️ Error al crear grupo: {e}")
-                
-        except Exception as e:
-            st.error(f"⚠️ Error al procesar datos: {e}")
 
-    def eliminar_grupo(grupo_id):
-        """Función para eliminar un grupo."""
-        try:
-            # Comprobar si tiene participantes asignados
-            check_participantes = supabase.table("participantes").select("id").eq("grupo_id", grupo_id).execute()
-            if check_participantes.data:
-                st.error(f"⚠️ No se puede eliminar el grupo porque tiene participantes asignados.")
+            fecha_inicio = datos_nuevos.get("fecha_inicio_prevista") or datos_nuevos.get("fecha_inicio")
+            fecha_fin_prevista = datos_nuevos.get("fecha_fin_prevista")
+
+            if fecha_inicio and fecha_fin_prevista and fecha_inicio > fecha_fin_prevista:
+                st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin prevista.")
                 return
-                
-            # Comprobar si tiene asignaciones en participantes_grupos
-            check_asignaciones = supabase.table("participantes_grupos").select("id").eq("grupo_id", grupo_id).execute()
-            if check_asignaciones.data:
-                # Eliminar asignaciones primero
-                supabase.table("participantes_grupos").delete().eq("grupo_id", grupo_id).execute()
-            
-            # Eliminar grupo
-            result = supabase.table("grupos").delete().eq("id", grupo_id).execute()
-            
-            if result.data:
-                st.success("✅ Grupo eliminado correctamente.")
+
+            payload = {
+                "codigo_grupo": datos_nuevos["codigo_grupo"],
+                "accion_formativa_id": accion_formativa_id,
+                "empresa_id": empresa_id,
+                "tutor_id": tutor_id,
+                "fecha_inicio": fecha_inicio,
+                "fecha_fin_prevista": fecha_fin_prevista,
+                "n_participantes_previstos": datos_nuevos.get("n_participantes_previstos"),
+                "estado": datos_nuevos.get("estado"),
+                "observaciones": datos_nuevos.get("observaciones")
+            }
+
+            res = supabase.table("grupos").insert(payload).execute()
+            if res.data:
+                st.success("✅ Grupo creado correctamente.")
                 st.rerun()
             else:
-                st.error("⚠️ Error al eliminar grupo.")
-                
+                st.error("⚠️ No se pudo crear el grupo.")
         except Exception as e:
-            st.error(f"⚠️ Error al eliminar grupo: {e}")
+            st.error(f"⚠️ Error al crear grupo: {e}")
 
     # =========================
     # Configuración de campos para listado_con_ficha
