@@ -1,12 +1,9 @@
 """
 Módulo para la gestión de empresas.
-Versión mejorada con integración completa de DataService y listado_con_ficha.
+Integrado con DataService y el componente listado_con_ficha.
 """
 
 import streamlit as st
-import pandas as pd
-from datetime import date, datetime
-from utils import validar_dni_cif, export_csv, export_excel, formato_fecha, mostrar_notificacion
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
@@ -14,120 +11,96 @@ def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
     st.caption("Administración de empresas y configuración de módulos activos.")
 
-    # Verificar permisos
+    # Permisos: solo admin
     if session_state.role != "admin":
         st.warning("🔒 Solo los administradores pueden acceder a esta sección.")
         return
 
-    # Inicializar servicio de datos
-    data_service = get_data_service(supabase, session_state)
+    ds = get_data_service(supabase, session_state)
 
     # =========================
-    # Cargar datos con DataService
+    # Carga de datos y métricas
     # =========================
-    with st.spinner("Cargando datos de empresas..."):
-        df_empresas = data_service.get_empresas_con_modulos()
-        metricas = data_service.get_metricas_empresas()
+    with st.spinner("Cargando empresas..."):
+        df_empresas = ds.get_empresas_con_modulos()
+        metricas = ds.get_metricas_empresas()
 
     # =========================
-    # Métricas mejoradas
+    # Métricas rápidas
     # =========================
     if not df_empresas.empty:
         col1, col2, col3, col4 = st.columns(4)
-        
         with col1:
-            st.metric("🏢 Total Empresas", metricas.get("total_empresas", 0))
-        
+            st.metric("🏢 Total empresas", metricas.get("total_empresas", 0))
         with col2:
             st.metric("🆕 Nuevas este mes", metricas.get("nuevas_mes", 0))
-        
         with col3:
             st.metric("🌍 Provincia principal", metricas.get("provincia_top", "N/D"))
-        
         with col4:
             st.metric("📊 Módulos activos", metricas.get("modulos_activos", 0))
 
     st.divider()
 
     # =========================
-    # Filtros de búsqueda
+    # Filtros
     # =========================
-    st.markdown("### 🔍 Buscar y Filtrar")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        query = st.text_input("🔍 Buscar por nombre, CIF, email, provincia o ciudad")
-    with col2:
+    st.markdown("### 🔍 Buscar y filtrar")
+    colf1, colf2 = st.columns(2)
+    with colf1:
+        query = st.text_input("Buscar por nombre, CIF, email, provincia o ciudad")
+    with colf2:
         modulo_filter = st.selectbox(
-            "Filtrar por módulo activo", 
+            "Filtrar por módulo activo",
             ["Todos", "Formación", "ISO 9001", "RGPD", "CRM", "Doc. Avanzada"]
         )
 
-    # Aplicar filtros
-    df_filtered = data_service.filter_empresas(df_empresas, query, modulo_filter)
-
-    # Exportar datos
-    if not df_filtered.empty:
-        col1, col2 = st.columns(2)
-        with col1:
-            export_csv(df_filtered, filename="empresas.csv")
-        with col2:
-            export_excel(df_filtered, filename="empresas.xlsx")
-    
-    st.divider()
+    df_filtered = ds.filter_empresas(df_empresas, query, modulo_filter)
 
     # =========================
-    # Funciones CRUD optimizadas
+    # CRUD callbacks
     # =========================
     def guardar_empresa(empresa_id, datos_editados):
-        """Función para guardar cambios en una empresa."""
         try:
-            # Usar DataService para validar y guardar
-            success = data_service.update_empresa(empresa_id, datos_editados)
-            if success:
+            ok = ds.update_empresa(empresa_id, datos_editados)
+            if ok:
                 st.success("✅ Empresa actualizada correctamente.")
                 st.rerun()
             else:
-                st.error("⚠️ Error en validación de datos.")
+                st.error("⚠️ Revisa los datos. No se pudo actualizar.")
         except Exception as e:
-            st.error(f"⚠️ Error al actualizar empresa: {e}")
+            st.error(f"❌ Error al actualizar: {e}")
 
     def crear_empresa(datos_nuevos):
-        """Función para crear una nueva empresa."""
         try:
-            # Usar DataService para validar y crear
-            success = data_service.create_empresa(datos_nuevos)
-            if success:
+            ok = ds.create_empresa(datos_nuevos)
+            if ok:
                 st.success("✅ Empresa creada correctamente.")
                 st.rerun()
             else:
-                st.error("⚠️ Error en validación de datos.")
+                st.error("⚠️ Revisa los datos. No se pudo crear.")
         except Exception as e:
-            st.error(f"⚠️ Error al crear empresa: {e}")
+            st.error(f"❌ Error al crear: {e}")
 
     def eliminar_empresa(empresa_id):
-        """Función para eliminar una empresa."""
         try:
-            success = data_service.delete_empresa(empresa_id)
-            if success:
-                st.success("✅ Empresa eliminada correctamente.")
+            ok = ds.delete_empresa(empresa_id)
+            if ok:
+                st.success("✅ Empresa eliminada.")
                 st.rerun()
             else:
-                st.error("⚠️ No se pudo eliminar la empresa. Verifique que no tenga datos relacionados.")
+                st.error("⚠️ No se pudo eliminar. Revisa dependencias (usuarios, grupos).")
         except Exception as e:
-            st.error(f"⚠️ Error al eliminar empresa: {e}")
+            st.error(f"❌ Error al eliminar: {e}")
 
     # =========================
-    # Configuración de campos para listado_con_ficha
+    # Configuración de formulario
     # =========================
-    def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente."""
+    def get_campos_dinamicos(_fila_o_vacio):
         campos_base = [
             "nombre", "cif", "direccion", "telefono", "email",
-            "representante_nombre", "representante_dni", 
+            "representante_nombre", "representante_dni",
             "ciudad", "provincia", "codigo_postal"
         ]
-        
         campos_modulos = [
             "formacion_activo", "formacion_inicio", "formacion_fin",
             "iso_activo", "iso_inicio", "iso_fin",
@@ -135,8 +108,8 @@ def main(supabase, session_state):
             "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin",
             "crm_activo", "crm_inicio", "crm_fin"
         ]
-        
-        return campos_base + campos_modulos
+        # Añade CRM si no existe en DF (por seguridad visual)
+        return [c for c in (campos_base + campos_modulos) if c in df_empresas.columns or c in campos_modulos]
 
     campos_select = {
         "formacion_activo": [True, False],
@@ -150,16 +123,16 @@ def main(supabase, session_state):
 
     campos_help = {
         "nombre": "Nombre completo de la empresa (obligatorio)",
-        "cif": "CIF válido de la empresa (obligatorio)",
-        "email": "Email de contacto principal",
+        "cif": "CIF válido (obligatorio y único)",
+        "email": "Email de contacto",
         "telefono": "Teléfono de contacto",
-        "formacion_activo": "Activar módulo de gestión de formación",
-        "iso_activo": "Activar módulo de gestión ISO 9001",
-        "rgpd_activo": "Activar módulo de gestión RGPD",
-        "crm_activo": "Activar módulo de CRM comercial",
-        "docu_avanzada_activo": "Activar módulo de documentación avanzada",
         "representante_nombre": "Nombre del representante legal",
-        "representante_dni": "DNI del representante legal"
+        "representante_dni": "DNI del representante legal",
+        "formacion_activo": "Activa el módulo de formación",
+        "iso_activo": "Activa el módulo ISO 9001",
+        "rgpd_activo": "Activa el módulo RGPD",
+        "docu_avanzada_activo": "Activa documentación avanzada",
+        "crm_activo": "Activa CRM comercial"
     }
 
     campos_obligatorios = ["nombre", "cif"]
@@ -173,19 +146,21 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Mostrar interfaz principal
+    # Interfaz principal
     # =========================
-    if df_filtered.empty:
-        if df_empresas.empty:
-            st.info("ℹ️ No hay empresas registradas en el sistema.")
-            st.markdown("### ➕ Crear primera empresa")
-        else:
-            st.warning("🔍 No se encontraron empresas que coincidan con los filtros aplicados.")
-    
-    # Mostrar el listado con ficha
+    if df_empresas.empty:
+        st.info("ℹ️ No hay empresas registradas.")
+    elif df_filtered.empty:
+        st.warning("🔍 No hay resultados con los filtros aplicados.")
+
+    columnas_visibles = [c for c in [
+        "nombre", "cif", "ciudad", "provincia", "email", "telefono",
+        "formacion_activo", "iso_activo", "rgpd_activo", "docu_avanzada_activo"
+    ] if c in df_empresas.columns]
+
     listado_con_ficha(
-        df=df_filtered,
-        columnas_visibles=["nombre", "cif", "ciudad", "provincia", "email", "telefono", "formacion_activo", "iso_activo", "rgpd_activo"],
+        df=df_filtered if not df_filtered.empty else df_empresas,
+        columnas_visibles=columnas_visibles,
         titulo="Empresa",
         on_save=guardar_empresa,
         on_create=crear_empresa,
@@ -197,5 +172,5 @@ def main(supabase, session_state):
         campos_help=campos_help,
         campos_obligatorios=campos_obligatorios,
         reactive_fields=reactive_fields,
-        search_columns=["nombre", "cif", "ciudad", "provincia"]
+        search_columns=["nombre", "cif", "ciudad", "provincia", "email", "telefono"]
     )
