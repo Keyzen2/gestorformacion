@@ -10,7 +10,6 @@ import base64
 from datetime import datetime, date
 from io import BytesIO
 from typing import Optional, List, Dict, Any
-from services.data_service import cached_get_ajustes_app
 
 # =========================
 # VALIDACIONES
