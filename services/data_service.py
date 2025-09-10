@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any
 from datetime import date
-# ❌ Eliminada importación global de validar_dni_cif para evitar bucle con utils.py
+# Importaciones diferidas desde utils dentro de las funciones que lo necesiten
 
 
 # -------------------------------------------------------------------
@@ -152,6 +152,7 @@ class DataService:
 
         df_filtered = df.copy()
 
+        # Filtrar por búsqueda
         if query:
             query_lower = query.lower()
             mask = False
@@ -160,6 +161,7 @@ class DataService:
                     mask = mask | df_filtered[col].astype(str).str.lower().str.contains(query_lower, na=False)
             df_filtered = df_filtered[mask]
 
+        # Filtrar por módulo
         if modulo_filter != "Todos":
             modulo_map = {
                 "Formación": "formacion_activo",
@@ -176,10 +178,12 @@ class DataService:
     def create_empresa(_self, datos_empresa: Dict[str, Any]) -> bool:
         """Crea una nueva empresa con validaciones."""
         try:
+            # Verificar permisos
             if _self.rol != "admin":
                 st.error("⚠️ Solo los administradores pueden crear empresas.")
                 return False
 
+            # Validar datos obligatorios
             if not datos_empresa.get("nombre"):
                 st.error("⚠️ El nombre de la empresa es obligatorio.")
                 return False
@@ -188,41 +192,47 @@ class DataService:
                 st.error("⚠️ El CIF de la empresa es obligatorio.")
                 return False
 
-            # Import diferido para evitar bucle
+            # Validar CIF (import diferido)
             from utils import validar_dni_cif
             cif = datos_empresa.get("cif", "")
             if not validar_dni_cif(cif):
                 st.error(f"⚠️ El CIF {cif} no es válido.")
                 return False
 
+            # Verificar duplicados
             check = _self.supabase.table("empresas").select("id").eq("cif", cif).execute()
             if check.data:
                 st.error(f"⚠️ Ya existe una empresa con el CIF {cif}.")
                 return False
 
+            # Añadir fecha de alta
             datos_empresa["fecha_alta"] = date.today().isoformat()
-            result = _self.supabase.table("empresas").insert(datos_empresa).execute()
 
+            # Insertar empresa
+            result = _self.supabase.table("empresas").insert(datos_empresa).execute()
             if not result.data:
                 st.error("⚠️ Error al crear la empresa.")
                 return False
 
             empresa_id = result.data[0]["id"]
 
+            # Crear registro CRM si está activado
             if datos_empresa.get("crm_activo"):
                 crm_data = {"empresa_id": empresa_id, "crm_activo": True}
                 crm_data["crm_inicio"] = datos_empresa.get("crm_inicio") or date.today().isoformat()
                 _self.supabase.table("crm_empresas").insert(crm_data).execute()
 
+            # Limpiar cache de empresas
             _self.get_empresas_con_modulos.clear()
             _self.get_metricas_empresas.clear()
+
             return True
 
         except Exception as e:
             st.error(f"⚠️ Error al crear empresa: {e}")
             return False
 
-        def update_empresa(_self, empresa_id: str, datos_empresa: Dict[str, Any]) -> bool:
+    def update_empresa(_self, empresa_id: str, datos_empresa: Dict[str, Any]) -> bool:
         """Actualiza datos de una empresa con validaciones."""
         try:
             if _self.rol != "admin":
@@ -273,6 +283,7 @@ class DataService:
                     crm_data["empresa_id"] = empresa_id
                     _self.supabase.table("crm_empresas").insert(crm_data).execute()
 
+            # Limpiar cache
             _self.get_empresas_con_modulos.clear()
             _self.get_metricas_empresas.clear()
             return True
@@ -288,6 +299,7 @@ class DataService:
                 st.error("⚠️ Solo los administradores pueden eliminar empresas.")
                 return False
 
+            # Verificar si tiene datos relacionados
             usuarios_res = _self.supabase.table("usuarios").select("id").eq("empresa_id", empresa_id).execute()
             if usuarios_res.data:
                 st.error("⚠️ No se puede eliminar: la empresa tiene usuarios asociados.")
@@ -298,17 +310,25 @@ class DataService:
                 st.error("⚠️ No se puede eliminar: la empresa tiene grupos asociados.")
                 return False
 
+            # Eliminar registros relacionados primero
             _self.supabase.table("crm_empresas").delete().eq("empresa_id", empresa_id).execute()
+
+            # Eliminar empresa
             _self.supabase.table("empresas").delete().eq("id", empresa_id).execute()
 
+            # Limpiar cache
             _self.get_empresas_con_modulos.clear()
             _self.get_metricas_empresas.clear()
+
             return True
 
         except Exception as e:
             st.error(f"⚠️ Error al eliminar empresa: {e}")
             return False
 
+    # =========================
+    # EMPRESAS ORIGINALES (compatibilidad)
+    # =========================
     @st.cache_data(ttl=300)
     def get_empresas(_self) -> pd.DataFrame:
         """Obtiene lista de empresas según el rol."""
@@ -317,6 +337,7 @@ class DataService:
                 query = _self.supabase.table("empresas").select("*").eq("id", _self.empresa_id)
             else:
                 query = _self.supabase.table("empresas").select("*")
+
             res = query.execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
@@ -327,10 +348,240 @@ class DataService:
         df = _self.get_empresas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
-    # ... (resto de métodos de usuarios, grupos, participantes, tutores, documentos, áreas, acciones, ajustes sin cambios) ...
+    # =========================
+    # USUARIOS
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_usuarios(_self, include_empresa: bool = True) -> pd.DataFrame:
+        """Obtiene usuarios según el rol."""
+        try:
+            if include_empresa:
+                query = _self.supabase.table("usuarios").select(
+                    """
+                    id, email, nombre_completo, role, telefono, created_at, 
+                    ultimo_acceso, empresa_id, empresa:empresas(nombre)
+                    """
+                )
+            else:
+                query = _self.supabase.table("usuarios").select("*")
+
+            # Aplicar filtro por empresa para gestores
+            query = _self._apply_empresa_filter(query, "usuarios")
+
+            res = query.execute()
+            df = pd.DataFrame(res.data or [])
+
+            # Aplanar columna empresa
+            if include_empresa and not df.empty and "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+                df = df.drop("empresa", axis=1)
+
+            return df
+
+        except Exception as e:
+            return _self._handle_query_error("cargar usuarios", e)
+
+    # =========================
+    # GRUPOS 
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_grupos_completos(_self) -> pd.DataFrame:
+        """Obtiene grupos con información completa."""
+        try:
+            # Query optimizada con información esencial
+            query = _self.supabase.table("grupos").select(
+                """
+                id, codigo_grupo, n_participantes_previstos, fecha_inicio_prevista, 
+                fecha_fin_prevista, accion_id, empresa_id, tutor_id, estado,
+                accion:acciones_formativas(id, nombre, area_profesional),
+                empresa:empresas(id, nombre),
+                tutor:tutores(id, nombre, apellidos)
+                """
+            )
+
+            # Aplicar filtro por empresa para gestores
+            query = _self._apply_empresa_filter(query, "grupos")
+
+            res = query.execute()
+            df = pd.DataFrame(res.data or [])
+
+            if df.empty:
+                return df
+
+            # Procesar columnas anidadas (mantener ambos, planos y originales)
+            if "accion" in df.columns:
+                df["accion_nombre"] = df["accion"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+                df["area_profesional"] = df["accion"].apply(
+                    lambda x: x.get("area_profesional") if isinstance(x, dict) else ""
+                )
+
+            if "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+
+            if "tutor" in df.columns:
+                df["tutor_nombre"] = df["tutor"].apply(
+                    lambda x: f"{x.get('nombre', '')} {x.get('apellidos', '')}" if isinstance(x, dict) else ""
+                )
+
+            return df
+
+        except Exception as e:
+            return _self._handle_query_error("cargar grupos completos", e)
+
+    # =========================
+    # PARTICIPANTES
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_participantes_completos(_self) -> pd.DataFrame:
+        """Obtiene lista completa de participantes."""
+        try:
+            # Query optimizada
+            query = _self.supabase.table("participantes").select(
+                """
+                id, nombre, apellidos, dni, email, telefono, sexo, fecha_nacimiento,
+                nivel_estudios, situacion_laboral, grupo_id, asistencia, evaluacion,
+                created_at, updated_at, empresa_id,
+                grupo:grupos(id, codigo_grupo, accion_id, accion:acciones_formativas(nombre))
+                """
+            )
+
+            # Aplicar filtro por empresa para gestores
+            query = _self._apply_empresa_filter(query, "participantes")
+
+            res = query.execute()
+            df = pd.DataFrame(res.data or [])
+
+            if df.empty:
+                return df
+
+            # Procesar columnas anidadas
+            if "grupo" in df.columns:
+                df["codigo_grupo"] = df["grupo"].apply(lambda x: x.get("codigo_grupo") if isinstance(x, dict) else "")
+                df["accion_nombre"] = df["grupo"].apply(
+                    lambda x: x.get("accion", {}).get("nombre") if isinstance(x, dict) and "accion" in x else ""
+                )
+
+            return df
+
+        except Exception as e:
+            return _self._handle_query_error("cargar participantes completos", e)
+
+    # =========================
+    # TUTORES
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_tutores(_self) -> pd.DataFrame:
+        """Obtiene lista completa de tutores."""
+        try:
+            query = _self.supabase.table("tutores").select(
+                """
+                id, nombre, apellidos, email, telefono, nif, tipo_tutor,
+                direccion, ciudad, provincia, codigo_postal, cv_url, 
+                especialidad, created_at,
+                empresa:empresas(id, nombre)
+                """
+            )
+            query = _self._apply_empresa_filter(query, "tutores")
+
+            res = query.order("nombre").execute()
+            df = pd.DataFrame(res.data or [])
+
+            # Aplanar empresa
+            if not df.empty and "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar tutores", e)
+
+    # =========================
+    # DOCUMENTOS
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_documentos(_self, tipo: Optional[str] = None) -> pd.DataFrame:
+        """Obtiene documentos según el rol y tipo opcional."""
+        try:
+            query = _self.supabase.table("documentos").select("*")
+            query = _self._apply_empresa_filter(query, "documentos")
+
+            if tipo:
+                query = query.eq("tipo", tipo)
+
+            res = query.order("created_at", desc=True).execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar documentos", e)
+
+    # =========================
+    # ÁREAS PROFESIONALES Y GRUPOS DE ACCIONES
+    # =========================
+    @st.cache_data(ttl=3600)  # Cache más largo para datos estáticos
+    def get_areas_profesionales(_self) -> pd.DataFrame:
+        """Obtiene áreas profesionales."""
+        try:
+            res = _self.supabase.table("areas_profesionales").select("*").order("familia").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar áreas profesionales", e)
+
+    def get_areas_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario de áreas profesionales."""
+        df = _self.get_areas_profesionales()
+        return {f"{row['codigo']} - {row['nombre']}": row["codigo"] for _, row in df.iterrows()} if not df.empty else {}
+
+    @st.cache_data(ttl=3600)
+    def get_grupos_acciones(_self) -> pd.DataFrame:
+        """Obtiene grupos de acciones."""
+        try:
+            res = _self.supabase.table("grupos_acciones").select("*").order("nombre").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar grupos de acciones", e)
+
+    # =========================
+    # ACCIONES FORMATIVAS
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_acciones_formativas(_self) -> pd.DataFrame:
+        """Obtiene acciones formativas según el rol."""
+        try:
+            query = _self.supabase.table("acciones_formativas").select("*")
+            query = _self._apply_empresa_filter(query, "acciones_formativas")
+
+            res = query.order("nombre").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar acciones formativas", e)
+
+    def get_acciones_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario nombre -> id de acciones."""
+        df = _self.get_acciones_formativas()
+        return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+
+    # =========================
+    # AJUSTES (método sin cache en self para evitar hashing)
+    # =========================
+    def get_ajustes_app(_self, campos: Optional[str] = None) -> Dict[str, Any]:
+        """Obtiene ajustes de la aplicación (sin cache de Streamlit para evitar Unhashable)."""
+        try:
+            query = _self.supabase.table("ajustes_app").select("*")
+
+            # Filtrar campos si se especifica (string de campos separado por comas)
+            if campos:
+                campos_lista = [c.strip() for c in campos.split(",")]
+                query = query.select(",".join(campos_lista))
+
+            res = query.single().execute()
+            if not res.data:
+                return {}
+            return res.data
+
+        except Exception as e:
+            st.error(f"⚠️ Error al cargar ajustes: {e}")
+            return {}
 
 
-# Factory function
+# Factory function para obtener instancia de DataService
 def get_data_service(supabase, session_state) -> DataService:
     """Crea y devuelve una instancia de DataService."""
     return DataService(supabase, session_state)
