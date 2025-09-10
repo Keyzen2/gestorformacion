@@ -22,25 +22,44 @@ def main(supabase, session_state):
     # =========================
     with st.spinner("Cargando datos de empresas..."):
         df_empresas = data_service.get_empresas_con_modulos()
-        metricas = data_service.get_metricas_empresas()
+        if df_empresas.empty:
+            st.info("ℹ️ No hay empresas registradas.")
+            st.stop()
 
     # =========================
     # Métricas mejoradas
     # =========================
-    if not df_empresas.empty:
+    try:
+        # Calcular métricas básicas
+        total_empresas = len(df_empresas)
+        empresas_este_mes = len(df_empresas[
+            pd.to_datetime(df_empresas['created_at'], errors='coerce').dt.date >= 
+            datetime.now().replace(day=1).date()
+        ]) if 'created_at' in df_empresas.columns else 0
+        
+        provincia_top = df_empresas['provincia'].mode().iloc[0] if 'provincia' in df_empresas.columns and not df_empresas['provincia'].isna().all() else "N/D"
+        
+        # Contar módulos activos
+        modulos_cols = [col for col in df_empresas.columns if col.endswith('_activo')]
+        modulos_activos = df_empresas[modulos_cols].sum().sum() if modulos_cols else 0
+
+        # Mostrar métricas
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("🏢 Total Empresas", metricas.get("total_empresas", 0))
+            st.metric("🏢 Total Empresas", total_empresas)
         
         with col2:
-            st.metric("🆕 Nuevas este mes", metricas.get("nuevas_mes", 0))
+            st.metric("🆕 Nuevas este mes", empresas_este_mes)
         
         with col3:
-            st.metric("🌍 Provincia principal", metricas.get("provincia_top", "N/D"))
+            st.metric("🌍 Provincia principal", provincia_top)
         
         with col4:
-            st.metric("📊 Módulos activos", metricas.get("modulos_activos", 0))
+            st.metric("📊 Módulos activos", modulos_activos)
+
+    except Exception as e:
+        st.error(f"⚠️ Error al calcular métricas: {e}")
 
     st.divider()
 
@@ -52,6 +71,7 @@ def main(supabase, session_state):
     
     with col1:
         query = st.text_input("🔍 Buscar por nombre, CIF, email, provincia o ciudad")
+    
     with col2:
         modulo_filter = st.selectbox(
             "Filtrar por módulo activo", 
@@ -59,7 +79,37 @@ def main(supabase, session_state):
         )
 
     # Aplicar filtros
-    df_filtered = data_service.filter_empresas(df_empresas, query, modulo_filter)
+    df_filtered = df_empresas.copy()
+    
+    # Filtro de búsqueda
+    if query:
+        q = query.lower()
+        mask = (
+            df_filtered['nombre'].fillna("").str.lower().str.contains(q, na=False) |
+            df_filtered['cif'].fillna("").str.lower().str.contains(q, na=False) |
+            df_filtered['email'].fillna("").str.lower().str.contains(q, na=False) |
+            df_filtered['provincia'].fillna("").str.lower().str.contains(q, na=False) |
+            df_filtered['ciudad'].fillna("").str.lower().str.contains(q, na=False)
+        )
+        df_filtered = df_filtered[mask]
+
+    # Filtro de módulos
+    if modulo_filter != "Todos":
+        modulo_map = {
+            "Formación": "formacion_activo",
+            "ISO 9001": "iso_activo", 
+            "RGPD": "rgpd_activo",
+            "CRM": "crm_activo",
+            "Doc. Avanzada": "docu_avanzada_activo"
+        }
+        col_filtro = modulo_map.get(modulo_filter)
+        if col_filtro and col_filtro in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered[col_filtro] == True]
+
+    # Mensaje si no hay resultados
+    if df_filtered.empty and query:
+        st.warning(f"🔍 No se encontraron empresas que coincidan con '{query}'.")
+        return
 
     # Exportar CSV
     if not df_filtered.empty:
@@ -73,36 +123,94 @@ def main(supabase, session_state):
     def guardar_empresa(empresa_id, datos_editados):
         """Función para guardar cambios en una empresa."""
         try:
-            # Usar DataService para validar y guardar
-            success = data_service.update_empresa(empresa_id, datos_editados)
-            if success:
+            # Validaciones básicas
+            if not datos_editados.get("nombre"):
+                st.error("⚠️ El nombre de la empresa es obligatorio.")
+                return
+                
+            if datos_editados.get("cif") and not validar_dni_cif(datos_editados["cif"]):
+                st.error("⚠️ El CIF no tiene un formato válido.")
+                return
+
+            # Actualizar en base de datos
+            update_data = {k: v for k, v in datos_editados.items() if v is not None}
+            if update_data:
+                supabase.table("empresas").update(update_data).eq("id", empresa_id).execute()
+                
+                # Limpiar cache
+                if hasattr(data_service.get_empresas_con_modulos, 'clear'):
+                    data_service.get_empresas_con_modulos.clear()
+                
                 st.success("✅ Empresa actualizada correctamente.")
                 st.rerun()
             else:
-                st.error("⚠️ Error en validación de datos.")
+                st.warning("⚠️ No se detectaron cambios para guardar.")
+                
         except Exception as e:
             st.error(f"⌛ Error al actualizar empresa: {e}")
 
     def crear_empresa(datos_nuevos):
         """Función para crear una nueva empresa."""
         try:
-            # Usar DataService para validar y crear
-            success = data_service.create_empresa(datos_nuevos)
-            if success:
-                st.success("✅ Empresa creada correctamente.")
-                st.rerun()
-            else:
-                st.error("⚠️ Error en validación de datos.")
+            # Validaciones obligatorias
+            if not datos_nuevos.get("nombre"):
+                st.error("⚠️ El nombre de la empresa es obligatorio.")
+                return
+                
+            if not datos_nuevos.get("cif"):
+                st.error("⚠️ El CIF es obligatorio.")
+                return
+                
+            if not validar_dni_cif(datos_nuevos["cif"]):
+                st.error("⚠️ El CIF no tiene un formato válido.")
+                return
+
+            # Verificar si ya existe empresa con mismo CIF
+            existing = supabase.table("empresas").select("id").eq("cif", datos_nuevos["cif"]).execute()
+            if existing.data:
+                st.error("⚠️ Ya existe una empresa con este CIF.")
+                return
+
+            # Crear empresa
+            create_data = {k: v for k, v in datos_nuevos.items() if v is not None and v != ""}
+            create_data["created_at"] = datetime.now().isoformat()
+            
+            supabase.table("empresas").insert(create_data).execute()
+            
+            # Limpiar cache
+            if hasattr(data_service.get_empresas_con_modulos, 'clear'):
+                data_service.get_empresas_con_modulos.clear()
+            
+            st.success("✅ Empresa creada correctamente.")
+            st.rerun()
+            
         except Exception as e:
             st.error(f"⌛ Error al crear empresa: {e}")
 
     def eliminar_empresa(empresa_id):
         """Función para eliminar una empresa."""
         try:
-            success = data_service.delete_empresa(empresa_id)
-            if success:
-                st.success("✅ Empresa eliminada correctamente.")
-                st.rerun()
+            # Verificar si tiene datos relacionados
+            usuarios = supabase.table("usuarios").select("id").eq("empresa_id", empresa_id).execute()
+            if usuarios.data:
+                st.error("⚠️ No se puede eliminar: la empresa tiene usuarios asignados.")
+                return
+
+            grupos = supabase.table("grupos").select("id").eq("empresa_id", empresa_id).execute()
+            if grupos.data:
+                st.error("⚠️ No se puede eliminar: la empresa tiene grupos formativos.")
+                return
+
+            # Eliminar empresa
+            supabase.table("empresas").delete().eq("id", empresa_id).execute()
+            
+            # Limpiar cache
+            if hasattr(data_service.get_empresas_con_modulos, 'clear'):
+                data_service.get_empresas_con_modulos.clear()
+            
+            st.success("✅ Empresa eliminada correctamente.")
+            st.rerun()
+            
         except Exception as e:
             st.error(f"⌛ Error al eliminar empresa: {e}")
 
@@ -112,221 +220,83 @@ def main(supabase, session_state):
     def get_campos_dinamicos(datos):
         """Determina campos a mostrar dinámicamente."""
         campos_base = [
-            "nombre", "cif", "direccion", "telefono", "email",
-            "representante_nombre", "representante_dni", 
-            "ciudad", "provincia", "codigo_postal"
+            "nombre", "cif", "email", "telefono", "direccion", 
+            "ciudad", "provincia", "codigo_postal", "pais"
         ]
         
+        # Campos de módulos
         campos_modulos = [
             "formacion_activo", "formacion_inicio", "formacion_fin",
             "iso_activo", "iso_inicio", "iso_fin",
             "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-            "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin",
-            "crm_activo", "crm_inicio", "crm_fin"
+            "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin"
         ]
         
         return campos_base + campos_modulos
 
+    # Configuración de campos especiales
     campos_select = {
         "formacion_activo": [True, False],
         "iso_activo": [True, False],
         "rgpd_activo": [True, False],
         "docu_avanzada_activo": [True, False],
-        "crm_activo": [True, False]
+        "pais": ["España", "Portugal", "Francia", "Italia", "Otro"]
     }
 
-    campos_readonly = ["id", "fecha_alta", "created_at"]
-
+    campos_readonly = ["id", "created_at"]
+    
     campos_help = {
-        "nombre": "Nombre completo de la empresa (obligatorio)",
-        "cif": "CIF válido de la empresa (obligatorio)",
+        "nombre": "Nombre completo de la empresa",
+        "cif": "CIF/NIF de la empresa (obligatorio)",
         "email": "Email de contacto principal",
-        "telefono": "Teléfono de contacto",
-        "formacion_activo": "Activar módulo de gestión de formación",
-        "iso_activo": "Activar módulo de gestión ISO 9001",
-        "rgpd_activo": "Activar módulo de gestión RGPD",
-        "crm_activo": "Activar módulo de CRM comercial",
-        "docu_avanzada_activo": "Activar módulo de documentación avanzada",
-        "representante_nombre": "Nombre del representante legal",
-        "representante_dni": "DNI del representante legal"
+        "formacion_activo": "¿Está activo el módulo de formación?",
+        "iso_activo": "¿Está activo el módulo ISO 9001?",
+        "rgpd_activo": "¿Está activo el módulo RGPD?",
+        "docu_avanzada_activo": "¿Está activo el módulo de documentación avanzada?"
     }
 
-    campos_obligatorios = ["nombre", "cif"]
+    # Columnas visibles en la tabla
+    columnas_visibles = [
+        "nombre", "cif", "email", "ciudad", "provincia", 
+        "formacion_activo", "iso_activo", "rgpd_activo"
+    ]
 
     # =========================
     # Mostrar interfaz principal
     # =========================
     if df_filtered.empty:
         if df_empresas.empty:
-            st.info("ℹ️ No hay empresas registradas en el sistema.")
-            st.markdown("### ➕ Crear primera empresa")
+            st.info("ℹ️ No hay empresas registradas.")
         else:
-            st.warning("🔍 No se encontraron empresas que coincidan con los filtros aplicados.")
-        
-        # Mostrar formulario de creación incluso si no hay datos
-        if st.button("➕ Crear nueva empresa", key="btn_crear_empresa"):
-            st.session_state["mostrar_formulario_empresa"] = True
+            st.warning(f"🔍 No hay empresas que coincidan con los filtros aplicados.")
     else:
-        # Preparar datos para mostrar con columnas correctas
-        df_display = data_service.prepare_empresas_display(df_filtered)
-        
-        # Mostrar tabla interactiva con configuración correcta
+        # Usar el componente listado_con_ficha optimizado
         listado_con_ficha(
-            df_display,
-            columnas_visibles=[
-                "id", "nombre", "cif", "ciudad", "provincia", "telefono", "email",
-                "formacion_activo", "iso_activo", "rgpd_activo", "crm_activo"
-            ],
+            df=df_filtered,
+            columnas_visibles=columnas_visibles,
             titulo="Empresa",
             on_save=guardar_empresa,
-            on_create=crear_empresa,
-            on_delete=eliminar_empresa,
             id_col="id",
+            on_create=crear_empresa,
             campos_select=campos_select,
             campos_readonly=campos_readonly,
-            campos_obligatorios=campos_obligatorios,
-            campos_help=campos_help,
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=True,
-            allow_deletion=True,
-            search_columns=["nombre", "cif", "ciudad", "provincia"]
+            campos_help=campos_help
         )
 
     # =========================
-    # Formulario de creación rápida mejorado
+    # Información adicional
     # =========================
-    if st.session_state.get("mostrar_formulario_empresa", False) or df_empresas.empty:
-        st.divider()
-        st.subheader("➕ Crear nueva empresa")
-        
-        with st.form("crear_empresa_rapida", clear_on_submit=False):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### 🏢 Datos básicos")
-                nombre = st.text_input("Nombre *", help="Nombre completo de la empresa")
-                cif = st.text_input("CIF *", help="CIF válido de la empresa")
-                email = st.text_input("Email", help="Email de contacto")
-                telefono = st.text_input("Teléfono", help="Teléfono de contacto")
-                
-            with col2:
-                st.markdown("#### 🌍 Ubicación")
-                direccion = st.text_input("Dirección")
-                ciudad = st.text_input("Ciudad")
-                provincia = st.text_input("Provincia")
-                codigo_postal = st.text_input("Código Postal")
-
-            st.markdown("#### 👤 Representante legal")
-            col3, col4 = st.columns(2)
-            with col3:
-                rep_nombre = st.text_input("Nombre representante")
-            with col4:
-                rep_dni = st.text_input("DNI representante")
-
-            st.markdown("#### 📋 Módulos a activar")
-            col5, col6, col7, col8 = st.columns(4)
-            
-            with col5:
-                formacion_activo = st.checkbox("🎓 Formación", value=True)
-                if formacion_activo:
-                    formacion_inicio = st.date_input("Inicio Formación", value=date.today())
-            
-            with col6:
-                iso_activo = st.checkbox("📋 ISO 9001")
-                if iso_activo:
-                    iso_inicio = st.date_input("Inicio ISO", value=date.today())
-            
-            with col7:
-                rgpd_activo = st.checkbox("🛡️ RGPD")
-                if rgpd_activo:
-                    rgpd_inicio = st.date_input("Inicio RGPD", value=date.today())
-            
-            with col8:
-                crm_activo = st.checkbox("📈 CRM")
-                if crm_activo:
-                    crm_inicio = st.date_input("Inicio CRM", value=date.today())
-
-            # Botones de acción
-            col_submit1, col_submit2 = st.columns([1, 3])
-            with col_submit1:
-                crear_empresa_btn = st.form_submit_button("✅ Crear empresa", use_container_width=True)
-            with col_submit2:
-                cancelar_btn = st.form_submit_button("❌ Cancelar", use_container_width=True)
-
-        # Manejar acciones del formulario
-        if cancelar_btn:
-            st.session_state["mostrar_formulario_empresa"] = False
-            st.rerun()
-
-        if crear_empresa_btn:
-            if not nombre or not cif:
-                st.error("⚠️ Nombre y CIF son obligatorios.")
-            elif not validar_dni_cif(cif):
-                st.error("⚠️ CIF inválido.")
-            else:
-                # Preparar datos para crear empresa
-                empresa_data = {
-                    "nombre": nombre,
-                    "cif": cif,
-                    "direccion": direccion,
-                    "telefono": telefono,
-                    "email": email,
-                    "representante_nombre": rep_nombre,
-                    "representante_dni": rep_dni,
-                    "ciudad": ciudad,
-                    "provincia": provincia,
-                    "codigo_postal": codigo_postal,
-                    "formacion_activo": formacion_activo,
-                    "iso_activo": iso_activo,
-                    "rgpd_activo": rgpd_activo,
-                    "docu_avanzada_activo": False,  # Por defecto desactivado
-                    "crm_activo": crm_activo
-                }
-
-                # Añadir fechas de inicio si los módulos están activos
-                if formacion_activo:
-                    empresa_data["formacion_inicio"] = formacion_inicio.isoformat()
-                if iso_activo:
-                    empresa_data["iso_inicio"] = iso_inicio.isoformat()
-                if rgpd_activo:
-                    empresa_data["rgpd_inicio"] = rgpd_inicio.isoformat()
-                if crm_activo:
-                    empresa_data["crm_inicio"] = crm_inicio.isoformat()
-
-                # Crear empresa usando DataService
-                try:
-                    success = data_service.create_empresa_completa(empresa_data)
-                    if success:
-                        st.success("✅ Empresa creada exitosamente.")
-                        st.session_state["mostrar_formulario_empresa"] = False
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"⌛ Error al crear la empresa: {e}")
-
-    # =========================
-    # Estadísticas adicionales
-    # =========================
-    if not df_empresas.empty:
-        st.divider()
-        st.markdown("### 📊 Estadísticas Detalladas")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 🏢 Distribución por Provincia")
-            if "provincia" in df_empresas.columns:
-                provincia_counts = df_empresas["provincia"].value_counts().head(10)
-                if not provincia_counts.empty:
-                    for prov, count in provincia_counts.items():
-                        st.write(f"📍 {prov}: {count} empresas")
-                else:
-                    st.info("No hay datos de provincia disponibles")
-        
-        with col2:
-            st.markdown("#### 📈 Módulos más Utilizados")
-            modulos_stats = data_service.get_modulos_stats(df_empresas)
-            for modulo, stats in modulos_stats.items():
-                st.write(f"🔧 {modulo}: {stats['activos']} activos ({stats['porcentaje']:.1f}%)")
-
     st.divider()
-    st.caption("💡 Las empresas son la unidad organizativa principal. Cada empresa puede tener múltiples módulos activos.")
+    with st.expander("ℹ️ Información sobre módulos"):
+        st.markdown("""
+        **Módulos disponibles:**
+        - **📚 Formación**: Gestión de acciones formativas, grupos y participantes
+        - **📋 ISO 9001**: Sistema de gestión de calidad
+        - **🔒 RGPD**: Gestión de protección de datos
+        - **📁 Doc. Avanzada**: Sistema documental transversal
+        - **📊 CRM**: Gestión de relaciones comerciales (configuración independiente)
+        
+        Los módulos se activan mediante las fechas de inicio y fin correspondientes.
+        """)
