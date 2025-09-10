@@ -28,11 +28,6 @@ def importar_participantes_excel(file):
 # Generar PDF profesional
 # =========================
 def generar_pdf(nombre_archivo, contenido="Documento generado", encabezado=None):
-    """
-    Genera un PDF en memoria con el contenido indicado.
-    Devuelve un BytesIO listo para subir o descargar.
-    El encabezado es opcional.
-    """
     try:
         buffer = BytesIO()
         c = canvas.Canvas(buffer, pagesize=A4)
@@ -93,9 +88,9 @@ def validar_xml(xml_string: str, xsd_string: str = None, xsd_url: str = None) ->
         return False
 
 # =========================
-# Generadores XML Fundae
+# Generadores XML FUNDAE (versión antigua con ElementTree)
 # =========================
-def generar_xml_accion_formativa(accion: dict) -> str:
+def generar_xml_accion_formativa_et(accion: dict) -> str:
     root = ET.Element("ACCIONES_FORMATIVAS", xmlns="http://www.fundae.es/esquemas/accion_formativa")
     af = ET.SubElement(root, "ACCION_FORMATIVA")
     datos = ET.SubElement(af, "DATOS_GENERALES")
@@ -112,31 +107,27 @@ def generar_xml_accion_formativa(accion: dict) -> str:
     ET.SubElement(datos, "CERTIFICADO_PROFESIONALIDAD").text = "S" if accion.get("certificado_profesionalidad") else "N"
     return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
-def generar_xml_inicio_grupo(grupo: dict) -> str:
-    root = ET.Element("INICIO_GRUPO", xmlns="http://www.fundae.es/esquemas/InicioGrupos_Organizadora")
-    datos = ET.SubElement(root, "DATOS_GRUPO")
-    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(datos, "FECHA_INICIO").text = grupo.get("fecha_inicio", "")
-    ET.SubElement(datos, "AULA_VIRTUAL").text = "S" if grupo.get("aula_virtual") else "N"
-    ET.SubElement(datos, "LOCALIDAD").text = grupo.get("localidad") or "No especificado"
-    ET.SubElement(datos, "PROVINCIA").text = grupo.get("provincia") or "No especificado"
-    ET.SubElement(datos, "CP").text = grupo.get("cp") or "00000"
-    ET.SubElement(datos, "N_PARTICIPANTES_PREVISTOS").text = str(grupo.get("n_participantes_previstos") or 0)
-    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
-
-def generar_xml_finalizacion_grupo(grupo: dict) -> str:
-    root = ET.Element("FINALIZACION_GRUPO", xmlns="http://www.fundae.es/esquemas/FinalizacionGrupo_Organizadora")
-    datos = ET.SubElement(root, "DATOS_FINALIZACION")
-    ET.SubElement(datos, "CODIGO_GRUPO").text = grupo.get("codigo_grupo", "")
-    ET.SubElement(datos, "CODIGO_ACCION").text = grupo.get("accion_formativa_id", "")
-    ET.SubElement(datos, "FECHA_FIN").text = grupo.get("fecha_fin", "")
-    ET.SubElement(datos, "N_PARTICIPANTES_FINALIZADOS").text = str(grupo.get("n_participantes_finalizados") or 0)
-    ET.SubElement(datos, "N_APTOS").text = str(grupo.get("n_aptos") or 0)
-    ET.SubElement(datos, "N_NO_APTOS").text = str(grupo.get("n_no_aptos") or 0)
-    ET.SubElement(datos, "OBSERVACIONES").text = grupo.get("observaciones") or ""
-    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8")
+# =========================
+# Generadores XML FUNDAE (versión nueva con lxml)
+# =========================
+def generar_xml_accion_formativa(accion, namespace="http://www.fundae.es/esquemas"):
+    nsmap = {None: namespace, 'xsi': 'http://www.w3.org/2001/XMLSchema-instance'}
+    root = etree.Element("ACCIONES_FORMATIVAS", nsmap=nsmap)
+    root.set("{http://www.w3.org/2001/XMLSchema-instance}schemaLocation", f"{namespace} AAFF_Inicio.xsd")
+    accion_elem = etree.SubElement(root, "ACCION_FORMATIVA")
+    etree.SubElement(accion_elem, "CODIGO_ACCION").text = str(accion.get('codigo', ''))
+    etree.SubElement(accion_elem, "DENOMINACION").text = str(accion.get('denominacion', ''))
+    etree.SubElement(accion_elem, "MODALIDAD").text = str(accion.get('modalidad', 'PRESENCIAL'))
+    etree.SubElement(accion_elem, "HORAS").text = str(accion.get('horas', 0))
+    if accion.get('area_profesional'):
+        etree.SubElement(accion_elem, "AREA_PROFESIONAL").text = str(accion['area_profesional'])
+    if accion.get('fecha_inicio'):
+        etree.SubElement(accion_elem, "FECHA_INICIO").text = str(accion['fecha_inicio'])
+    if accion.get('fecha_fin'):
+        etree.SubElement(accion_elem, "FECHA_FIN").text = str(accion['fecha_fin'])
+    if accion.get('contenidos'):
+        etree.SubElement(accion_elem, "CONTENIDOS").text = str(accion['contenidos'])
+    return etree.tostring(root, pretty_print=True, xml_declaration=True, encoding='UTF-8').decode('utf-8')
 
 # =========================
 # Ajustes globales de la app
@@ -152,9 +143,6 @@ def get_ajustes_app(supabase, campos=None):
         return {}
 
 def update_ajustes_app(supabase, data_dict):
-    """
-    Actualiza los ajustes globales en la tabla ajustes_app.
-    """
     try:
         data_dict["updated_at"] = datetime.utcnow().isoformat()
         supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
@@ -162,49 +150,35 @@ def update_ajustes_app(supabase, data_dict):
         st.error(f"❌ Error al guardar ajustes de la app: {e}")
 
 # =========================
-# Subida de archivos a Supabase Storage por empresa
+# Subida y eliminación de archivos en Supabase
 # =========================
 def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
-    """
-    Sube un archivo a Supabase Storage en una carpeta por empresa.
-    Devuelve la URL pública del archivo o None si falla.
-    """
     try:
         nombre_original = archivo.name
         extension = nombre_original.split(".")[-1]
         nombre_unico = f"{uuid.uuid4()}.{extension}"
         ruta = f"empresa_{empresa_id}/{nombre_unico}"
-
         res = supabase.storage.from_(bucket).upload(ruta, archivo)
         if isinstance(res, dict) and res.get("error"):
             st.error("❌ Error al subir el archivo a Supabase Storage.")
             return None
-
         url = supabase.storage.from_(bucket).get_public_url(ruta)
         return url
     except Exception as e:
         st.error(f"❌ Error al subir archivo: {e}")
         return None
 
-# =========================
-# Eliminación de archivos en Supabase Storage
-# =========================
 def eliminar_archivo_supabase(supabase, url, bucket="documentos"):
-    """
-    Elimina un archivo de Supabase Storage a partir de su URL pública.
-    """
     try:
         base_url = supabase.storage.from_(bucket).get_public_url("")
         if not url.startswith(base_url):
             st.warning("⚠️ La URL no pertenece al bucket especificado.")
             return False
-
         ruta = url.replace(base_url, "")
         res = supabase.storage.from_(bucket).remove([ruta])
         if isinstance(res, dict) and res.get("error"):
             st.error("❌ Error al eliminar el archivo de Supabase Storage.")
             return False
-
         return True
     except Exception as e:
         st.error(f"❌ Error al procesar la eliminación del archivo: {e}")
@@ -214,11 +188,6 @@ def eliminar_archivo_supabase(supabase, url, bucket="documentos"):
 # Renderizado seguro de textos
 # =========================
 def render_texto(texto: str, modo="markdown"):
-    """
-    Renderiza texto en Streamlit según el modo indicado.
-    - markdown: usa st.markdown()
-    - html: usa st.markdown(..., unsafe_allow_html=True)
-    """
     if not isinstance(texto, str) or not texto.strip():
         return
     try:
@@ -233,9 +202,6 @@ def render_texto(texto: str, modo="markdown"):
 # Verificación de módulo activo por empresa
 # =========================
 def is_module_active(empresa: dict, empresa_crm: dict, modulo: str, fecha: date, rol: str) -> bool:
-    """
-    Verifica si un módulo está activo para una empresa en una fecha determinada y para un rol específico.
-    """
     if rol == "alumno":
         return False
     if not empresa or not modulo:
@@ -312,3 +278,5 @@ def validar_dni_cif(valor: str) -> bool:
 def export_csv(df, filename="data.csv"):
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("💾 Descargar CSV", data=csv, file_name=filename, mime="text/csv")
+
+
