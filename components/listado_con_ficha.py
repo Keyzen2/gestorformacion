@@ -226,14 +226,15 @@ def listado_con_ficha(
             with st.form("form_editar", clear_on_submit=False):
                 datos_editados = {}
                 
-                # Organizar campos en secciones si hay muchos
+                # ✅ CORRECCIÓN: Organizar campos en secciones si hay muchos
                 if len(campos_a_mostrar) > 8:
                     st.markdown("#### 📝 Información básica")
                     col1, col2 = st.columns(2)
                     cols = [col1, col2]
                     col_idx = 0
                 else:
-                    cols = [st]
+                    # ✅ CORRECCIÓN: Usar container() en lugar de st directamente
+                    cols = [st.container()]
                     col_idx = 0
                 
                 for i, col in enumerate(campos_a_mostrar):
@@ -251,123 +252,15 @@ def listado_con_ficha(
                     else:
                         current_col = cols[0]
 
-                    with current_col:
-                        # Crear contenedor dinámico para campos reactivos
-                        campo_container = st.container()
-                        
-                        with campo_container:
-                            label = col.replace('_', ' ').title()
-                            help_text = campos_help.get(col, "")
-                            
-                            # Campo readonly
-                            if col in campos_readonly:
-                                st.text_input(
-                                    label, 
-                                    value=str(valor_actual), 
-                                    disabled=True,
-                                    key=f"readonly_{col}",
-                                    help=help_text
-                                )
-                                continue
-
-                            # Campo select con mejoras visuales
-                            elif col in campos_select:
-                                opciones = campos_select[col]
-                                try:
-                                    idx = opciones.index(valor_actual) if valor_actual in opciones else 0
-                                except (ValueError, TypeError):
-                                    idx = 0
-                                
-                                # Campo select reactivo
-                                datos_editados[col] = st.selectbox(
-                                    label, 
-                                    options=opciones, 
-                                    index=idx,
-                                    key=f"select_{col}",
-                                    help=help_text
-                                )
-
-                            # Campo textarea
-                            elif col in campos_textarea:
-                                datos_editados[col] = st.text_area(
-                                    campos_textarea[col].get("label", label),
-                                    value=str(valor_actual),
-                                    height=campos_textarea[col].get("height", 100),
-                                    key=f"textarea_{col}",
-                                    help=help_text
-                                )
-
-                            # Campo file con preview
-                            elif col in campos_file:
-                                st.markdown(f"**{campos_file[col].get('label', label)}**")
-                                if valor_actual:
-                                    st.caption(f"📎 Archivo actual: {valor_actual}")
-                                datos_editados[col] = st.file_uploader(
-                                    "Seleccionar nuevo archivo",
-                                    type=campos_file[col].get("type", None),
-                                    key=f"file_{col}",
-                                    help=help_text
-                                )
-
-                            # Campos específicos por tipo con mejoras
-                            else:
-                                if 'fecha' in col.lower():
-                                    try:
-                                        if valor_actual:
-                                            valor_fecha = pd.to_datetime(valor_actual).date()
-                                        else:
-                                            valor_fecha = None
-                                    except Exception:
-                                        valor_fecha = None
-                                    datos_editados[col] = st.date_input(
-                                        label, 
-                                        value=valor_fecha,
-                                        key=f"date_{col}",
-                                        help=help_text
-                                    )
-                                elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
-                                    try:
-                                        valor_num = float(valor_actual) if valor_actual else 0.0
-                                    except (ValueError, TypeError):
-                                        valor_num = 0.0
-                                    datos_editados[col] = st.number_input(
-                                        label, 
-                                        value=valor_num,
-                                        min_value=0.0, 
-                                        step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
-                                        key=f"number_{col}",
-                                        help=help_text
-                                    )
-                                elif 'email' in col.lower():
-                                    datos_editados[col] = st.text_input(
-                                        label, 
-                                        value=str(valor_actual),
-                                        placeholder="usuario@ejemplo.com",
-                                        key=f"email_{col}",
-                                        help=help_text
-                                    )
-                                elif 'telefono' in col.lower() or 'movil' in col.lower():
-                                    datos_editados[col] = st.text_input(
-                                        label, 
-                                        value=str(valor_actual),
-                                        placeholder="600123456",
-                                        key=f"phone_{col}",
-                                        help=help_text
-                                    )
-                                elif col in campos_password:
-                                    # Los campos de contraseña no se muestran en edición
-                                    pass
-                                else:
-                                    datos_editados[col] = st.text_input(
-                                        label, 
-                                        value=str(valor_actual),
-                                        key=f"text_{col}",
-                                        help=help_text
-                                    )
-                            
-                            # Mostrar texto de ayuda si existe
-                            if help_text:
-                                st.caption(f"💡 {help_text}")
+                    # ✅ CORRECCIÓN: Usar context manager solo cuando sea válido
+                    if len(cols) > 1:
+                        with current_col:
+                            _render_form_field(col, valor_actual, datos_editados, campos_select, campos_textarea, 
+                                             campos_file, campos_readonly, campos_password, campos_help)
+                    else:
+                        # Para una sola columna, renderizar directamente sin context manager
+                        _render_form_field(col, valor_actual, datos_editados, campos_select, campos_textarea, 
+                                         campos_file, campos_readonly, campos_password, campos_help)
 
                 # Botones de acción con estilos mejorados
                 st.markdown("#### 🔧 Acciones")
@@ -388,21 +281,23 @@ def listado_con_ficha(
                             st.warning("⚠️ No hay cambios para guardar.")
                 
                 with col2:
-                    if st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
+                    if on_delete and st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
                         st.session_state[f'confirm_delete_{fila[id_col]}'] = True
                         st.rerun()
 
             # Confirmación de eliminación
-            if st.session_state.get(f'confirm_delete_{fila[id_col]}', False):
+            if on_delete and st.session_state.get(f'confirm_delete_{fila[id_col]}', False):
                 st.error("⚠️ ¿Estás seguro de que quieres eliminar este registro?")
                 st.caption("Esta acción no se puede deshacer.")
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("✅ Sí, eliminar", key=f"confirm_yes_{fila[id_col]}", type="primary"):
-                        # Aquí iría la función de eliminación si estuviera implementada
-                        st.success("✅ Funcionalidad de eliminación pendiente de implementar.")
-                        del st.session_state[f'confirm_delete_{fila[id_col]}']
-                        st.rerun()
+                        try:
+                            on_delete(fila[id_col])
+                            del st.session_state[f'confirm_delete_{fila[id_col]}']
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al eliminar: {e}")
                 with col2:
                     if st.button("❌ Cancelar", key=f"confirm_no_{fila[id_col]}"):
                         del st.session_state[f'confirm_delete_{fila[id_col]}']
@@ -436,14 +331,15 @@ def listado_con_ficha(
                 except Exception:
                     pass  # Usar columnas_visibles por defecto
 
-            # Organizar campos en columnas si son muchos
+            # ✅ CORRECCIÓN: Organizar campos en columnas si son muchos
             if len(campos_crear) > 6:
                 st.markdown("#### 📝 Información del nuevo registro")
                 col1, col2 = st.columns(2)
                 cols = [col1, col2]
                 col_idx = 0
             else:
-                cols = [st]
+                # ✅ CORRECCIÓN: Usar container() en lugar de st directamente
+                cols = [st.container()]
                 col_idx = 0
 
             for col in campos_crear:
@@ -457,95 +353,15 @@ def listado_con_ficha(
                 else:
                     current_col = cols[0]
 
-                with current_col:
-                    label = col.replace('_', ' ').title()
-                    help_text = campos_help.get(col, "")
-
-                    # Campo select
-                    if col in campos_select:
-                        datos_nuevos[col] = st.selectbox(
-                            label,
-                            options=campos_select[col],
-                            key=f"create_select_{col}",
-                            help=help_text
-                        )
-
-                    # Campo textarea
-                    elif col in campos_textarea:
-                        cfg = campos_textarea[col]
-                        datos_nuevos[col] = st.text_area(
-                            cfg.get("label", label),
-                            height=cfg.get("height", 100),
-                            key=f"create_textarea_{col}",
-                            help=help_text
-                        )
-
-                    # Campo file
-                    elif col in campos_file:
-                        cfg = campos_file[col]
-                        datos_nuevos[col] = st.file_uploader(
-                            cfg.get("label", label),
-                            type=cfg.get("type", None),
-                            key=f"create_file_{col}",
-                            help=help_text
-                        )
-
-                    # Campo password
-                    elif col in campos_password:
-                        datos_nuevos[col] = st.text_input(
-                            label,
-                            type="password",
-                            key=f"create_password_{col}",
-                            help=help_text or "Se generará automáticamente si se deja vacío"
-                        )
-
-                    # Campos específicos por tipo
-                    else:
-                        if 'fecha' in col.lower():
-                            datos_nuevos[col] = st.date_input(
-                                label,
-                                key=f"create_date_{col}",
-                                help=help_text
-                            )
-                        elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
-                            datos_nuevos[col] = st.number_input(
-                                label,
-                                min_value=0.0,
-                                step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
-                                key=f"create_number_{col}",
-                                help=help_text
-                            )
-                        elif 'email' in col.lower():
-                            datos_nuevos[col] = st.text_input(
-                                label,
-                                placeholder="usuario@ejemplo.com",
-                                key=f"create_email_{col}",
-                                help=help_text
-                            )
-                        elif 'telefono' in col.lower() or 'movil' in col.lower():
-                            datos_nuevos[col] = st.text_input(
-                                label,
-                                placeholder="600123456",
-                                key=f"create_phone_{col}",
-                                help=help_text
-                            )
-                        elif 'cif' in col.lower() or 'dni' in col.lower():
-                            datos_nuevos[col] = st.text_input(
-                                label,
-                                placeholder="12345678A" if 'dni' in col.lower() else "A12345678",
-                                key=f"create_doc_{col}",
-                                help=help_text
-                            )
-                        else:
-                            datos_nuevos[col] = st.text_input(
-                                label,
-                                key=f"create_input_{col}",
-                                help=help_text
-                            )
-                    
-                    # Mostrar texto de ayuda
-                    if help_text:
-                        st.caption(f"💡 {help_text}")
+                # ✅ CORRECCIÓN: Usar context manager solo cuando sea válido
+                if len(cols) > 1:
+                    with current_col:
+                        _render_create_field(col, datos_nuevos, campos_select, campos_textarea, 
+                                           campos_file, campos_password, campos_help)
+                else:
+                    # Para una sola columna, renderizar directamente sin context manager
+                    _render_create_field(col, datos_nuevos, campos_select, campos_textarea, 
+                                       campos_file, campos_password, campos_help)
 
             # Botones de creación
             st.markdown("#### 🔧 Crear registro")
@@ -560,6 +376,216 @@ def listado_con_ficha(
                         st.error(f"❌ Error al crear {titulo.lower()}: {e}")
         
         st.markdown('</div>', unsafe_allow_html=True)
+
+
+def _render_form_field(col, valor_actual, datos_editados, campos_select, campos_textarea, 
+                      campos_file, campos_readonly, campos_password, campos_help):
+    """Función auxiliar para renderizar campos del formulario de edición."""
+    label = col.replace('_', ' ').title()
+    help_text = campos_help.get(col, "")
+    
+    # Campo readonly
+    if col in campos_readonly:
+        st.text_input(
+            label, 
+            value=str(valor_actual), 
+            disabled=True,
+            key=f"readonly_{col}",
+            help=help_text
+        )
+        return
+
+    # Campo select con mejoras visuales
+    elif col in campos_select:
+        opciones = campos_select[col]
+        try:
+            idx = opciones.index(valor_actual) if valor_actual in opciones else 0
+        except (ValueError, TypeError):
+            idx = 0
+        
+        datos_editados[col] = st.selectbox(
+            label, 
+            options=opciones, 
+            index=idx,
+            key=f"select_{col}",
+            help=help_text
+        )
+
+    # Campo textarea
+    elif col in campos_textarea:
+        datos_editados[col] = st.text_area(
+            campos_textarea[col].get("label", label),
+            value=str(valor_actual),
+            height=campos_textarea[col].get("height", 100),
+            key=f"textarea_{col}",
+            help=help_text
+        )
+
+    # Campo file con preview
+    elif col in campos_file:
+        st.markdown(f"**{campos_file[col].get('label', label)}**")
+        if valor_actual:
+            st.caption(f"📎 Archivo actual: {valor_actual}")
+        datos_editados[col] = st.file_uploader(
+            "Seleccionar nuevo archivo",
+            type=campos_file[col].get("type", None),
+            key=f"file_{col}",
+            help=help_text
+        )
+
+    # Campos específicos por tipo con mejoras
+    else:
+        if 'fecha' in col.lower():
+            try:
+                if valor_actual:
+                    valor_fecha = pd.to_datetime(valor_actual).date()
+                else:
+                    valor_fecha = None
+            except Exception:
+                valor_fecha = None
+            datos_editados[col] = st.date_input(
+                label, 
+                value=valor_fecha,
+                key=f"date_{col}",
+                help=help_text
+            )
+        elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
+            try:
+                valor_num = float(valor_actual) if valor_actual else 0.0
+            except (ValueError, TypeError):
+                valor_num = 0.0
+            datos_editados[col] = st.number_input(
+                label, 
+                value=valor_num,
+                min_value=0.0, 
+                step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
+                key=f"number_{col}",
+                help=help_text
+            )
+        elif 'email' in col.lower():
+            datos_editados[col] = st.text_input(
+                label, 
+                value=str(valor_actual),
+                placeholder="usuario@ejemplo.com",
+                key=f"email_{col}",
+                help=help_text
+            )
+        elif 'telefono' in col.lower() or 'movil' in col.lower():
+            datos_editados[col] = st.text_input(
+                label, 
+                value=str(valor_actual),
+                placeholder="600123456",
+                key=f"phone_{col}",
+                help=help_text
+            )
+        elif col in campos_password:
+            # Los campos de contraseña no se muestran en edición
+            pass
+        else:
+            datos_editados[col] = st.text_input(
+                label, 
+                value=str(valor_actual),
+                key=f"text_{col}",
+                help=help_text
+            )
+        
+        # Mostrar texto de ayuda si existe
+        if help_text:
+            st.caption(f"💡 {help_text}")
+
+
+def _render_create_field(col, datos_nuevos, campos_select, campos_textarea, 
+                        campos_file, campos_password, campos_help):
+    """Función auxiliar para renderizar campos del formulario de creación."""
+    label = col.replace('_', ' ').title()
+    help_text = campos_help.get(col, "")
+
+    # Campo select
+    if col in campos_select:
+        datos_nuevos[col] = st.selectbox(
+            label,
+            options=campos_select[col],
+            key=f"create_select_{col}",
+            help=help_text
+        )
+
+    # Campo textarea
+    elif col in campos_textarea:
+        cfg = campos_textarea[col]
+        datos_nuevos[col] = st.text_area(
+            cfg.get("label", label),
+            height=cfg.get("height", 100),
+            key=f"create_textarea_{col}",
+            help=help_text
+        )
+
+    # Campo file
+    elif col in campos_file:
+        cfg = campos_file[col]
+        datos_nuevos[col] = st.file_uploader(
+            cfg.get("label", label),
+            type=cfg.get("type", None),
+            key=f"create_file_{col}",
+            help=help_text
+        )
+
+    # Campo password
+    elif col in campos_password:
+        datos_nuevos[col] = st.text_input(
+            label,
+            type="password",
+            key=f"create_password_{col}",
+            help=help_text or "Se generará automáticamente si se deja vacío"
+        )
+
+    # Campos específicos por tipo
+    else:
+        if 'fecha' in col.lower():
+            datos_nuevos[col] = st.date_input(
+                label,
+                key=f"create_date_{col}",
+                help=help_text
+            )
+        elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
+            datos_nuevos[col] = st.number_input(
+                label,
+                min_value=0.0,
+                step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
+                key=f"create_number_{col}",
+                help=help_text
+            )
+        elif 'email' in col.lower():
+            datos_nuevos[col] = st.text_input(
+                label,
+                placeholder="usuario@ejemplo.com",
+                key=f"create_email_{col}",
+                help=help_text
+            )
+        elif 'telefono' in col.lower() or 'movil' in col.lower():
+            datos_nuevos[col] = st.text_input(
+                label,
+                placeholder="600123456",
+                key=f"create_phone_{col}",
+                help=help_text
+            )
+        elif 'cif' in col.lower() or 'dni' in col.lower():
+            datos_nuevos[col] = st.text_input(
+                label,
+                placeholder="12345678A" if 'dni' in col.lower() else "A12345678",
+                key=f"create_doc_{col}",
+                help=help_text
+            )
+        else:
+            datos_nuevos[col] = st.text_input(
+                label,
+                key=f"create_input_{col}",
+                help=help_text
+            )
+        
+        # Mostrar texto de ayuda
+        if help_text:
+            st.caption(f"💡 {help_text}")
+
 
 def _handle_reactive_change(field, reactive_config):
     """Función auxiliar para manejar cambios en campos reactivos."""
