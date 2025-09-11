@@ -188,8 +188,11 @@ def listado_con_ficha(
     # =========================
     st.markdown('<div class="tabla-container">', unsafe_allow_html=True)
     
-    # Preparar datos para mostrar
-    df_display = df[columnas_disponibles + [id_col]].copy()
+    # Preparar datos para mostrar - evitar columnas duplicadas
+    columnas_finales = columnas_disponibles.copy()
+    if id_col not in columnas_finales:
+        columnas_finales.append(id_col)
+    df_display = df[columnas_finales].copy()
     
     # Formatear datos para mejor visualización
     for col in df_display.columns:
