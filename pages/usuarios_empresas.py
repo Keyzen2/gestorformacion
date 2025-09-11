@@ -78,7 +78,7 @@ def main(supabase, session_state):
         q_lower = query.lower()
         search_cols = []
         
-        # Verificar qué columnas existen para búsqueda
+        # Verificar qué columnas existen para búsqueda (usando columnas reales)
         for col in ["nombre", "nombre_completo", "email", "telefono"]:
             if col in df_filtered.columns:
                 search_cols.append(df_filtered[col].fillna("").str.lower().str.contains(q_lower, na=False))
@@ -149,11 +149,15 @@ def main(supabase, session_state):
                 empresa_sel = datos_editados.pop("empresa_sel")
                 if empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
+                else:
+                    datos_editados["empresa_id"] = None
 
             if "grupo_sel" in datos_editados:
                 grupo_sel = datos_editados.pop("grupo_sel")
                 if grupo_sel and grupo_sel in grupos_dict:
                     datos_editados["grupo_id"] = grupos_dict[grupo_sel]
+                else:
+                    datos_editados["grupo_id"] = None
 
             # Actualizar usuario
             supabase.table("usuarios").update(datos_editados).eq("id", usuario_id).execute()
@@ -174,8 +178,8 @@ def main(supabase, session_state):
                 st.error("⚠️ El email es obligatorio.")
                 return
             
-            if not datos_nuevos.get("nombre"):
-                st.error("⚠️ El nombre es obligatorio.")
+            if not datos_nuevos.get("nombre_completo"):
+                st.error("⚠️ El nombre completo es obligatorio.")
                 return
             
             if not re.match(EMAIL_REGEX, datos_nuevos["email"]):
@@ -193,23 +197,64 @@ def main(supabase, session_state):
                 return
 
             # Convertir selects a IDs
+            empresa_id = None
             if "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
                 if empresa_sel and empresa_sel in empresas_dict:
-                    datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
+                    empresa_id = empresas_dict[empresa_sel]
 
+            grupo_id = None
             if "grupo_sel" in datos_nuevos:
                 grupo_sel = datos_nuevos.pop("grupo_sel")
                 if grupo_sel and grupo_sel in grupos_dict:
-                    datos_nuevos["grupo_id"] = grupos_dict[grupo_sel]
+                    grupo_id = grupos_dict[grupo_sel]
 
-            # Crear usuario
-            supabase.table("usuarios").insert(datos_nuevos).execute()
+            # Generar contraseña temporal si no se proporciona
+            password = datos_nuevos.get("password", "TempPass123!")
+            
+            # Crear usuario en Auth primero
+            auth_res = supabase.auth.admin.create_user({
+                "email": datos_nuevos["email"],
+                "password": password,
+                "email_confirm": True
+            })
+            
+            if not getattr(auth_res, "user", None):
+                st.error("❌ Error al crear usuario en Auth.")
+                return
+                
+            auth_id = auth_res.user.id
+
+            # Preparar datos para la base de datos (usando campos exactos de la BD)
+            db_datos = {
+                "auth_id": auth_id,
+                "email": datos_nuevos["email"],
+                "nombre_completo": datos_nuevos.get("nombre_completo", ""),
+                "nombre": datos_nuevos.get("nombre", datos_nuevos.get("nombre_completo", "")[:50]),  # Nombre corto
+                "telefono": datos_nuevos.get("telefono"),
+                "dni": datos_nuevos.get("dni"),
+                "rol": datos_nuevos.get("rol", "alumno"),
+                "empresa_id": empresa_id,
+                "grupo_id": grupo_id,
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            # Crear usuario en la base de datos
+            result = supabase.table("usuarios").insert(db_datos).execute()
+            
+            if not result.data:
+                # Si falla, eliminar de Auth
+                try:
+                    supabase.auth.admin.delete_user(auth_id)
+                except:
+                    pass
+                st.error("❌ Error al crear usuario en la base de datos.")
+                return
             
             # Limpiar cache del DataService
             data_service.get_usuarios.clear()
             
-            st.success("✅ Usuario creado correctamente.")
+            st.success(f"✅ Usuario creado correctamente. Contraseña temporal: {password}")
             st.rerun()
         except Exception as e:
             st.error(f"❌ Error al crear usuario: {e}")
@@ -219,10 +264,11 @@ def main(supabase, session_state):
     # =========================
     def get_campos_dinamicos(datos):
         """Determina campos a mostrar dinámicamente según el rol."""
-        campos_base = ["nombre", "nombre_completo", "email", "telefono", "dni", "rol"]
+        # Campos base que siempre se muestran (usando nombres exactos de la BD)
+        campos_base = ["email", "nombre_completo", "nombre", "telefono", "dni", "rol"]
         
         # Obtener rol actual
-        rol_actual = datos.get("rol", "")
+        rol_actual = datos.get("rol", "") if isinstance(datos, dict) else ""
         
         # Si es gestor, mostrar selector de empresa
         if rol_actual == "gestor":
@@ -231,6 +277,10 @@ def main(supabase, session_state):
         # Si es alumno, mostrar selector de grupo
         if rol_actual == "alumno":
             campos_base.append("grupo_sel")
+        
+        # Para creación, añadir campo de contraseña
+        if not datos or not datos.get("id"):
+            campos_base.append("password")
         
         return campos_base
 
@@ -242,6 +292,7 @@ def main(supabase, session_state):
     }
 
     campos_readonly = ["created_at", "auth_id"]
+    campos_password = ["password"]
 
     campos_help = {
         "email": "Email único del usuario (obligatorio)",
@@ -249,12 +300,15 @@ def main(supabase, session_state):
         "rol": "Rol del usuario en la plataforma",
         "empresa_sel": "Empresa a la que pertenece el usuario (solo para gestores)",
         "grupo_sel": "Grupo asignado al usuario (solo para alumnos)",
-        "nombre": "Nombre del usuario (obligatorio)",
-        "nombre_completo": "Nombre completo del usuario",
-        "telefono": "Número de teléfono de contacto"
+        "nombre": "Nombre corto del usuario",
+        "nombre_completo": "Nombre completo del usuario (obligatorio)",
+        "telefono": "Número de teléfono de contacto",
+        "password": "Contraseña temporal para el usuario (solo al crear)"
     }
 
-    # Campos reactivos - empresa aparece cuando rol es "gestor"
+    campos_obligatorios = ["email", "nombre_completo", "rol"]
+
+    # Campos reactivos - campos que aparecen según el rol
     reactive_fields = {
         "rol": ["empresa_sel", "grupo_sel"]
     }
@@ -279,7 +333,7 @@ def main(supabase, session_state):
         else:
             df_display["grupo_sel"] = ""
 
-        # Determinar columnas visibles
+        # Determinar columnas visibles (usando columnas reales de la BD)
         columnas_visibles = ["nombre_completo", "email", "telefono", "rol"]
         if "empresa_nombre" in df_display.columns:
             columnas_visibles.append("empresa_nombre")
@@ -297,6 +351,8 @@ def main(supabase, session_state):
             campos_select=campos_select,
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
+            campos_password=campos_password,
+            campos_obligatorios=campos_obligatorios,
             allow_creation=True,
             campos_help=campos_help,
             reactive_fields=reactive_fields
