@@ -1,7 +1,7 @@
 import os
 import sys
 import streamlit as st
-from supabase import create_client
+from supabase import create_client, Client
 from datetime import datetime
 import pandas as pd
 from utils import get_ajustes_app
