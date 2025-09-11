@@ -333,7 +333,10 @@ def main(supabase, session_state):
             campos_textarea=campos_textarea,
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=session_state.role in ["admin", "gestor"],
-            campos_help=campos_help
+            campos_help=campos_help,
+            campos_obligatorios=campos_obligatorios,
+            search_columns=["codigo_grupo", "accion_nombre"],
+            campos_readonly=campos_readonly
         )
 
     st.divider()
