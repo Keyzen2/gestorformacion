@@ -5,6 +5,7 @@ from utils import validar_dni_cif, export_csv, format_percentage, get_ajustes_ap
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
+
 def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
     st.caption("Administración de empresas cliente y configuración de módulos.")
@@ -25,7 +26,7 @@ def main(supabase, session_state):
     # =========================
     try:
         metricas = data_service.get_metricas_empresas()
-        
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("🏢 Total Empresas", metricas.get("total_empresas", 0))
@@ -36,7 +37,7 @@ def main(supabase, session_state):
         with col4:
             porcentaje = metricas.get("porcentaje_activas", 0)
             st.metric("📊 % Activas", f"{porcentaje}%")
-            
+
     except Exception as e:
         st.error(f"❌ Error al cargar métricas: {e}")
         # Métricas por defecto en caso de error
@@ -51,35 +52,35 @@ def main(supabase, session_state):
             st.metric("📊 % Activas", "0%")
 
     # =========================
-# ESTADÍSTICAS DE MÓDULOS
-# =========================
-if session_state.role == "admin":
-    st.divider()
-    st.markdown("### 📊 Uso de Módulos por Empresa")
-    
-    try:
-        # Verificar que tenemos datos de empresas antes de calcular estadísticas
-        if not df_empresas.empty:
-            stats_modulos = data_service.get_estadisticas_modulos(df_empresas)
-            
-            if stats_modulos:
-                cols = st.columns(len(stats_modulos))
-                for i, (modulo, data) in enumerate(stats_modulos.items()):
-                    with cols[i]:
-                        activos = data.get("activos", 0)
-                        porcentaje = data.get("porcentaje", 0)
-                        st.metric(
-                            f"📋 {modulo}", 
-                            f"{activos}",
-                            delta=f"{porcentaje:.1f}%"
-                        )
+    # ESTADÍSTICAS DE MÓDULOS
+    # =========================
+    if session_state.role == "admin":
+        st.divider()
+        st.markdown("### 📊 Uso de Módulos por Empresa")
+
+        try:
+            # Verificar que tenemos datos de empresas antes de calcular estadísticas
+            if not df_empresas.empty:
+                stats_modulos = data_service.get_estadisticas_modulos(df_empresas)
+
+                if stats_modulos:
+                    cols = st.columns(len(stats_modulos))
+                    for i, (modulo, data) in enumerate(stats_modulos.items()):
+                        with cols[i]:
+                            activos = data.get("activos", 0)
+                            porcentaje = data.get("porcentaje", 0)
+                            st.metric(
+                                f"📋 {modulo}",
+                                f"{activos}",
+                                delta=f"{porcentaje:.1f}%"
+                            )
+                else:
+                    st.info("No hay estadísticas de módulos disponibles.")
             else:
-                st.info("No hay estadísticas de módulos disponibles.")
-        else:
-            st.info("No hay empresas registradas para mostrar estadísticas de módulos.")
-            
-    except Exception as e:
-        st.warning(f"No se pudieron cargar las estadísticas de módulos: {e}")
+                st.info("No hay empresas registradas para mostrar estadísticas de módulos.")
+
+        except Exception as e:
+            st.warning(f"No se pudieron cargar las estadísticas de módulos: {e}")
 
     # =========================
     # CARGAR DATOS PRINCIPALES
@@ -95,7 +96,7 @@ if session_state.role == "admin":
     # =========================
     st.divider()
     st.markdown("### 🔍 Buscar y Filtrar Empresas")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         query = st.text_input("🔍 Buscar por nombre, CIF o ciudad")
@@ -107,7 +108,7 @@ if session_state.role == "admin":
 
     # Aplicar filtros
     df_filtered = df_empresas.copy()
-    
+
     if query:
         q_lower = query.lower()
         df_filtered = df_filtered[
@@ -115,7 +116,7 @@ if session_state.role == "admin":
             df_filtered["cif"].str.lower().str.contains(q_lower, na=False) |
             df_filtered["ciudad"].fillna("").str.lower().str.contains(q_lower, na=False)
         ]
-    
+
     if modulo_filter != "Todos":
         if modulo_filter == "Sin módulos":
             # Empresas sin ningún módulo activo
@@ -149,17 +150,17 @@ if session_state.role == "admin":
     def get_campos_dinamicos(datos):
         """Define campos visibles según el contexto."""
         campos_base = [
-            "id", "nombre", "cif", "direccion", "ciudad", "provincia", 
+            "id", "nombre", "cif", "direccion", "ciudad", "provincia",
             "codigo_postal", "telefono", "email", "web"
         ]
-        
+
         # Solo admin puede ver/editar módulos
         if session_state.role == "admin":
             campos_base.extend([
-                "formacion_activo", "iso_activo", "rgpd_activo", 
+                "formacion_activo", "iso_activo", "rgpd_activo",
                 "crm_activo", "docu_avanzada_activo"
             ])
-        
+
         return campos_base
 
     # Campos para select (solo admin puede modificar módulos)
@@ -205,7 +206,7 @@ if session_state.role == "admin":
             if not datos_editados.get("nombre") or not datos_editados.get("cif"):
                 st.error("⚠️ Nombre y CIF son obligatorios.")
                 return
-                
+
             if not validar_dni_cif(datos_editados["cif"]):
                 st.error("⚠️ El CIF no es válido.")
                 return
@@ -214,7 +215,7 @@ if session_state.role == "admin":
             if data_service.update_empresa(empresa_id, datos_editados):
                 st.success("✅ Empresa actualizada correctamente.")
                 st.rerun()
-            
+
         except Exception as e:
             st.error(f"❌ Error al guardar empresa: {e}")
 
@@ -225,7 +226,7 @@ if session_state.role == "admin":
             if data_service.create_empresa(datos_nuevos):
                 st.success("✅ Empresa creada correctamente.")
                 st.rerun()
-                
+
         except Exception as e:
             st.error(f"❌ Error al crear empresa: {e}")
 
@@ -235,7 +236,7 @@ if session_state.role == "admin":
             if data_service.delete_empresa(empresa_id):
                 st.success("✅ Empresa eliminada correctamente.")
                 st.rerun()
-                
+
         except Exception as e:
             st.error(f"❌ Error al eliminar empresa: {e}")
 
@@ -278,26 +279,26 @@ if session_state.role == "admin":
             - **🔐 RGPD**: Consentimientos, documentación legal y trazabilidad
             - **📈 CRM**: Gestión de clientes, oportunidades y tareas comerciales
             - **📄 Doc. Avanzada**: Gestión documental avanzada y workflows
-            
+
             **Nota**: Solo los administradores pueden activar/desactivar módulos para las empresas.
             """)
 
         # Acciones rápidas para admin
         st.markdown("### ⚡ Acciones Rápidas")
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             if st.button("🗑️ Limpiar Cache", help="Limpia el cache para actualizar datos"):
                 st.cache_data.clear()
                 st.success("Cache limpiada correctamente")
                 st.rerun()
-        
+
         with col2:
             if st.button("📊 Recalcular Métricas", help="Fuerza el recálculo de métricas"):
                 data_service.get_metricas_empresas.clear()
                 st.success("Métricas recalculadas")
                 st.rerun()
-        
+
         with col3:
             empresas_activas = len(df_empresas[df_empresas.get("formacion_activo", pd.Series([False])) == True])
             st.metric("🎯 Empresas con Formación", empresas_activas)
