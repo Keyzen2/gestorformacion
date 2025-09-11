@@ -196,46 +196,43 @@ class DataService:
         except Exception as e:
             return _self._handle_query_error("cargar documentos", e)
 
-# AÑADIR ESTE MÉTODO EN services/data_service.py dentro de la clase DataService:
+    # =========================
+    # USUARIOS
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_usuarios(_self, include_empresa=False) -> pd.DataFrame:
+        """Obtiene usuarios con información opcional de empresa."""
+        try:
+            if include_empresa:
+                query = _self.supabase.table("usuarios").select("""
+                    id, email, nombre, apellidos, rol, activo, 
+                    created_at, updated_at, empresa_id,
+                    empresa:empresas(id, nombre, cif)
+                """)
+            else:
+                query = _self.supabase.table("usuarios").select("*")
+            
+            query = _self._apply_empresa_filter(query, "usuarios")
+            
+            res = query.order("created_at", desc=True).execute()
+            df = pd.DataFrame(res.data or [])
+            
+            if include_empresa and not df.empty and "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["empresa_cif"] = df["empresa"].apply(
+                    lambda x: x.get("cif") if isinstance(x, dict) else ""
+                )
+            
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar usuarios", e)
 
-   @st.cache_data(ttl=300)
-   def get_usuarios(_self, include_empresa=False) -> pd.DataFrame:
-       """Obtiene usuarios con información opcional de empresa."""
-       try:
-           if include_empresa:
-               # Incluir datos de empresa
-               query = _self.supabase.table("usuarios").select("""
-                   id, email, nombre, apellidos, rol, activo, 
-                   created_at, updated_at, empresa_id,
-                   empresa:empresas(id, nombre, cif)
-               """)
-           else:
-               # Solo datos del usuario
-               query = _self.supabase.table("usuarios").select("*")
-        
-           # Aplicar filtro por empresa para gestores
-           query = _self._apply_empresa_filter(query, "usuarios")
-        
-           res = query.order("created_at", desc=True).execute()
-           df = pd.DataFrame(res.data or [])
-        
-           # Aplanar relación empresa si existe
-           if include_empresa and not df.empty and "empresa" in df.columns:
-               df["empresa_nombre"] = df["empresa"].apply(
-                   lambda x: x.get("nombre") if isinstance(x, dict) else ""
-               )
-               df["empresa_cif"] = df["empresa"].apply(
-                   lambda x: x.get("cif") if isinstance(x, dict) else ""
-               )
-        
-           return df
-       except Exception as e:
-           return _self._handle_query_error("cargar usuarios", e)
-        
     # =========================
     # ÁREAS PROFESIONALES Y GRUPOS DE ACCIONES
     # =========================
-    @st.cache_data(ttl=3600)  # Cache más largo para datos estáticos
+    @st.cache_data(ttl=3600)
     def get_areas_profesionales(_self) -> pd.DataFrame:
         """Obtiene áreas profesionales."""
         try:
@@ -271,15 +268,13 @@ class DataService:
             if _self.rol != "admin" and empresa_id != _self.empresa_id:
                 return {}
             
-            # Usar función SQL optimizada si existe
             try:
                 res = _self.supabase.rpc('get_gestor_metrics', {'empresa_uuid': empresa_id}).execute()
                 if res.data:
                     return res.data[0]
             except Exception:
-                pass  # Fallback a consultas individuales
+                pass
             
-            # Fallback manual
             grupos = len(_self.supabase.table("grupos").select("id").eq("empresa_id", empresa_id).execute().data or [])
             participantes = len(_self.supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute().data or [])
             documentos = len(_self.supabase.table("documentos").select("id").eq("empresa_id", empresa_id).execute().data or [])
@@ -299,15 +294,13 @@ class DataService:
     def get_metricas_admin(_self) -> Dict[str, int]:
         """Obtiene métricas globales para admin."""
         try:
-            # Usar función SQL optimizada si existe
             try:
                 res = _self.supabase.rpc('get_admin_metrics').execute()
                 if res.data:
                     return res.data[0]
             except Exception:
-                pass  # Fallback a consultas individuales
+                pass
             
-            # Fallback manual con COUNT
             empresas = _self.supabase.table("empresas").select("*", count="exact").execute().count or 0
             usuarios = _self.supabase.table("usuarios").select("*", count="exact").execute().count or 0
             cursos = _self.supabase.table("acciones_formativas").select("*", count="exact").execute().count or 0
@@ -332,14 +325,12 @@ class DataService:
             return _self.get_participantes_completos()
         
         try:
-            # Usar función SQL si existe
             try:
                 res = _self.supabase.rpc('search_usuarios', {'search_term': search_term}).execute()
                 return pd.DataFrame(res.data or [])
             except Exception:
-                pass  # Fallback a búsqueda manual
+                pass
             
-            # Fallback manual
             df = _self.get_participantes_completos()
             if df.empty:
                 return df
@@ -365,7 +356,6 @@ class DataService:
                 data["empresa_id"] = _self.empresa_id
             
             _self.supabase.table("acciones_formativas").insert(data).execute()
-            # Limpiar cache
             _self.get_acciones_formativas.clear()
             return True
         except Exception as e:
@@ -376,7 +366,6 @@ class DataService:
         """Actualiza una acción formativa."""
         try:
             _self.supabase.table("acciones_formativas").update(data).eq("id", accion_id).execute()
-            # Limpiar cache
             _self.get_acciones_formativas.clear()
             return True
         except Exception as e:
@@ -387,7 +376,6 @@ class DataService:
         """Elimina una acción formativa."""
         try:
             _self.supabase.table("acciones_formativas").delete().eq("id", accion_id).execute()
-            # Limpiar cache
             _self.get_acciones_formativas.clear()
             return True
         except Exception as e:
