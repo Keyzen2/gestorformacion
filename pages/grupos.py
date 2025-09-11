@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import export_csv, validar_dni_cif
+from utils import export_csv, validar_dni_cif, get_ajustes_app
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
