@@ -285,43 +285,20 @@ def subir_archivo_supabase(supabase, file_content: bytes, filename: str,
 # GESTIÓN DE AJUSTES DE APP
 # ===============================
 
-@st.cache_data(ttl=300)
-def get_ajustes_app(supabase, campos: Optional[List[str]] = None) -> Dict[str, Any]:
+def get_ajustes_app(supabase, campos=None):
     """
-    Obtiene los ajustes de la aplicación desde la base de datos.
+    Obtiene ajustes de la app SIN cache.
+    Para uso con cache seguro, usar cached_get_ajustes_app del data_service.
     """
     try:
-        query = supabase.table("ajustes_app").select("*").limit(1)
-        result = query.execute()
-        
-        if result.data:
-            ajustes = result.data[0]
-            # Filtrar solo los campos solicitados si se especifican
-            if campos:
-                ajustes = {k: v for k, v in ajustes.items() if k in campos}
-            return ajustes
+        if campos:
+            sel = ",".join(campos)
+            res = supabase.table("ajustes_app").select(sel).single().execute()
         else:
-            # Valores por defecto
-            defaults = {
-                "color_primario": "#4285F4",
-                "color_secundario": "#34A853", 
-                "color_exito": "#0F9D58",
-                "color_advertencia": "#FF9800",
-                "color_error": "#F44336",
-                "mensaje_login": "Accede al gestor con tus credenciales.",
-                "mensaje_admin": "Panel de administración completo.",
-                "mensaje_gestor": "Gestiona tu empresa de forma eficiente.",
-                "mensaje_alumno": "Accede a tus cursos y diplomas.",
-                "logo_url": "",
-                "favicon_url": "",
-                "tema_oscuro": False,
-                "mostrar_version": True
-            }
-            if campos:
-                defaults = {k: v for k, v in defaults.items() if k in campos}
-            return defaults
+            res = supabase.table("ajustes_app").select("*").single().execute()
+        return res.data or {}
     except Exception as e:
-        st.error(f"Error al cargar ajustes: {e}")
+        print(f"⚠️ Error al cargar ajustes: {e}")
         return {}
 
 def update_ajustes_app(supabase, ajustes: Dict[str, Any]) -> bool:
