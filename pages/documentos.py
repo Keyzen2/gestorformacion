@@ -1,15 +1,18 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
+from io import BytesIO
+from datetime import datetime
 from utils import (
-    export_csv, 
-    subir_archivo_supabase, 
-    format_date,
-    safe_date_parse,
+    generar_pdf,
+    generar_xml_accion_formativa,
+    generar_xml_inicio_grupo,
+    generar_xml_finalizacion_grupo,
+    validar_xml,
+    export_csv,
     get_ajustes_app
 )
-from components.listado_con_ficha import listado_con_ficha
 from services.data_service import get_data_service
+import os
 
 def main(supabase, session_state):
     st.title("📄 Gestión de Documentos")
