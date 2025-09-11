@@ -1,13 +1,8 @@
-"""
-Módulo para gestión de usuarios empresariales.
-Integrado con DataService y el componente listado_con_ficha.
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import validar_dni_cif, validar_email, export_csv, export_excel, generar_password_segura
-from utils import get_ajustes_app
+from utils import validar_dni_cif, validar_email, export_csv, export_excel, generar_password_segura, get_ajustes_app
+from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
