@@ -1,13 +1,7 @@
 import streamlit as st
-import json  # ✅ AÑADIDO: Import faltante
+import json
 from datetime import datetime
 from utils import get_ajustes_app, update_ajustes_app
-
-# ✅ Import para cache monitor (solo se usa si es admin)
-try:
-    from services.cache_service import render_cache_monitor
-except ImportError:
-    render_cache_monitor = None  # Fallback si no existe
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
@@ -253,7 +247,47 @@ def main(supabase, session_state):
         with col3:
             st.metric("Última actualización", datetime.now().strftime("%H:%M:%S"))
 
-        # ✅ ELIMINADO: Herramientas duplicadas que estaban aquí
+        # Herramientas de administración
+        st.markdown("#### 🛠️ Herramientas de Administración")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🗑️ Limpiar Cache", help="Limpia toda la cache de la aplicación"):
+                st.cache_data.clear()
+                st.success("Cache limpiada correctamente")
+                st.rerun()
+
+        with col2:
+            # Exportar configuración
+            if st.button("📥 Exportar Config", help="Descarga la configuración actual"):
+                config_json = json.dumps(ajustes_actuales, indent=2, ensure_ascii=False)
+                st.download_button(
+                    label="💾 Descargar JSON",
+                    data=config_json,
+                    file_name=f"config_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+
+        with col3:
+            # Importar configuración
+            uploaded_config = st.file_uploader(
+                "📤 Importar Config",
+                type=['json'],
+                help="Sube un archivo de configuración"
+            )
+            
+            if uploaded_config:
+                try:
+                    config_data = json.load(uploaded_config)
+                    if st.button("✅ Aplicar Configuración"):
+                        if update_ajustes_app(supabase, config_data):
+                            st.success("Configuración importada correctamente")
+                            st.rerun()
+                        else:
+                            st.error("Error al importar configuración")
+                except Exception as e:
+                    st.error(f"Error al leer archivo: {e}")
 
     # ===============================
     # GUARDAR CAMBIOS
@@ -295,81 +329,7 @@ def main(supabase, session_state):
                 st.rerun()
             else:
                 st.error("❌ Error al guardar la configuración")
-                
-    # =========================
-    # Monitor de Cache (Solo Admin) - ÚNICO
-    # =========================
-    if session_state.role == "admin":
-        try:
-            from services.cache_service import render_cache_monitor
-            
-            st.divider()
-            st.markdown("## 🔧 Herramientas de Administración")
-            
-            # Monitor de cache
-            render_cache_monitor()
-            
-        except ImportError:
-            # Si cache_service no existe, mostrar herramientas básicas
-            st.divider()
-            st.markdown("## 🔧 Herramientas de Administración")
-            
-            with st.expander("⚡ Acciones Rápidas", expanded=False):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🔄 Limpiar Cache"):
-                        st.cache_data.clear()
-                        st.success("✅ Cache limpiado")
-                        st.rerun()
-                
-                with col2:
-                    if st.button("📊 Info del Sistema"):
-                        import sys
-                        import platform
-                        st.json({
-                            "python_version": sys.version.split()[0],
-                            "streamlit_version": st.__version__,
-                            "platform": platform.system(),
-                            "usuario_actual": session_state.user.get('email', 'N/A'),
-                            "rol_actual": session_state.role
-                        })
-                        
-            # Herramientas adicionales
-            with st.expander("🔧 Herramientas Adicionales", expanded=False):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Exportar configuración
-                    if st.button("📥 Exportar Config"):
-                        config_json = json.dumps(ajustes_actuales, indent=2, ensure_ascii=False)
-                        st.download_button(
-                            label="💾 Descargar JSON",
-                            data=config_json,
-                            file_name=f"config_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                            mime="application/json"
-                        )
 
-                with col2:
-                    # Importar configuración
-                    uploaded_config = st.file_uploader(
-                        "📤 Importar Config",
-                        type=['json'],
-                        help="Sube un archivo de configuración"
-                    )
-                    
-                    if uploaded_config:
-                        try:
-                            config_data = json.load(uploaded_config)
-                            if st.button("✅ Aplicar Configuración"):
-                                if update_ajustes_app(supabase, config_data):
-                                    st.success("Configuración importada correctamente")
-                                    st.rerun()
-                                else:
-                                    st.error("Error al importar configuración")
-                        except Exception as e:
-                            st.error(f"Error al leer archivo: {e}")
-                    
     # ===============================
     # APLICAR CSS PERSONALIZADO
     # ===============================
