@@ -1,8 +1,3 @@
-"""
-Servicios centralizados para consultas de datos optimizadas.
-Unifica las consultas y aplica filtros por rol de forma consistente.
-"""
-
 import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any, Tuple
@@ -481,6 +476,37 @@ def delete_empresa(_self, empresa_id: str) -> bool:
         except Exception as e:
             return _self._handle_query_error("cargar documentos", e)
 
+    @st.cache_data(ttl=300)
+def get_documentos_completos(_self) -> pd.DataFrame:
+    """Obtiene documentos con información de grupo."""
+    try:
+        query = _self.supabase.table("documentos").select("""
+            id, tipo, archivo_path, archivo_nombre, fecha_subida, 
+            created_at, updated_at,
+            grupo:grupos(id, codigo_grupo),
+            accion_formativa:acciones_formativas(id, nombre)
+        """)
+        query = _self._apply_empresa_filter(query, "documentos")
+        
+        res = query.order("created_at", desc=True).execute()
+        df = pd.DataFrame(res.data or [])
+        
+        # Aplanar relaciones
+        if not df.empty:
+            if "grupo" in df.columns:
+                df["grupo_codigo"] = df["grupo"].apply(
+                    lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
+                )
+            
+            if "accion_formativa" in df.columns:
+                df["accion_nombre"] = df["accion_formativa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+        
+        return df
+    except Exception as e:
+        return _self._handle_query_error("cargar documentos", e)
+        
     # =========================
     # USUARIOS
     # =========================
