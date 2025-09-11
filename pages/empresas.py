@@ -190,6 +190,7 @@ def main(supabase, session_state):
 
     # Campos obligatorios
     campos_obligatorios = ["nombre", "cif"]
+    campos_readonly = ["id", "created_at", "updated_at", "fecha_alta"]
 
     # Columnas visibles en la tabla
     columnas_visibles = ["nombre", "cif", "ciudad", "telefono", "email"]
