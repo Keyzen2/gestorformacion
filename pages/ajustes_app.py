@@ -1,7 +1,11 @@
 import streamlit as st
-import json
 from datetime import datetime
 from utils import get_ajustes_app, update_ajustes_app
+# ✅ NUEVO: Import para cache monitor (solo se usa si es admin)
+try:
+    from services.cache_service import render_cache_monitor
+except ImportError:
+    render_cache_monitor = None  # Fallback si no existe
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
@@ -329,7 +333,71 @@ def main(supabase, session_state):
                 st.rerun()
             else:
                 st.error("❌ Error al guardar la configuración")
-
+                
+     # =========================
+    # Monitor de Cache (Solo Admin) - NUEVO
+    # =========================
+    if session_state.role == "admin":
+        from services.cache_service import render_cache_monitor
+        
+        st.divider()
+        st.markdown("## 🔧 Herramientas de Administración")
+        
+        # ✅ Monitor de cache
+        render_cache_monitor()
+        
+        # ✅ Información adicional del sistema
+        with st.expander("ℹ️ Información del Sistema", expanded=False):
+            import streamlit as st
+            import sys
+            import platform
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🐍 Python & Streamlit**")
+                st.text(f"Python: {sys.version.split()[0]}")
+                st.text(f"Streamlit: {st.__version__}")
+                st.text(f"Platform: {platform.system()}")
+            
+            with col2:
+                st.markdown("**📊 Estado de la Aplicación**")
+                st.text(f"Páginas activas: {len([k for k in st.session_state.keys() if 'page' in k])}")
+                st.text(f"Usuario conectado: {session_state.user.get('email', 'N/A')}")
+                st.text(f"Rol actual: {session_state.role}")
+        
+        # ✅ Acciones administrativas rápidas
+        with st.expander("⚡ Acciones Rápidas", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("🔄 Refrescar Cache Global"):
+                    from services.cache_service import clear_all_cache
+                    clear_all_cache()
+                    st.success("✅ Cache global limpiado")
+                    st.rerun()
+            
+            with col2:
+                if st.button("🧹 Limpiar Session State"):
+                    # Mantener datos críticos
+                    critical_keys = ['role', 'user', 'auth_session']
+                    keys_to_remove = [k for k in st.session_state.keys() if k not in critical_keys]
+                    for key in keys_to_remove:
+                        del st.session_state[key]
+                    st.success(f"✅ Limpiadas {len(keys_to_remove)} variables de sesión")
+                    st.rerun()
+            
+            with col3:
+                if st.button("📊 Debug DataService"):
+                    from services.data_service import get_data_service
+                    data_service = get_data_service(supabase, session_state)
+                    st.json({
+                        "rol": data_service.rol,
+                        "empresa_id": data_service.empresa_id,
+                        "user_id": data_service.user_id,
+                        "metodos_disponibles": [m for m in dir(data_service) if not m.startswith('_')][:10]
+                    })
+                    
     # ===============================
     # APLICAR CSS PERSONALIZADO
     # ===============================
