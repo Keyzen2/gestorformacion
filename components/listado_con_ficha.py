@@ -310,7 +310,8 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, campos_
             col1, col2 = st.columns(2)
             columnas = [col1, col2]
         else:
-            columnas = [st]
+            # Crear una lista con el contenedor principal
+            columnas = [st.container()]
         
         for i, campo in enumerate(campos_a_mostrar):
             if campo == id_col:
@@ -321,7 +322,10 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, campos_
                 valor_actual = ""
 
             # Determinar en qué columna mostrar el campo
-            col_actual = columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]
+            if len(columnas) > 1:
+                col_actual = columnas[i % len(columnas)]
+            else:
+                col_actual = columnas[0]
             
             with col_actual:
                 valor_editado = crear_campo_formulario(
@@ -411,16 +415,21 @@ def mostrar_formulario_creacion(titulo, on_create, campos_select, campos_textare
         # Añadir campos obligatorios
         todos_campos.update(campos_obligatorios)
         
-        # Organizar en columnas
+        # Organizar en columnas - CORREGIDO: usar containers en lugar del módulo st
         campos_lista = sorted(list(todos_campos))
         if len(campos_lista) > 6:
             col1, col2 = st.columns(2)
             columnas = [col1, col2]
         else:
-            columnas = [st]
+            # Crear una lista con un container en lugar de usar st directamente
+            columnas = [st.container()]
         
         for i, campo in enumerate(campos_lista):
-            col_actual = columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]
+            # Determinar columna actual - CORREGIDO
+            if len(columnas) > 1:
+                col_actual = columnas[i % len(columnas)]
+            else:
+                col_actual = columnas[0]
             
             with col_actual:
                 valor = crear_campo_formulario(
