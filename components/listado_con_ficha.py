@@ -9,6 +9,7 @@ def listado_con_ficha(
     on_save,
     id_col="id",
     on_create=None,
+    on_delete=None,
     campos_select=None,
     campos_textarea=None,
     campos_file=None,
