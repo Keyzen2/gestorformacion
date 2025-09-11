@@ -3,7 +3,8 @@ import pandas as pd
 from datetime import datetime
 from io import BytesIO
 from services.alumnos import alta_alumno
-from services.data_service import get_data_service
+from services.participantes_service import get_participantes_service
+from services.data_service import get_data_service  # Para empresas y grupos dict
 from utils import is_module_active, validar_dni_cif, export_csv, subir_archivo_supabase, get_ajustes_app
 from components.listado_con_ficha import listado_con_ficha
 
@@ -27,8 +28,9 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
-    # ✅ CAMBIO PRINCIPAL: Usar DataService
-    data_service = get_data_service(supabase, session_state)
+    # Inicializar servicios
+    participantes_service = get_participantes_service(supabase, session_state)
+    data_service = get_data_service(supabase, session_state)  # Para dict de empresas/grupos
     
     empresa_id = session_state.user.get("empresa_id")
 
@@ -37,10 +39,10 @@ def main(supabase, session_state):
     # =========================
     with st.spinner("Cargando datos..."):
         try:
-            # ✅ Usar métodos con cache del DataService
+            # Usar servicios especializados
+            df_part = participantes_service.get_participantes_completos()
             empresas_dict = data_service.get_empresas_dict()
             grupos_dict = data_service.get_grupos_dict()
-            df_part = data_service.get_participantes_completos()  # ✅ Ya tiene cache y filtros por empresa
             
             # Opciones para selects
             empresas_opciones = [""] + sorted(empresas_dict.keys())
@@ -54,37 +56,24 @@ def main(supabase, session_state):
             return
 
     # =========================
-    # Métricas OPTIMIZADAS
+    # Métricas OPTIMIZADAS usando servicio
     # =========================
     if not df_part.empty:
+        stats = participantes_service.get_estadisticas_participantes()
+        
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("🧑‍🎓 Total Participantes", len(df_part))
+            st.metric("🧑‍🎓 Total Participantes", stats["total"])
         
         with col2:
-            # Participantes con grupo asignado
-            con_grupo = len(df_part[df_part["grupo_id"].notna()])
-            st.metric("👥 Con Grupo", con_grupo)
+            st.metric("👥 Con Grupo", stats["con_grupo"])
         
         with col3:
-            # Participantes registrados este mes
-            if "created_at" in df_part.columns:
-                este_mes = df_part[
-                    pd.to_datetime(df_part["created_at"], errors="coerce").dt.month == datetime.now().month
-                ]
-                st.metric("🆕 Nuevos este mes", len(este_mes))
-            else:
-                st.metric("🆕 Nuevos este mes", 0)
+            st.metric("🆕 Nuevos este mes", stats["este_mes"])
         
         with col4:
-            # Usuarios con acceso activo (que tienen datos completos)
-            completos = df_part[
-                (df_part["email"].notna()) & 
-                (df_part["nombre"].notna()) & 
-                (df_part["apellidos"].notna())
-            ]
-            st.metric("✅ Datos Completos", len(completos))
+            st.metric("✅ Datos Completos", stats["datos_completos"])
 
     st.divider()
 
@@ -102,33 +91,28 @@ def main(supabase, session_state):
         if session_state.role == "admin":
             empresa_filter = st.selectbox("Filtrar por empresa", ["Todas"] + sorted(empresas_dict.keys()))
 
-    # Aplicar filtros
-    df_filtered = df_part.copy()
-    
+    # Aplicar filtros usando servicio
+    filtros = {}
     if query:
-        q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["apellidos"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["email"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["dni"].str.lower().str.contains(q_lower, na=False)
-        ]
-    
+        filtros["query"] = query
     if grupo_filter != "Todos":
-        grupo_id = grupos_dict.get(grupo_filter)
-        df_filtered = df_filtered[df_filtered["grupo_id"] == grupo_id]
-    
+        filtros["grupo_id"] = grupos_dict.get(grupo_filter)
     if session_state.role == "admin" and 'empresa_filter' in locals() and empresa_filter != "Todas":
-        empresa_filter_id = empresas_dict.get(empresa_filter)
-        df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_filter_id]
+        filtros["empresa_id"] = empresas_dict.get(empresa_filter)
+
+    # Usar búsqueda avanzada del servicio
+    if filtros:
+        df_filtered = participantes_service.search_participantes_avanzado(filtros)
+    else:
+        df_filtered = df_part.copy()
 
     # =========================
-    # Funciones CRUD OPTIMIZADAS
+    # Funciones CRUD OPTIMIZADAS usando servicio
     # =========================
     def guardar_participante(datos):
-        """Guarda o actualiza un participante usando DataService."""
+        """Guarda o actualiza un participante usando participantes_service."""
         try:
-            # Validaciones
+            # Validaciones básicas (el servicio también las hace)
             if not datos.get("email"):
                 st.error("⚠️ El email es obligatorio.")
                 return False
@@ -150,12 +134,11 @@ def main(supabase, session_state):
             datos_limpios = {k: v for k, v in datos.items() 
                            if not k.endswith("_sel") and k != "contraseña"}
             
-            # ✅ Usar DataService para guardar
+            # Usar participantes_service
             if datos.get("id"):
-                success = data_service.update_participante(datos["id"], datos_limpios)
+                success = participantes_service.update_participante(datos["id"], datos_limpios)
                 if success:
                     st.success("✅ Participante actualizado correctamente.")
-                    # ✅ Cache se invalida automáticamente en DataService
                     st.rerun()
             else:
                 # Para nuevo participante, crear usuario también
@@ -181,8 +164,8 @@ def main(supabase, session_state):
                     )
                 
                 if result.get("success"):
-                    # Crear registro de participante
-                    success = data_service.create_participante(datos_limpios)
+                    # Crear registro de participante usando servicio
+                    success = participantes_service.create_participante(datos_limpios)
                     if success:
                         st.success("✅ Participante creado correctamente.")
                         if result.get("password"):
@@ -231,7 +214,7 @@ def main(supabase, session_state):
 
     campos_password = ["contraseña"]
     campos_readonly = ["created_at", "updated_at"]
-    campos_obligatorios = ["nombre", "apellidos", "email"]  # ✅ Marcar campos obligatorios
+    campos_obligatorios = ["nombre", "apellidos", "email"]
 
     campos_help = {
         "email": "Email único del participante (obligatorio)",
@@ -302,7 +285,7 @@ def main(supabase, session_state):
                                 if row.get("grupo"):
                                     datos_participante["grupo_id"] = grupos_dict.get(row["grupo"])
                             
-                            # Crear participante
+                            # Crear participante usando servicio
                             if crear_participante(datos_participante):
                                 creados += 1
                             else:
@@ -349,7 +332,7 @@ def main(supabase, session_state):
         if session_state.role == "admin":
             df_display["empresa_sel"] = df_display["empresa_nombre"]
 
-        # ✅ Mostrar tabla con componente optimizado
+        # Mostrar tabla con componente optimizado
         listado_con_ficha(
             df_display,
             columnas_visibles=[
@@ -364,10 +347,10 @@ def main(supabase, session_state):
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
             campos_password=campos_password,
-            campos_obligatorios=campos_obligatorios,  # ✅ Campos obligatorios
+            campos_obligatorios=campos_obligatorios,
             allow_creation=puede_crear,
             campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "dni"]  # ✅ Búsqueda optimizada
+            search_columns=["nombre", "apellidos", "email", "dni"]
         )
 
     # =========================
