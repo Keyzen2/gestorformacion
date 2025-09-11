@@ -28,13 +28,6 @@ def main(supabase, session_state):
             empresas_dict = data_service.get_empresas_dict()
         else:
             empresas_dict = {}
-        
-        # Debug: verificar qué columnas tenemos - REMOVER después de diagnosticar
-        if not df_grupos.empty:
-            with st.expander("🔍 Debug - Información del DataFrame"):
-                st.write("**Columnas disponibles:**", list(df_grupos.columns))
-                st.write("**Primeras filas:**")
-                st.dataframe(df_grupos.head())
             
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {e}")
