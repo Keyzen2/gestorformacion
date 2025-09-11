@@ -198,7 +198,11 @@ def main(supabase, session_state):
         df_display = df_filtered.copy()
         
         # Añadir campos para selects
+        if "accion_nombre" in df_display.columns:
         df_display["accion_sel"] = df_display["accion_nombre"]
+    else:
+        # Fallback si no existe la columna
+        df_display["accion_sel"] = ""
         if session_state.role == "admin":
             # Obtener nombres de empresa
             empresa_nombres = {}
