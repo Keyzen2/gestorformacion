@@ -349,8 +349,7 @@ def main(supabase, session_state):
             campos_password=campos_password,
             campos_obligatorios=campos_obligatorios,
             allow_creation=puede_crear,
-            campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "dni"]
+            campos_help=campos_help
         )
 
     # =========================
