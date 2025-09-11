@@ -200,7 +200,57 @@ def export_excel(df: pd.DataFrame, filename: str = "export.xlsx"):
     b64 = base64.b64encode(excel_data).decode('utf-8')
     href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">📥 Descargar Excel</a>'
     st.markdown(href, unsafe_allow_html=True)
+    
+    Sube un archivo a Supabase Storage en una carpeta por empresa.
+    Devuelve la URL pública del archivo o None si falla.
+    """
+    try:
+        nombre_original = archivo.name
+        extension = nombre_original.split(".")[-1]
+        nombre_unico = f"{uuid.uuid4()}.{extension}"
+        ruta = f"empresa_{empresa_id}/{nombre_unico}"
 
+        res = supabase.storage.from_(bucket).upload(ruta, archivo)
+        if isinstance(res, dict) and res.get("error"):
+            st.error("❌ Error al subir el archivo a Supabase Storage.")
+            return None
+
+        url = supabase.storage.from_(bucket).get_public_url(ruta)
+        return url
+    except Exception as e:
+        st.error(f"❌ Error al subir archivo: {e}")
+        return None
+
+# =========================
+# Eliminación de archivos en Supabase Storage
+# =========================
+def eliminar_archivo_supabase(supabase, url, bucket="documentos"):
+    """
+    Elimina un archivo de Supabase Storage a partir de su URL pública.
+    """
+    try:
+        base_url = supabase.storage.from_(bucket).get_public_url("")
+        if not url.startswith(base_url):
+            st.warning("⚠️ La URL no pertenece al bucket especificado.")
+            return False
+
+        ruta = url.replace(base_url, "")
+        res = supabase.storage.from_(bucket).remove([ruta])
+        if isinstance(res, dict) and res.get("error"):
+            st.error("❌ Error al eliminar el archivo de Supabase Storage.")
+            return False
+
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al procesar la eliminación del archivo: {e}")
+        return False
+
+# =========================
+# Renderizado seguro de textos
+# =========================
+def render_texto(texto: str, modo="markdown"):
+    """
+    Renderiza texto en Streamlit según el modo indicado.
 # =========================
 # FORMATEO DE DATOS
 # =========================
