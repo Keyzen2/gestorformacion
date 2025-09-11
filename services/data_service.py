@@ -52,7 +52,8 @@ class DataService:
         """Obtiene diccionario nombre -> id de empresas."""
         df = _self.get_empresas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
-    # =========================
+  
+# =========================
 # EMPRESAS - MÉTODOS EXPANDIDOS FALTANTES
 # =========================
 
@@ -64,10 +65,10 @@ def get_empresas_con_modulos(_self) -> pd.DataFrame:
             query = _self.supabase.table("empresas").select("*").eq("id", _self.empresa_id)
         else:
             query = _self.supabase.table("empresas").select("*")
-        
+
         empresas_res = query.execute()
         df_emp = pd.DataFrame(empresas_res.data or [])
-        
+
         if df_emp.empty:
             return df_emp
 
@@ -91,16 +92,17 @@ def get_empresas_con_modulos(_self) -> pd.DataFrame:
             df_emp["crm_fin"] = None
 
         return df_emp
-        
+
     except Exception as e:
         return _self._handle_query_error("cargar empresas con módulos", e)
+
 
 @st.cache_data(ttl=300)
 def get_metricas_empresas(_self) -> Dict[str, Any]:
     """Obtiene métricas específicas de empresas."""
     try:
         df_empresas = _self.get_empresas_con_modulos()
-        
+
         if df_empresas.empty:
             return {
                 "total_empresas": 0,
@@ -111,7 +113,7 @@ def get_metricas_empresas(_self) -> Dict[str, Any]:
 
         # Calcular métricas
         total_empresas = len(df_empresas)
-        
+
         # Nuevas este mes
         nuevas_mes = 0
         if "fecha_alta" in df_empresas.columns:
@@ -119,12 +121,12 @@ def get_metricas_empresas(_self) -> Dict[str, Any]:
                 pd.to_datetime(df_empresas["fecha_alta"], errors="coerce").dt.month == datetime.now().month
             ]
             nuevas_mes = len(este_mes)
-        
+
         # Provincia más frecuente
         provincia_top = "N/D"
         if "provincia" in df_empresas.columns and not df_empresas["provincia"].isna().all():
             provincia_top = df_empresas["provincia"].value_counts().idxmax()
-        
+
         # Módulos activos
         modulos_activos = 0
         for col in ["formacion_activo", "iso_activo", "rgpd_activo", "crm_activo", "docu_avanzada_activo"]:
@@ -137,10 +139,11 @@ def get_metricas_empresas(_self) -> Dict[str, Any]:
             "provincia_top": provincia_top,
             "modulos_activos": int(modulos_activos)
         }
-        
+
     except Exception as e:
         st.error(f"⚠️ Error al cargar métricas de empresas: {e}")
         return {}
+
 
 def get_estadisticas_modulos(_self, df_empresas: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
     """Obtiene estadísticas de uso de módulos."""
@@ -148,14 +151,14 @@ def get_estadisticas_modulos(_self, df_empresas: pd.DataFrame) -> Dict[str, Dict
         modulos = {
             "Formación": "formacion_activo",
             "ISO 9001": "iso_activo",
-            "RGPD": "rgpd_activo", 
+            "RGPD": "rgpd_activo",
             "CRM": "crm_activo",
             "Doc. Avanzada": "docu_avanzada_activo"
         }
-        
+
         stats = {}
         total_empresas = len(df_empresas)
-        
+
         for nombre, columna in modulos.items():
             if columna in df_empresas.columns:
                 activos = df_empresas[columna].fillna(False).sum()
@@ -166,18 +169,19 @@ def get_estadisticas_modulos(_self, df_empresas: pd.DataFrame) -> Dict[str, Dict
                 }
             else:
                 stats[nombre] = {"activos": 0, "porcentaje": 0}
-        
+
         return stats
-        
+
     except Exception as e:
         st.error(f"⚠️ Error al calcular estadísticas de módulos: {e}")
         return {}
+
 
 def filter_empresas(_self, df_empresas: pd.DataFrame, query: str = "", modulo_filter: str = "Todos") -> pd.DataFrame:
     """Filtra empresas por búsqueda y módulo."""
     try:
         df_filtered = df_empresas.copy()
-        
+
         # Filtro por texto
         if query:
             q_lower = query.lower()
@@ -188,7 +192,7 @@ def filter_empresas(_self, df_empresas: pd.DataFrame, query: str = "", modulo_fi
                 df_filtered["provincia"].fillna("").str.lower().str.contains(q_lower, na=False) |
                 df_filtered["ciudad"].fillna("").str.lower().str.contains(q_lower, na=False)
             ]
-        
+
         # Filtro por módulo
         if modulo_filter != "Todos":
             modulo_map = {
@@ -203,10 +207,11 @@ def filter_empresas(_self, df_empresas: pd.DataFrame, query: str = "", modulo_fi
                 df_filtered = df_filtered[df_filtered[col_filtro] == True]
 
         return df_filtered
-        
+
     except Exception as e:
         st.error(f"⚠️ Error al filtrar empresas: {e}")
         return df_empresas
+
 
 # =========================
 # OPERACIONES CRUD PARA EMPRESAS
@@ -218,7 +223,7 @@ def update_empresa(_self, empresa_id: str, datos_editados: Dict[str, Any]) -> bo
         if not datos_editados.get("nombre") or not datos_editados.get("cif"):
             st.error("⚠️ Nombre y CIF son obligatorios.")
             return False
-            
+
         if not validar_dni_cif(datos_editados["cif"]):
             st.error("⚠️ CIF inválido.")
             return False
@@ -226,7 +231,7 @@ def update_empresa(_self, empresa_id: str, datos_editados: Dict[str, Any]) -> bo
         # Separar datos de CRM
         crm_data = {}
         empresa_data = {}
-        
+
         for key, value in datos_editados.items():
             if key.startswith("crm_"):
                 crm_data[key] = value
@@ -245,12 +250,13 @@ def update_empresa(_self, empresa_id: str, datos_editados: Dict[str, Any]) -> bo
         # Limpiar cache
         _self.get_empresas_con_modulos.clear()
         _self.get_metricas_empresas.clear()
-        
+
         return True
-        
+
     except Exception as e:
         st.error(f"⚠️ Error al actualizar empresa: {e}")
         return False
+
 
 def create_empresa(_self, datos_nuevos: Dict[str, Any]) -> bool:
     """Crea una nueva empresa con validaciones básicas."""
@@ -259,7 +265,7 @@ def create_empresa(_self, datos_nuevos: Dict[str, Any]) -> bool:
         if not datos_nuevos.get("nombre") or not datos_nuevos.get("cif"):
             st.error("⚠️ Nombre y CIF son obligatorios.")
             return False
-            
+
         if not validar_dni_cif(datos_nuevos["cif"]):
             st.error("⚠️ CIF inválido.")
             return False
@@ -267,7 +273,7 @@ def create_empresa(_self, datos_nuevos: Dict[str, Any]) -> bool:
         # Separar datos de CRM
         crm_data = {}
         empresa_data = {}
-        
+
         for key, value in datos_nuevos.items():
             if key.startswith("crm_"):
                 crm_data[key] = value
@@ -279,10 +285,10 @@ def create_empresa(_self, datos_nuevos: Dict[str, Any]) -> bool:
 
         # Crear empresa
         result = _self.supabase.table("empresas").insert(empresa_data).execute()
-        
+
         if result.data:
             empresa_id = result.data[0]["id"]
-            
+
             # Crear registro CRM si hay datos
             if crm_data and any(crm_data.values()):
                 crm_data["empresa_id"] = empresa_id
@@ -291,26 +297,26 @@ def create_empresa(_self, datos_nuevos: Dict[str, Any]) -> bool:
             # Limpiar cache
             _self.get_empresas_con_modulos.clear()
             _self.get_metricas_empresas.clear()
-            
+
             return True
         else:
             st.error("⚠️ Error al crear la empresa.")
             return False
-            
+
     except Exception as e:
         st.error(f"⚠️ Error al crear empresa: {e}")
         return False
 
+
 def delete_empresa(_self, empresa_id: str) -> bool:
     """Elimina una empresa con validaciones."""
     try:
-        # Verificar si tiene dependencias
-        # (participantes, grupos, etc.)
+        # Verificar si tiene dependencias (participantes, grupos, etc.)
         participantes = _self.supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute()
         if participantes.data:
             st.error("⚠️ No se puede eliminar. La empresa tiene participantes asociados.")
             return False
-        
+
         grupos = _self.supabase.table("grupos").select("id").eq("empresa_id", empresa_id).execute()
         if grupos.data:
             st.error("⚠️ No se puede eliminar. La empresa tiene grupos asociados.")
@@ -318,16 +324,16 @@ def delete_empresa(_self, empresa_id: str) -> bool:
 
         # Eliminar empresa
         _self.supabase.table("empresas").delete().eq("id", empresa_id).execute()
-        
+
         # Eliminar CRM asociado si existe
         _self.supabase.table("crm_empresas").delete().eq("empresa_id", empresa_id).execute()
 
         # Limpiar cache
         _self.get_empresas_con_modulos.clear()
         _self.get_metricas_empresas.clear()
-        
+
         return True
-        
+
     except Exception as e:
         st.error(f"⚠️ Error al eliminar empresa: {e}")
         return False
