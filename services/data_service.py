@@ -196,6 +196,42 @@ class DataService:
         except Exception as e:
             return _self._handle_query_error("cargar documentos", e)
 
+# AÑADIR ESTE MÉTODO EN services/data_service.py dentro de la clase DataService:
+
+   @st.cache_data(ttl=300)
+   def get_usuarios(_self, include_empresa=False) -> pd.DataFrame:
+       """Obtiene usuarios con información opcional de empresa."""
+       try:
+           if include_empresa:
+               # Incluir datos de empresa
+               query = _self.supabase.table("usuarios").select("""
+                   id, email, nombre, apellidos, rol, activo, 
+                   created_at, updated_at, empresa_id,
+                   empresa:empresas(id, nombre, cif)
+               """)
+           else:
+               # Solo datos del usuario
+               query = _self.supabase.table("usuarios").select("*")
+        
+           # Aplicar filtro por empresa para gestores
+           query = _self._apply_empresa_filter(query, "usuarios")
+        
+           res = query.order("created_at", desc=True).execute()
+           df = pd.DataFrame(res.data or [])
+        
+           # Aplanar relación empresa si existe
+           if include_empresa and not df.empty and "empresa" in df.columns:
+               df["empresa_nombre"] = df["empresa"].apply(
+                   lambda x: x.get("nombre") if isinstance(x, dict) else ""
+               )
+               df["empresa_cif"] = df["empresa"].apply(
+                   lambda x: x.get("cif") if isinstance(x, dict) else ""
+               )
+        
+           return df
+       except Exception as e:
+           return _self._handle_query_error("cargar usuarios", e)
+        
     # =========================
     # ÁREAS PROFESIONALES Y GRUPOS DE ACCIONES
     # =========================
