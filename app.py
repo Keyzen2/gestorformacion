@@ -4,7 +4,7 @@ import streamlit as st
 from supabase import create_client
 from datetime import datetime
 import pandas as pd
-from services.data_service import get_ajustes_app
+from utils import get_ajustes_app
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
