@@ -13,7 +13,7 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
-    # Inicializar servicio de datos
+    # Inicializar servicio de grupos
     grupos_service = get_grupos_service(supabase, session_state)
 
     # =========================
@@ -21,43 +21,26 @@ def main(supabase, session_state):
     # =========================
     try:
         df_grupos = grupos_service.get_grupos_completos()
+        acciones_dict = grupos_service.get_acciones_dict()
+        empresas_dict = grupos_service.get_empresas_dict()
     except Exception as e:
-        st.error(f"❌ Error al cargar grupos: {e}")
+        st.error(f"❌ Error al cargar datos: {e}")
         return
 
-    # Cargar acciones formativas para los selects
-    try:
-        acciones_res = supabase.table("acciones_formativas").select("id,nombre").execute()
-        acciones_dict = {a["nombre"]: a["id"] for a in (acciones_res.data or [])}
-    except Exception as e:
-        st.error(f"❌ Error al cargar acciones formativas: {e}")
-        acciones_dict = {}
-
-    # Cargar empresas para admin
-    empresas_dict = {}
-    if session_state.role == "admin":
-        try:
-            empresas_res = supabase.table("empresas").select("id,nombre").execute()
-            empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
-        except Exception as e:
-            st.error(f"❌ Error al cargar empresas: {e}")
-
     # =========================
-    # Métricas rápidas
+    # Métricas rápidas usando estadísticas del servicio
     # =========================
     if not df_grupos.empty:
+        stats = grupos_service.get_estadisticas_grupos()
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("👥 Total Grupos", len(df_grupos))
+            st.metric("👥 Total Grupos", stats["total"])
         with col2:
-            activos = len(df_grupos[df_grupos["fecha_fin"].isna() | (df_grupos["fecha_fin"] >= datetime.now())])
-            st.metric("🟢 Activos", activos)
+            st.metric("🟢 Activos", stats["activos"])
         with col3:
-            promedio_participantes = df_grupos["n_participantes_previstos"].mean() if "n_participantes_previstos" in df_grupos.columns else 0
-            st.metric("📊 Promedio Participantes", f"{promedio_participantes:.1f}")
+            st.metric("📊 Promedio Participantes", stats["promedio_participantes"])
         with col4:
-            proximos = len(df_grupos[df_grupos["fecha_inicio"] > datetime.now()])
-            st.metric("📅 Próximos", proximos)
+            st.metric("📅 Próximos", stats["proximos"])
 
     # =========================
     # Filtros de búsqueda
@@ -88,13 +71,17 @@ def main(supabase, session_state):
         hoy = datetime.now()
         if estado_filter == "Activos":
             df_filtered = df_filtered[
-                (df_filtered["fecha_inicio"] <= hoy) & 
-                (df_filtered["fecha_fin"].isna() | (df_filtered["fecha_fin"] >= hoy))
+                (pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") <= hoy) & 
+                (df_filtered["fecha_fin"].isna() | (pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") >= hoy))
             ]
         elif estado_filter == "Finalizados":
-            df_filtered = df_filtered[df_filtered["fecha_fin"] < hoy]
+            df_filtered = df_filtered[
+                pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") < hoy
+            ]
         elif estado_filter == "Próximos":
-            df_filtered = df_filtered[df_filtered["fecha_inicio"] > hoy]
+            df_filtered = df_filtered[
+                pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") > hoy
+            ]
 
     # Exportar CSV
     if not df_filtered.empty:
@@ -103,16 +90,11 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # Funciones CRUD
+    # Funciones CRUD usando grupos_service
     # =========================
     def guardar_grupo(grupo_id, datos_editados):
         """Función para guardar cambios en un grupo."""
         try:
-            # Validaciones
-            if not datos_editados.get("codigo_grupo"):
-                st.error("⚠️ El código de grupo es obligatorio.")
-                return
-
             # Procesar acción formativa si está presente
             if "accion_sel" in datos_editados:
                 accion_sel = datos_editados.pop("accion_sel")
@@ -125,47 +107,34 @@ def main(supabase, session_state):
                 if empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
 
-            # Actualizar grupo
-            supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
-            
-            # Limpiar cache
-            grupos_service.get_grupos_completos.clear()
-            st.success("✅ Grupo actualizado correctamente.")
-            st.rerun()
+            # Usar servicio para actualizar
+            success = grupos_service.update_grupo(grupo_id, datos_editados)
+            if success:
+                st.success("✅ Grupo actualizado correctamente.")
+                st.rerun()
         except Exception as e:
             st.error(f"❌ Error al actualizar grupo: {e}")
 
     def crear_grupo(datos_nuevos):
         """Función para crear un nuevo grupo."""
         try:
-            # Validaciones
-            if not datos_nuevos.get("codigo_grupo"):
-                st.error("⚠️ El código de grupo es obligatorio.")
-                return
-                
-            if not datos_nuevos.get("accion_sel"):
-                st.error("⚠️ Debes seleccionar una acción formativa.")
-                return
-
             # Procesar acción formativa
-            accion_sel = datos_nuevos.pop("accion_sel")
-            datos_nuevos["accion_formativa_id"] = acciones_dict.get(accion_sel)
+            if "accion_sel" in datos_nuevos:
+                accion_sel = datos_nuevos.pop("accion_sel")
+                if accion_sel and accion_sel in acciones_dict:
+                    datos_nuevos["accion_formativa_id"] = acciones_dict[accion_sel]
 
             # Procesar empresa
             if session_state.role == "admin" and "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
-                datos_nuevos["empresa_id"] = empresas_dict.get(empresa_sel)
-            elif session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
+                if empresa_sel and empresa_sel in empresas_dict:
+                    datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
 
-            # Establecer estado por defecto
-            datos_nuevos["estado"] = "abierto"
-
-            supabase.table("grupos").insert(datos_nuevos).execute()
-            # Limpiar cache
-            grupos_service.get_grupos_completos.clear()
-            st.success("✅ Grupo creado correctamente.")
-            st.rerun()
+            # Usar servicio para crear
+            success = grupos_service.create_grupo(datos_nuevos)
+            if success:
+                st.success("✅ Grupo creado correctamente.")
+                st.rerun()
         except Exception as e:
             st.error(f"❌ Error al crear grupo: {e}")
 
@@ -258,7 +227,7 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # Asignación de participantes
+    # Asignación de participantes usando grupos_service
     # =========================
     if not df_grupos.empty and grupos_service.can_modify_data():
         st.markdown("### 👥 Asignar Participantes a Grupos")
@@ -285,17 +254,11 @@ def main(supabase, session_state):
                 ]["id"].iloc[0]
 
         with col2:
-            # Filtro de participantes
+            # Filtro de participantes usando servicio
             participante_query = st.text_input("🔍 Buscar participante")
             
             try:
-                # Cargar participantes
-                if session_state.role == "gestor":
-                    part_res = supabase.table("participantes").select("id,nombre,apellidos,dni,email").eq("empresa_id", session_state.user.get("empresa_id")).execute()
-                else:
-                    part_res = supabase.table("participantes").select("id,nombre,apellidos,dni,email").execute()
-                
-                df_participantes = pd.DataFrame(part_res.data or [])
+                df_participantes = grupos_service.get_participantes_disponibles()
                 
                 if not df_participantes.empty and participante_query:
                     q_lower = participante_query.lower()
@@ -326,31 +289,15 @@ def main(supabase, session_state):
                 st.error(f"❌ Error al cargar participantes: {e}")
                 participante_id = None
 
-        # Botón de asignación
+        # Botón de asignación usando servicio
         if participante_id and st.button("✅ Asignar participante al grupo"):
-            try:
-                # Verificar si ya está asignado
-                existe = supabase.table("participantes_grupos")\
-                    .select("id")\
-                    .eq("participante_id", participante_id)\
-                    .eq("grupo_id", grupo_id)\
-                    .execute()
-                
-                if existe.data:
-                    st.warning("⚠️ Este participante ya está asignado a este grupo.")
-                else:
-                    supabase.table("participantes_grupos").insert({
-                        "participante_id": participante_id,
-                        "grupo_id": grupo_id,
-                        "fecha_asignacion": datetime.utcnow().isoformat()
-                    }).execute()
-                    st.success("✅ Participante asignado correctamente.")
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al asignar participante: {e}")
+            success = grupos_service.asignar_participante_grupo(participante_id, grupo_id)
+            if success:
+                st.success("✅ Participante asignado correctamente.")
+                st.rerun()
 
     # =========================
-    # Vista de participantes por grupo
+    # Vista de participantes por grupo usando servicio
     # =========================
     if not df_grupos.empty:
         st.divider()
@@ -365,39 +312,19 @@ def main(supabase, session_state):
         for _, grupo in df_grupos_vista.iterrows():
             with st.expander(f"👥 {grupo['codigo_grupo']} - {grupo['accion_nombre']}"):
                 try:
-                    # Obtener participantes del grupo
-                    pg_res = supabase.table("participantes_grupos")\
-                        .select("participante_id, fecha_asignacion")\
-                        .eq("grupo_id", grupo["id"])\
-                        .execute()
+                    # Usar servicio para obtener participantes del grupo
+                    df_participantes_grupo = grupos_service.get_participantes_grupo(grupo["id"])
                     
-                    if pg_res.data:
-                        participante_ids = [p["participante_id"] for p in pg_res.data]
-                        
-                        # Obtener datos de participantes
-                        part_res = supabase.table("participantes")\
-                            .select("id, nombre, apellidos, email, dni")\
-                            .in_("id", participante_ids)\
-                            .execute()
-                        
-                        if part_res.data:
-                            for p in part_res.data:
-                                col1, col2 = st.columns([4, 1])
-                                col1.write(f"📝 {p.get('dni', 'Sin DNI')} - {p['nombre']} {p.get('apellidos', '')} ({p['email']})")
-                                
-                                if col2.button("🗑️", key=f"remove_{grupo['id']}_{p['id']}"):
-                                    try:
-                                        supabase.table("participantes_grupos")\
-                                            .delete()\
-                                            .eq("participante_id", p["id"])\
-                                            .eq("grupo_id", grupo["id"])\
-                                            .execute()
-                                        st.success(f"✅ {p['nombre']} eliminado del grupo.")
-                                        st.rerun()
-                                    except Exception as e:
-                                        st.error(f"❌ Error al eliminar: {e}")
-                        else:
-                            st.info("ℹ️ No se encontraron datos de participantes.")
+                    if not df_participantes_grupo.empty:
+                        for _, p in df_participantes_grupo.iterrows():
+                            col1, col2 = st.columns([4, 1])
+                            col1.write(f"📝 {p.get('dni', 'Sin DNI')} - {p['nombre']} {p.get('apellidos', '')} ({p['email']})")
+                            
+                            if col2.button("🗑️", key=f"remove_{grupo['id']}_{p['id']}"):
+                                success = grupos_service.desasignar_participante_grupo(p["id"], grupo["id"])
+                                if success:
+                                    st.success(f"✅ {p['nombre']} eliminado del grupo.")
+                                    st.rerun()
                     else:
                         st.info("ℹ️ Este grupo no tiene participantes asignados.")
                         
@@ -405,9 +332,9 @@ def main(supabase, session_state):
                     st.error(f"❌ Error al cargar participantes del grupo: {e}")
 
     # =========================
-    # Importación masiva desde Excel
+    # Importación masiva desde Excel usando servicio
     # =========================
-    if not df_grupos.empty and da_service.can_modify_data():
+    if not df_grupos.empty and grupos_service.can_modify_data():
         st.divider()
         st.markdown("### 📤 Importación Masiva desde Excel")
         
@@ -444,70 +371,28 @@ def main(supabase, session_state):
                 else:
                     # Procesar DNIs
                     dnis_import = [str(d).strip() for d in df_import["dni"] if pd.notna(d)]
-                    dnis_validos = [d for d in dnis_import if validar_dni_cif(d)]
-                    dnis_invalidos = set(dnis_import) - set(dnis_validos)
-
-                    if dnis_invalidos:
-                        st.warning(f"⚠️ DNIs inválidos detectados: {', '.join(dnis_invalidos)}")
-
-                    # Buscar participantes existentes
-                    if session_state.role == "gestor":
-                        part_res = supabase.table("participantes")\
-                            .select("id, dni")\
-                            .eq("empresa_id", session_state.user.get("empresa_id"))\
-                            .execute()
-                    else:
-                        part_res = supabase.table("participantes")\
-                            .select("id, dni")\
-                            .execute()
                     
-                    participantes_existentes = {p["dni"]: p["id"] for p in (part_res.data or [])}
-
-                    # Verificar asignaciones existentes
-                    ya_asignados_res = supabase.table("participantes_grupos")\
-                        .select("participante_id")\
-                        .eq("grupo_id", grupo_excel_id)\
-                        .execute()
-                    ya_asignados_ids = {p["participante_id"] for p in (ya_asignados_res.data or [])}
-
-                    # Procesar asignaciones
-                    creados = 0
-                    errores = []
-
-                    for dni in dnis_validos:
-                        participante_id = participantes_existentes.get(dni)
+                    # Usar servicio para importación masiva
+                    resultado = grupos_service.importar_participantes_masivo(grupo_excel_id, dnis_import)
+                    
+                    if resultado["success"]:
+                        if resultado["creados"] > 0:
+                            st.success(f"✅ Se han asignado {resultado['creados']} participantes al grupo.")
                         
-                        if not participante_id:
-                            errores.append(f"DNI {dni} no encontrado en participantes")
-                            continue
-                            
-                        if participante_id in ya_asignados_ids:
-                            errores.append(f"DNI {dni} ya asignado al grupo")
-                            continue
-                            
-                        try:
-                            supabase.table("participantes_grupos").insert({
-                                "participante_id": participante_id,
-                                "grupo_id": grupo_excel_id,
-                                "fecha_asignacion": datetime.utcnow().isoformat()
-                            }).execute()
-                            creados += 1
-                        except Exception as e:
-                            errores.append(f"DNI {dni} - Error: {str(e)}")
-
-                    # Mostrar resultados
-                    if creados > 0:
-                        st.success(f"✅ Se han asignado {creados} participantes al grupo.")
-                    
-                    if errores:
-                        st.warning("⚠️ Errores encontrados:")
-                        for error in errores[:10]:  # Mostrar solo los primeros 10
-                            st.caption(f"• {error}")
-                        if len(errores) > 10:
-                            st.caption(f"... y {len(errores) - 10} errores más")
-                    
-                    if creados > 0:
-                        st.rerun()
+                        if resultado["errores"]:
+                            st.warning("⚠️ Errores encontrados:")
+                            for error in resultado["errores"][:10]:  # Mostrar solo los primeros 10
+                                st.caption(f"• {error}")
+                            if len(resultado["errores"]) > 10:
+                                st.caption(f"... y {len(resultado['errores']) - 10} errores más")
+                        
+                        if resultado["dnis_invalidos"]:
+                            st.warning(f"⚠️ DNIs inválidos: {', '.join(resultado['dnis_invalidos'])}")
+                        
+                        if resultado["creados"] > 0:
+                            st.rerun()
+                    else:
+                        st.error(f"❌ Error: {resultado['error']}")
                         
             except Exception as e:
                 st.error(f"❌ Error al procesar el archivo: {e}")
