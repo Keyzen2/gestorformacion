@@ -1,8 +1,7 @@
 import os
 import sys
 import streamlit as st
-from services.data_service import cached_get_ajustes_app
-from utils import is_module_active  # ✅ Mantener imports existentes
+from utils import get_ajustes_app, is_module_active  # ✅ Mantener imports existentes
 from services.data_service import get_data_service  # ✅ NUEVO: Añadir DataService
 from supabase import create_client
 from datetime import datetime
@@ -53,7 +52,7 @@ for key, default in {
 # =========================
 def login_view():
     """Vista de login optimizada."""
-    ajustes = cached_get_ajustes_app(supabase_admin, campos=["mensaje_login", "nombre_app", "color_primario"])
+    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_login", "nombre_app", "color_primario"])
     
     col1, col2, col3 = st.columns([1, 2, 1])
     
@@ -318,7 +317,7 @@ def route():
                 st.session_state.page = page_key
 
     # --- Footer dinámico desde ajustes_app ---
-    ajustes = cached_get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
+    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
     mensaje_footer = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · ISO 9001 · RGPD · CRM · Formación · Streamlit + Supabase")
 
     st.sidebar.markdown("---")
@@ -332,7 +331,7 @@ def mostrar_dashboard():
     try:
         # Cargar ajustes con manejo de errores
         try:
-            ajustes = cached_get_ajustes_app(supabase_admin)
+            ajustes = get_ajustes_app(supabase_admin)
         except Exception as e:
             st.error(f"⚠️ Error al cargar ajustes: {e}")
             # Fallback con ajustes por defecto
