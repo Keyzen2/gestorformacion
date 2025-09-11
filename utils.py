@@ -640,7 +640,331 @@ def generar_password_segura(longitud: int = 10) -> str:
     # Mezclar y convertir a string
     random.shuffle(pwd)
     return ''.join(pwd)
+    
+# =========================
+# GENERACIÓN DE XML FUNDAE
+# =========================
 
+def generar_pdf(buffer, lines):
+    """
+    Genera un PDF con las líneas proporcionadas.
+    
+    Args:
+        buffer: BytesIO buffer para escribir el PDF
+        lines: Lista de líneas de texto para incluir en el PDF
+        
+    Returns:
+        BytesIO: Buffer con el PDF generado
+    """
+    try:
+        # Crear el PDF usando reportlab
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # Configurar el documento
+        c.setTitle("Documento FUNDAE")
+        
+        # Añadir líneas de texto
+        y_position = height - 2*cm
+        for line in lines:
+            if y_position < 2*cm:  # Nueva página si es necesario
+                c.showPage()
+                y_position = height - 2*cm
+            
+            c.drawString(2*cm, y_position, str(line))
+            y_position -= 0.5*cm
+        
+        c.save()
+        buffer.seek(0)
+        return buffer
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar PDF: {e}")
+        return None
+
+def generar_xml_accion_formativa(accion):
+    """
+    Genera XML de acción formativa según estándares FUNDAE.
+    
+    Args:
+        accion: Diccionario con datos de la acción formativa
+        
+    Returns:
+        str: XML generado o None si hay error
+    """
+    try:
+        # Crear elemento raíz
+        root = ET.Element("AccionFormativa")
+        root.set("xmlns", "http://www.fundae.es/schemas/accionformativa")
+        root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+        
+        # Información básica
+        info = ET.SubElement(root, "InformacionBasica")
+        
+        codigo = ET.SubElement(info, "CodigoAccion")
+        codigo.text = str(accion.get('codigo_accion', ''))
+        
+        nombre = ET.SubElement(info, "NombreAccion")
+        nombre.text = str(accion.get('nombre', ''))
+        
+        modalidad = ET.SubElement(info, "Modalidad")
+        modalidad.text = str(accion.get('modalidad', 'Presencial'))
+        
+        horas = ET.SubElement(info, "NumeroHoras")
+        horas.text = str(accion.get('num_horas', 0))
+        
+        # Área profesional
+        if accion.get('area_profesional') or accion.get('cod_area_profesional'):
+            area = ET.SubElement(info, "AreaProfesional")
+            
+            if accion.get('cod_area_profesional'):
+                cod_area = ET.SubElement(area, "Codigo")
+                cod_area.text = str(accion.get('cod_area_profesional'))
+            
+            if accion.get('area_profesional'):
+                nom_area = ET.SubElement(area, "Nombre")
+                nom_area.text = str(accion.get('area_profesional'))
+        
+        # Contenidos formativos
+        contenidos = ET.SubElement(root, "ContenidosFormativos")
+        
+        if accion.get('objetivos'):
+            objetivos = ET.SubElement(contenidos, "Objetivos")
+            objetivos.text = str(accion.get('objetivos'))
+        
+        if accion.get('contenidos'):
+            contenidos_text = ET.SubElement(contenidos, "Contenidos")
+            contenidos_text.text = str(accion.get('contenidos'))
+        
+        # Información adicional
+        if accion.get('nivel'):
+            nivel = ET.SubElement(root, "Nivel")
+            nivel.text = str(accion.get('nivel'))
+        
+        if accion.get('certificado_profesionalidad'):
+            cert = ET.SubElement(root, "CertificadoProfesionalidad")
+            cert.text = "true" if accion.get('certificado_profesionalidad') else "false"
+        
+        # Convertir a string XML
+        xml_str = ET.tostring(root, encoding='unicode', method='xml')
+        
+        # Formatear con declaración XML
+        formatted_xml = f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+        
+        return formatted_xml
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML de acción formativa: {e}")
+        return None
+
+def generar_xml_inicio_grupo(grupo, participantes):
+    """
+    Genera XML de inicio de grupo según estándares FUNDAE.
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de participantes del grupo
+        
+    Returns:
+        str: XML generado o None si hay error
+    """
+    try:
+        # Crear elemento raíz
+        root = ET.Element("InicioGrupo")
+        root.set("xmlns", "http://www.fundae.es/schemas/iniciogrupo")
+        root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+        
+        # Información del grupo
+        info_grupo = ET.SubElement(root, "InformacionGrupo")
+        
+        codigo = ET.SubElement(info_grupo, "CodigoGrupo")
+        codigo.text = str(grupo.get('codigo_grupo', ''))
+        
+        fecha_inicio = ET.SubElement(info_grupo, "FechaInicio")
+        fecha_inicio.text = str(grupo.get('fecha_inicio', ''))
+        
+        fecha_fin = ET.SubElement(info_grupo, "FechaFinPrevista")
+        fecha_fin.text = str(grupo.get('fecha_fin_prevista', ''))
+        
+        if grupo.get('localidad'):
+            localidad = ET.SubElement(info_grupo, "Localidad")
+            localidad.text = str(grupo.get('localidad'))
+        
+        if grupo.get('provincia'):
+            provincia = ET.SubElement(info_grupo, "Provincia")
+            provincia.text = str(grupo.get('provincia'))
+        
+        # Modalidad
+        if grupo.get('modalidad') or grupo.get('accion_modalidad'):
+            modalidad = ET.SubElement(info_grupo, "Modalidad")
+            modalidad.text = str(grupo.get('modalidad') or grupo.get('accion_modalidad', 'Presencial'))
+        
+        # Participantes
+        if participantes:
+            lista_participantes = ET.SubElement(root, "ListaParticipantes")
+            
+            for participante in participantes:
+                part_elem = ET.SubElement(lista_participantes, "Participante")
+                
+                if participante.get('dni') or participante.get('nif'):
+                    dni = ET.SubElement(part_elem, "DNI")
+                    dni.text = str(participante.get('dni') or participante.get('nif', ''))
+                
+                if participante.get('nombre'):
+                    nombre = ET.SubElement(part_elem, "Nombre")
+                    nombre.text = str(participante.get('nombre'))
+                
+                if participante.get('apellidos'):
+                    apellidos = ET.SubElement(part_elem, "Apellidos")
+                    apellidos.text = str(participante.get('apellidos'))
+                
+                if participante.get('email'):
+                    email = ET.SubElement(part_elem, "Email")
+                    email.text = str(participante.get('email'))
+                
+                if participante.get('telefono'):
+                    telefono = ET.SubElement(part_elem, "Telefono")
+                    telefono.text = str(participante.get('telefono'))
+        
+        # Convertir a string XML
+        xml_str = ET.tostring(root, encoding='unicode', method='xml')
+        
+        # Formatear con declaración XML
+        formatted_xml = f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+        
+        return formatted_xml
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML de inicio de grupo: {e}")
+        return None
+
+def generar_xml_finalizacion_grupo(grupo, participantes):
+    """
+    Genera XML de finalización de grupo según estándares FUNDAE.
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de participantes del grupo
+        
+    Returns:
+        str: XML generado o None si hay error
+    """
+    try:
+        # Crear elemento raíz
+        root = ET.Element("FinalizacionGrupo")
+        root.set("xmlns", "http://www.fundae.es/schemas/finalizaciongrupo")
+        root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+        
+        # Información del grupo
+        info_grupo = ET.SubElement(root, "InformacionGrupo")
+        
+        codigo = ET.SubElement(info_grupo, "CodigoGrupo")
+        codigo.text = str(grupo.get('codigo_grupo', ''))
+        
+        fecha_inicio = ET.SubElement(info_grupo, "FechaInicio")
+        fecha_inicio.text = str(grupo.get('fecha_inicio', ''))
+        
+        fecha_fin = ET.SubElement(info_grupo, "FechaFinReal")
+        fecha_fin.text = str(grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista', ''))
+        
+        # Resultados del grupo
+        resultados = ET.SubElement(root, "Resultados")
+        
+        n_previstos = ET.SubElement(resultados, "ParticipantesPrevistos")
+        n_previstos.text = str(grupo.get('n_participantes_previstos', len(participantes)))
+        
+        n_finalizados = ET.SubElement(resultados, "ParticipantesFinalizados")
+        n_finalizados.text = str(grupo.get('n_participantes_finalizados', len(participantes)))
+        
+        n_aptos = ET.SubElement(resultados, "ParticipantesAptos")
+        n_aptos.text = str(grupo.get('n_aptos', 0))
+        
+        n_no_aptos = ET.SubElement(resultados, "ParticipantesNoAptos")
+        n_no_aptos.text = str(grupo.get('n_no_aptos', 0))
+        
+        # Participantes finalizados
+        if participantes:
+            lista_participantes = ET.SubElement(root, "ParticipantesFinalizados")
+            
+            for participante in participantes:
+                part_elem = ET.SubElement(lista_participantes, "Participante")
+                
+                if participante.get('dni') or participante.get('nif'):
+                    dni = ET.SubElement(part_elem, "DNI")
+                    dni.text = str(participante.get('dni') or participante.get('nif', ''))
+                
+                if participante.get('nombre'):
+                    nombre = ET.SubElement(part_elem, "Nombre")
+                    nombre.text = str(participante.get('nombre'))
+                
+                if participante.get('apellidos'):
+                    apellidos = ET.SubElement(part_elem, "Apellidos")
+                    apellidos.text = str(participante.get('apellidos'))
+                
+                # Resultado del participante
+                resultado = ET.SubElement(part_elem, "Resultado")
+                resultado.text = participante.get('resultado', 'APTO')  # Por defecto APTO
+                
+                # Calificación si existe
+                if participante.get('calificacion'):
+                    calificacion = ET.SubElement(part_elem, "Calificacion")
+                    calificacion.text = str(participante.get('calificacion'))
+        
+        # Observaciones
+        if grupo.get('observaciones'):
+            observaciones = ET.SubElement(root, "Observaciones")
+            observaciones.text = str(grupo.get('observaciones'))
+        
+        # Convertir a string XML
+        xml_str = ET.tostring(root, encoding='unicode', method='xml')
+        
+        # Formatear con declaración XML
+        formatted_xml = f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+        
+        return formatted_xml
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML de finalización de grupo: {e}")
+        return None
+
+def validar_xml(xml_content, xsd_url):
+    """
+    Valida un XML contra un esquema XSD remoto.
+    
+    Args:
+        xml_content: Contenido XML a validar
+        xsd_url: URL del esquema XSD
+        
+    Returns:
+        tuple: (es_valido: bool, errores: list)
+    """
+    try:
+        # Descargar el esquema XSD
+        response = requests.get(xsd_url, timeout=10)
+        if response.status_code != 200:
+            return False, [f"No se pudo descargar el esquema XSD desde {xsd_url}"]
+        
+        # Parsear el esquema XSD
+        xsd_doc = etree.fromstring(response.content)
+        xsd_schema = etree.XMLSchema(xsd_doc)
+        
+        # Parsear el XML a validar
+        xml_doc = etree.fromstring(xml_content.encode('utf-8'))
+        
+        # Validar
+        if xsd_schema.validate(xml_doc):
+            return True, []
+        else:
+            errores = [str(error) for error in xsd_schema.error_log]
+            return False, errores
+            
+    except requests.RequestException as e:
+        return False, [f"Error al acceder al esquema XSD: {e}"]
+    except etree.XMLSyntaxError as e:
+        return False, [f"Error de sintaxis XML: {e}"]
+    except Exception as e:
+        return False, [f"Error de validación: {e}"]
+        
 # =========================
 # AJUSTES GLOBALES DE LA APP
 # =========================
