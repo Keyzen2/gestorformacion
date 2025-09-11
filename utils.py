@@ -285,7 +285,6 @@ def subir_archivo_supabase(supabase, file_content: bytes, filename: str,
 # GESTIÓN DE AJUSTES DE APP
 # ===============================
 
-@st.cache_data(ttl=300)
 def get_ajustes_app(supabase, campos: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Obtiene los ajustes de la aplicación desde la base de datos.
