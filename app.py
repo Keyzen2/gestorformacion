@@ -2,52 +2,37 @@ import os
 import sys
 import streamlit as st
 from supabase import create_client, Client
-from datetime import datetime
+from datetime import datetime, date
 import pandas as pd
 from utils import get_ajustes_app
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 # =========================
-# Configuración de la página
+# Configuración de la aplicación
 # =========================
 st.set_page_config(
     page_title="Gestor de Formación",
+    page_icon="📚",
     layout="wide",
-    initial_sidebar_state="expanded",
-    menu_items={}
+    initial_sidebar_state="expanded"
 )
 
 # =========================
-# Claves Supabase
+# Configuración de Supabase
 # =========================
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
-SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+supabase_public: Client = create_client(
+    st.secrets["SUPABASE_URL"], 
+    st.secrets["SUPABASE_ANON_KEY"]
+)
 
-supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-# Poner clientes en session_state para caché segura
-st.session_state.supabase_public = supabase_public
-st.session_state.supabase_admin = supabase_admin
-
-# =========================
-# Estado inicial
-# =========================
-for key, default in {
-    "page": "home",
-    "role": None,
-    "user": {},
-    "auth_session": None
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = default
+supabase_admin: Client = create_client(
+    st.secrets["SUPABASE_URL"], 
+    st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+)
 
 # =========================
-# Funciones auxiliares optimizadas
+# Funciones auxiliares optimizadas (SIN CACHE PROBLEMÁTICO)
 # =========================
-@st.cache_data(ttl=300)  # Cache por 5 minutos
+
 def get_metricas_admin():
     """Obtiene métricas del admin de forma optimizada."""
     try:
@@ -77,7 +62,6 @@ def get_metricas_admin():
             "grupos": grupos_res.count or 0
         }
 
-@st.cache_data(ttl=300)
 def get_metricas_gestor(empresa_id):
     """Obtiene métricas del gestor de forma optimizada."""
     try:
@@ -141,8 +125,8 @@ def do_logout():
 def login_view():
     """Pantalla de login con tarjetas de módulos."""
 
-    # ✅ Obtener mensaje de login desde ajustes con caché segura
-    ajustes = get_ajustes_app(["mensaje_login"])
+    # ✅ Obtener mensaje de login desde ajustes (CORREGIDO)
+    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_login"])
     mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales.")
 
     st.markdown("""
@@ -193,206 +177,194 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
     Admin y gestor (admin_empresa) pueden ver módulos activos de su empresa.
     Comercial solo CRM. Alumno nunca ve módulos.
     """
-    # Los alumnos nunca ven módulos
+    if role == "admin":
+        return True  # Admin ve todos los módulos
+
     if role == "alumno":
+        return False  # Alumno no ve módulos empresariales
+
+    if role == "comercial":
+        return key == "crm"  # Comercial solo ve CRM
+
+    # Para gestores
+    if not empresa:
         return False
 
-    if key == "formacion":
-        if not empresa.get("formacion_activo"):
-            return False
-        inicio = empresa.get("formacion_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    if key == "iso":
-        if not empresa.get("iso_activo"):
-            return False
-        inicio = empresa.get("iso_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    if key == "rgpd":
-        if not empresa.get("rgpd_activo"):
-            return False
-        inicio = empresa.get("rgpd_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
     if key == "crm":
-        if not empresa_crm.get("crm_activo"):
+        # CRM requiere verificación especial
+        if not empresa_crm:
             return False
+        crm_activo = empresa_crm.get("crm_activo", False)
+        if not crm_activo:
+            return False
+        # Verificar fechas si existen
         inicio = empresa_crm.get("crm_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
+        fin = empresa_crm.get("crm_fin")
+        if inicio:
+            try:
+                fecha_inicio = datetime.strptime(inicio, "%Y-%m-%d").date()
+                if hoy < fecha_inicio:
+                    return False
+            except (ValueError, TypeError):
+                pass
+        if fin:
+            try:
+                fecha_fin = datetime.strptime(fin, "%Y-%m-%d").date()
+                if hoy > fecha_fin:
+                    return False
+            except (ValueError, TypeError):
+                pass
         return True
-
-    if key == "docu_avanzada":  # ✅ Nuevo módulo
-        if not empresa.get("docu_avanzada_activo"):
-            return False
-        inicio = empresa.get("docu_avanzada_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
-
-    return False
+    else:
+        # Otros módulos verifican directamente en empresa
+        return empresa.get(f"{key}_activo", False)
 
 # =========================
-# Función de tarjetas optimizada
+# Función principal de navegación
 # =========================
-def tarjeta(icono, titulo, descripcion, activo=True, color_activo="#d1fae5"):
-    color = color_activo if activo else "#f3f4f6"
-    return f"""
-    <div style="
-        border-radius: 15px;
-        padding: 20px;
-        margin-bottom: 15px;
-        background-color: {color};
-        box-shadow: 0px 2px 6px rgba(0,0,0,0.1);
-        transition: transform 0.2s ease;
-    ">
-        <h3 style="margin:0; font-size: 1.2em;">{icono} {titulo}</h3>
-        <p style="margin:0; color:#374151; font-size: 0.9em;">{descripcion}</p>
-    </div>
-    """
+def main_app():
+    """Función principal de la aplicación."""
     
-# =========================
-# Sidebar y navegación + Bienvenida
-# =========================
-def route():
-    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
-    st.sidebar.markdown(f"### 👋 Bienvenido, **{nombre_usuario}**")
+    # Verificar autenticación
+    if "auth_session" not in st.session_state or not st.session_state.auth_session:
+        login_view()
+        return
 
-    # Botón de logout mejorado
-    if st.sidebar.button("🚪 Cerrar sesión", key="logout", help="Cerrar sesión y limpiar datos"):
-        do_logout()
+    # Configurar sidebar
+    with st.sidebar:
+        st.markdown("### 👤 Usuario")
+        user_email = st.session_state.user.get("email", "Sin email")
+        user_role = st.session_state.role
+        st.write(f"**Email:** {user_email}")
+        st.write(f"**Rol:** {user_role.title()}")
+        
+        if st.button("🚪 Cerrar sesión"):
+            do_logout()
+            return
 
-    # --- Obtener empresa y módulos ---
+        st.markdown("---")
+
+    # Obtener datos del usuario y empresa
+    rol = st.session_state.role
+    user_id = st.session_state.user.get("id")
     empresa_id = st.session_state.user.get("empresa_id")
+    
+    # Cargar datos de empresa si es gestor
     empresa = {}
     empresa_crm = {}
-    hoy = datetime.today().date()
-    
-    if empresa_id:
+    if rol == "gestor" and empresa_id:
         try:
-            empresa_res = supabase_admin.table("empresas").select(
-                "formacion_activo", "formacion_inicio", "formacion_fin",
-                "iso_activo", "iso_inicio", "iso_fin",
-                "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-                "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin"
-            ).eq("id", empresa_id).execute()
-            empresa = empresa_res.data[0] if empresa_res.data else {}
+            empresa_res = supabase_admin.table("empresas").select("*").eq("id", empresa_id).single().execute()
+            empresa = empresa_res.data or {}
             
-            crm_res = supabase_admin.table("crm_empresas").select(
-                "crm_activo", "crm_inicio", "crm_fin"
-            ).eq("empresa_id", empresa_id).execute()
-            empresa_crm = crm_res.data[0] if crm_res.data else {}
-        except Exception as e:
-            st.sidebar.error(f"⚠️ Error al cargar configuración de empresa: {e}")
+            crm_res = supabase_admin.table("crm_empresas").select("*").eq("empresa_id", empresa_id).single().execute()
+            empresa_crm = crm_res.data or {}
+        except Exception:
+            pass
 
-    st.session_state.empresa = empresa
-    st.session_state.empresa_crm = empresa_crm
+    # Navegación por páginas
+    if "page" not in st.session_state:
+        st.session_state.page = "home"
 
-    rol = st.session_state.role
+    # --- Sidebar de navegación ---
+    with st.sidebar:
+        st.markdown("### 🧭 Navegación")
 
-    # --- Administración SaaS (solo admin) ---
+        # Página de inicio
+        if st.button("🏠 Inicio", key="nav_home"):
+            st.session_state.page = "home"
+
+    # --- Panel de Administración (solo admin) ---
     if rol == "admin":
-        st.sidebar.markdown("#### 🧭 Administración SaaS")
-        base_menu = {
-            "Panel Admin": "panel_admin",
-            "Usuarios y Empresas": "usuarios_empresas",
-            "Empresas": "empresas",
-            "Ajustes de la App": "ajustes_app"
-        }
-        for label, page_key in base_menu.items():
-            if st.sidebar.button(label, key=f"admin_{page_key}_{rol}"):
-                st.session_state.page = page_key
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### ⚙️ Administración")
+            admin_menu = {
+                "Panel de Admin": "panel_admin",
+                "Usuarios y Empresas": "usuarios_empresas",
+                "Empresas": "empresas",
+                "Ajustes de la App": "ajustes_app"
+            }
+            for label, page_key in admin_menu.items():
+                if st.button(label, key=f"admin_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     elif rol == "alumno":
-        st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
-            st.session_state.page = "mis_grupos"
+        with st.sidebar:
+            st.markdown("#### 🎓 Área del Alumno")
+            if st.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
+                st.session_state.page = "mis_grupos"
             
     # --- Panel del Gestor (solo gestores con formación activa) ---
-    if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📊 Panel de Formación")
-        panel_menu = {
-            "Panel del Gestor": "panel_gestor"
-        }
-        for label, page_key in panel_menu.items():
-            if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
-                st.session_state.page = page_key
+    if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", date.today(), rol):
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### 📊 Panel de Formación")
+            panel_menu = {
+                "Panel del Gestor": "panel_gestor"
+            }
+            for label, page_key in panel_menu.items():
+                if st.button(label, key=f"panel_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     # --- Módulo Formación ---
+    hoy = date.today()
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📚 Gestión de Formación")
-        formacion_menu = {
-            "Acciones Formativas": "acciones_formativas",
-            "Grupos": "grupos",
-            "Participantes": "participantes",
-            "Tutores": "tutores",
-            "Documentos": "documentos"
-        }
-        for label, page_key in formacion_menu.items():
-            if st.sidebar.button(label, key=f"formacion_{page_key}_{rol}"):
-                st.session_state.page = page_key
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### 📚 Gestión de Formación")
+            formacion_menu = {
+                "Acciones Formativas": "acciones_formativas",
+                "Grupos": "grupos",
+                "Participantes": "participantes",
+                "Tutores": "tutores",
+                "Documentos": "documentos"
+            }
+            for label, page_key in formacion_menu.items():
+                if st.button(label, key=f"formacion_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     # --- Módulo ISO ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📏 Gestión ISO 9001")
-        iso_menu = {
-            "No Conformidades": "no_conformidades",
-            "Acciones Correctivas": "acciones_correctivas",
-            "Auditorías": "auditorias",
-            "Indicadores": "indicadores",
-            "Dashboard Calidad": "dashboard_calidad",
-            "Objetivos de Calidad": "objetivos_calidad",
-            "Informe Auditoría": "informe_auditoria"
-        }
-        for label, page_key in iso_menu.items():
-            if st.sidebar.button(label, key=f"iso_{page_key}_{rol}"):
-                st.session_state.page = page_key
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### 📋 ISO 9001")
+            iso_menu = {
+                "Auditorías": "auditorias",
+                "Indicadores": "indicadores", 
+                "Informes": "informes_iso"
+            }
+            for label, page_key in iso_menu.items():
+                if st.button(label, key=f"iso_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     # --- Módulo RGPD ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 🛡️ Gestión RGPD")
-        rgpd_menu = {
-            "Panel RGPD": "rgpd_panel",
-            "Tareas RGPD": "rgpd_planner",
-            "Diagnóstico Inicial": "rgpd_inicio",
-            "Tratamientos": "rgpd_tratamientos",
-            "Cláusulas y Consentimientos": "rgpd_consentimientos",
-            "Encargados del Tratamiento": "rgpd_encargados",
-            "Derechos de los Interesados": "rgpd_derechos",
-            "Evaluación de Impacto": "rgpd_evaluacion",
-            "Medidas de Seguridad": "rgpd_medidas",
-            "Incidencias": "rgpd_incidencias"
-        }
-        for label, page_key in rgpd_menu.items():
-            if st.sidebar.button(label, key=f"rgpd_{page_key}_{rol}"):
-                st.session_state.page = page_key
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### 🔐 RGPD")
+            rgpd_menu = {
+                "Consentimientos": "consentimientos",
+                "Tratamientos": "tratamientos",
+                "Registro de Actividades": "registro_actividades"
+            }
+            for label, page_key in rgpd_menu.items():
+                if st.button(label, key=f"rgpd_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     # --- Módulo CRM ---
-    if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📈 Gestión CRM")
-        crm_menu = {
-            "Panel CRM": "crm_panel",
-            "Clientes": "crm_clientes",
-            "Oportunidades": "crm_oportunidades",
-            "Tareas y Seguimiento": "crm_tareas",
-            "Comunicaciones": "crm_comunicaciones",
-            "Estadísticas": "crm_estadisticas"
-        }
-        for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=f"crm_{page_key}_{rol}"):
-                st.session_state.page = page_key
+    if rol in ["admin", "gestor", "comercial"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol):
+        with st.sidebar:
+            st.markdown("---")
+            st.markdown("#### 📈 CRM")
+            crm_menu = {
+                "Clientes": "clientes",
+                "Oportunidades": "oportunidades",
+                "Tareas": "tareas"
+            }
+            for label, page_key in crm_menu.items():
+                if st.button(label, key=f"crm_{page_key}_{rol}"):
+                    st.session_state.page = page_key
 
     # --- Módulo Documentación Avanzada ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
