@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
+from utils import validar_dni_cif
 
 class DataService:
     def __init__(self, supabase, session_state):
