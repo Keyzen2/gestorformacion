@@ -552,10 +552,12 @@ def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancela
 def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Versión de compatibilidad para llamadas antiguas.
-    Ignora el cliente de Supabase que se le pase y usa la caché segura.
+    Ignora el cliente de Supabase que se le pase y usa la caché segura de data_service.
     """
     try:
-        return get_ajustes_app(campos)
+        # Import diferido para evitar import circular
+        from services.data_service import cached_get_ajustes_app
+        return cached_get_ajustes_app(campos)
     except Exception as e:
         st.error(f"⚠️ Error al cargar ajustes: {e}")
         return {}
