@@ -28,6 +28,13 @@ def main(supabase, session_state):
             empresas_dict = data_service.get_empresas_dict()
         else:
             empresas_dict = {}
+        
+        # Debug: verificar qué columnas tenemos - REMOVER después de diagnosticar
+        if not df_grupos.empty:
+            with st.expander("🔍 Debug - Información del DataFrame"):
+                st.write("**Columnas disponibles:**", list(df_grupos.columns))
+                st.write("**Primeras filas:**")
+                st.dataframe(df_grupos.head())
             
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {e}")
@@ -257,10 +264,28 @@ def main(supabase, session_state):
         "n_participantes_previstos": "Número estimado de participantes"
     }
 
-    # Columnas visibles
-    columnas_visibles = ["codigo_grupo", "accion_nombre", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos"]
+    # Columnas visibles - usar solo las que sabemos que existen
+    columnas_base = ["codigo_grupo", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos"]
+    
+    # Añadir columnas opcionales solo si existen
+    columnas_visibles = []
+    for col in columnas_base:
+        if col in df_grupos.columns:
+            columnas_visibles.append(col)
+    
+    # Verificar si tenemos información de acción formativa
+    if "accion_nombre" in df_grupos.columns:
+        columnas_visibles.insert(1, "accion_nombre")
+    elif "accion_formativa_id" in df_grupos.columns:
+        # Si tenemos el ID pero no el nombre, lo añadimos
+        columnas_visibles.insert(1, "accion_formativa_id")
+    
+    # Para admin, añadir empresa si existe
     if session_state.role == "admin":
-        columnas_visibles.insert(2, "empresa_nombre")
+        if "empresa_nombre" in df_grupos.columns:
+            columnas_visibles.insert(2, "empresa_nombre")
+        elif "empresa_id" in df_grupos.columns:
+            columnas_visibles.insert(2, "empresa_id")
 
     # =========================
     # Mostrar interfaz principal
@@ -275,23 +300,25 @@ def main(supabase, session_state):
         # Preparar datos para mostrar
         df_display = df_filtered.copy()
         
-        # Añadir campos para selects - CORREGIDO: problema de indentación
+        # Añadir campos para selects - usar columnas que realmente existen
         if "accion_nombre" in df_display.columns:
             df_display["accion_sel"] = df_display["accion_nombre"]
         else:
-            # Fallback si no existe la columna
-            df_display["accion_sel"] = ""
+            # Si no tenemos accion_nombre, crear un valor por defecto
+            df_display["accion_sel"] = "Acción no disponible"
             
         if session_state.role == "admin" and empresas_dict:
             if "empresa_nombre" in df_display.columns:
                 df_display["empresa_sel"] = df_display["empresa_nombre"]
-            else:
-                # Obtener nombres de empresa
+            elif "empresa_id" in df_display.columns:
+                # Mapear IDs a nombres si tenemos el diccionario
                 empresa_nombres = {}
                 for empresa_id in df_display["empresa_id"].dropna().unique():
-                    empresa_nombre = next((k for k, v in empresas_dict.items() if v == empresa_id), "")
+                    empresa_nombre = next((k for k, v in empresas_dict.items() if v == empresa_id), f"Empresa {empresa_id}")
                     empresa_nombres[empresa_id] = empresa_nombre
-                df_display["empresa_sel"] = df_display["empresa_id"].map(empresa_nombres).fillna("")
+                df_display["empresa_sel"] = df_display["empresa_id"].map(empresa_nombres).fillna("Sin empresa")
+            else:
+                df_display["empresa_sel"] = "Sin empresa"
 
         # Usar el componente listado_con_ficha
         listado_con_ficha(
