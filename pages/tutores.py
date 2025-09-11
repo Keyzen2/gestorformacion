@@ -1,9 +1,8 @@
-# pages/tutores.py - OPTIMIZADO
 import streamlit as st
 import pandas as pd
-from utils import export_csv, validar_dni_cif  # ✅ Usar validaciones de utils
+from utils import export_csv, validar_dni_cif, get_ajustes_app
 from utils import get_ajustes_app
-from components.listado_con_ficha import listado_con_ficha
+from services.data_service import get_data_service
 import uuid
 from datetime import datetime
 
