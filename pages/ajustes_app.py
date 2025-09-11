@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime
+# ✅ IMPORTACIONES CORREGIDAS - Sin cached_get_ajustes_app
 from utils import get_ajustes_app, update_ajustes_app
+from services.data_service import get_data_service
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
@@ -10,7 +12,7 @@ def main(supabase, session_state):
         st.warning("🔒 Solo el administrador global puede acceder a esta sección.")
         return
 
-    # Cargar ajustes actuales con manejo de errores (caché segura)
+    # ✅ CARGAR AJUSTES CON FUNCIÓN CORREGIDA
     try:
         ajustes = get_ajustes_app(supabase)
         if not ajustes:
@@ -504,8 +506,7 @@ def main(supabase, session_state):
     with col1:
         if st.button("🔄 Recargar ajustes", help="Recarga la configuración desde la base de datos"):
             try:
-                if hasattr(_get_ajustes_app, 'clear'):
-                    get_ajustes_app.clear()
+                # Forzar recarga de ajustes
                 st.success("✅ Ajustes recargados correctamente.")
                 st.rerun()
             except Exception as e:
@@ -544,10 +545,32 @@ def main(supabase, session_state):
                         "bienvenida_comercial": "Área Comercial - CRM"
                     }
                     update_ajustes_app(supabase, defaults)
-                    # Invalidar caché para que se recojan los nuevos valores
-                    if hasattr(get_ajustes_app, 'clear'):
-                        get_ajustes_app.clear()
                     st.success("✅ Configuración restablecida a valores por defecto.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al restablecer: {e}")
+
+    # =========================
+    # Monitor de sistema para admin
+    # =========================
+    st.divider()
+    st.markdown("### 📊 Estado del Sistema")
+    
+    try:
+        data_service = get_data_service(supabase, session_state)
+        metricas = data_service.get_metricas_admin()
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🏢 Empresas", metricas.get("total_empresas", "N/A"))
+        with col2:
+            st.metric("👥 Usuarios", metricas.get("total_usuarios", "N/A"))
+        with col3:
+            st.metric("📚 Cursos", metricas.get("total_cursos", "N/A"))
+        with col4:
+            st.metric("👨‍🎓 Grupos", metricas.get("total_grupos", "N/A"))
+    except Exception as e:
+        st.warning(f"No se pudieron cargar las métricas del sistema: {e}")
+
+    st.divider()
+    st.caption("💡 Los cambios en ajustes se aplican inmediatamente y afectan a todos los usuarios.")
