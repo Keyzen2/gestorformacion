@@ -51,14 +51,16 @@ def main(supabase, session_state):
             st.metric("📊 % Activas", "0%")
 
     # =========================
-    # ESTADÍSTICAS DE MÓDULOS
-    # =========================
-    if session_state.role == "admin":
-        st.divider()
-        st.markdown("### 📊 Uso de Módulos por Empresa")
-        
-        try:
-            stats_modulos = data_service.get_estadisticas_modulos()
+# ESTADÍSTICAS DE MÓDULOS
+# =========================
+if session_state.role == "admin":
+    st.divider()
+    st.markdown("### 📊 Uso de Módulos por Empresa")
+    
+    try:
+        # Verificar que tenemos datos de empresas antes de calcular estadísticas
+        if not df_empresas.empty:
+            stats_modulos = data_service.get_estadisticas_modulos(df_empresas)
             
             if stats_modulos:
                 cols = st.columns(len(stats_modulos))
@@ -69,10 +71,15 @@ def main(supabase, session_state):
                         st.metric(
                             f"📋 {modulo}", 
                             f"{activos}",
-                            delta=f"{format_percentage(porcentaje)}"
+                            delta=f"{porcentaje:.1f}%"
                         )
-        except Exception as e:
-            st.warning(f"No se pudieron cargar las estadísticas de módulos: {e}")
+            else:
+                st.info("No hay estadísticas de módulos disponibles.")
+        else:
+            st.info("No hay empresas registradas para mostrar estadísticas de módulos.")
+            
+    except Exception as e:
+        st.warning(f"No se pudieron cargar las estadísticas de módulos: {e}")
 
     # =========================
     # CARGAR DATOS PRINCIPALES
