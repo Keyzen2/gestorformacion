@@ -9,7 +9,7 @@ import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any
 from datetime import date
-# Importaciones diferidas desde utils dentro de las funciones que lo necesiten
+from utils import validar_dni_cif
 
 
 # -------------------------------------------------------------------
@@ -94,9 +94,11 @@ class DataService:
                     right_on="empresa_id",
                     how="left",
                 )
+                # Limpiar columna duplicada
                 if "empresa_id" in df_emp.columns:
                     df_emp = df_emp.drop("empresa_id", axis=1)
             else:
+                # Añadir columnas CRM vacías si no hay datos
                 df_emp["crm_activo"] = False
                 df_emp["crm_inicio"] = None
                 df_emp["crm_fin"] = None
@@ -119,20 +121,29 @@ class DataService:
                     "modulos_activos": 0,
                 }
 
+            # Calcular métricas
             total = len(df)
+
+            # Nuevas este mes
             hoy = pd.Timestamp.now()
             inicio_mes = pd.Timestamp(hoy.year, hoy.month, 1)
             df_fecha = pd.to_datetime(df["created_at"], errors="coerce")
             nuevas = len(df[df_fecha >= inicio_mes])
 
+            # Provincia más común
             if "provincia" in df.columns and not df["provincia"].isna().all():
                 provincia_counts = df["provincia"].value_counts()
                 provincia_top = provincia_counts.index[0] if not provincia_counts.empty else "N/D"
             else:
                 provincia_top = "N/D"
 
+            # Contar módulos activos
             modulos_cols = ["formacion_activo", "iso_activo", "rgpd_activo", "docu_avanzada_activo", "crm_activo"]
-            modulos_totales = sum(df[col].fillna(False).sum() for col in modulos_cols if col in df.columns)
+
+            modulos_totales = 0
+            for col in modulos_cols:
+                if col in df.columns:
+                    modulos_totales += df[col].fillna(False).sum()
 
             return {
                 "total_empresas": total,
@@ -156,9 +167,12 @@ class DataService:
         if query:
             query_lower = query.lower()
             mask = False
+
+            # Columnas para buscar
             for col in ["nombre", "cif", "email", "ciudad", "provincia"]:
                 if col in df_filtered.columns:
                     mask = mask | df_filtered[col].astype(str).str.lower().str.contains(query_lower, na=False)
+
             df_filtered = df_filtered[mask]
 
         # Filtrar por módulo
@@ -170,6 +184,7 @@ class DataService:
                 "CRM": "crm_activo",
                 "Doc. Avanzada": "docu_avanzada_activo",
             }
+
             if modulo_filter in modulo_map and modulo_map[modulo_filter] in df_filtered.columns:
                 df_filtered = df_filtered[df_filtered[modulo_map[modulo_filter]] == True]
 
@@ -192,8 +207,7 @@ class DataService:
                 st.error("⚠️ El CIF de la empresa es obligatorio.")
                 return False
 
-            # Validar CIF (import diferido)
-            from utils import validar_dni_cif
+            # Validar CIF
             cif = datos_empresa.get("cif", "")
             if not validar_dni_cif(cif):
                 st.error(f"⚠️ El CIF {cif} no es válido.")
@@ -210,6 +224,7 @@ class DataService:
 
             # Insertar empresa
             result = _self.supabase.table("empresas").insert(datos_empresa).execute()
+
             if not result.data:
                 st.error("⚠️ Error al crear la empresa.")
                 return False
@@ -219,7 +234,11 @@ class DataService:
             # Crear registro CRM si está activado
             if datos_empresa.get("crm_activo"):
                 crm_data = {"empresa_id": empresa_id, "crm_activo": True}
-                crm_data["crm_inicio"] = datos_empresa.get("crm_inicio") or date.today().isoformat()
+                if datos_empresa.get("crm_inicio"):
+                    crm_data["crm_inicio"] = datos_empresa["crm_inicio"]
+                else:
+                    crm_data["crm_inicio"] = date.today().isoformat()
+
                 _self.supabase.table("crm_empresas").insert(crm_data).execute()
 
             # Limpiar cache de empresas
@@ -235,14 +254,13 @@ class DataService:
     def update_empresa(_self, empresa_id: str, datos_empresa: Dict[str, Any]) -> bool:
         """Actualiza datos de una empresa con validaciones."""
         try:
+            # Verificar permisos
             if _self.rol != "admin":
                 st.error("⚠️ Solo los administradores pueden modificar empresas.")
                 return False
 
             # Validar CIF si se actualiza
             if "cif" in datos_empresa and datos_empresa["cif"]:
-                # Import diferido para evitar bucle
-                from utils import validar_dni_cif
                 cif = datos_empresa["cif"]
                 if not validar_dni_cif(cif):
                     st.error(f"⚠️ El CIF {cif} no es válido.")
@@ -262,6 +280,7 @@ class DataService:
 
             # Obtener datos actuales para verificar cambios en CRM
             empresa_actual = _self.supabase.table("empresas").select("*").eq("id", empresa_id).execute()
+
             if not empresa_actual.data:
                 st.error("⚠️ No se encontró la empresa para actualizar.")
                 return False
@@ -275,17 +294,22 @@ class DataService:
             crm_fields = ["crm_activo", "crm_inicio", "crm_fin"]
             if any(field in datos_empresa for field in crm_fields):
                 crm_data = {k: v for k, v in datos_empresa.items() if k in crm_fields}
+
+                # Comprobar si ya existe un registro CRM
                 crm_check = _self.supabase.table("crm_empresas").select("id").eq("empresa_id", empresa_id).execute()
 
                 if crm_check.data:
+                    # Actualizar registro existente
                     _self.supabase.table("crm_empresas").update(crm_data).eq("empresa_id", empresa_id).execute()
                 elif datos_empresa.get("crm_activo"):
+                    # Crear nuevo registro
                     crm_data["empresa_id"] = empresa_id
                     _self.supabase.table("crm_empresas").insert(crm_data).execute()
 
             # Limpiar cache
             _self.get_empresas_con_modulos.clear()
             _self.get_metricas_empresas.clear()
+
             return True
 
         except Exception as e:
@@ -360,7 +384,7 @@ class DataService:
                     """
                     id, email, nombre_completo, role, telefono, created_at, 
                     ultimo_acceso, empresa_id, empresa:empresas(nombre)
-                    """
+                """
                 )
             else:
                 query = _self.supabase.table("usuarios").select("*")
@@ -396,7 +420,7 @@ class DataService:
                 accion:acciones_formativas(id, nombre, area_profesional),
                 empresa:empresas(id, nombre),
                 tutor:tutores(id, nombre, apellidos)
-                """
+            """
             )
 
             # Aplicar filtro por empresa para gestores
@@ -442,7 +466,7 @@ class DataService:
                 nivel_estudios, situacion_laboral, grupo_id, asistencia, evaluacion,
                 created_at, updated_at, empresa_id,
                 grupo:grupos(id, codigo_grupo, accion_id, accion:acciones_formativas(nombre))
-                """
+            """
             )
 
             # Aplicar filtro por empresa para gestores
@@ -467,342 +491,32 @@ class DataService:
             return _self._handle_query_error("cargar participantes completos", e)
 
     # =========================
-# MÉTODOS PARA TUTORES (AÑADIR al DataService existente)
-# =========================
-
-@st.cache_data(ttl=300)
-def get_tutores_completos(_self) -> pd.DataFrame:
-    """Obtiene tutores con información de empresa."""
-    try:
-        query = _self.supabase.table("tutores").select("""
-            id, nombre, apellidos, email, telefono, nif, tipo_tutor,
-            direccion, ciudad, provincia, codigo_postal, cv_url, 
-            especialidad, created_at, empresa_id,
-            empresa:empresas(id, nombre)
-        """)
-        query = _self._apply_empresa_filter(query, "tutores")
-        
-        res = query.order("nombre").execute()
-        df = pd.DataFrame(res.data or [])
-        
-        # Aplanar empresa
-        if not df.empty and "empresa" in df.columns:
-            df["empresa_nombre"] = df["empresa"].apply(
-                lambda x: x.get("nombre") if isinstance(x, dict) else ""
+    # TUTORES
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_tutores(_self) -> pd.DataFrame:
+        """Obtiene lista completa de tutores."""
+        try:
+            query = _self.supabase.table("tutores").select(
+                """
+                id, nombre, apellidos, email, telefono, nif, tipo_tutor,
+                direccion, ciudad, provincia, codigo_postal, cv_url, 
+                especialidad, created_at,
+                empresa:empresas(id, nombre)
+            """
             )
-        else:
-            df["empresa_nombre"] = ""
-        
-        return df
-    except Exception as e:
-        return _self._handle_query_error("cargar tutores", e)
+            query = _self._apply_empresa_filter(query, "tutores")
 
-def create_tutor(_self, data: Dict[str, Any]) -> bool:
-    """Crea un nuevo tutor."""
-    try:
-        # Validaciones básicas
-        if not data.get("nombre") or not data.get("apellidos"):
-            st.error("⚠️ Nombre y apellidos son obligatorios.")
-            return False
-        
-        if not data.get("tipo_tutor"):
-            st.error("⚠️ Tipo de tutor es obligatorio.")
-            return False
-        
-        # Verificar permisos
-        if _self.rol == "gestor" and not _self.empresa_id:
-            st.error("⚠️ Error: Gestor sin empresa asignada.")
-            return False
-        
-        # Asegurar empresa_id para gestores
-        if _self.rol == "gestor":
-            data["empresa_id"] = _self.empresa_id
-        
-        # Verificar si ya existe tutor con mismo email
-        if data.get("email"):
-            existing = _self.supabase.table("tutores").select("id").eq("email", data["email"]).execute()
-            if existing.data:
-                st.error("⚠️ Ya existe un tutor con este email.")
-                return False
-        
-        # Crear tutor
-        data["created_at"] = datetime.now().isoformat()
-        res = _self.supabase.table("tutores").insert(data).execute()
-        
-        if res.data:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            st.error("❌ Error al crear tutor.")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al crear tutor: {e}")
-        return False
+            res = query.order("nombre").execute()
+            df = pd.DataFrame(res.data or [])
 
-def update_tutor(_self, tutor_id: str, data: Dict[str, Any]) -> bool:
-    """Actualiza un tutor existente."""
-    try:
-        # Verificar permisos
-        if _self.rol == "gestor":
-            # Verificar que el tutor pertenece a su empresa
-            tutor_check = _self.supabase.table("tutores").select("empresa_id").eq("id", tutor_id).execute()
-            if not tutor_check.data or tutor_check.data[0]["empresa_id"] != _self.empresa_id:
-                st.error("⚠️ No tienes permisos para editar este tutor.")
-                return False
-        
-        # Verificar email único (excluyendo el tutor actual)
-        if data.get("email"):
-            existing = _self.supabase.table("tutores").select("id").eq("email", data["email"]).neq("id", tutor_id).execute()
-            if existing.data:
-                st.error("⚠️ Ya existe otro tutor con este email.")
-                return False
-        
-        # Actualizar
-        data["updated_at"] = datetime.now().isoformat()
-        res = _self.supabase.table("tutores").update(data).eq("id", tutor_id).execute()
-        
-        if res.data:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            st.error("❌ Error al actualizar tutor.")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al actualizar tutor: {e}")
-        return False
+            # Aplanar empresa
+            if not df.empty and "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
 
-def delete_tutor(_self, tutor_id: str) -> bool:
-    """Elimina un tutor."""
-    try:
-        # Verificar permisos
-        if _self.rol == "gestor":
-            tutor_check = _self.supabase.table("tutores").select("empresa_id").eq("id", tutor_id).execute()
-            if not tutor_check.data or tutor_check.data[0]["empresa_id"] != _self.empresa_id:
-                st.error("⚠️ No tienes permisos para eliminar este tutor.")
-                return False
-        
-        # Verificar si tiene asignaciones
-        assignments = _self.supabase.table("tutores_grupos").select("id").eq("tutor_id", tutor_id).execute()
-        if assignments.data:
-            st.error("⚠️ No se puede eliminar: el tutor tiene grupos asignados.")
-            return False
-        
-        # Eliminar
-        res = _self.supabase.table("tutores").delete().eq("id", tutor_id).execute()
-        
-        if res.data is not None:  # Supabase delete devuelve [] en éxito
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            st.error("❌ Error al eliminar tutor.")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al eliminar tutor: {e}")
-        return False
-
-# =========================
-# MÉTODOS PARA ASIGNACIONES TUTOR-GRUPO
-# =========================
-
-def assign_tutor_to_grupo(_self, tutor_id: str, grupo_id: str) -> bool:
-    """Asigna un tutor a un grupo."""
-    try:
-        # Verificar que no existe ya la asignación
-        existing = _self.supabase.table("tutores_grupos").select("id").eq("tutor_id", tutor_id).eq("grupo_id", grupo_id).execute()
-        if existing.data:
-            return False  # Ya existe
-        
-        # Verificar permisos de empresa
-        if _self.rol == "gestor":
-            # Verificar que tanto tutor como grupo pertenecen a su empresa
-            tutor_check = _self.supabase.table("tutores").select("empresa_id").eq("id", tutor_id).execute()
-            grupo_check = _self.supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
-            
-            if (not tutor_check.data or tutor_check.data[0]["empresa_id"] != _self.empresa_id or
-                not grupo_check.data or grupo_check.data[0]["empresa_id"] != _self.empresa_id):
-                st.error("⚠️ No tienes permisos para esta asignación.")
-                return False
-        
-        # Crear asignación
-        data = {
-            "tutor_id": tutor_id,
-            "grupo_id": grupo_id,
-            "created_at": datetime.now().isoformat()
-        }
-        
-        res = _self.supabase.table("tutores_grupos").insert(data).execute()
-        
-        if res.data:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al asignar tutor: {e}")
-        return False
-
-def remove_tutor_from_grupo(_self, assignment_id: str) -> bool:
-    """Elimina asignación de tutor a grupo."""
-    try:
-        # Verificar permisos si es gestor
-        if _self.rol == "gestor":
-            # Verificar que la asignación pertenece a su empresa
-            assignment_check = _self.supabase.table("tutores_grupos").select("""
-                id, tutor:tutores(empresa_id), grupo:grupos(empresa_id)
-            """).eq("id", assignment_id).execute()
-            
-            if (not assignment_check.data or 
-                assignment_check.data[0]["tutor"]["empresa_id"] != _self.empresa_id or
-                assignment_check.data[0]["grupo"]["empresa_id"] != _self.empresa_id):
-                st.error("⚠️ No tienes permisos para eliminar esta asignación.")
-                return False
-        
-        # Eliminar asignación
-        res = _self.supabase.table("tutores_grupos").delete().eq("id", assignment_id).execute()
-        
-        if res.data is not None:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al eliminar asignación: {e}")
-        return False
-
-@st.cache_data(ttl=300)
-def get_tutor_group_assignments(_self) -> pd.DataFrame:
-    """Obtiene asignaciones de tutores a grupos."""
-    try:
-        query = _self.supabase.table("tutores_grupos").select("""
-            id, created_at,
-            tutor:tutores(id, nombre, apellidos, tipo_tutor, empresa_id),
-            grupo:grupos(id, codigo_grupo, empresa_id, accion_formativa:acciones_formativas(nombre))
-        """)
-        
-        res = query.execute()
-        data = res.data or []
-        
-        # Filtrar por empresa si es gestor
-        if _self.rol == "gestor" and _self.empresa_id:
-            data = [
-                asig for asig in data 
-                if (asig.get("tutor", {}).get("empresa_id") == _self.empresa_id and 
-                    asig.get("grupo", {}).get("empresa_id") == _self.empresa_id)
-            ]
-        
-        # Aplanar datos para DataFrame
-        assignments = []
-        for asig in data:
-            tutor = asig.get("tutor", {})
-            grupo = asig.get("grupo", {})
-            accion = grupo.get("accion_formativa", {}) if grupo else {}
-            
-            assignments.append({
-                "id": asig["id"],
-                "created_at": asig["created_at"],
-                "tutor_id": tutor.get("id"),
-                "tutor_nombre": tutor.get("nombre", ""),
-                "tutor_apellidos": tutor.get("apellidos", ""),
-                "tutor_tipo": tutor.get("tipo_tutor", ""),
-                "grupo_id": grupo.get("id"),
-                "grupo_codigo": grupo.get("codigo_grupo", ""),
-                "accion_nombre": accion.get("nombre", "Sin acción")
-            })
-        
-        return pd.DataFrame(assignments)
-        
-    except Exception as e:
-        return _self._handle_query_error("cargar asignaciones tutor-grupo", e)
-
-# =========================
-# MÉTODOS PARA PARTICIPANTES FALTANTES (si no existen)
-# =========================
-
-def create_participante(_self, data: Dict[str, Any]) -> bool:
-    """Crea un nuevo participante."""
-    try:
-        # Validaciones básicas
-        if not data.get("email"):
-            st.error("⚠️ Email es obligatorio.")
-            return False
-        
-        if not data.get("nombre") or not data.get("apellidos"):
-            st.error("⚠️ Nombre y apellidos son obligatorios.")
-            return False
-        
-        # Verificar permisos
-        if _self.rol == "gestor" and not _self.empresa_id:
-            st.error("⚠️ Error: Gestor sin empresa asignada.")
-            return False
-        
-        # Asegurar empresa_id para gestores
-        if _self.rol == "gestor":
-            data["empresa_id"] = _self.empresa_id
-        
-        # Verificar email único
-        existing = _self.supabase.table("participantes").select("id").eq("email", data["email"]).execute()
-        if existing.data:
-            st.error("⚠️ Ya existe un participante con este email.")
-            return False
-        
-        # Crear participante
-        data["created_at"] = datetime.now().isoformat()
-        res = _self.supabase.table("participantes").insert(data).execute()
-        
-        if res.data:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            st.error("❌ Error al crear participante.")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al crear participante: {e}")
-        return False
-
-def update_participante(_self, participante_id: str, data: Dict[str, Any]) -> bool:
-    """Actualiza un participante existente."""
-    try:
-        # Verificar permisos
-        if _self.rol == "gestor":
-            participante_check = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
-            if not participante_check.data or participante_check.data[0]["empresa_id"] != _self.empresa_id:
-                st.error("⚠️ No tienes permisos para editar este participante.")
-                return False
-        
-        # Verificar email único (excluyendo el participante actual)
-        if data.get("email"):
-            existing = _self.supabase.table("participantes").select("id").eq("email", data["email"]).neq("id", participante_id).execute()
-            if existing.data:
-                st.error("⚠️ Ya existe otro participante con este email.")
-                return False
-        
-        # Actualizar
-        data["updated_at"] = datetime.now().isoformat()
-        res = _self.supabase.table("participantes").update(data).eq("id", participante_id).execute()
-        
-        if res.data:
-            # Invalidar cache
-            st.cache_data.clear()
-            return True
-        else:
-            st.error("❌ Error al actualizar participante.")
-            return False
-            
-    except Exception as e:
-        st.error(f"❌ Error al actualizar participante: {e}")
-        return False
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar tutores", e)
 
     # =========================
     # DOCUMENTOS
@@ -869,8 +583,9 @@ def update_participante(_self, participante_id: str, data: Dict[str, Any]) -> bo
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
     # =========================
-    # AJUSTES (método sin cache en self para evitar hashing)
+    # AJUSTES
     # =========================
+    # Importante: SIN decorador @st.cache_data para evitar hashing de self
     def get_ajustes_app(_self, campos: Optional[str] = None) -> Dict[str, Any]:
         """Obtiene ajustes de la aplicación (sin cache de Streamlit para evitar Unhashable)."""
         try:
@@ -882,8 +597,10 @@ def update_participante(_self, participante_id: str, data: Dict[str, Any]) -> bo
                 query = query.select(",".join(campos_lista))
 
             res = query.single().execute()
+
             if not res.data:
                 return {}
+
             return res.data
 
         except Exception as e:
