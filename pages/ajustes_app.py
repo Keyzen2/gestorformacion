@@ -1,438 +1,555 @@
 import streamlit as st
-import json
 from datetime import datetime
-from utils import get_ajustes_app, update_ajustes_app
+# Dejamos de usar utils.get_ajustes_app para evitar cache con objetos no-hasheables
+from services.data_service import cached_get_ajustes_app
+from utils import update_ajustes_app
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
-    st.caption("Personaliza la apariencia y configuración de la aplicación.")
+    st.caption("Configura los textos, apariencia y comportamiento global de la plataforma.")
 
     if session_state.role != "admin":
-        st.warning("🔒 Solo los administradores pueden acceder a esta sección.")
+        st.warning("🔒 Solo el administrador global puede acceder a esta sección.")
         return
 
-    # Cargar ajustes actuales
-    ajustes_actuales = get_ajustes_app(supabase)
+    # Cargar ajustes actuales con manejo de errores (caché segura)
+    try:
+        ajustes = cached_get_ajustes_app()
+        if not ajustes:
+            ajustes = {}
+    except Exception as e:
+        st.error(f"⚠️ Error al cargar ajustes: {e}")
+        ajustes = {}
 
-    # Crear tabs para organizar la configuración
-    tab1, tab2, tab3, tab4 = st.tabs(["🎨 Apariencia", "📝 Mensajes", "🏢 Branding", "⚙️ Avanzado"])
+    # =========================
+    # CSS para preview en tiempo real
+    # =========================
+    st.markdown("""
+    <style>
+    .preview-card {
+        border: 2px solid #e1e5e9;
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .color-preview {
+        width: 40px;
+        height: 20px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-left: 10px;
+        border: 1px solid #ccc;
+    }
+    
+    .branding-preview {
+        text-align: center;
+        padding: 20px;
+        border-radius: 10px;
+        margin: 10px 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    # ===============================
-    # TAB 1: APARIENCIA
-    # ===============================
+    # =========================
+    # Tabs para organizar mejor
+    # =========================
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🎨 Branding", 
+        "📝 Textos Generales", 
+        "🏷️ Textos por Rol",
+        "🔄 Vista Previa"
+    ])
+
+    # =========================
+    # TAB 1: BRANDING Y APARIENCIA
+    # =========================
     with tab1:
-        st.markdown("### 🎨 Colores de la Aplicación")
-        st.caption("Personaliza la paleta de colores del sistema.")
-
-        col1, col2 = st.columns(2)
+        st.subheader("🎨 Branding y Apariencia")
         
-        with col1:
-            color_primario = st.color_picker(
-                "Color Primario", 
-                value=ajustes_actuales.get("color_primario", "#4285F4"),
-                help="Color principal usado en botones y elementos destacados"
+        with st.form("branding_form"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 📱 Identidad de marca")
+                nombre_app = st.text_input(
+                    "Nombre visible de la app", 
+                    value=ajustes.get("nombre_app", "Gestor de Formación"),
+                    help="Nombre que aparece en el título y en todo el sistema"
+                )
+                
+                logo_url = st.text_input(
+                    "URL del logo", 
+                    value=ajustes.get("logo_url", ""),
+                    help="URL completa del logo (ej: https://ejemplo.com/logo.png)"
+                )
+                
+                favicon_url = st.text_input(
+                    "URL del favicon", 
+                    value=ajustes.get("favicon_url", ""),
+                    help="Icono que aparece en la pestaña del navegador"
+                )
+
+            with col2:
+                st.markdown("#### 🎨 Colores del sistema")
+                color_primario = st.color_picker(
+                    "Color primario", 
+                    value=ajustes.get("color_primario", "#4285F4"),
+                    help="Color principal de la interfaz"
+                )
+                st.markdown(f'<div class="color-preview" style="background-color: {color_primario};"></div>', unsafe_allow_html=True)
+                
+                color_secundario = st.color_picker(
+                    "Color secundario", 
+                    value=ajustes.get("color_secundario", "#5f6368"),
+                    help="Color para elementos secundarios"
+                )
+                st.markdown(f'<div class="color-preview" style="background-color: {color_secundario};"></div>', unsafe_allow_html=True)
+                
+                color_exito = st.color_picker(
+                    "Color de éxito", 
+                    value=ajustes.get("color_exito", "#10b981"),
+                    help="Color para mensajes de éxito"
+                )
+                
+                color_advertencia = st.color_picker(
+                    "Color de advertencia", 
+                    value=ajustes.get("color_advertencia", "#f59e0b"),
+                    help="Color para advertencias"
+                )
+                
+                color_error = st.color_picker(
+                    "Color de error", 
+                    value=ajustes.get("color_error", "#ef4444"),
+                    help="Color para mensajes de error"
+                )
+
+            st.markdown("#### 🌐 Configuración adicional")
+            tema_oscuro = st.checkbox(
+                "Habilitar tema oscuro por defecto", 
+                value=ajustes.get("tema_oscuro", False),
+                help="Los usuarios pueden cambiar entre temas claro/oscuro"
             )
             
-            color_exito = st.color_picker(
-                "Color Éxito", 
-                value=ajustes_actuales.get("color_exito", "#0F9D58"),
-                help="Color usado para mensajes de éxito"
+            mostrar_logo_sidebar = st.checkbox(
+                "Mostrar logo en barra lateral", 
+                value=ajustes.get("mostrar_logo_sidebar", True),
+                help="Mostrar el logo en la barra lateral de navegación"
             )
+
+            guardar_branding = st.form_submit_button("💾 Guardar configuración de marca", use_container_width=True)
             
-            color_error = st.color_picker(
-                "Color Error", 
-                value=ajustes_actuales.get("color_error", "#F44336"),
-                help="Color usado para mensajes de error"
-            )
+            if guardar_branding:
+                try:
+                    branding_data = {
+                        "nombre_app": nombre_app,
+                        "logo_url": logo_url,
+                        "favicon_url": favicon_url,
+                        "color_primario": color_primario,
+                        "color_secundario": color_secundario,
+                        "color_exito": color_exito,
+                        "color_advertencia": color_advertencia,
+                        "color_error": color_error,
+                        "tema_oscuro": tema_oscuro,
+                        "mostrar_logo_sidebar": mostrar_logo_sidebar
+                    }
+                    update_ajustes_app(supabase, branding_data)
+                    st.success("✅ Configuración de marca actualizada correctamente.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar: {e}")
 
-        with col2:
-            color_secundario = st.color_picker(
-                "Color Secundario", 
-                value=ajustes_actuales.get("color_secundario", "#34A853"),
-                help="Color secundario usado en elementos de soporte"
-            )
-            
-            color_advertencia = st.color_picker(
-                "Color Advertencia", 
-                value=ajustes_actuales.get("color_advertencia", "#FF9800"),
-                help="Color usado para mensajes de advertencia"
-            )
-
-        # Vista previa de colores
-        st.markdown("#### 🔍 Vista Previa")
-        col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.markdown(f"""
-            <div style="background-color: {color_primario}; color: white; padding: 10px; 
-                        border-radius: 5px; text-align: center; margin: 5px 0;">
-                Primario
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div style="background-color: {color_secundario}; color: white; padding: 10px; 
-                        border-radius: 5px; text-align: center; margin: 5px 0;">
-                Secundario
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            st.markdown(f"""
-            <div style="background-color: {color_exito}; color: white; padding: 10px; 
-                        border-radius: 5px; text-align: center; margin: 5px 0;">
-                Éxito
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col4:
-            st.markdown(f"""
-            <div style="background-color: {color_advertencia}; color: white; padding: 10px; 
-                        border-radius: 5px; text-align: center; margin: 5px 0;">
-                Advertencia
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col5:
-            st.markdown(f"""
-            <div style="background-color: {color_error}; color: white; padding: 10px; 
-                        border-radius: 5px; text-align: center; margin: 5px 0;">
-                Error
-            </div>
-            """, unsafe_allow_html=True)
-
-        # Opciones de tema
-        st.markdown("### 🌙 Tema")
-        tema_oscuro = st.checkbox(
-            "Activar tema oscuro", 
-            value=ajustes_actuales.get("tema_oscuro", False),
-            help="Aplica un tema oscuro a la aplicación"
-        )
-
-    # ===============================
-    # TAB 2: MENSAJES PERSONALIZADOS
-    # ===============================
+    # =========================
+    # TAB 2: TEXTOS GENERALES
+    # =========================
     with tab2:
-        st.markdown("### 📝 Mensajes por Rol de Usuario")
-        st.caption("Personaliza los mensajes que ven los usuarios según su rol.")
-
-        mensaje_login = st.text_area(
-            "Mensaje de Login",
-            value=ajustes_actuales.get("mensaje_login", "Accede al gestor con tus credenciales."),
-            help="Mensaje mostrado en la pantalla de login",
-            height=100
-        )
-
-        col1, col2 = st.columns(2)
+        st.subheader("📝 Textos Generales del Sistema")
         
-        with col1:
-            mensaje_admin = st.text_area(
-                "Mensaje para Administradores",
-                value=ajustes_actuales.get("mensaje_admin", "Panel de administración completo."),
-                help="Mensaje de bienvenida para administradores",
-                height=80
+        with st.form("textos_generales"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 🔐 Pantalla de login")
+                mensaje_login = st.text_area(
+                    "Mensaje de bienvenida", 
+                    value=ajustes.get("mensaje_login", "Accede al gestor con tus credenciales."),
+                    height=100,
+                    help="Mensaje que aparece en la pantalla de inicio de sesión"
+                )
+                
+                instrucciones_login = st.text_area(
+                    "Instrucciones adicionales", 
+                    value=ajustes.get("instrucciones_login", ""),
+                    height=80,
+                    help="Instrucciones extra para el login (opcional)"
+                )
+
+            with col2:
+                st.markdown("#### 📄 Pie de página y legal")
+                mensaje_footer = st.text_area(
+                    "Texto del pie de página", 
+                    value=ajustes.get("mensaje_footer", "© 2025 Gestor de Formación · Streamlit + Supabase"),
+                    height=100,
+                    help="Texto que aparece en el pie de todas las páginas"
+                )
+                
+                aviso_legal = st.text_area(
+                    "Aviso legal/privacidad", 
+                    value=ajustes.get("aviso_legal", ""),
+                    height=80,
+                    help="Enlace o texto legal (opcional)"
+                )
+
+            st.markdown("#### 📧 Configuración de notificaciones")
+            email_soporte = st.text_input(
+                "Email de soporte", 
+                value=ajustes.get("email_soporte", ""),
+                help="Email para contacto de soporte técnico"
             )
             
-            mensaje_alumno = st.text_area(
-                "Mensaje para Alumnos",
-                value=ajustes_actuales.get("mensaje_alumno", "Accede a tus cursos y diplomas."),
-                help="Mensaje de bienvenida para alumnos",
-                height=80
+            telefono_soporte = st.text_input(
+                "Teléfono de soporte", 
+                value=ajustes.get("telefono_soporte", ""),
+                help="Teléfono para soporte (opcional)"
             )
 
-        with col2:
-            mensaje_gestor = st.text_area(
-                "Mensaje para Gestores",
-                value=ajustes_actuales.get("mensaje_gestor", "Gestiona tu empresa de forma eficiente."),
-                help="Mensaje de bienvenida para gestores",
-                height=80
-            )
+            guardar_generales = st.form_submit_button("💾 Guardar textos generales", use_container_width=True)
+            
+            if guardar_generales:
+                try:
+                    generales_data = {
+                        "mensaje_login": mensaje_login,
+                        "instrucciones_login": instrucciones_login,
+                        "mensaje_footer": mensaje_footer,
+                        "aviso_legal": aviso_legal,
+                        "email_soporte": email_soporte,
+                        "telefono_soporte": telefono_soporte
+                    }
+                    update_ajustes_app(supabase, generales_data)
+                    st.success("✅ Textos generales actualizados.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al guardar: {e}")
 
-        # Vista previa de mensajes
-        st.markdown("#### 🔍 Vista Previa de Mensajes")
-        
-        with st.expander("👁️ Ver como aparecerán los mensajes"):
-            st.info(f"**Login:** {mensaje_login}")
-            st.success(f"**Admin:** {mensaje_admin}")
-            st.info(f"**Gestor:** {mensaje_gestor}")
-            st.warning(f"**Alumno:** {mensaje_alumno}")
-
-    # ===============================
-    # TAB 3: BRANDING
-    # ===============================
+    # =========================
+    # TAB 3: TEXTOS POR ROL
+    # =========================
     with tab3:
-        st.markdown("### 🏢 Identidad Corporativa")
-        st.caption("Configura logos, favicon y elementos de marca.")
-
-        col1, col2 = st.columns(2)
+        st.subheader("🏷️ Personalización por Rol de Usuario")
         
-        with col1:
-            logo_url = st.text_input(
-                "URL del Logo",
-                value=ajustes_actuales.get("logo_url", ""),
-                help="URL completa del logo de la empresa (opcional)"
-            )
-            
-            if logo_url:
-                try:
-                    st.image(logo_url, width=200, caption="Vista previa del logo")
-                except Exception:
-                    st.warning("No se pudo cargar la imagen. Verifica la URL.")
+        # Sub-tabs para cada rol
+        subtab1, subtab2, subtab3, subtab4 = st.tabs([
+            "👑 Admin", "🏢 Gestor", "🎓 Alumno", "📊 Comercial"
+        ])
+        
+        with subtab1:
+            with st.form("textos_admin"):
+                st.markdown("#### 👑 Textos para Administradores")
+                
+                bienvenida_admin = st.text_area(
+                    "Mensaje de bienvenida", 
+                    value=ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
+                    help="Título que ve el admin en la página principal"
+                )
+                
+                tarjeta_admin_usuarios = st.text_area(
+                    "Descripción - Gestión de Usuarios", 
+                    value=ajustes.get("tarjeta_admin_usuarios", "Alta, gestión y permisos de usuarios."),
+                    help="Texto explicativo del módulo de usuarios"
+                )
+                
+                tarjeta_admin_empresas = st.text_area(
+                    "Descripción - Gestión de Empresas", 
+                    value=ajustes.get("tarjeta_admin_empresas", "Gestión de empresas y sus módulos."),
+                    help="Texto explicativo del módulo de empresas"
+                )
+                
+                tarjeta_admin_ajustes = st.text_area(
+                    "Descripción - Ajustes Globales", 
+                    value=ajustes.get("tarjeta_admin_ajustes", "Configuración global de la aplicación."),
+                    help="Texto explicativo de los ajustes del sistema"
+                )
 
-        with col2:
-            favicon_url = st.text_input(
-                "URL del Favicon",
-                value=ajustes_actuales.get("favicon_url", ""),
-                help="URL del favicon (.ico o .png de 32x32px)"
-            )
-            
-            if favicon_url:
-                try:
-                    st.image(favicon_url, width=32, caption="Vista previa del favicon")
-                except Exception:
-                    st.warning("No se pudo cargar el favicon. Verifica la URL.")
+                guardar_admin = st.form_submit_button("💾 Guardar textos de Admin")
+                if guardar_admin:
+                    try:
+                        admin_data = {
+                            "bienvenida_admin": bienvenida_admin,
+                            "tarjeta_admin_usuarios": tarjeta_admin_usuarios,
+                            "tarjeta_admin_empresas": tarjeta_admin_empresas,
+                            "tarjeta_admin_ajustes": tarjeta_admin_ajustes
+                        }
+                        update_ajustes_app(supabase, admin_data)
+                        st.success("✅ Textos de Admin actualizados.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar: {e}")
 
-        # Información adicional
-        st.markdown("#### ℹ️ Consejos para el Branding")
-        st.markdown("""
-        - **Logo**: Usa formato PNG o SVG para mejor calidad
-        - **Tamaño recomendado**: 200-300px de ancho
-        - **Favicon**: Formato ICO o PNG de 32x32 píxeles
-        - **URLs**: Deben ser accesibles públicamente (no archivos locales)
-        """)
+        with subtab2:
+            with st.form("textos_gestor"):
+                st.markdown("#### 🏢 Textos para Gestores")
+                
+                bienvenida_gestor = st.text_area(
+                    "Mensaje de bienvenida", 
+                    value=ajustes.get("bienvenida_gestor", "Panel del Gestor"),
+                    help="Título que ve el gestor en la página principal"
+                )
+                
+                tarjeta_gestor_grupos = st.text_area(
+                    "Descripción - Gestión de Grupos", 
+                    value=ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."),
+                    help="Texto explicativo del módulo de grupos"
+                )
+                
+                tarjeta_gestor_documentos = st.text_area(
+                    "Descripción - Documentación Básica", 
+                    value=ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación de formación."),
+                    help="Texto explicativo del módulo de documentos"
+                )
+                
+                tarjeta_gestor_docu_avanzada = st.text_area(
+                    "Descripción - Documentación Avanzada", 
+                    value=ajustes.get("tarjeta_gestor_docu_avanzada", "Repositorio documental transversal por empresa, grupo o usuario."),
+                    help="Texto explicativo del módulo avanzado de documentos"
+                )
 
-    # ===============================
-    # TAB 4: CONFIGURACIÓN AVANZADA
-    # ===============================
+                guardar_gestor = st.form_submit_button("💾 Guardar textos de Gestor")
+                if guardar_gestor:
+                    try:
+                        gestor_data = {
+                            "bienvenida_gestor": bienvenida_gestor,
+                            "tarjeta_gestor_grupos": tarjeta_gestor_grupos,
+                            "tarjeta_gestor_documentos": tarjeta_gestor_documentos,
+                            "tarjeta_gestor_docu_avanzada": tarjeta_gestor_docu_avanzada
+                        }
+                        update_ajustes_app(supabase, gestor_data)
+                        st.success("✅ Textos de Gestor actualizados.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar: {e}")
+
+        with subtab3:
+            with st.form("textos_alumno"):
+                st.markdown("#### 🎓 Textos para Alumnos")
+                
+                bienvenida_alumno = st.text_area(
+                    "Mensaje de bienvenida", 
+                    value=ajustes.get("bienvenida_alumno", "Área del Alumno"),
+                    help="Título que ve el alumno en la página principal"
+                )
+                
+                tarjeta_alumno_grupos = st.text_area(
+                    "Descripción - Mis Grupos", 
+                    value=ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."),
+                    help="Texto explicativo de la consulta de grupos"
+                )
+                
+                tarjeta_alumno_diplomas = st.text_area(
+                    "Descripción - Mis Diplomas", 
+                    value=ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."),
+                    help="Texto explicativo de la descarga de diplomas"
+                )
+                
+                tarjeta_alumno_seguimiento = st.text_area(
+                    "Descripción - Mi Seguimiento", 
+                    value=ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."),
+                    help="Texto explicativo del seguimiento formativo"
+                )
+
+                guardar_alumno = st.form_submit_button("💾 Guardar textos de Alumno")
+                if guardar_alumno:
+                    try:
+                        alumno_data = {
+                            "bienvenida_alumno": bienvenida_alumno,
+                            "tarjeta_alumno_grupos": tarjeta_alumno_grupos,
+                            "tarjeta_alumno_diplomas": tarjeta_alumno_diplomas,
+                            "tarjeta_alumno_seguimiento": tarjeta_alumno_seguimiento
+                        }
+                        update_ajustes_app(supabase, alumno_data)
+                        st.success("✅ Textos de Alumno actualizados.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar: {e}")
+
+        with subtab4:
+            with st.form("textos_comercial"):
+                st.markdown("#### 📊 Textos para Comerciales")
+                
+                bienvenida_comercial = st.text_area(
+                    "Mensaje de bienvenida", 
+                    value=ajustes.get("bienvenida_comercial", "Área Comercial - CRM"),
+                    help="Título que ve el comercial en la página principal"
+                )
+                
+                tarjeta_comercial_clientes = st.text_area(
+                    "Descripción - Gestión de Clientes", 
+                    value=ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."),
+                    help="Texto explicativo del módulo de clientes"
+                )
+                
+                tarjeta_comercial_oportunidades = st.text_area(
+                    "Descripción - Oportunidades de Venta", 
+                    value=ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."),
+                    help="Texto explicativo del módulo de oportunidades"
+                )
+                
+                tarjeta_comercial_tareas = st.text_area(
+                    "Descripción - Gestión de Tareas", 
+                    value=ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."),
+                    help="Texto explicativo del módulo de tareas comerciales"
+                )
+
+                guardar_comercial = st.form_submit_button("💾 Guardar textos de Comercial")
+                if guardar_comercial:
+                    try:
+                        comercial_data = {
+                            "bienvenida_comercial": bienvenida_comercial,
+                            "tarjeta_comercial_clientes": tarjeta_comercial_clientes,
+                            "tarjeta_comercial_oportunidades": tarjeta_comercial_oportunidades,
+                            "tarjeta_comercial_tareas": tarjeta_comercial_tareas
+                        }
+                        update_ajustes_app(supabase, comercial_data)
+                        st.success("✅ Textos de Comercial actualizados.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar: {e}")
+
+    # =========================
+    # TAB 4: VISTA PREVIA
+    # =========================
     with tab4:
-        st.markdown("### ⚙️ Configuración Avanzada")
-        st.caption("Opciones técnicas y de sistema.")
-
+        st.subheader("🔄 Vista Previa de Cambios")
+        st.caption("Visualiza cómo se verán los cambios antes de aplicarlos")
+        
+        # Obtener valores actuales (incluye cambios no guardados del formulario)
+        preview_ajustes = ajustes.copy()
+        
+        st.markdown("#### 🎨 Apariencia actual")
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("#### 📊 Información del Sistema")
-            mostrar_version = st.checkbox(
-                "Mostrar versión de la app",
-                value=ajustes_actuales.get("mostrar_version", True),
-                help="Muestra información de versión en el pie de página"
-            )
-            
-            debug_mode = st.checkbox(
-                "Modo debugging",
-                value=ajustes_actuales.get("debug_mode", False),
-                help="Activa información adicional para desarrolladores"
-            )
-
+            st.markdown(f"""
+            <div class="branding-preview" style="
+                background: linear-gradient(135deg, {preview_ajustes.get('color_primario', '#4285F4')} 0%, 
+                {preview_ajustes.get('color_secundario', '#5f6368')} 100%);
+                color: white;
+            ">
+                <h2>{preview_ajustes.get('nombre_app', 'Gestor de Formación')}</h2>
+                <p>Vista previa del header</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with col2:
-            st.markdown("#### 🔧 Funcionalidades")
+            st.markdown("**Colores configurados:**")
+            colors = {
+                "Primario": preview_ajustes.get('color_primario', '#4285F4'),
+                "Secundario": preview_ajustes.get('color_secundario', '#5f6368'),
+                "Éxito": preview_ajustes.get('color_exito', '#10b981'),
+                "Advertencia": preview_ajustes.get('color_advertencia', '#f59e0b'),
+                "Error": preview_ajustes.get('color_error', '#ef4444')
+            }
             
-            cache_duration = st.number_input(
-                "Duración del cache (segundos)",
-                min_value=60,
-                max_value=3600,
-                value=ajustes_actuales.get("cache_duration", 300),
-                help="Tiempo que se mantienen los datos en cache"
-            )
+            for nombre, color in colors.items():
+                st.markdown(f"""
+                <div style="display: flex; align-items: center; margin: 5px 0;">
+                    <div style="width: 20px; height: 20px; background-color: {color}; 
+                               border-radius: 3px; margin-right: 10px; border: 1px solid #ccc;"></div>
+                    <span><strong>{nombre}:</strong> {color}</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-        # Información del sistema actual
-        st.markdown("#### 📈 Estado del Sistema")
-        col1, col2, col3 = st.columns(3)
+        st.divider()
+        
+        st.markdown("#### 📝 Textos por rol")
+        preview_roles = {
+            "👑 Admin": preview_ajustes.get('bienvenida_admin', 'Panel de Administración SaaS'),
+            "🏢 Gestor": preview_ajustes.get('bienvenida_gestor', 'Panel del Gestor'),
+            "🎓 Alumno": preview_ajustes.get('bienvenida_alumno', 'Área del Alumno'),
+            "📊 Comercial": preview_ajustes.get('bienvenida_comercial', 'Área Comercial - CRM')
+        }
+        
+        cols = st.columns(4)
+        for i, (rol, texto) in enumerate(preview_roles.items()):
+            with cols[i]:
+                st.markdown(f"""
+                <div class="preview-card">
+                    <h4>{rol}</h4>
+                    <p style="font-size: 0.9em; color: #666;">{texto}</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+        st.divider()
+        
+        st.markdown("#### 📱 Configuración de login y footer")
+        col1, col2 = st.columns(2)
         
         with col1:
-            st.metric("Cache activo", "✅" if st.cache_data else "❌")
+            st.markdown("**Pantalla de login:**")
+            st.info(preview_ajustes.get('mensaje_login', 'Accede al gestor con tus credenciales.'))
+            if preview_ajustes.get('instrucciones_login'):
+                st.caption(preview_ajustes.get('instrucciones_login'))
+        
         with col2:
-            st.metric("Sesión actual", session_state.role.upper() if hasattr(session_state, 'role') else "N/A")
-        with col3:
-            st.metric("Última actualización", datetime.now().strftime("%H:%M:%S"))
+            st.markdown("**Pie de página:**")
+            st.caption(preview_ajustes.get('mensaje_footer', '© 2025 Gestor de Formación · Streamlit + Supabase'))
 
-        # Herramientas de administración
-        st.markdown("#### 🛠️ Herramientas de Administración")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("🗑️ Limpiar Cache", help="Limpia toda la cache de la aplicación"):
-                st.cache_data.clear()
-                st.success("Cache limpiada correctamente")
+    # =========================
+    # Acciones masivas
+    # =========================
+    st.divider()
+    st.markdown("### 🔧 Acciones Avanzadas")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔄 Recargar ajustes", help="Recarga la configuración desde la base de datos"):
+            try:
+                if hasattr(cached_get_ajustes_app, 'clear'):
+                    cached_get_ajustes_app.clear()
+                st.success("✅ Ajustes recargados correctamente.")
                 st.rerun()
-
-        with col2:
-            # Exportar configuración
-            if st.button("📥 Exportar Config", help="Descarga la configuración actual"):
-                config_json = json.dumps(ajustes_actuales, indent=2, ensure_ascii=False)
+            except Exception as e:
+                st.error(f"❌ Error al recargar: {e}")
+    
+    with col2:
+        if st.button("📋 Exportar configuración", help="Descarga la configuración actual"):
+            try:
+                import json
+                config_json = json.dumps(ajustes, indent=2, ensure_ascii=False)
                 st.download_button(
                     label="💾 Descargar JSON",
                     data=config_json,
-                    file_name=f"config_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    file_name=f"ajustes_app_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json"
                 )
-
-        with col3:
-            # Importar configuración
-            uploaded_config = st.file_uploader(
-                "📤 Importar Config",
-                type=['json'],
-                help="Sube un archivo de configuración"
-            )
-            
-            if uploaded_config:
+            except Exception as e:
+                st.error(f"❌ Error al exportar: {e}")
+    
+    with col3:
+        if st.button("⚠️ Restablecer por defecto", help="Vuelve a la configuración inicial"):
+            if st.checkbox("Confirmar restablecimiento (no se puede deshacer)"):
                 try:
-                    config_data = json.load(uploaded_config)
-                    if st.button("✅ Aplicar Configuración"):
-                        if update_ajustes_app(supabase, config_data):
-                            st.success("Configuración importada correctamente")
-                            st.rerun()
-                        else:
-                            st.error("Error al importar configuración")
+                    defaults = {
+                        "nombre_app": "Gestor de Formación",
+                        "color_primario": "#4285F4",
+                        "color_secundario": "#5f6368",
+                        "color_exito": "#10b981",
+                        "color_advertencia": "#f59e0b",
+                        "color_error": "#ef4444",
+                        "mensaje_login": "Accede al gestor con tus credenciales.",
+                        "mensaje_footer": "© 2025 Gestor de Formación · Streamlit + Supabase",
+                        "bienvenida_admin": "Panel de Administración SaaS",
+                        "bienvenida_gestor": "Panel del Gestor",
+                        "bienvenida_alumno": "Área del Alumno",
+                        "bienvenida_comercial": "Área Comercial - CRM"
+                    }
+                    update_ajustes_app(supabase, defaults)
+                    # Invalidar caché para que se recojan los nuevos valores
+                    if hasattr(cached_get_ajustes_app, 'clear'):
+                        cached_get_ajustes_app.clear()
+                    st.success("✅ Configuración restablecida a valores por defecto.")
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error al leer archivo: {e}")
-
-    # ===============================
-    # GUARDAR CAMBIOS
-    # ===============================
-    st.divider()
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col2:
-        if st.button("💾 Guardar Todos los Cambios", use_container_width=True, type="primary"):
-            # Recopilar todos los ajustes
-            nuevos_ajustes = {
-                "color_primario": color_primario,
-                "color_secundario": color_secundario,
-                "color_exito": color_exito,
-                "color_advertencia": color_advertencia,
-                "color_error": color_error,
-                "tema_oscuro": tema_oscuro,
-                "mensaje_login": mensaje_login,
-                "mensaje_admin": mensaje_admin,
-                "mensaje_gestor": mensaje_gestor,
-                "mensaje_alumno": mensaje_alumno,
-                "logo_url": logo_url,
-                "favicon_url": favicon_url,
-                "mostrar_version": mostrar_version,
-                "debug_mode": debug_mode,
-                "cache_duration": cache_duration,
-                "updated_at": datetime.now().isoformat()
-            }
-            
-            # Guardar en base de datos
-            if update_ajustes_app(supabase, nuevos_ajustes):
-                st.success("✅ Configuración guardada correctamente")
-                
-                # Aplicar CSS personalizado inmediatamente
-                apply_custom_css(nuevos_ajustes)
-                
-                # Recargar página para aplicar cambios
-                st.rerun()
-            else:
-                st.error("❌ Error al guardar la configuración")
-
-    # ===============================
-    # APLICAR CSS PERSONALIZADO
-    # ===============================
-    # Aplicar estilos actuales
-    apply_custom_css(ajustes_actuales)
-
-def apply_custom_css(ajustes):
-    """Aplica CSS personalizado basado en los ajustes."""
-    
-    # Obtener colores
-    color_primario = ajustes.get("color_primario", "#4285F4")
-    color_secundario = ajustes.get("color_secundario", "#34A853")
-    color_exito = ajustes.get("color_exito", "#0F9D58")
-    color_advertencia = ajustes.get("color_advertencia", "#FF9800")
-    color_error = ajustes.get("color_error", "#F44336")
-    tema_oscuro = ajustes.get("tema_oscuro", False)
-    
-    # CSS personalizado
-    css = f"""
-    <style>
-    /* Colores personalizados */
-    :root {{
-        --color-primario: {color_primario};
-        --color-secundario: {color_secundario};
-        --color-exito: {color_exito};
-        --color-advertencia: {color_advertencia};
-        --color-error: {color_error};
-    }}
-    
-    /* Botones primarios */
-    .stButton > button[kind="primary"] {{
-        background-color: {color_primario} !important;
-        border-color: {color_primario} !important;
-    }}
-    
-    .stButton > button[kind="primary"]:hover {{
-        background-color: {color_primario}dd !important;
-        border-color: {color_primario}dd !important;
-    }}
-    
-    /* Elementos de éxito */
-    .stSuccess {{
-        background-color: {color_exito}20 !important;
-        border-left-color: {color_exito} !important;
-    }}
-    
-    /* Elementos de error */
-    .stError {{
-        background-color: {color_error}20 !important;
-        border-left-color: {color_error} !important;
-    }}
-    
-    /* Elementos de advertencia */
-    .stWarning {{
-        background-color: {color_advertencia}20 !important;
-        border-left-color: {color_advertencia} !important;
-    }}
-    
-    /* Sidebar personalizada */
-    .css-1d391kg {{
-        background-color: {color_primario}10;
-    }}
-    
-    /* Links y elementos interactivos */
-    a {{
-        color: {color_primario} !important;
-    }}
-    
-    /* Métricas */
-    .metric-container {{
-        background: linear-gradient(135deg, {color_primario}10, {color_secundario}10);
-        border-radius: 10px;
-        padding: 1rem;
-        border-left: 4px solid {color_primario};
-    }}
-    
-    /* Tema oscuro */
-    {get_dark_theme_css() if tema_oscuro else ""}
-    </style>
-    """
-    
-    st.markdown(css, unsafe_allow_html=True)
-
-def get_dark_theme_css():
-    """Retorna CSS para tema oscuro."""
-    return """
-    /* Tema oscuro */
-    .stApp {{
-        background-color: #1e1e1e !important;
-        color: #ffffff !important;
-    }}
-    
-    .stSidebar {{
-        background-color: #2d2d2d !important;
-    }}
-    
-    .stSelectbox > div > div {{
-        background-color: #3d3d3d !important;
-        color: #ffffff !important;
-    }}
-    
-    .stTextInput > div > div > input {{
-        background-color: #3d3d3d !important;
-        color: #ffffff !important;
-    }}
-    """
+                    st.error(f"❌ Error al restablecer: {e}")
