@@ -382,10 +382,11 @@ def main(supabase, session_state):
         try:
             st.markdown("#### 📋 Asignaciones Actuales")
             
+            # Corregir la consulta especificando la relación exacta
             asignaciones_res = supabase.table("tutores_grupos").select("""
                 id, created_at,
-                tutor:tutores(id, nombre, apellidos, tipo_tutor),
-                grupo:grupos(id, codigo_grupo, accion_formativa:acciones_formativas(nombre))
+                tutores!tutores_grupos_tutor_id_fkey(id, nombre, apellidos, tipo_tutor),
+                grupos(id, codigo_grupo, acciones_formativas(nombre))
             """).execute()
             
             if asignaciones_res.data:
@@ -394,9 +395,9 @@ def main(supabase, session_state):
                 # Aplanar datos para mostrar
                 asignaciones_display = []
                 for _, row in asignaciones_df.iterrows():
-                    tutor_info = row.get("tutor", {})
-                    grupo_info = row.get("grupo", {})
-                    accion_info = grupo_info.get("accion_formativa", {}) if grupo_info else {}
+                    tutor_info = row.get("tutores", {})
+                    grupo_info = row.get("grupos", {})
+                    accion_info = grupo_info.get("acciones_formativas", {}) if grupo_info else {}
                     
                     asignaciones_display.append({
                         "ID": row["id"],
@@ -441,6 +442,15 @@ def main(supabase, session_state):
         
         except Exception as e:
             st.warning(f"⚠️ Error al cargar asignaciones: {e}")
+            # Fallback: mostrar consulta simple sin joins
+            try:
+                asignaciones_simple = supabase.table("tutores_grupos").select("*").execute()
+                if asignaciones_simple.data:
+                    st.dataframe(pd.DataFrame(asignaciones_simple.data), use_container_width=True)
+                else:
+                    st.info("ℹ️ No hay asignaciones registradas.")
+            except Exception as e2:
+                st.error(f"❌ Error crítico al cargar asignaciones: {e2}")
 
     # =========================
     # EXPORTAR DATOS
