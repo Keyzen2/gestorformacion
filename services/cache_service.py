@@ -1,27 +1,79 @@
 # services/cache_service.py
 """
 🔧 Cache Service - Gestión centralizada de cache para Streamlit
-Proporciona funciones para invalidar cache selectivamente por módulo
+Proporciona funciones para invalidar cache selectivamente por módulo y 
+herramientas de monitoreo de performance.
 """
 
 import streamlit as st
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import time
+import hashlib
+import json
+from datetime import datetime, timedelta
+import pandas as pd
 
 class CacheService:
-    """Servicio para gestión centralizada de cache."""
+    """Servicio avanzado para gestión centralizada de cache."""
     
     def __init__(self):
+        # Mapeo de módulos a funciones de cache
         self.cache_keys = {
-            'empresas': ['get_empresas', 'get_empresa_by_id', 'get_metricas_empresa'],
-            'participantes': ['get_participantes', 'get_participante_by_id'],
-            'grupos': ['get_grupos', 'get_grupos_completos', 'get_grupo_by_id'],
-            'documentos': ['get_documentos', 'get_documento_by_id'],
-            'tutores': ['get_tutores', 'get_tutor_by_id'],
-            'usuarios': ['get_usuarios', 'get_usuario_by_id'],
-            'ajustes': ['get_ajustes_app'],
-            'metricas': ['get_metricas_admin', 'get_metricas_empresa']
+            'empresas': [
+                'get_empresas', 'get_empresas_completas', 'get_empresa_by_id', 
+                'get_empresas_dict', 'get_metricas_empresa'
+            ],
+            'participantes': [
+                'get_participantes', 'get_participantes_completos', 
+                'get_participante_by_id', 'get_participantes_by_grupo'
+            ],
+            'grupos': [
+                'get_grupos', 'get_grupos_completos', 'get_grupo_by_id',
+                'get_grupos_dict', 'get_grupos_by_empresa'
+            ],
+            'documentos': [
+                'get_documentos', 'get_documento_by_id', 'get_documentos_by_grupo',
+                'get_documentos_by_empresa'
+            ],
+            'tutores': [
+                'get_tutores', 'get_tutores_completos', 'get_tutor_by_id'
+            ],
+            'usuarios': [
+                'get_usuarios', 'get_usuario_by_id', 'get_usuarios_by_empresa'
+            ],
+            'ajustes': [
+                'get_ajustes_app', 'get_configuracion_global'
+            ],
+            'metricas': [
+                'get_metricas_admin', 'get_metricas_empresa', 'get_metricas_globales'
+            ],
+            'acciones': [
+                'get_acciones_formativas', 'get_acciones_dict', 'get_accion_by_id'
+            ]
         }
+        
+        # TTL recomendados por tipo de dato
+        self.ttl_config = {
+            'empresas': 600,      # 10 minutos - datos estables
+            'participantes': 300, # 5 minutos - datos dinámicos
+            'grupos': 300,        # 5 minutos - datos dinámicos  
+            'documentos': 180,    # 3 minutos - datos muy dinámicos
+            'tutores': 600,       # 10 minutos - datos estables
+            'usuarios': 900,      # 15 minutos - datos muy estables
+            'ajustes': 3600,      # 1 hora - datos muy estables
+            'metricas': 120,      # 2 minutos - datos de análisis
+            'acciones': 1800      # 30 minutos - datos semi-estables
+        }
+        
+        # Estadísticas de cache
+        if 'cache_stats' not in st.session_state:
+            st.session_state.cache_stats = {
+                'hits': 0,
+                'misses': 0,
+                'invalidations': 0,
+                'last_clear': None,
+                'module_stats': {}
+            }
     
     def invalidate_module_cache(self, module: str) -> bool:
         """
@@ -35,9 +87,17 @@ class CacheService:
         """
         try:
             if module in self.cache_keys:
-                # Streamlit no permite invalidar funciones específicas por nombre,
-                # pero podemos limpiar todo el cache o usar una estrategia de keys
-                st.cache_data.clear()
+                # Como Streamlit no permite invalidación selectiva,
+                # usamos un enfoque de timestamp para simular invalidación
+                timestamp_key = f"cache_invalidated_{module}"
+                st.session_state[timestamp_key] = time.time()
+                
+                # Actualizar estadísticas
+                st.session_state.cache_stats['invalidations'] += 1
+                if module not in st.session_state.cache_stats['module_stats']:
+                    st.session_state.cache_stats['module_stats'][module] = {'invalidations': 0}
+                st.session_state.cache_stats['module_stats'][module]['invalidations'] += 1
+                
                 return True
             return False
         except Exception as e:
