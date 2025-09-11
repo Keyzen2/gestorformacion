@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils import validar_dni_cif, export_csv, format_percentage
-from services.data_service import get_data_service
+from utils import get_ajustes_app
 from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
