@@ -202,7 +202,7 @@ def export_excel(df: pd.DataFrame, filename: str = "export.xlsx"):
     st.markdown(href, unsafe_allow_html=True)
 
 # =========================
-# SUPABASE STORAGE - FUNCIONES CORREGIDAS
+# SUPABASE STORAGE
 # =========================
 
 def subir_archivo_supabase(supabase, archivo, empresa_id, bucket="documentos"):
@@ -642,40 +642,42 @@ def generar_password_segura(longitud: int = 10) -> str:
     return ''.join(pwd)
 
 # =========================
-# NOTIFICACIONES Y MENSAJES
+# AJUSTES GLOBALES DE LA APP
 # =========================
 
-def mostrar_notificacion(tipo: str, mensaje: str, duracion: int = 3):
+def get_ajustes_app(supabase, campos=None):
     """
-    Muestra una notificación estilizada.
+    Obtiene ajustes globales de la aplicación.
     
     Args:
-        tipo: Tipo de notificación (success, info, warning, error)
-        mensaje: Texto de la notificación
-        duracion: Duración en segundos
+        supabase: Cliente de Supabase
+        campos: Lista de campos específicos a obtener (opcional)
+        
+    Returns:
+        dict: Diccionario con los ajustes
+    """
+    try:
+        query = supabase.table("ajustes_app")
+        query = query.select(",".join(campos)) if campos else query.select("*")
+        res = query.eq("id", 1).execute()
+        return res.data[0] if res.data else {}
+    except Exception as e:
+        st.error(f"❌ Error al cargar ajustes de la app: {e}")
+        return {}
+
+def update_ajustes_app(supabase, data_dict):
+    """
+    Actualiza los ajustes globales en la tabla ajustes_app.
+    
+    Args:
+        supabase: Cliente de Supabase
+        data_dict: Diccionario con los datos a actualizar
         
     Returns:
         None
     """
-    # Mapeo de tipos a iconos y colores
-    estilos = {
-        "success": {"icono": "✅", "color": "#28a745"},
-        "info": {"icono": "ℹ️", "color": "#17a2b8"},
-        "warning": {"icono": "⚠️", "color": "#ffc107"},
-        "error": {"icono": "❌", "color": "#dc3545"}
-    }
-    
-    estilo = estilos.get(tipo, estilos["info"])
-    
-    # Crear HTML para notificación
-    html = f"""
-    <div style="
-        padding: 10px 15px;
-        border-radius: 5px;
-        background-color: {estilo['color']}22;
-        border-left: 5px solid {estilo['color']};
-        margin-bottom: 10px;
-        animation: fadeOut {duracion}s forwards {duracion-0.5}s;
-    ">
-        <div style="display: flex; align-items: center;">
-            <div style="fon
+    try:
+        data_dict["updated_at"] = datetime.utcnow().isoformat()
+        supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
+    except Exception as e:
+        st.error(f"❌ Error al guardar ajustes de la app: {e}")
