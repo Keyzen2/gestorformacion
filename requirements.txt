@@ -1,0 +1,44 @@
+# ===== VERSIONES ACTUALIZADAS COMPATIBLES =====
+
+# Streamlit actualizado con nuevas funcionalidades
+streamlit>=1.49.0
+
+# Supabase cliente - compatible
+supabase>=2.0.1
+
+# Pandas con compatibilidad mejorada
+pandas>=2.3.0
+
+# Excel handling mejorado
+openpyxl>=3.1.5
+
+# Numpy optimizado para Python 3.13
+numpy>=1.26.4
+
+# PDFs - ahora compatible con st.pdf nativo
+reportlab>=4.4.3
+
+# XML handling
+lxml>=6.0.0
+
+# Logs y estilos en terminal
+rich>=10.14.0,<14
+
+# Visualizaciones mejoradas
+altair>=5.5.0
+
+# IMPORTANTE: streamlit-aggrid puede tener conflictos
+# Probamos primero sin él para usar las nuevas funcionalidades nativas
+# streamlit-aggrid>=0.3.4.post3
+
+# Excel writing
+XlsxWriter>=3.0.0
+
+# ===== NUEVAS DEPENDENCIAS OPCIONALES =====
+# Para aprovechar las nuevas funcionalidades
+
+# Faker para datos de prueba
+faker>=24.0.0
+
+# Pillow para manejo de imágenes mejorado
+Pillow>=10.0.0
