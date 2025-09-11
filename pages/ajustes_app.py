@@ -1,8 +1,7 @@
 import streamlit as st
 from datetime import datetime
 # Dejamos de usar utils.get_ajustes_app para evitar cache con objetos no-hasheables
-from services.data_service import cached_get_ajustes_app
-from utils import update_ajustes_app
+from utils import get_ajustes_app, update_ajustes_app
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
