@@ -8,638 +8,415 @@ from utils import (
     generar_xml_inicio_grupo,
     generar_xml_finalizacion_grupo,
     validar_xml,
-    export_csv,
-    get_ajustes_app
+    get_ajustes_app,
+    export_csv
 )
 from services.data_service import get_data_service
-import os
 
 def main(supabase, session_state):
-    st.title("📄 Gestión de Documentos")
-    st.caption("Administración de documentos y archivos del sistema de formación.")
-
+    st.title("📄 Generación de Documentos FUNDAE")
+    st.caption("Genera XMLs y PDFs oficiales para comunicaciones con FUNDAE.")
+    
+    # Verificar permisos
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
+    # Cargar configuración
+    ajustes = get_ajustes_app(supabase)
+    
     # Inicializar servicio de datos
     data_service = get_data_service(supabase, session_state)
 
-    # =========================
-    # CARGAR DATOS PRINCIPALES
-    # =========================
+    # Leer URLs XSD desde secrets
     try:
-        df_documentos = data_service.get_documentos()
+        FUNDAE = st.secrets["FUNDAE"]
+        xsd_urls = {
+            'accion_formativa': FUNDAE["xsd_accion_formativa"],
+            'inicio_grupo': FUNDAE["xsd_inicio_grupo"],
+            'finalizacion_grupo': FUNDAE["xsd_finalizacion_grupo"]
+        }
     except Exception as e:
-        st.error(f"❌ Error al cargar documentos: {e}")
+        st.error("⚠️ Error al cargar configuración de esquemas XSD. Verifica la configuración en secrets.")
         return
 
-    # Cargar empresas para los selects
-    try:
-        if session_state.role == "admin":
-            empresas_res = supabase.table("empresas").select("id,nombre").execute()
-        else:
-            empresa_id = session_state.user.get("empresa_id")
-            empresas_res = supabase.table("empresas").select("id,nombre").eq("id", empresa_id).execute()
-        
-        empresas_dict = {e["nombre"]: e["id"] for e in (empresas_res.data or [])}
-        empresas_opciones = [""] + sorted(empresas_dict.keys())
-    except Exception as e:
-        st.error(f"❌ Error al cargar empresas: {e}")
-        empresas_dict = {}
-        empresas_opciones = [""]
+    # =========================
+    # CARGAR DATOS CON DataService
+    # =========================
+    with st.spinner("Cargando datos..."):
+        try:
+            df_acciones = data_service.get_acciones_formativas()
+            df_grupos = data_service.get_grupos_completos()
+            df_participantes = data_service.get_participantes_completos()
+        except Exception as e:
+            st.error(f"⚠️ Error al cargar datos: {e}")
+            return
 
     # =========================
-    # MÉTRICAS PRINCIPALES
+    # MÉTRICAS DEL DASHBOARD
     # =========================
-    if not df_documentos.empty:
+    if not df_acciones.empty or not df_grupos.empty:
         col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
-            st.metric("📄 Total Documentos", len(df_documentos))
+            st.metric("📚 Acciones Formativas", len(df_acciones))
+        
         with col2:
-            # Documentos por tipo
-            tipos = df_documentos["tipo"].value_counts()
-            tipo_principal = tipos.index[0] if not tipos.empty else "N/A"
-            st.metric("📋 Tipo Principal", tipo_principal)
+            st.metric("👥 Grupos", len(df_grupos))
+        
         with col3:
-            # Documentos recientes (últimos 30 días)
-            if "created_at" in df_documentos.columns:
-                try:
-                    df_documentos['created_at_safe'] = df_documentos['created_at'].apply(safe_date_parse)
-                    fecha_limite = datetime.now() - pd.Timedelta(days=30)
-                    recientes = len(df_documentos[df_documentos['created_at_safe'] >= fecha_limite])
-                    st.metric("🆕 Recientes (30 días)", recientes)
-                except Exception:
-                    st.metric("🆕 Recientes (30 días)", 0)
-            else:
-                st.metric("🆕 Recientes (30 días)", 0)
+            grupos_activos = df_grupos[df_grupos['estado'] == 'activo'] if 'estado' in df_grupos.columns and not df_grupos.empty else pd.DataFrame()
+            st.metric("✅ Grupos Activos", len(grupos_activos))
+        
         with col4:
-            # Documentos con URL
-            con_url = len(df_documentos[df_documentos["url"].notna()])
-            st.metric("🔗 Con Archivo", con_url)
-
-    # =========================
-    # FILTROS DE BÚSQUEDA
-    # =========================
-    st.divider()
-    st.markdown("### 🔍 Buscar y Filtrar Documentos")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        query = st.text_input("🔍 Buscar por título o descripción")
-    with col2:
-        # Obtener tipos únicos de documentos
-        tipos_unicos = ["Todos"] + sorted(df_documentos["tipo"].fillna("Sin tipo").unique().tolist())
-        tipo_filter = st.selectbox("Filtrar por tipo", tipos_unicos)
-    with col3:
-        # Filtro por fecha
-        fecha_filter = st.selectbox(
-            "Filtrar por fecha",
-            ["Todos", "Últimos 7 días", "Últimos 30 días", "Últimos 90 días"]
-        )
-
-    # Aplicar filtros
-    df_filtered = df_documentos.copy()
-    
-    if query:
-        q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered["titulo"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["descripcion"].fillna("").str.lower().str.contains(q_lower, na=False)
-        ]
-    
-    if tipo_filter != "Todos":
-        if tipo_filter == "Sin tipo":
-            df_filtered = df_filtered[df_filtered["tipo"].isna()]
-        else:
-            df_filtered = df_filtered[df_filtered["tipo"] == tipo_filter]
-    
-    if fecha_filter != "Todos" and "created_at" in df_filtered.columns:
-        try:
-            df_filtered['created_at_safe'] = df_filtered['created_at'].apply(safe_date_parse)
-            days_map = {
-                "Últimos 7 días": 7,
-                "Últimos 30 días": 30,
-                "Últimos 90 días": 90
-            }
-            days = days_map.get(fecha_filter, 30)
-            fecha_limite = datetime.now() - pd.Timedelta(days=days)
-            df_filtered = df_filtered[df_filtered['created_at_safe'] >= fecha_limite]
-        except Exception:
-            pass  # Si falla el filtro por fecha, mostrar todos
-
-    # Botón de exportación
-    if not df_filtered.empty:
-        export_csv(df_filtered, filename="documentos.csv")
+            grupos_cerrados = df_grupos[df_grupos['estado'] == 'cerrado'] if 'estado' in df_grupos.columns and not df_grupos.empty else pd.DataFrame()
+            st.metric("🏁 Grupos Cerrados", len(grupos_cerrados))
 
     st.divider()
 
     # =========================
-    # DEFINIR CAMPOS PARA FORMULARIOS
+    # SELECCIÓN DE ACCIÓN FORMATIVA
     # =========================
-    def get_campos_dinamicos(datos):
-        """Define campos visibles según el contexto."""
-        campos_base = [
-            "id", "titulo", "descripcion", "tipo", "fecha_documento"
-        ]
-        
-        # Solo admin puede asignar empresa
-        if session_state.role == "admin":
-            campos_base.append("empresa_nombre")
-        
-        # Campos adicionales
-        campos_base.extend(["observaciones", "url"])
-        
-        return campos_base
-
-    # Tipos de documento predefinidos
-    tipos_documento = [
-        "Certificado",
-        "Diploma", 
-        "Manual",
-        "Evaluación",
-        "Acta",
-        "Informe",
-        "Normativa",
-        "Plantilla",
-        "Comunicación",
-        "Otro"
-    ]
-
-    # Campos para select
-    campos_select = {
-        "tipo": tipos_documento
-    }
+    st.markdown("### 📋 Selección de Acción Formativa")
     
-    if session_state.role == "admin":
-        campos_select["empresa_nombre"] = empresas_opciones
+    if df_acciones.empty:
+        st.warning("⚠️ No hay acciones formativas disponibles.")
+        return
 
-    # Campos de texto área
-    campos_textarea = {
-        "descripcion": {"label": "Descripción del documento", "height": 100},
-        "observaciones": {"label": "Observaciones adicionales", "height": 80}
-    }
+    # Preparar opciones de acciones formativas
+    acciones_opciones = {}
+    for _, accion in df_acciones.iterrows():
+        display_name = f"{accion.get('codigo_accion', 'Sin código')} - {accion.get('nombre', 'Sin nombre')}"
+        acciones_opciones[display_name] = accion
 
-    # Campos de archivo
-    campos_file = {
-        "url": {"label": "Subir archivo", "type": ["pdf", "doc", "docx", "xlsx", "xls", "ppt", "pptx", "jpg", "png"]}
-    }
+    accion_seleccionada = st.selectbox(
+        "Selecciona la acción formativa:",
+        options=list(acciones_opciones.keys()),
+        help="Selecciona la acción formativa para generar documentos"
+    )
 
-    # Campos de ayuda
-    campos_help = {
-        "titulo": "Título descriptivo del documento (obligatorio)",
-        "descripcion": "Descripción detallada del contenido",
-        "tipo": "Categoría del documento",
-        "fecha_documento": "Fecha del documento (no de subida)",
-        "empresa_nombre": "Empresa a la que pertenece (solo para admin)",
-        "observaciones": "Notas adicionales o comentarios",
-        "url": "Archivo digital del documento"
-    }
+    accion = acciones_opciones[accion_seleccionada]
 
-    # Campos obligatorios
-    campos_obligatorios = ["titulo", "tipo"]
-
-    # Columnas visibles en la tabla
-    columnas_visibles = ["titulo", "tipo", "fecha_documento", "descripcion"]
-    if session_state.role == "admin":
-        columnas_visibles.append("empresa_nombre")
+    # Mostrar información de la acción seleccionada
+    with st.expander("ℹ️ Información de la Acción Formativa", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**Código:** {accion.get('codigo_accion', 'No especificado')}")
+            st.write(f"**Nombre:** {accion.get('nombre', 'No especificado')}")
+            st.write(f"**Modalidad:** {accion.get('modalidad', 'No especificada')}")
+        with col2:
+            st.write(f"**Duración:** {accion.get('num_horas', 0)} horas")
+            st.write(f"**Nivel:** {accion.get('nivel', 'No especificado')}")
+            st.write(f"**Área:** {accion.get('area_profesional', 'No especificada')}")
 
     # =========================
-    # FUNCIONES CRUD
+    # SELECCIÓN DE GRUPO
     # =========================
-    def guardar_documento(documento_id, datos_editados):
-        """Función para guardar cambios en un documento."""
-        try:
-            # Validaciones básicas
-            if not datos_editados.get("titulo") or not datos_editados.get("tipo"):
-                st.error("⚠️ Título y tipo son obligatorios.")
-                return
-
-            # Manejar subida de archivo
-            if "url" in datos_editados and datos_editados["url"]:
-                archivo = datos_editados["url"]
-                if archivo:
-                    archivo_url = subir_archivo_supabase(supabase, archivo.read(), archivo.name, "documentos")
-                    if archivo_url:
-                        datos_editados["url"] = archivo_url
-                    else:
-                        st.error("⚠️ Error al subir el archivo.")
-                        return
-                else:
-                    # Mantener URL existente si no se subió nuevo archivo
-                    del datos_editados["url"]
-
-            # Convertir empresa_nombre a empresa_id si es necesario
-            if "empresa_nombre" in datos_editados and datos_editados["empresa_nombre"]:
-                empresa_id_new = empresas_dict.get(datos_editados["empresa_nombre"])
-                datos_editados["empresa_id"] = empresa_id_new
-                del datos_editados["empresa_nombre"]
-            elif "empresa_nombre" in datos_editados:
-                datos_editados["empresa_id"] = None
-                del datos_editados["empresa_nombre"]
-
-            # Convertir fecha si es necesario
-            if "fecha_documento" in datos_editados and isinstance(datos_editados["fecha_documento"], date):
-                datos_editados["fecha_documento"] = datos_editados["fecha_documento"].isoformat()
-
-            # Actualizar documento
-            supabase.table("documentos").update(datos_editados).eq("id", documento_id).execute()
-            
-            st.success("✅ Documento actualizado correctamente.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Error al actualizar documento: {e}")
-
-    def crear_documento(datos_nuevos):
-        """Función para crear un nuevo documento."""
-        try:
-            # Validaciones básicas
-            if not datos_nuevos.get("titulo") or not datos_nuevos.get("tipo"):
-                st.error("⚠️ Título y tipo son obligatorios.")
-                return
-
-            # Asignar empresa según rol
-            if session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
-            elif "empresa_nombre" in datos_nuevos and datos_nuevos["empresa_nombre"]:
-                empresa_id_new = empresas_dict.get(datos_nuevos["empresa_nombre"])
-                datos_nuevos["empresa_id"] = empresa_id_new
-                del datos_nuevos["empresa_nombre"]
-
-            # Manejar subida de archivo
-            if "url" in datos_nuevos and datos_nuevos["url"]:
-                archivo = datos_nuevos["url"]
-                if archivo:
-                    archivo_url = subir_archivo_supabase(supabase, archivo.read(), archivo.name, "documentos")
-                    if archivo_url:
-                        datos_nuevos["url"] = archivo_url
-                    else:
-                        st.error("⚠️ Error al subir el archivo.")
-                        return
-                else:
-                    del datos_nuevos["url"]
-
-            # Convertir fecha si es necesario
-            if "fecha_documento" in datos_nuevos and isinstance(datos_nuevos["fecha_documento"], date):
-                datos_nuevos["fecha_documento"] = datos_nuevos["fecha_documento"].isoformat()
-
-            # Crear documento
-            supabase.table("documentos").insert(datos_nuevos).execute()
-            
-            st.success("✅ Documento creado correctamente.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Error al crear documento: {e}")
-
-    def eliminar_documento(documento_id):
-        """Función para eliminar un documento."""
-        try:
-            # Verificar permisos
-            if session_state.role != "admin":
-                st.error("⚠️ Solo los administradores pueden eliminar documentos.")
-                return
-            
-            # Eliminar documento
-            supabase.table("documentos").delete().eq("id", documento_id).execute()
-            
-            st.success("✅ Documento eliminado correctamente.")
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ Error al eliminar documento: {e}")
-
-    # =========================
-    # RENDERIZAR COMPONENTE PRINCIPAL
-    # =========================
-    if df_filtered.empty and query:
-        st.warning(f"🔍 No se encontraron documentos que coincidan con '{query}'.")
-    elif df_filtered.empty:
-        st.info("ℹ️ No hay documentos registrados. Crea el primer documento usando el formulario de abajo.")
+    st.markdown("### 👥 Selección de Grupo")
+    
+    # Filtrar grupos por acción formativa seleccionada
+    grupos_accion = df_grupos[df_grupos['accion_formativa_id'] == accion['id']] if not df_grupos.empty else pd.DataFrame()
+    
+    if grupos_accion.empty:
+        st.warning("⚠️ No hay grupos disponibles para esta acción formativa.")
+        grupo = None
     else:
-        # Formatear fechas para mostrar
-        if "fecha_documento" in df_filtered.columns:
-            df_filtered["fecha_documento"] = df_filtered["fecha_documento"].apply(
-                lambda x: format_date(x) if pd.notna(x) else ""
-            )
-        
-        # Usar el componente listado_con_ficha corregido
-        listado_con_ficha(
-            df=df_filtered,
-            columnas_visibles=columnas_visibles,
-            titulo="Documento",
-            on_save=guardar_documento,
-            on_create=crear_documento if data_service.can_modify_data() else None,
-            on_delete=eliminar_documento if session_state.role == "admin" else None,
-            id_col="id",
-            campos_select=campos_select,
-            campos_textarea=campos_textarea,
-            campos_file=campos_file,
-            campos_dinamicos=get_campos_dinamicos,
-            allow_creation=data_service.can_modify_data(),
-            campos_help=campos_help,
-            campos_obligatorios=campos_obligatorios,
-            search_columns=["titulo", "descripcion", "tipo"]
+        # Preparar opciones de grupos
+        grupos_opciones = {}
+        for _, grupo_row in grupos_accion.iterrows():
+            display_name = f"{grupo_row.get('codigo_grupo', 'Sin código')} - {grupo_row.get('estado', 'Sin estado')}"
+            grupos_opciones[display_name] = grupo_row
+
+        grupo_seleccionado = st.selectbox(
+            "Selecciona el grupo:",
+            options=list(grupos_opciones.keys()),
+            help="Selecciona el grupo para generar XMLs de inicio o finalización"
         )
 
-    # =========================
-    # GESTIÓN MASIVA DE DOCUMENTOS
-    # =========================
+        grupo = grupos_opciones[grupo_seleccionado]
+
+        # Mostrar información del grupo seleccionado
+        with st.expander("ℹ️ Información del Grupo", expanded=False):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Código:** {grupo.get('codigo_grupo', 'No especificado')}")
+                st.write(f"**Estado:** {grupo.get('estado', 'No especificado')}")
+                st.write(f"**Fecha Inicio:** {grupo.get('fecha_inicio', 'No especificada')}")
+            with col2:
+                st.write(f"**Fecha Fin:** {grupo.get('fecha_fin_prevista', 'No especificada')}")
+                st.write(f"**Modalidad:** {grupo.get('modalidad', 'No especificada')}")
+                st.write(f"**Participantes:** {grupo.get('n_participantes_previstos', 0)}")
+
     st.divider()
-    st.markdown("### 📤 Gestión Masiva de Documentos")
+
+    # =========================
+    # GENERACIÓN DE DOCUMENTOS
+    # =========================
+    st.markdown("### 🔧 Generar Documentos")
     
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        st.markdown("#### 📁 Subida Múltiple")
-        archivos_multiples = st.file_uploader(
-            "Seleccionar múltiples archivos",
-            type=["pdf", "doc", "docx", "xlsx", "xls", "ppt", "pptx", "jpg", "png"],
-            accept_multiple_files=True,
-            help="Puedes subir varios archivos a la vez. Se crearán documentos automáticamente."
-        )
+    # Organizar en tabs para mejor UX
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📄 PDF Acción",
+        "📋 XML Acción",
+        "🚀 XML Inicio Grupo",
+        "🏁 XML Finalización"
+    ])
+
+    # TAB 1: PDF de Acción Formativa
+    with tab1:
+        st.subheader("📄 Generar PDF de Acción Formativa")
+        st.caption("Genera un documento PDF con la información de la acción formativa")
         
-        if archivos_multiples:
-            col_config1, col_config2 = st.columns(2)
-            with col_config1:
-                tipo_masivo = st.selectbox("Tipo para todos los archivos", tipos_documento, key="tipo_masivo")
-            with col_config2:
-                if session_state.role == "admin":
-                    empresa_masiva = st.selectbox("Empresa (opcional)", empresas_opciones, key="empresa_masiva")
-                else:
-                    empresa_masiva = None
+        if st.button("🔧 Generar PDF", type="primary", use_container_width=True):
+            with st.spinner("Generando PDF..."):
+                try:
+                    # Preparar información para el PDF
+                    lines = [
+                        f"ACCIÓN FORMATIVA",
+                        f"",
+                        f"Código: {accion.get('codigo_accion', 'No especificado')}",
+                        f"Nombre: {accion.get('nombre', 'No especificado')}",
+                        f"Modalidad: {accion.get('modalidad', 'No especificada')}",
+                        f"Nivel: {accion.get('nivel', 'No especificado')}",
+                        f"Duración: {accion.get('num_horas', 0)} horas",
+                        f"Área Profesional: {accion.get('area_profesional', 'No especificada')}",
+                        f"",
+                        f"Objetivos: {accion.get('objetivos', 'No especificados')}",
+                        f"Contenidos: {accion.get('contenidos', 'No especificados')}",
+                        f"",
+                        f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+                    ]
+                    
+                    buffer = BytesIO()
+                    pdf_bytes = generar_pdf(buffer, lines)
+                    
+                    if pdf_bytes:
+                        st.success("✅ PDF generado correctamente")
+                        st.download_button(
+                            "📥 Descargar PDF Acción Formativa",
+                            data=pdf_bytes.getvalue(),
+                            file_name=f"AF_{accion.get('codigo_accion', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    else:
+                        st.error("❌ Error al generar el PDF")
+                        
+                except Exception as e:
+                    st.error(f"❌ Error al generar PDF: {e}")
+
+    # TAB 2: XML de Acción Formativa
+    with tab2:
+        st.subheader("📋 Generar XML de Acción Formativa")
+        st.caption("Genera XML oficial para comunicar la acción formativa a FUNDAE")
+        
+        # Verificar campos obligatorios
+        campos_obligatorios = ['codigo_accion', 'nombre', 'modalidad', 'num_horas']
+        campos_faltantes = [c for c in campos_obligatorios if not accion.get(c)]
+        
+        if campos_faltantes:
+            st.warning(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
+            st.info("Completa la información de la acción formativa antes de generar el XML")
+        else:
+            col1, col2 = st.columns(2)
             
-            if st.button("📥 Subir Todos los Archivos"):
-                subir_archivos_masivo(supabase, session_state, archivos_multiples, tipo_masivo, empresa_masiva, empresas_dict)
+            with col1:
+                if st.button("🔧 Generar XML Acción", type="primary", use_container_width=True):
+                    with st.spinner("Generando y validando XML..."):
+                        try:
+                            xml_content = generar_xml_accion_formativa(accion)
+                            
+                            if xml_content:
+                                # Validar contra XSD
+                                es_valido, errores = validar_xml(xml_content, xsd_urls['accion_formativa'])
+                                
+                                if es_valido:
+                                    st.success("✅ XML generado y validado correctamente")
+                                    st.download_button(
+                                        "📥 Descargar XML Acción Formativa",
+                                        data=xml_content,
+                                        file_name=f"AF_{accion.get('codigo_accion', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                        mime="application/xml",
+                                        use_container_width=True
+                                    )
+                                else:
+                                    st.error("❌ El XML no es válido según el esquema XSD")
+                                    for error in errores[:5]:
+                                        st.error(f"• {error}")
+                            else:
+                                st.error("❌ Error al generar el XML")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+            
+            with col2:
+                if st.button("👁️ Vista previa XML", use_container_width=True):
+                    try:
+                        xml_preview = generar_xml_accion_formativa(accion)
+                        if xml_preview:
+                            st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
+                    except Exception as e:
+                        st.error(f"❌ Error en vista previa: {e}")
 
-    with col2:
-        st.markdown("#### 📊 Estadísticas por Tipo")
-        if not df_documentos.empty:
-            tipos_stats = df_documentos["tipo"].value_counts()
-            for tipo, cantidad in tipos_stats.head(5).items():
-                st.metric(f"📋 {tipo}", cantidad)
+    # TAB 3: XML de Inicio de Grupo
+    with tab3:
+        st.subheader("🚀 Generar XML de Inicio de Grupo")
+        st.caption("Genera XML oficial para comunicar el inicio de grupo a FUNDAE")
+        
+        if not grupo:
+            st.warning("⚠️ Selecciona un grupo para generar el XML de inicio")
+        elif not grupo.get("fecha_inicio") or not grupo.get("fecha_fin_prevista"):
+            st.error("⚠️ El grupo debe tener fechas de inicio y fin previstas")
+        else:
+            # Cargar participantes del grupo
+            participantes_grupo = df_participantes[df_participantes['grupo_id'] == grupo['id']] if not df_participantes.empty else pd.DataFrame()
+            
+            if participantes_grupo.empty:
+                st.warning("⚠️ No hay participantes asignados a este grupo")
+                st.info("Asigna participantes al grupo antes de generar el XML")
+            else:
+                st.info(f"📊 Participantes encontrados: {len(participantes_grupo)}")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔧 Generar XML Inicio", type="primary", use_container_width=True):
+                        with st.spinner("Generando y validando XML..."):
+                            try:
+                                # Convertir participantes a formato necesario
+                                participantes_list = participantes_grupo.to_dict('records')
+                                
+                                xml_content = generar_xml_inicio_grupo(grupo, participantes_list)
+                                
+                                if xml_content:
+                                    # Validar contra XSD
+                                    es_valido, errores = validar_xml(xml_content, xsd_urls['inicio_grupo'])
+                                    
+                                    if es_valido:
+                                        st.success("✅ XML de inicio generado y validado correctamente")
+                                        st.download_button(
+                                            "📥 Descargar XML Inicio Grupo",
+                                            data=xml_content,
+                                            file_name=f"IG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                            mime="application/xml",
+                                            use_container_width=True
+                                        )
+                                    else:
+                                        st.error("❌ El XML no es válido según el esquema XSD")
+                                        for error in errores[:5]:
+                                            st.error(f"• {error}")
+                                else:
+                                    st.error("❌ Error al generar el XML")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                
+                with col2:
+                    if st.button("👁️ Vista previa XML", use_container_width=True):
+                        try:
+                            participantes_list = participantes_grupo.to_dict('records')
+                            xml_preview = generar_xml_inicio_grupo(grupo, participantes_list)
+                            if xml_preview:
+                                st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
+                        except Exception as e:
+                            st.error(f"❌ Error en vista previa: {e}")
 
-    # =========================
-    # PLANTILLAS Y HERRAMIENTAS
-    # =========================
-    st.divider()
-    st.markdown("### 🛠️ Herramientas Adicionales")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("#### 📋 Plantillas")
-        if st.button("📄 Crear Acta de Reunión"):
-            crear_plantilla_acta(supabase, session_state)
-        if st.button("📋 Crear Informe de Evaluación"):
-            crear_plantilla_evaluacion(supabase, session_state)
-    
-    with col2:
-        st.markdown("#### 🔍 Búsqueda Avanzada")
-        if st.button("🔎 Buscar por Contenido"):
-            st.info("Funcionalidad en desarrollo - Búsqueda full-text en documentos")
-        if st.button("📅 Documentos Próximos a Vencer"):
-            mostrar_documentos_vencimiento(df_documentos)
-    
-    with col3:
-        st.markdown("#### 📊 Reportes")
-        if st.button("📈 Generar Reporte de Documentos"):
-            generar_reporte_documentos(df_documentos)
-        if st.button("🗂️ Exportar Todo a ZIP"):
-            st.info("Funcionalidad en desarrollo - Exportación masiva")
-
-    st.divider()
-    st.caption("💡 Los documentos son elementos clave para la trazabilidad y gestión de la formación. Mantén organizados los archivos por tipo y empresa.")
+    # TAB 4: XML de Finalización de Grupo
+    with tab4:
+        st.subheader("🏁 Generar XML de Finalización de Grupo")
+        st.caption("Genera XML oficial para comunicar la finalización de grupo a FUNDAE")
+        
+        if not grupo:
+            st.warning("⚠️ Selecciona un grupo para generar el XML de finalización")
+        elif grupo.get("estado") != "cerrado":
+            st.error("⚠️ El grupo debe estar cerrado antes de generar el XML de finalización")
+            st.info("Cambia el estado del grupo a 'cerrado' en la gestión de grupos")
+        else:
+            # Cargar participantes del grupo
+            participantes_grupo = df_participantes[df_participantes['grupo_id'] == grupo['id']] if not df_participantes.empty else pd.DataFrame()
+            
+            if participantes_grupo.empty:
+                st.warning("⚠️ No hay participantes registrados en este grupo")
+            else:
+                st.info(f"📊 Participantes encontrados: {len(participantes_grupo)}")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔧 Generar XML Finalización", type="primary", use_container_width=True):
+                        with st.spinner("Generando y validando XML..."):
+                            try:
+                                # Convertir participantes a formato necesario
+                                participantes_list = participantes_grupo.to_dict('records')
+                                
+                                xml_content = generar_xml_finalizacion_grupo(grupo, participantes_list)
+                                
+                                if xml_content:
+                                    # Validar contra XSD
+                                    es_valido, errores = validar_xml(xml_content, xsd_urls['finalizacion_grupo'])
+                                    
+                                    if es_valido:
+                                        st.success("✅ XML de finalización generado y validado correctamente")
+                                        st.download_button(
+                                            "📥 Descargar XML Finalización Grupo",
+                                            data=xml_content,
+                                            file_name=f"FG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                            mime="application/xml",
+                                            use_container_width=True
+                                        )
+                                    else:
+                                        st.error("❌ El XML no es válido según el esquema XSD")
+                                        for error in errores[:5]:
+                                            st.error(f"• {error}")
+                                else:
+                                    st.error("❌ Error al generar el XML")
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                
+                with col2:
+                    if st.button("👁️ Vista previa XML", use_container_width=True):
+                        try:
+                            participantes_list = participantes_grupo.to_dict('records')
+                            xml_preview = generar_xml_finalizacion_grupo(grupo, participantes_list)
+                            if xml_preview:
+                                st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
+                        except Exception as e:
+                            st.error(f"❌ Error en vista previa: {e}")
 
     # =========================
     # INFORMACIÓN ADICIONAL
     # =========================
-    with st.expander("ℹ️ Información sobre Gestión de Documentos"):
-        st.markdown("""
-        **Tipos de documentos soportados:**
+    st.divider()
+    st.markdown("### 📊 Resumen de Datos")
+    
+    if not df_acciones.empty:
+        col1, col2 = st.columns(2)
         
-        **📄 Documentos de texto:**
-        - PDF, DOC, DOCX para manuales, certificados, informes
-        
-        **📊 Hojas de cálculo:**
-        - XLSX, XLS para listas, evaluaciones, métricas
-        
-        **📽️ Presentaciones:**
-        - PPT, PPTX para materiales formativos
-        
-        **🖼️ Imágenes:**
-        - JPG, PNG para capturas, diagramas, logos
-        
-        **🔒 Seguridad:**
-        - Los archivos se almacenan de forma segura en Supabase Storage
-        - Control de acceso basado en roles de usuario
-        - URLs únicas y no predecibles
-        
-        **💡 Consejos:**
-        - Usa nombres descriptivos para los títulos
-        - Especifica siempre el tipo de documento
-        - Añade observaciones para facilitar la búsqueda
-        - Revisa periódicamente documentos obsoletos
-        """)
-
-def subir_archivos_masivo(supabase, session_state, archivos, tipo, empresa_nombre, empresas_dict):
-    """Función para subir múltiples archivos de una vez."""
-    try:
-        exitosos = 0
-        errores = []
-        
-        # Determinar empresa_id
-        empresa_id = None
-        if session_state.role == "gestor":
-            empresa_id = session_state.user.get("empresa_id")
-        elif empresa_nombre and empresa_nombre in empresas_dict:
-            empresa_id = empresas_dict[empresa_nombre]
-        
-        progress_bar = st.progress(0)
-        total_archivos = len(archivos)
-        
-        for i, archivo in enumerate(archivos):
-            try:
-                # Subir archivo
-                archivo_url = subir_archivo_supabase(supabase, archivo.read(), archivo.name, "documentos")
-                
-                if archivo_url:
-                    # Crear documento
-                    datos_documento = {
-                        "titulo": archivo.name,
-                        "tipo": tipo,
-                        "url": archivo_url,
-                        "descripcion": f"Documento subido masivamente: {archivo.name}",
-                        "empresa_id": empresa_id
-                    }
-                    
-                    supabase.table("documentos").insert(datos_documento).execute()
-                    exitosos += 1
-                else:
-                    errores.append(f"Error al subir {archivo.name}")
-                
-                # Actualizar barra de progreso
-                progress_bar.progress((i + 1) / total_archivos)
-                
-            except Exception as e:
-                errores.append(f"Error con {archivo.name}: {str(e)}")
-        
-        # Mostrar resultados
-        if exitosos > 0:
-            st.success(f"✅ Se subieron {exitosos} archivos correctamente.")
-        
-        if errores:
-            st.error("❌ Errores encontrados:")
-            for error in errores[:5]:  # Mostrar solo los primeros 5
-                st.caption(f"• {error}")
-            if len(errores) > 5:
-                st.caption(f"... y {len(errores) - 5} errores más")
-        
-        if exitosos > 0:
-            st.rerun()
+        with col1:
+            st.markdown("#### 📈 Estadísticas")
+            st.write(f"• **Total acciones formativas:** {len(df_acciones)}")
+            st.write(f"• **Total grupos:** {len(df_grupos)}")
+            st.write(f"• **Total participantes:** {len(df_participantes)}")
             
-    except Exception as e:
-        st.error(f"❌ Error en subida masiva: {e}")
+            # Exportar datos para análisis
+            if st.button("📊 Exportar Datos para Análisis"):
+                export_csv(df_acciones, "acciones_formativas.csv")
+                export_csv(df_grupos, "grupos.csv")
+                export_csv(df_participantes, "participantes.csv")
+        
+        with col2:
+            st.markdown("#### ℹ️ Información")
+            st.info("""
+            **Documentos FUNDAE oficiales:**
+            
+            • **PDF Acción:** Documento informativo
+            • **XML Acción:** Comunicación oficial de acción formativa
+            • **XML Inicio:** Comunicación de inicio de grupo
+            • **XML Finalización:** Comunicación de finalización
+            
+            Todos los XMLs se validan contra esquemas XSD oficiales.
+            """)
 
-def crear_plantilla_acta(supabase, session_state):
-    """Crea una plantilla de acta de reunión."""
-    try:
-        plantilla_acta = """
-        ACTA DE REUNIÓN
-        
-        Fecha: ________________
-        Hora: _________________
-        Lugar: ________________
-        
-        ASISTENTES:
-        - 
-        - 
-        - 
-        
-        ORDEN DEL DÍA:
-        1. 
-        2. 
-        3. 
-        
-        DESARROLLO:
-        
-        
-        ACUERDOS:
-        
-        
-        ACCIONES PENDIENTES:
-        
-        
-        Firma: ________________
-        """
-        
-        # Crear documento plantilla
-        datos_plantilla = {
-            "titulo": f"Plantilla Acta de Reunión - {datetime.now().strftime('%Y%m%d')}",
-            "tipo": "Plantilla",
-            "descripcion": plantilla_acta,
-            "empresa_id": session_state.user.get("empresa_id") if session_state.role == "gestor" else None
-        }
-        
-        supabase.table("documentos").insert(datos_plantilla).execute()
-        st.success("✅ Plantilla de acta creada correctamente.")
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"❌ Error al crear plantilla: {e}")
-
-def crear_plantilla_evaluacion(supabase, session_state):
-    """Crea una plantilla de informe de evaluación."""
-    try:
-        plantilla_evaluacion = """
-        INFORME DE EVALUACIÓN
-        
-        Participante: ________________
-        Curso: _______________________
-        Tutor: _______________________
-        Fecha: _______________________
-        
-        EVALUACIÓN TEÓRICA:
-        - Puntuación: ___/100
-        - Observaciones:
-        
-        
-        EVALUACIÓN PRÁCTICA:
-        - Puntuación: ___/100
-        - Observaciones:
-        
-        
-        COMPETENCIAS DESARROLLADAS:
-        [ ] Competencia 1
-        [ ] Competencia 2
-        [ ] Competencia 3
-        
-        RECOMENDACIONES:
-        
-        
-        RESULTADO FINAL: APTO / NO APTO
-        
-        Firma Tutor: ________________
-        """
-        
-        # Crear documento plantilla
-        datos_plantilla = {
-            "titulo": f"Plantilla Evaluación - {datetime.now().strftime('%Y%m%d')}",
-            "tipo": "Plantilla",
-            "descripcion": plantilla_evaluacion,
-            "empresa_id": session_state.user.get("empresa_id") if session_state.role == "gestor" else None
-        }
-        
-        supabase.table("documentos").insert(datos_plantilla).execute()
-        st.success("✅ Plantilla de evaluación creada correctamente.")
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"❌ Error al crear plantilla: {e}")
-
-def mostrar_documentos_vencimiento(df_documentos):
-    """Muestra documentos próximos a vencer (ejemplo)."""
-    st.info("📅 Funcionalidad en desarrollo: Análisis de documentos con fechas de vencimiento")
-    
-    # Aquí podrías implementar lógica para documentos con fecha de caducidad
-    if not df_documentos.empty:
-        st.write("Próximamente: alertas automáticas para documentos próximos a vencer")
-
-def generar_reporte_documentos(df_documentos):
-    """Genera un reporte estadístico de documentos."""
-    if df_documentos.empty:
-        st.warning("No hay documentos para generar reporte.")
-        return
-    
-    st.markdown("### 📊 Reporte de Documentos")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### Distribución por Tipo")
-        tipos_count = df_documentos["tipo"].value_counts()
-        st.bar_chart(tipos_count)
-    
-    with col2:
-        st.markdown("#### Documentos por Mes")
-        if "created_at" in df_documentos.columns:
-            try:
-                df_documentos['created_at_safe'] = df_documentos['created_at'].apply(safe_date_parse)
-                df_documentos['mes'] = df_documentos['created_at_safe'].dt.to_period('M')
-                por_mes = df_documentos['mes'].value_counts().sort_index()
-                st.line_chart(por_mes)
-            except Exception:
-                st.info("No se pueden mostrar estadísticas por fecha")
-    
-    # Tabla resumen
-    st.markdown("#### 📋 Resumen Estadístico")
-    resumen = {
-        "Total documentos": len(df_documentos),
-        "Tipos únicos": df_documentos["tipo"].nunique(),
-        "Con archivo adjunto": len(df_documentos[df_documentos["url"].notna()]),
-        "Sin archivo": len(df_documentos[df_documentos["url"].isna()])
-    }
-    
-    for metrica, valor in resumen.items():
-        st.metric(metrica, valor)
+    st.divider()
+    st.caption("💡 Los documentos generados cumplen con los estándares oficiales de FUNDAE y se validan automáticamente.")
