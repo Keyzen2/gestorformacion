@@ -9,12 +9,16 @@ def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
     st.caption("Administración de empresas cliente y configuración de módulos.")
 
+    # Verificar permisos
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
     # Inicializar servicio de datos
     data_service = get_data_service(supabase, session_state)
+    with st.spinner("Cargando datos de empresas..."):
+        df_empresas = data_service.get_empresas_con_modulos()
+        metricas = data_service.get_metricas_empresas()
 
     # =========================
     # MÉTRICAS PRINCIPALES
