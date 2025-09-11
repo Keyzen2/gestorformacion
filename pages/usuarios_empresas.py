@@ -316,5 +316,4 @@ def main(supabase, session_state):
         campos_password=campos_password,
         campos_help=campos_help,
         reactive_fields=reactive_fields,
-        search_columns=["nombre_completo", "email", "telefono", "empresa_nombre"]
     )
