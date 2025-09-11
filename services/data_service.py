@@ -373,9 +373,10 @@ class DataService:
         try:
             if include_empresa:
                 query = _self.supabase.table("usuarios").select("""
-                    id, email, nombre, apellidos, rol, activo, 
-                    created_at, updated_at, empresa_id,
-                    empresa:empresas(id, nombre, cif)
+                    id, auth_id, email, rol, empresa_id, dni, nombre_completo, 
+                    telefono, nombre, grupo_id, created_at,
+                    empresa:empresas(id, nombre, cif),
+                    grupo:grupos(id, codigo_grupo)
                 """)
             else:
                 query = _self.supabase.table("usuarios").select("*")
@@ -385,13 +386,21 @@ class DataService:
             res = query.order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data or [])
             
-            if include_empresa and not df.empty and "empresa" in df.columns:
-                df["empresa_nombre"] = df["empresa"].apply(
-                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                )
-                df["empresa_cif"] = df["empresa"].apply(
-                    lambda x: x.get("cif") if isinstance(x, dict) else ""
-                )
+            if include_empresa and not df.empty:
+                # Aplanar relación de empresa
+                if "empresa" in df.columns:
+                    df["empresa_nombre"] = df["empresa"].apply(
+                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                    )
+                    df["empresa_cif"] = df["empresa"].apply(
+                        lambda x: x.get("cif") if isinstance(x, dict) else ""
+                    )
+                
+                # Aplanar relación de grupo
+                if "grupo" in df.columns:
+                    df["grupo_codigo"] = df["grupo"].apply(
+                        lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
+                    )
             
             return df
         except Exception as e:
