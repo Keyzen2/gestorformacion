@@ -1,6 +1,6 @@
 import streamlit as st
 from datetime import datetime
-from utils import get_ajustes_app, update_ajustes_ap
+from utils import get_ajustes_app, update_ajustes_app
 
 def main(supabase, session_state):
     st.title("⚙️ Ajustes de la Aplicación")
