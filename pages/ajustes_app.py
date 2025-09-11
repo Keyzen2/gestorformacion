@@ -13,7 +13,7 @@ def main(supabase, session_state):
 
     # Cargar ajustes actuales con manejo de errores (caché segura)
     try:
-        ajustes = cached_get_ajustes_app()
+        ajustes = get_ajustes_app(supabase)
         if not ajustes:
             ajustes = {}
     except Exception as e:
@@ -505,8 +505,8 @@ def main(supabase, session_state):
     with col1:
         if st.button("🔄 Recargar ajustes", help="Recarga la configuración desde la base de datos"):
             try:
-                if hasattr(cached_get_ajustes_app, 'clear'):
-                    cached_get_ajustes_app.clear()
+                if hasattr(_get_ajustes_app, 'clear'):
+                    get_ajustes_app.clear()
                 st.success("✅ Ajustes recargados correctamente.")
                 st.rerun()
             except Exception as e:
@@ -546,8 +546,8 @@ def main(supabase, session_state):
                     }
                     update_ajustes_app(supabase, defaults)
                     # Invalidar caché para que se recojan los nuevos valores
-                    if hasattr(cached_get_ajustes_app, 'clear'):
-                        cached_get_ajustes_app.clear()
+                    if hasattr(get_ajustes_app, 'clear'):
+                        get_ajustes_app.clear()
                     st.success("✅ Configuración restablecida a valores por defecto.")
                     st.rerun()
                 except Exception as e:
