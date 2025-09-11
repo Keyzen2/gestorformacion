@@ -9,7 +9,6 @@ def listado_con_ficha(
     on_save,
     id_col="id",
     on_create=None,
-    on_delete=None,
     campos_select=None,
     campos_textarea=None,
     campos_file=None,
@@ -18,9 +17,7 @@ def listado_con_ficha(
     campos_password=None,
     allow_creation=True,
     campos_help=None,
-    reactive_fields=None,
-    search_columns=None,
-    campos_obligatorios=None
+    reactive_fields=None
 ):
     """
     Muestra un listado interactivo y, al seleccionar un registro, abre una ficha editable.
@@ -34,7 +31,6 @@ def listado_con_ficha(
     on_save: función que recibe (id, datos_editados)
     id_col: columna identificadora
     on_create: función que recibe (datos_nuevos) para crear registros
-    on_delete: función que recibe (id) para eliminar registros
     campos_select: dict {columna: [opciones]} para selects
     campos_textarea: dict {columna: {"label": str}} para áreas de texto
     campos_file: dict {columna: {"label": str, "type": [extensiones]}} para subida de archivos
@@ -44,10 +40,7 @@ def listado_con_ficha(
     allow_creation: bool para mostrar/ocultar formulario de creación
     campos_help: dict {columna: "texto de ayuda"} para mostrar ayuda contextual
     reactive_fields: dict {campo_trigger: [campos_dependientes]} para campos reactivos
-    search_columns: lista de columnas para búsqueda rápida
-    campos_obligatorios: lista de campos obligatorios
     """
-    # Inicializar parámetros opcionales
     campos_select = campos_select or {}
     campos_textarea = campos_textarea or {}
     campos_file = campos_file or {}
@@ -55,8 +48,6 @@ def listado_con_ficha(
     campos_password = campos_password or []
     campos_help = campos_help or {}
     reactive_fields = reactive_fields or {}
-    search_columns = search_columns or []
-    campos_obligatorios = campos_obligatorios or []
 
     # CSS mejorado para mejor visualización
     st.markdown("""
@@ -188,30 +179,13 @@ def listado_con_ficha(
     """, unsafe_allow_html=True)
 
     # ===============================
-    # BÚSQUEDA RÁPIDA (si se especifican columnas)
-    # ===============================
-    df_filtered = df.copy()
-    if search_columns and not df.empty:
-        search_query = st.text_input(
-            f"🔍 Buscar en {', '.join(search_columns)}", 
-            key=f"search_{titulo}"
-        )
-        if search_query:
-            search_lower = search_query.lower()
-            mask = pd.Series([False] * len(df))
-            for col in search_columns:
-                if col in df.columns:
-                    mask |= df[col].astype(str).str.lower().str.contains(search_lower, na=False)
-            df_filtered = df[mask]
-
-    # ===============================
     # TABLA DE LISTADO
     # ===============================
-    if not df_filtered.empty:
-        st.markdown(f"### 📋 {titulo}s registrados ({len(df_filtered)} total)")
+    if not df.empty:
+        st.markdown(f"### 📋 {titulo}s registrados ({len(df)} total)")
         
         # Configuración de la tabla
-        gb = GridOptionsBuilder.from_dataframe(df_filtered[columnas_visibles])
+        gb = GridOptionsBuilder.from_dataframe(df[columnas_visibles])
         gb.configure_default_column(filter=True, sortable=True, resizable=True)
         gb.configure_pagination(paginationAutoPageSize=False, paginationPageSize=15)
         gb.configure_selection('single', use_checkbox=False)
@@ -219,7 +193,7 @@ def listado_con_ficha(
         grid_options = gb.build()
 
         grid_response = AgGrid(
-            df_filtered[columnas_visibles],
+            df[columnas_visibles],
             gridOptions=grid_options,
             update_mode=GridUpdateMode.SELECTION_CHANGED,
             theme="balham",
@@ -251,15 +225,15 @@ def listado_con_ficha(
             with st.form("form_editar", clear_on_submit=False):
                 datos_editados = {}
                 
-                # ✅ CORRECCIÓN: Organizar campos en secciones si hay muchos
+                # Organizar campos en secciones si hay muchos
                 if len(campos_a_mostrar) > 8:
                     st.markdown("#### 📝 Información básica")
                     col1, col2 = st.columns(2)
                     cols = [col1, col2]
+                    col_idx = 0
                 else:
                     cols = [st]
-                
-                col_idx = 0
+                    col_idx = 0
                 
                 for i, col in enumerate(campos_a_mostrar):
                     if col == id_col:
@@ -269,14 +243,13 @@ def listado_con_ficha(
                     if valor_actual is None:
                         valor_actual = ""
 
-                    # ✅ CORRECCIÓN: Determinar columna para organización visual
+                    # Determinar columna para organización visual
                     if len(cols) > 1:
                         current_col = cols[col_idx % 2]
                         col_idx += 1
                     else:
                         current_col = cols[0]
 
-                    # ✅ CORRECCIÓN: Ahora current_col está garantizada que existe
                     with current_col:
                         # Crear contenedor dinámico para campos reactivos
                         campo_container = st.container()
@@ -285,52 +258,49 @@ def listado_con_ficha(
                             label = col.replace('_', ' ').title()
                             help_text = campos_help.get(col, "")
                             
-                            # Marcar campos obligatorios
-                            if col in campos_obligatorios:
-                                st.markdown(f'<div class="campo-obligatorio">', unsafe_allow_html=True)
-
-                            # Campo de solo lectura
+                            # Campo readonly
                             if col in campos_readonly:
                                 st.text_input(
-                                    f"{label} (solo lectura)",
-                                    value=str(valor_actual),
+                                    label, 
+                                    value=str(valor_actual), 
                                     disabled=True,
                                     key=f"readonly_{col}",
                                     help=help_text
                                 )
-                                datos_editados[col] = valor_actual
+                                continue
 
-                            # Campo select
+                            # Campo select con mejoras visuales
                             elif col in campos_select:
                                 opciones = campos_select[col]
                                 try:
-                                    index = opciones.index(valor_actual) if valor_actual in opciones else 0
-                                except (ValueError, IndexError):
-                                    index = 0
+                                    idx = opciones.index(valor_actual) if valor_actual in opciones else 0
+                                except (ValueError, TypeError):
+                                    idx = 0
+                                
+                                # Campo select reactivo
                                 datos_editados[col] = st.selectbox(
-                                    label,
-                                    options=opciones,
-                                    index=index,
+                                    label, 
+                                    options=opciones, 
+                                    index=idx,
                                     key=f"select_{col}",
                                     help=help_text
                                 )
 
                             # Campo textarea
                             elif col in campos_textarea:
-                                cfg = campos_textarea[col]
                                 datos_editados[col] = st.text_area(
-                                    cfg.get("label", label),
+                                    campos_textarea[col].get("label", label),
                                     value=str(valor_actual),
-                                    height=cfg.get("height", 100),
+                                    height=campos_textarea[col].get("height", 100),
                                     key=f"textarea_{col}",
                                     help=help_text
                                 )
 
-                            # Campo file
+                            # Campo file con preview
                             elif col in campos_file:
-                                st.markdown(f"**{label}**")
+                                st.markdown(f"**{campos_file[col].get('label', label)}**")
                                 if valor_actual:
-                                    st.caption(f"Archivo actual: {valor_actual}")
+                                    st.caption(f"📎 Archivo actual: {valor_actual}")
                                 datos_editados[col] = st.file_uploader(
                                     "Seleccionar nuevo archivo",
                                     type=campos_file[col].get("type", None),
@@ -383,14 +353,9 @@ def listado_con_ficha(
                                         key=f"phone_{col}",
                                         help=help_text
                                     )
-                                elif 'url' in col.lower() or 'web' in col.lower():
-                                    datos_editados[col] = st.text_input(
-                                        label, 
-                                        value=str(valor_actual),
-                                        placeholder="https://ejemplo.com",
-                                        key=f"url_{col}",
-                                        help=help_text
-                                    )
+                                elif col in campos_password:
+                                    # Los campos de contraseña no se muestran en edición
+                                    pass
                                 else:
                                     datos_editados[col] = st.text_input(
                                         label, 
@@ -399,46 +364,53 @@ def listado_con_ficha(
                                         help=help_text
                                     )
                             
-                            # Cerrar contenedor de campo obligatorio
-                            if col in campos_obligatorios:
-                                st.markdown('</div>', unsafe_allow_html=True)
+                            # Mostrar texto de ayuda si existe
+                            if help_text:
+                                st.caption(f"💡 {help_text}")
 
-                # Botones de acción
+                # Botones de acción con estilos mejorados
+                st.markdown("#### 🔧 Acciones")
                 col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    submitted = st.form_submit_button("💾 Guardar", use_container_width=True)
-                with col2:
-                    if on_delete:
-                        delete_clicked = st.form_submit_button("🗑️ Eliminar", use_container_width=True)
                 
-                # Procesar envío del formulario
-                if submitted:
-                    # Validar campos obligatorios
-                    campos_vacios = [col for col in campos_obligatorios 
-                                   if col in datos_editados and not str(datos_editados[col]).strip()]
-                    
-                    if campos_vacios:
-                        st.error(f"⚠️ Los siguientes campos son obligatorios: {', '.join(campos_vacios)}")
-                    else:
-                        try:
-                            on_save(fila[id_col], datos_editados)
-                        except Exception as e:
-                            st.error(f"❌ Error al guardar: {e}")
+                with col1:
+                    if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
+                        # Filtrar campos que no han cambiado o están vacíos innecesariamente
+                        datos_filtrados = {}
+                        for key, value in datos_editados.items():
+                            if key in campos_file and value is None:
+                                continue  # No actualizar archivos si no se subió nada nuevo
+                            datos_filtrados[key] = value
+                        
+                        if datos_filtrados:
+                            on_save(fila[id_col], datos_filtrados)
+                        else:
+                            st.warning("⚠️ No hay cambios para guardar.")
+                
+                with col2:
+                    if st.form_submit_button("🗑️ Eliminar", use_container_width=True, type="secondary"):
+                        st.session_state[f'confirm_delete_{fila[id_col]}'] = True
+                        st.rerun()
 
-                # Procesar eliminación
-                if on_delete and 'delete_clicked' in locals() and delete_clicked:
-                    if st.warning("⚠️ ¿Estás seguro de que quieres eliminar este registro? Esta acción no se puede deshacer."):
-                        try:
-                            on_delete(fila[id_col])
-                            st.success("✅ Registro eliminado correctamente.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al eliminar: {e}")
-
+            # Confirmación de eliminación
+            if st.session_state.get(f'confirm_delete_{fila[id_col]}', False):
+                st.error("⚠️ ¿Estás seguro de que quieres eliminar este registro?")
+                st.caption("Esta acción no se puede deshacer.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("✅ Sí, eliminar", key=f"confirm_yes_{fila[id_col]}", type="primary"):
+                        # Aquí iría la función de eliminación si estuviera implementada
+                        st.success("✅ Funcionalidad de eliminación pendiente de implementar.")
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+                with col2:
+                    if st.button("❌ Cancelar", key=f"confirm_no_{fila[id_col]}"):
+                        del st.session_state[f'confirm_delete_{fila[id_col]}']
+                        st.rerun()
+            
             st.markdown('</div>', unsafe_allow_html=True)
 
     else:
-        st.info(f"ℹ️ No hay {titulo.lower()}s para mostrar.")
+        st.info(f"ℹ️ No hay {titulo.lower()}s registrados en el sistema.")
 
     # ===============================
     # FORMULARIO DE CREACIÓN MEJORADO
@@ -463,35 +435,30 @@ def listado_con_ficha(
                 except Exception:
                     pass  # Usar columnas_visibles por defecto
 
-            # ✅ CORRECCIÓN: Organizar campos en columnas si son muchos
+            # Organizar campos en columnas si son muchos
             if len(campos_crear) > 6:
                 st.markdown("#### 📝 Información del nuevo registro")
                 col1, col2 = st.columns(2)
                 cols = [col1, col2]
+                col_idx = 0
             else:
                 cols = [st]
-
-            col_idx = 0
+                col_idx = 0
 
             for col in campos_crear:
                 if col == id_col:
                     continue
 
-                # ✅ CORRECCIÓN: Definir current_col SIEMPRE antes de usarla
+                # Alternar entre columnas si hay más de 6 campos
                 if len(cols) > 1:
                     current_col = cols[col_idx % 2]
                     col_idx += 1
                 else:
                     current_col = cols[0]
 
-                # ✅ CORRECCIÓN: Ahora current_col está garantizada que existe
                 with current_col:
                     label = col.replace('_', ' ').title()
                     help_text = campos_help.get(col, "")
-                    
-                    # Marcar campos obligatorios
-                    if col in campos_obligatorios:
-                        st.markdown(f'<div class="campo-obligatorio">', unsafe_allow_html=True)
 
                     # Campo select
                     if col in campos_select:
@@ -541,60 +508,59 @@ def listado_con_ficha(
                             )
                         elif col.lower() in ['precio', 'importe', 'valor', 'cantidad', 'numero', 'num', 'horas']:
                             datos_nuevos[col] = st.number_input(
-                                label, 
-                                min_value=0.0, 
+                                label,
+                                min_value=0.0,
                                 step=0.01 if 'precio' in col.lower() or 'importe' in col.lower() else 1.0,
                                 key=f"create_number_{col}",
                                 help=help_text
                             )
                         elif 'email' in col.lower():
                             datos_nuevos[col] = st.text_input(
-                                label, 
+                                label,
                                 placeholder="usuario@ejemplo.com",
                                 key=f"create_email_{col}",
                                 help=help_text
                             )
                         elif 'telefono' in col.lower() or 'movil' in col.lower():
                             datos_nuevos[col] = st.text_input(
-                                label, 
+                                label,
                                 placeholder="600123456",
                                 key=f"create_phone_{col}",
                                 help=help_text
                             )
-                        elif 'url' in col.lower() or 'web' in col.lower():
+                        elif 'cif' in col.lower() or 'dni' in col.lower():
                             datos_nuevos[col] = st.text_input(
-                                label, 
-                                placeholder="https://ejemplo.com",
-                                key=f"create_url_{col}",
+                                label,
+                                placeholder="12345678A" if 'dni' in col.lower() else "A12345678",
+                                key=f"create_doc_{col}",
                                 help=help_text
                             )
                         else:
                             datos_nuevos[col] = st.text_input(
                                 label,
-                                key=f"create_text_{col}",
+                                key=f"create_input_{col}",
                                 help=help_text
                             )
                     
-                    # Cerrar contenedor de campo obligatorio
-                    if col in campos_obligatorios:
-                        st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Botón de crear
+                    # Mostrar texto de ayuda
+                    if help_text:
+                        st.caption(f"💡 {help_text}")
+
+            # Botones de creación
+            st.markdown("#### 🔧 Crear registro")
             col1, col2 = st.columns([1, 3])
             with col1:
-                submitted = st.form_submit_button(f"✅ Crear {titulo}", use_container_width=True)
-                
-        if submitted:
-            # Validar campos obligatorios
-            campos_vacios = [col for col in campos_obligatorios 
-                           if col in datos_nuevos and not str(datos_nuevos[col]).strip()]
-            
-            if campos_vacios:
-                st.error(f"⚠️ Los siguientes campos son obligatorios: {', '.join(campos_vacios)}")
-            else:
-                try:
-                    on_create(datos_nuevos)
-                except Exception as e:
-                    st.error(f"❌ Error al crear {titulo.lower()}: {e}")
-
+                if st.form_submit_button(f"✅ Crear {titulo}", use_container_width=True, type="primary"):
+                    # Filtrar campos vacíos excepto los obligatorios
+                    datos_filtrados = {k: v for k, v in datos_nuevos.items() if v or k in campos_password}
+                    try:
+                        on_create(datos_filtrados)
+                    except Exception as e:
+                        st.error(f"❌ Error al crear {titulo.lower()}: {e}")
+        
         st.markdown('</div>', unsafe_allow_html=True)
+
+def _handle_reactive_change(field, reactive_config):
+    """Función auxiliar para manejar cambios en campos reactivos."""
+    # Esta función se puede expandir para lógica más compleja
+    pass
