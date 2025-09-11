@@ -283,16 +283,17 @@ def main(supabase, session_state):
             df_display["empresa_sel"] = df_display["empresa_nombre"]
 
         # Mostrar tabla con componente optimizado
+        # Mostrar tabla con componente optimizado
         listado_con_ficha(
             df_display,
             columnas_visibles=[
-                "id", "nombre", "apellidos", "email", "telefono",
+                "nombre", "apellidos", "email", "telefono",
                 "nif", "tipo_tutor", "especialidad", "cv_url", "empresa_nombre"
-            ],
+            ],  # ✅ REMOVIDO "id" de columnas_visibles ya que se añade automáticamente
             titulo="Tutor",
             on_save=guardar_tutor,
             on_create=crear_tutor,
-            id_col="id",
+            id_col="id",  # ✅ Se añade automáticamente, no debe estar en columnas_visibles
             campos_select=campos_select,
             campos_readonly=campos_readonly,
             campos_file=campos_file,
