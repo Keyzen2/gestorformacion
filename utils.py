@@ -258,6 +258,25 @@ def formato_porcentaje(valor):
         return f"{valor_num * 100:.1f}%"
     except:
         return str(valor)
+        
+def format_percentage(valor, decimales=1):
+    """Formatea un valor decimal como porcentaje."""
+    try:
+        if valor is None or valor == "":
+            return "0%"
+        
+        # Convertir a float si no lo es
+        if isinstance(valor, str):
+            valor = float(valor.replace('%', '').replace(',', '.'))
+        
+        # Si el valor ya es mayor a 1, asumimos que ya está en porcentaje
+        if valor > 1:
+            return f"{valor:.{decimales}f}%"
+        else:
+            # Si es decimal (0.xx), convertir a porcentaje
+            return f"{valor * 100:.{decimales}f}%"
+    except (ValueError, TypeError):
+        return "0%"
 
 # =========================
 # UTILIDADES DE CACHE
