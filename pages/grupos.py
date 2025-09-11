@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils import export_csv, validar_dni_cif, get_ajustes_app
-from services.data_service import get_data_service
+from services.grupos_service import get_grupos_service
 from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
@@ -14,13 +14,13 @@ def main(supabase, session_state):
         return
 
     # Inicializar servicio de datos
-    data_service = get_data_service(supabase, session_state)
+    grupos_service = get_grupos_service(supabase, session_state)
 
     # =========================
     # Cargar datos principales
     # =========================
     try:
-        df_grupos = data_service.get_grupos_completos()
+        df_grupos = grupos_service.get_grupos_completos()
     except Exception as e:
         st.error(f"❌ Error al cargar grupos: {e}")
         return
@@ -129,7 +129,7 @@ def main(supabase, session_state):
             supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
             
             # Limpiar cache
-            data_service.get_grupos_completos.clear()
+            grupos_service.get_grupos_completos.clear()
             st.success("✅ Grupo actualizado correctamente.")
             st.rerun()
         except Exception as e:
@@ -163,7 +163,7 @@ def main(supabase, session_state):
 
             supabase.table("grupos").insert(datos_nuevos).execute()
             # Limpiar cache
-            data_service.get_grupos_completos.clear()
+            grupos_service.get_grupos_completos.clear()
             st.success("✅ Grupo creado correctamente.")
             st.rerun()
         except Exception as e:
@@ -222,7 +222,7 @@ def main(supabase, session_state):
     if df_filtered.empty:
         st.info("ℹ️ No hay grupos para mostrar.")
         
-        if data_service.can_modify_data():
+        if grupos_service.can_modify_data():
             st.markdown("### ➕ Crear primer grupo")
     else:
         # Preparar datos para mostrar
@@ -249,7 +249,7 @@ def main(supabase, session_state):
             campos_select=campos_select,
             campos_textarea=campos_textarea,
             campos_dinamicos=get_campos_dinamicos,
-            allow_creation=data_service.can_modify_data(),
+            allow_creation=grupos_service.can_modify_data(),
             campos_help=campos_help,
             campos_obligatorios=campos_obligatorios,
             search_columns=["codigo_grupo", "accion_nombre"]
@@ -260,7 +260,7 @@ def main(supabase, session_state):
     # =========================
     # Asignación de participantes
     # =========================
-    if not df_grupos.empty and data_service.can_modify_data():
+    if not df_grupos.empty and grupos_service.can_modify_data():
         st.markdown("### 👥 Asignar Participantes a Grupos")
         
         col1, col2 = st.columns(2)
@@ -407,7 +407,7 @@ def main(supabase, session_state):
     # =========================
     # Importación masiva desde Excel
     # =========================
-    if not df_grupos.empty and data_service.can_modify_data():
+    if not df_grupos.empty and da_service.can_modify_data():
         st.divider()
         st.markdown("### 📤 Importación Masiva desde Excel")
         
