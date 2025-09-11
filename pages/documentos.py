@@ -5,10 +5,11 @@ from utils import (
     export_csv, 
     subir_archivo_supabase, 
     format_date,
-    safe_date_parse
+    safe_date_parse,
+    get_ajustes_app
 )
-from utils import get_ajustes_app
 from components.listado_con_ficha import listado_con_ficha
+from services.data_service import get_data_service
 
 def main(supabase, session_state):
     st.title("📄 Gestión de Documentos")
