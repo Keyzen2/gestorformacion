@@ -278,6 +278,83 @@ def format_percentage(valor, decimales=1):
     except (ValueError, TypeError):
         return "0%"
 
+def format_date(fecha):
+    """
+    Formatea una fecha para mostrar en la interfaz.
+    
+    Args:
+        fecha: Puede ser datetime, date, string, o None
+    
+    Returns:
+        str: Fecha formateada como "DD/MM/YYYY" o vacío si error
+    
+    Examples:
+        format_date(datetime.now()) -> "11/09/2025"
+        format_date("2025-09-11") -> "11/09/2025"
+        format_date(None) -> ""
+    """
+    if not fecha:
+        return ""
+    try:
+        if isinstance(fecha, str):
+            # Parsear string a datetime
+            if 'T' in fecha:  # ISO format con tiempo
+                fecha = datetime.fromisoformat(fecha.replace('Z', '+00:00'))
+            else:
+                fecha = pd.to_datetime(fecha)
+        
+        # Convertir a date si es datetime
+        if hasattr(fecha, 'date'):
+            fecha = fecha.date()
+        
+        return fecha.strftime("%d/%m/%Y")
+    except Exception:
+        return str(fecha) if fecha else ""
+
+def safe_date_parse(fecha_str, formato=None):
+    """
+    Parsea una fecha de forma segura desde string.
+    
+    Args:
+        fecha_str: String con la fecha
+        formato: Formato específico (opcional)
+    
+    Returns:
+        date: Objeto date o None si error
+    
+    Examples:
+        safe_date_parse("11/09/2025") -> date(2025, 9, 11)
+        safe_date_parse("2025-09-11") -> date(2025, 9, 11)
+        safe_date_parse("fecha inválida") -> None
+    """
+    if not fecha_str:
+        return None
+    
+    try:
+        if formato:
+            return datetime.strptime(fecha_str, formato).date()
+        else:
+            # Intentar varios formatos comunes
+            formatos = [
+                "%d/%m/%Y",      # 11/09/2025
+                "%d-%m-%Y",      # 11-09-2025
+                "%Y-%m-%d",      # 2025-09-11
+                "%Y/%m/%d",      # 2025/09/11
+                "%d/%m/%y",      # 11/09/25
+                "%d-%m-%y"       # 11-09-25
+            ]
+            
+            for fmt in formatos:
+                try:
+                    return datetime.strptime(fecha_str, fmt).date()
+                except ValueError:
+                    continue
+            
+            # Si no funciona ningún formato, usar pandas
+            return pd.to_datetime(fecha_str).date()
+            
+    except Exception:
+        return None
 # =========================
 # UTILIDADES DE CACHE
 # =========================
