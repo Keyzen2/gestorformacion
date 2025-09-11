@@ -149,8 +149,9 @@ def main(supabase, session_state):
     # =========================
     def get_campos_dinamicos(datos):
         """Define campos visibles según el contexto."""
+        # Campos base SIN id para creación/edición
         campos_base = [
-            "id", "nombre", "cif", "direccion", "ciudad", "provincia",
+            "nombre", "cif", "direccion", "ciudad", "provincia",
             "codigo_postal", "telefono", "email", "web"
         ]
 
@@ -176,16 +177,20 @@ def main(supabase, session_state):
 
     # Campos de ayuda
     campos_help = {
-        "nombre": "Nombre o razón social de la empresa",
+        "nombre": "Nombre o razón social de la empresa (obligatorio)",
         "cif": "CIF, NIF o NIE de la empresa (obligatorio)",
         "direccion": "Dirección completa de la empresa",
         "telefono": "Teléfono de contacto principal",
         "email": "Email de contacto principal",
         "web": "Página web (opcional, incluir https://)",
+        "ciudad": "Ciudad donde se ubica la empresa",
+        "provincia": "Provincia de la empresa",
+        "codigo_postal": "Código postal",
         "formacion_activo": "Activa el módulo de gestión de formación",
         "iso_activo": "Activa el módulo de gestión ISO 9001",
         "rgpd_activo": "Activa el módulo de gestión RGPD",
-        "crm_activo": "Activa el módulo de gestión comercial (CRM)"
+        "crm_activo": "Activa el módulo de gestión comercial (CRM)",
+        "docu_avanzada_activo": "Activa el módulo de documentación avanzada"
     }
 
     # Campos obligatorios
@@ -260,14 +265,12 @@ def main(supabase, session_state):
             id_col="id",
             campos_select=campos_select,
             campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=campos_obligatorios,  # ✅ AÑADIDO - estaba faltando
             allow_creation=data_service.can_modify_data(),
             campos_help=campos_help,
             search_columns=["nombre", "cif", "ciudad", "email"],
             campos_readonly=campos_readonly
         )
-
-    st.divider()
-    st.caption("💡 Las empresas son la unidad organizativa principal. Cada empresa puede tener múltiples módulos activos y usuarios asignados.")
 
     # =========================
     # INFORMACIÓN ADICIONAL PARA ADMIN
