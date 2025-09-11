@@ -645,6 +645,332 @@ def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancela
         
     # Si no se ha pulsado ningún botón, devolver None
     return None
+
+# =========================
+# GENERACIÓN DE DOCUMENTOS FUNDAE
+# =========================
+
+def generar_pdf(buffer, lines):
+    """
+    Genera un PDF con las líneas de texto proporcionadas.
+    
+    Args:
+        buffer: BytesIO buffer donde escribir el PDF
+        lines: Lista de strings con el contenido
+        
+    Returns:
+        BytesIO: Buffer con el PDF generado
+    """
+    try:
+        # Crear canvas de ReportLab
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # Configurar fuente
+        c.setFont("Helvetica", 12)
+        
+        # Título
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, height - 50, "DOCUMENTO FUNDAE")
+        
+        # Línea separadora
+        c.line(50, height - 70, width - 50, height - 70)
+        
+        # Contenido
+        c.setFont("Helvetica", 10)
+        y_position = height - 100
+        
+        for line in lines:
+            if y_position < 50:  # Nueva página si se queda sin espacio
+                c.showPage()
+                c.setFont("Helvetica", 10)
+                y_position = height - 50
+            
+            c.drawString(50, y_position, str(line))
+            y_position -= 20
+        
+        # Pie de página
+        c.setFont("Helvetica", 8)
+        c.drawString(50, 30, f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        
+        # Finalizar PDF
+        c.save()
+        buffer.seek(0)
+        
+        return buffer
+        
+    except Exception as e:
+        st.error(f"Error al generar PDF: {e}")
+        return None
+
+def generar_xml_accion_formativa(accion, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de acción formativa para FUNDAE con el namespace correcto.
+    
+    Args:
+        accion: Diccionario o Serie con datos de la acción formativa
+        namespace: Namespace XML para FUNDAE
+        
+    Returns:
+        str: XML generado como string
+    """
+    try:
+        # Definir namespaces
+        nsmap = {
+            None: namespace,  # Default namespace
+            'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+        }
+        
+        # Crear elemento raíz
+        root = etree.Element("ACCIONES_FORMATIVAS", nsmap=nsmap)
+        
+        # Añadir atributo schemaLocation
+        root.set(
+            "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+            f"{namespace} AAFF_Inicio.xsd"
+        )
+        
+        # Crear estructura del XML
+        accion_elem = etree.SubElement(root, "ACCION_FORMATIVA")
+        
+        # Elementos obligatorios
+        etree.SubElement(accion_elem, "CODIGO_ACCION").text = str(accion.get('codigo_accion', ''))
+        etree.SubElement(accion_elem, "DENOMINACION").text = str(accion.get('nombre', ''))
+        etree.SubElement(accion_elem, "MODALIDAD").text = str(accion.get('modalidad', 'PRESENCIAL'))
+        etree.SubElement(accion_elem, "HORAS").text = str(accion.get('num_horas', 0))
+        
+        # Elementos opcionales
+        if accion.get('area_profesional'):
+            etree.SubElement(accion_elem, "AREA_PROFESIONAL").text = str(accion['area_profesional'])
+        
+        if accion.get('nivel'):
+            etree.SubElement(accion_elem, "NIVEL").text = str(accion['nivel'])
+        
+        if accion.get('fecha_inicio'):
+            etree.SubElement(accion_elem, "FECHA_INICIO").text = str(accion['fecha_inicio'])
+        
+        if accion.get('fecha_fin'):
+            etree.SubElement(accion_elem, "FECHA_FIN").text = str(accion['fecha_fin'])
+        
+        if accion.get('contenidos'):
+            etree.SubElement(accion_elem, "CONTENIDOS").text = str(accion['contenidos'])
+        
+        if accion.get('objetivos'):
+            etree.SubElement(accion_elem, "OBJETIVOS").text = str(accion['objetivos'])
+        
+        # Convertir a string
+        xml_string = etree.tostring(
+            root,
+            pretty_print=True,
+            xml_declaration=True,
+            encoding='UTF-8'
+        )
+        
+        return xml_string.decode('utf-8')
+        
+    except Exception as e:
+        st.error(f"Error al generar XML de acción formativa: {e}")
+        return None
+
+def generar_xml_inicio_grupo(grupo, participantes, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de inicio de grupo para FUNDAE.
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de diccionarios con datos de participantes
+        namespace: Namespace XML para FUNDAE
+        
+    Returns:
+        str: XML generado como string
+    """
+    try:
+        # Definir namespaces
+        nsmap = {
+            None: namespace,
+            'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+        }
+        
+        # Crear elemento raíz
+        root = etree.Element("INICIO_GRUPOS", nsmap=nsmap)
+        
+        # Añadir atributo schemaLocation
+        root.set(
+            "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+            f"{namespace} InicioGrupos_Organizadora.xsd"
+        )
+        
+        # Información del grupo
+        grupo_elem = etree.SubElement(root, "GRUPO")
+        
+        # Elementos obligatorios del grupo
+        etree.SubElement(grupo_elem, "CODIGO_GRUPO").text = str(grupo.get('codigo_grupo', ''))
+        etree.SubElement(grupo_elem, "FECHA_INICIO").text = str(grupo.get('fecha_inicio', ''))
+        etree.SubElement(grupo_elem, "FECHA_FIN").text = str(grupo.get('fecha_fin_prevista', ''))
+        etree.SubElement(grupo_elem, "MODALIDAD").text = str(grupo.get('modalidad', 'PRESENCIAL'))
+        
+        # Elementos opcionales del grupo
+        if grupo.get('horario'):
+            etree.SubElement(grupo_elem, "HORARIO").text = str(grupo['horario'])
+        
+        if grupo.get('localidad'):
+            etree.SubElement(grupo_elem, "LOCALIDAD").text = str(grupo['localidad'])
+        
+        if grupo.get('provincia'):
+            etree.SubElement(grupo_elem, "PROVINCIA").text = str(grupo['provincia'])
+        
+        # Añadir participantes si existen
+        if participantes:
+            participantes_elem = etree.SubElement(grupo_elem, "PARTICIPANTES")
+            
+            for p in participantes:
+                part_elem = etree.SubElement(participantes_elem, "PARTICIPANTE")
+                
+                # Datos del participante
+                etree.SubElement(part_elem, "DNI").text = str(p.get('dni', ''))
+                etree.SubElement(part_elem, "NOMBRE").text = str(p.get('nombre', ''))
+                
+                if p.get('apellidos'):
+                    etree.SubElement(part_elem, "APELLIDOS").text = str(p['apellidos'])
+                
+                if p.get('email'):
+                    etree.SubElement(part_elem, "EMAIL").text = str(p['email'])
+        
+        # Convertir a string
+        xml_string = etree.tostring(
+            root,
+            pretty_print=True,
+            xml_declaration=True,
+            encoding='UTF-8'
+        )
+        
+        return xml_string.decode('utf-8')
+        
+    except Exception as e:
+        st.error(f"Error al generar XML de inicio de grupo: {e}")
+        return None
+
+def generar_xml_finalizacion_grupo(grupo, participantes, namespace="http://www.fundae.es/esquemas"):
+    """
+    Genera XML de finalización de grupo para FUNDAE.
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de diccionarios con datos de participantes
+        namespace: Namespace XML para FUNDAE
+        
+    Returns:
+        str: XML generado como string
+    """
+    try:
+        # Definir namespaces
+        nsmap = {
+            None: namespace,
+            'xsi': 'http://www.w3.org/2001/XMLSchema-instance'
+        }
+        
+        # Crear elemento raíz
+        root = etree.Element("FINALIZACION_GRUPOS", nsmap=nsmap)
+        
+        # Añadir atributo schemaLocation
+        root.set(
+            "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation",
+            f"{namespace} FinalizacionGrupo_Organizadora.xsd"
+        )
+        
+        # Información del grupo
+        grupo_elem = etree.SubElement(root, "GRUPO")
+        
+        # Elementos obligatorios del grupo
+        etree.SubElement(grupo_elem, "CODIGO_GRUPO").text = str(grupo.get('codigo_grupo', ''))
+        etree.SubElement(grupo_elem, "FECHA_INICIO").text = str(grupo.get('fecha_inicio', ''))
+        etree.SubElement(grupo_elem, "FECHA_FIN").text = str(grupo.get('fecha_fin', ''))
+        
+        # Resultados del grupo
+        etree.SubElement(grupo_elem, "N_PARTICIPANTES_PREVISTOS").text = str(grupo.get('n_participantes_previstos', 0))
+        etree.SubElement(grupo_elem, "N_PARTICIPANTES_FINALIZADOS").text = str(grupo.get('n_participantes_finalizados', 0))
+        etree.SubElement(grupo_elem, "N_APTOS").text = str(grupo.get('n_aptos', 0))
+        etree.SubElement(grupo_elem, "N_NO_APTOS").text = str(grupo.get('n_no_aptos', 0))
+        
+        # Añadir participantes con resultados
+        if participantes:
+            participantes_elem = etree.SubElement(grupo_elem, "PARTICIPANTES")
+            
+            for p in participantes:
+                part_elem = etree.SubElement(participantes_elem, "PARTICIPANTE")
+                
+                # Datos del participante
+                etree.SubElement(part_elem, "DNI").text = str(p.get('dni', ''))
+                etree.SubElement(part_elem, "NOMBRE").text = str(p.get('nombre', ''))
+                
+                if p.get('apellidos'):
+                    etree.SubElement(part_elem, "APELLIDOS").text = str(p['apellidos'])
+                
+                # Resultado: APTO o NO APTO
+                resultado = p.get('resultado', 'NO APTO')
+                if resultado not in ['APTO', 'NO APTO']:
+                    resultado = 'NO APTO'
+                etree.SubElement(part_elem, "RESULTADO").text = resultado
+                
+                # Horas realizadas
+                etree.SubElement(part_elem, "HORAS_REALIZADAS").text = str(p.get('horas_realizadas', 0))
+        
+        # Convertir a string
+        xml_string = etree.tostring(
+            root,
+            pretty_print=True,
+            xml_declaration=True,
+            encoding='UTF-8'
+        )
+        
+        return xml_string.decode('utf-8')
+        
+    except Exception as e:
+        st.error(f"Error al generar XML de finalización de grupo: {e}")
+        return None
+
+def validar_xml(xml_content, xsd_url):
+    """
+    Valida un XML contra un esquema XSD desde una URL.
+    
+    Args:
+        xml_content: Contenido XML como string
+        xsd_url: URL del esquema XSD
+        
+    Returns:
+        tuple: (es_valido: bool, errores: list)
+    """
+    try:
+        # Descargar el XSD
+        response = requests.get(xsd_url, timeout=10)
+        response.raise_for_status()
+        
+        # Parsear el XSD
+        xsd_doc = etree.fromstring(response.content)
+        xsd_schema = etree.XMLSchema(xsd_doc)
+        
+        # Parsear el XML
+        xml_doc = etree.fromstring(xml_content.encode('utf-8'))
+        
+        # Validar
+        es_valido = xsd_schema.validate(xml_doc)
+        
+        if es_valido:
+            return True, []
+        else:
+            # Obtener errores
+            errores = []
+            for error in xsd_schema.error_log:
+                errores.append(f"Línea {error.line}: {error.message}")
+            return False, errores
+            
+    except requests.exceptions.RequestException as e:
+        return False, [f"Error al descargar esquema XSD: {str(e)}"]
+    except etree.XMLSyntaxError as e:
+        return False, [f"Error de sintaxis XML: {str(e)}"]
+    except Exception as e:
+        return False, [f"Error de validación: {str(e)}"]
+        
 # =========================
 # Ajustes globales de la app
 # =========================
