@@ -260,7 +260,7 @@ def main(supabase, session_state):
             campos_select=campos_select,
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=data_service.can_modify_data(),
-            campos_help=campos_help,
+            campos_help=campos_help
         )
 
     st.divider()
