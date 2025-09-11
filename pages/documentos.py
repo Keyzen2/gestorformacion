@@ -7,7 +7,7 @@ from utils import (
     format_date,
     safe_date_parse
 )
-from services.data_service import get_data_service
+from utils import get_ajustes_app
 from components.listado_con_ficha import listado_con_ficha
 
 def main(supabase, session_state):
