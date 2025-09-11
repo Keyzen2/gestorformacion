@@ -208,6 +208,9 @@ def main(supabase, session_state):
             campos_select=campos_select,
             campos_textarea=campos_textarea,
             campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=["codigo_accion", "nombre"],
+            search_columns=["nombre", "codigo_accion", "area_profesional"],
+            campos_readonly=["id", "created_at", "updated_at"],
             allow_creation=data_service.can_modify_data()
         )
 
