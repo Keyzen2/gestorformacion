@@ -264,6 +264,9 @@ def main(supabase, session_state):
         "n_participantes_previstos": "Número estimado de participantes"
     }
 
+    campos_obligatorios = ["codigo_grupo"]
+    campos_readonly = ["id", "created_at", "updated_at"]
+
     # Columnas visibles - usar solo las que sabemos que existen
     columnas_base = ["codigo_grupo", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos"]
     
