@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 from utils import get_ajustes_app, update_ajustes_app
+import json
 # ✅ NUEVO: Import para cache monitor (solo se usa si es admin)
 try:
     from services.cache_service import render_cache_monitor
