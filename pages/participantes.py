@@ -1,11 +1,10 @@
-# pages/participantes.py - OPTIMIZADO
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 from io import BytesIO
 from services.alumnos import alta_alumno
-from services.data_service import get_data_service  # ✅ Usar DataService
-from utils import is_module_active, validar_dni_cif, export_csv, subir_archivo_supabase
+from services.data_service import get_data_service
+from utils import is_module_active, validar_dni_cif, export_csv, subir_archivo_supabase, get_ajustes_app
 from components.listado_con_ficha import listado_con_ficha
 
 def generar_plantilla_excel(rol):
