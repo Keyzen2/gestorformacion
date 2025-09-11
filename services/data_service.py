@@ -547,7 +547,40 @@ class DataService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar tutores", e)
-
+            
+   @st.cache_data(ttl=300)
+   def get_participantes_completos(_self) -> pd.DataFrame:
+       """Obtiene participantes con información de grupo y empresa."""
+       try:
+           query = _self.supabase.table("participantes").select("""
+               id, nif, nombre, apellidos, dni, email, telefono, 
+               fecha_nacimiento, sexo, created_at, updated_at,
+               grupo:grupos(id, codigo_grupo),
+               empresa:empresas(id, nombre)
+           """)
+           query = _self._apply_empresa_filter(query, "participantes")
+        
+           res = query.order("created_at", desc=True).execute()
+           df = pd.DataFrame(res.data or [])
+        
+           # Aplanar relaciones
+           if not df.empty:
+               if "grupo" in df.columns:
+                   df["grupo_codigo"] = df["grupo"].apply(
+                       lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
+                   )
+                   df["grupo_id"] = df["grupo"].apply(
+                       lambda x: x.get("id") if isinstance(x, dict) else None
+                   )
+            
+               if "empresa" in df.columns:
+                   df["empresa_nombre"] = df["empresa"].apply(
+                       lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                   )
+        
+           return df
+       except Exception as e:
+           return _self._handle_query_error("cargar participantes", e)
     # =========================
     # DOCUMENTOS - CONSERVAR PARA FUTURO SERVICIO
     # =========================
