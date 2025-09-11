@@ -2,15 +2,7 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-from utils import (
-    generar_pdf,
-    generar_xml_accion_formativa,
-    generar_xml_inicio_grupo,
-    generar_xml_finalizacion_grupo,
-    validar_xml,
-    get_ajustes_app,
-    export_csv
-)
+from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo, validar_xml, get_ajustes_app, export_csv
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
