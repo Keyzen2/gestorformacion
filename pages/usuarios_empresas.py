@@ -17,32 +17,15 @@ def main(supabase, session_state):
         return
 
     # =========================
-    # Cargar datos y opciones
+    # Cargar datos con DataService
     # =========================
+    data_service = get_data_service(supabase, session_state)
+    
     try:
-        usuarios_res = supabase.table("usuarios").select(
-            "id, auth_id, nombre, nombre_completo, telefono, email, rol, empresa:empresas(nombre), grupo:grupos(codigo_grupo), created_at, dni"
-        ).execute()
-        df_usuarios = pd.DataFrame(usuarios_res.data or [])
+        # Usar el método get_usuarios del DataService
+        df_usuarios = data_service.get_usuarios(include_empresa=True)
 
-        # Procesar relaciones anidadas
-        if not df_usuarios.empty:
-            # Aplanar empresa
-            if "empresa" in df_usuarios.columns:
-                df_usuarios["empresa_nombre"] = df_usuarios["empresa"].apply(
-                    lambda x: x.get("nombre") if isinstance(x, dict) and x else ""
-                )
-            else:
-                df_usuarios["empresa_nombre"] = ""
-            
-            # Aplanar grupo
-            if "grupo" in df_usuarios.columns:
-                df_usuarios["grupo_codigo"] = df_usuarios["grupo"].apply(
-                    lambda x: x.get("codigo_grupo") if isinstance(x, dict) and x else ""
-                )
-            else:
-                df_usuarios["grupo_codigo"] = ""
-
+        # Obtener empresas y grupos para los selects
         empresas_res = supabase.table("empresas").select("id,nombre").execute()
         empresas_dict = {e["nombre"]: e["id"] for e in empresas_res.data or []}
         empresas_opciones = [""] + sorted(empresas_dict.keys())
@@ -63,11 +46,14 @@ def main(supabase, session_state):
         with col1:
             st.metric("👥 Total Usuarios", len(df_usuarios))
         with col2:
-            st.metric("🔧 Administradores", len(df_usuarios[df_usuarios['rol'] == 'admin']))
+            admin_count = len(df_usuarios[df_usuarios['rol'] == 'admin']) if 'rol' in df_usuarios.columns else 0
+            st.metric("🔧 Administradores", admin_count)
         with col3:
-            st.metric("👨‍💼 Gestores", len(df_usuarios[df_usuarios['rol'] == 'gestor']))
+            gestor_count = len(df_usuarios[df_usuarios['rol'] == 'gestor']) if 'rol' in df_usuarios.columns else 0
+            st.metric("👨‍💼 Gestores", gestor_count)
         with col4:
-            st.metric("🎓 Alumnos", len(df_usuarios[df_usuarios['rol'] == 'alumno']))
+            alumno_count = len(df_usuarios[df_usuarios['rol'] == 'alumno']) if 'rol' in df_usuarios.columns else 0
+            st.metric("🎓 Alumnos", alumno_count)
 
     if df_usuarios.empty:
         st.info("ℹ️ No hay usuarios registrados.")
@@ -90,14 +76,21 @@ def main(supabase, session_state):
     
     if query:
         q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered["nombre"].fillna("").str.lower().str.contains(q_lower, na=False) |
-            df_filtered["nombre_completo"].fillna("").str.lower().str.contains(q_lower, na=False) |
-            df_filtered["email"].fillna("").str.lower().str.contains(q_lower, na=False) |
-            df_filtered["telefono"].fillna("").str.lower().str.contains(q_lower, na=False)
-        ]
+        search_cols = []
+        
+        # Verificar qué columnas existen para búsqueda
+        for col in ["nombre", "nombre_completo", "email", "telefono"]:
+            if col in df_filtered.columns:
+                search_cols.append(df_filtered[col].fillna("").str.lower().str.contains(q_lower, na=False))
+        
+        if search_cols:
+            # Combinar todas las búsquedas con OR
+            search_mask = search_cols[0]
+            for mask in search_cols[1:]:
+                search_mask = search_mask | mask
+            df_filtered = df_filtered[search_mask]
     
-    if rol_filter != "Todos":
+    if rol_filter != "Todos" and "rol" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["rol"] == rol_filter]
 
     # Exportación
@@ -106,7 +99,7 @@ def main(supabase, session_state):
         
         with col1:
             if st.button("📥 Descargar CSV"):
-                csv_data = export_csv(df_filtered)
+                csv_data = df_filtered.to_csv(index=False)
                 st.download_button(
                     "💾 Descargar CSV",
                     data=csv_data,
@@ -164,6 +157,10 @@ def main(supabase, session_state):
 
             # Actualizar usuario
             supabase.table("usuarios").update(datos_editados).eq("id", usuario_id).execute()
+            
+            # Limpiar cache del DataService
+            data_service.get_usuarios.clear()
+            
             st.success("✅ Usuario actualizado correctamente.")
             st.rerun()
         except Exception as e:
@@ -208,6 +205,10 @@ def main(supabase, session_state):
 
             # Crear usuario
             supabase.table("usuarios").insert(datos_nuevos).execute()
+            
+            # Limpiar cache del DataService
+            data_service.get_usuarios.clear()
+            
             st.success("✅ Usuario creado correctamente.")
             st.rerun()
         except Exception as e:
@@ -268,13 +269,27 @@ def main(supabase, session_state):
         df_display = df_filtered.copy()
         
         # Añadir campos para selects usando datos ya existentes
-        df_display["empresa_sel"] = df_display["empresa_nombre"]
-        df_display["grupo_sel"] = df_display["grupo_codigo"]
+        if "empresa_nombre" in df_display.columns:
+            df_display["empresa_sel"] = df_display["empresa_nombre"]
+        else:
+            df_display["empresa_sel"] = ""
+            
+        if "grupo_codigo" in df_display.columns:
+            df_display["grupo_sel"] = df_display["grupo_codigo"]
+        else:
+            df_display["grupo_sel"] = ""
+
+        # Determinar columnas visibles
+        columnas_visibles = ["nombre_completo", "email", "telefono", "rol"]
+        if "empresa_nombre" in df_display.columns:
+            columnas_visibles.append("empresa_nombre")
+        if "created_at" in df_display.columns:
+            columnas_visibles.append("created_at")
 
         # Interfaz principal con campos reactivos
         listado_con_ficha(
             df=df_display,
-            columnas_visibles=["nombre_completo", "email", "telefono", "rol", "empresa_nombre", "created_at"],
+            columnas_visibles=columnas_visibles,
             titulo="Usuario",
             on_save=guardar_usuario,
             on_create=crear_usuario,
