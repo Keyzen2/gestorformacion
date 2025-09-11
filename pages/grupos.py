@@ -221,7 +221,6 @@ def main(supabase, session_state):
             allow_creation=grupos_service.can_modify_data(),
             campos_help=campos_help,
             campos_obligatorios=campos_obligatorios,
-            search_columns=["codigo_grupo", "accion_nombre"]
         )
 
     st.divider()
