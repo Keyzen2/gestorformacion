@@ -5,6 +5,13 @@ import base64
 from datetime import datetime, date
 from io import BytesIO
 from typing import Optional, List, Dict, Any
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from lxml import etree
+import xml.etree.ElementTree as ET
+import uuid
+import requests
 
 # =========================
 # VALIDACIONES
@@ -542,20 +549,25 @@ def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancela
         
     # Si no se ha pulsado ningún botón, devolver None
     return None
+# =========================
+# Ajustes globales de la app
+# =========================
+def get_ajustes_app(supabase, campos=None):
+    try:
+        query = supabase.table("ajustes_app")
+        query = query.select(",".join(campos)) if campos else query.select("*")
+        res = query.eq("id", 1).execute()
+        return res.data[0] if res.data else {}
+    except Exception as e:
+        st.error(f"❌ Error al cargar ajustes de la app: {e}")
+        return {}
 
-def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, any]:
+def update_ajustes_app(supabase, data_dict):
     """
-    Versión de compatibilidad para llamadas antiguas.
-    Ignora el cliente de Supabase que se le pase y usa directamente st.session_state.supabase_admin.
+    Actualiza los ajustes globales en la tabla ajustes_app.
     """
     try:
-        supabase = st.session_state.supabase_admin
-        if campos:
-            sel = ",".join(campos)
-            res = supabase.table("ajustes_app").select(sel).single().execute()
-        else:
-            res = supabase.table("ajustes_app").select("*").single().execute()
-        return res.data or {}
+        data_dict["updated_at"] = datetime.utcnow().isoformat()
+        supabase.table("ajustes_app").update(data_dict).eq("id", 1).execute()
     except Exception as e:
-        st.error(f"⚠️ Error al cargar ajustes: {e}")
-        return {}
+        st.error(f"❌ Error al guardar ajustes de la app: {e}")
