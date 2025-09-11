@@ -347,7 +347,6 @@ def main(supabase, session_state):
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
             campos_password=campos_password,
-            campos_obligatorios=campos_obligatorios,
             allow_creation=puede_crear,
             campos_help=campos_help
         )
