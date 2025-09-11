@@ -1,8 +1,3 @@
-"""
-Funciones de utilidad para el gestor de formación.
-Versión mejorada con validaciones robustas y funciones optimizadas.
-"""
-
 import streamlit as st
 import pandas as pd
 import re
@@ -10,7 +5,6 @@ import base64
 from datetime import datetime, date
 from io import BytesIO
 from typing import Optional, List, Dict, Any
-from services.data_service import get_ajustes_app
 
 # =========================
 # VALIDACIONES
@@ -549,15 +543,19 @@ def confirmar_accion(mensaje: str, btn_confirmar: str = "Confirmar", btn_cancela
     # Si no se ha pulsado ningún botón, devolver None
     return None
 
-def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, Any]:
+def get_ajustes_app(_supabase_client_no_usado=None, campos: Optional[List[str]] = None) -> Dict[str, any]:
     """
     Versión de compatibilidad para llamadas antiguas.
-    Ignora el cliente de Supabase que se le pase y usa la caché segura de data_service.
+    Ignora el cliente de Supabase que se le pase y usa directamente st.session_state.supabase_admin.
     """
     try:
-        # Import diferido para evitar import circular
-        from services.data_service import cached_get_ajustes_app
-        return cached_get_ajustes_app(campos)
+        supabase = st.session_state.supabase_admin
+        if campos:
+            sel = ",".join(campos)
+            res = supabase.table("ajustes_app").select(sel).single().execute()
+        else:
+            res = supabase.table("ajustes_app").select("*").single().execute()
+        return res.data or {}
     except Exception as e:
         st.error(f"⚠️ Error al cargar ajustes: {e}")
         return {}
