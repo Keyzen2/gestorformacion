@@ -424,6 +424,206 @@ class DataService:
             return _self._handle_query_error("cargar participantes", e)
 
     # =========================
+    # MÉTODOS CRUD PARA PARTICIPANTES
+    # =========================
+    def create_participante(_self, datos: Dict[str, Any]) -> bool:
+        """Crea un nuevo participante con validaciones."""
+        try:
+            # Validaciones básicas
+            if not datos.get("email"):
+                st.error("⚠️ El email es obligatorio.")
+                return False
+                
+            if not datos.get("nombre") or not datos.get("apellidos"):
+                st.error("⚠️ Nombre y apellidos son obligatorios.")
+                return False
+                
+            if datos.get("dni") and not validar_dni_cif(datos["dni"]):
+                st.error("⚠️ DNI/CIF no válido.")
+                return False
+
+            # Verificar email único
+            email_existe = _self.supabase.table("participantes").select("id").eq("email", datos["email"]).execute()
+            if email_existe.data:
+                st.error("⚠️ Ya existe un participante con ese email.")
+                return False
+
+            # Aplicar filtro de empresa si es gestor
+            if _self.rol == "gestor":
+                datos["empresa_id"] = _self.empresa_id
+
+            # Añadir timestamps
+            datos["created_at"] = datetime.utcnow().isoformat()
+            datos["updated_at"] = datetime.utcnow().isoformat()
+
+            # Crear participante
+            result = _self.supabase.table("participantes").insert(datos).execute()
+
+            if result.data:
+                # Limpiar cache
+                _self.get_participantes_completos.clear()
+                return True
+            else:
+                st.error("⚠️ Error al crear el participante.")
+                return False
+
+        except Exception as e:
+            st.error(f"⚠️ Error al crear participante: {e}")
+            return False
+
+    def update_participante(_self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
+        """Actualiza un participante con validaciones."""
+        try:
+            # Validaciones
+            if not datos_editados.get("email"):
+                st.error("⚠️ El email es obligatorio.")
+                return False
+                
+            if datos_editados.get("dni") and not validar_dni_cif(datos_editados["dni"]):
+                st.error("⚠️ DNI/CIF no válido.")
+                return False
+
+            # Verificar email único (excluyendo el actual)
+            email_existe = _self.supabase.table("participantes").select("id").eq("email", datos_editados["email"]).neq("id", participante_id).execute()
+            if email_existe.data:
+                st.error("⚠️ Ya existe otro participante con ese email.")
+                return False
+
+            # Verificar permisos
+            if _self.rol == "gestor":
+                # Verificar que el participante pertenece a la empresa del gestor
+                participante = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
+                if not participante.data or participante.data[0].get("empresa_id") != _self.empresa_id:
+                    st.error("⚠️ No tienes permisos para editar este participante.")
+                    return False
+
+            # Añadir timestamp de actualización
+            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+
+            # Actualizar participante
+            _self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+
+            # Limpiar cache
+            _self.get_participantes_completos.clear()
+
+            return True
+
+        except Exception as e:
+            st.error(f"⚠️ Error al actualizar participante: {e}")
+            return False
+
+    def delete_participante(_self, participante_id: str) -> bool:
+        """Elimina un participante con validaciones."""
+        try:
+            # Verificar permisos
+            if _self.rol == "gestor":
+                participante = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
+                if not participante.data or participante.data[0].get("empresa_id") != _self.empresa_id:
+                    st.error("⚠️ No tienes permisos para eliminar este participante.")
+                    return False
+
+            # Eliminar participante
+            _self.supabase.table("participantes").delete().eq("id", participante_id).execute()
+
+            # Limpiar cache
+            _self.get_participantes_completos.clear()
+
+            return True
+
+        except Exception as e:
+            st.error(f"⚠️ Error al eliminar participante: {e}")
+            return False
+
+    def search_participantes_avanzado(_self, filtros: Dict[str, Any]) -> pd.DataFrame:
+        """Búsqueda avanzada de participantes con múltiples filtros."""
+        try:
+            df = _self.get_participantes_completos()
+            if df.empty:
+                return df
+
+            df_filtered = df.copy()
+
+            # Filtro por texto
+            if filtros.get("query"):
+                q_lower = filtros["query"].lower()
+                df_filtered = df_filtered[
+                    df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
+                    df_filtered["apellidos"].str.lower().str.contains(q_lower, na=False) |
+                    df_filtered["email"].str.lower().str.contains(q_lower, na=False) |
+                    df_filtered["dni"].str.lower().str.contains(q_lower, na=False)
+                ]
+
+            # Filtro por grupo
+            if filtros.get("grupo_id"):
+                df_filtered = df_filtered[df_filtered["grupo_id"] == filtros["grupo_id"]]
+
+            # Filtro por empresa (solo para admin)
+            if _self.rol == "admin" and filtros.get("empresa_id"):
+                df_filtered = df_filtered[df_filtered["empresa_id"] == filtros["empresa_id"]]
+
+            return df_filtered
+
+        except Exception as e:
+            return _self._handle_query_error("búsqueda avanzada de participantes", e)
+
+    def get_participantes_sin_grupo(_self) -> pd.DataFrame:
+        """Obtiene participantes que no tienen grupo asignado."""
+        try:
+            df = _self.get_participantes_completos()
+            if df.empty:
+                return df
+            
+            return df[df["grupo_id"].isna()]
+        
+        except Exception as e:
+            return _self._handle_query_error("cargar participantes sin grupo", e)
+
+    def get_estadisticas_participantes(_self) -> Dict[str, Any]:
+        """Obtiene estadísticas de participantes."""
+        try:
+            df = _self.get_participantes_completos()
+            
+            if df.empty:
+                return {
+                    "total": 0,
+                    "con_grupo": 0,
+                    "sin_grupo": 0,
+                    "este_mes": 0,
+                    "datos_completos": 0
+                }
+
+            total = len(df)
+            con_grupo = len(df[df["grupo_id"].notna()])
+            sin_grupo = total - con_grupo
+            
+            # Participantes de este mes
+            este_mes = 0
+            if "created_at" in df.columns:
+                este_mes_df = df[
+                    pd.to_datetime(df["created_at"], errors="coerce").dt.month == datetime.now().month
+                ]
+                este_mes = len(este_mes_df)
+            
+            # Participantes con datos completos
+            datos_completos = len(df[
+                (df["email"].notna()) & 
+                (df["nombre"].notna()) & 
+                (df["apellidos"].notna())
+            ])
+
+            return {
+                "total": total,
+                "con_grupo": con_grupo,
+                "sin_grupo": sin_grupo,
+                "este_mes": este_mes,
+                "datos_completos": datos_completos
+            }
+
+        except Exception as e:
+            st.error(f"⚠️ Error al calcular estadísticas: {e}")
+            return {}
+
+    # =========================
     # TUTORES
     # =========================
     @st.cache_data(ttl=300)
