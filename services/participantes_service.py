@@ -50,11 +50,16 @@ class ParticipantesService:
                     df["grupo_id"] = df["grupo"].apply(
                         lambda x: x.get("id") if isinstance(x, dict) else None
                     )
+                else:
+                    df["grupo_codigo"] = ""
+                    df["grupo_id"] = None
                 
                 if "empresa" in df.columns:
                     df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
+                else:
+                    df["empresa_nombre"] = ""
             
             return df
         except Exception as e:
@@ -192,7 +197,7 @@ class ParticipantesService:
                     df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
                     df_filtered["apellidos"].str.lower().str.contains(q_lower, na=False) |
                     df_filtered["email"].str.lower().str.contains(q_lower, na=False) |
-                    df_filtered["dni"].str.lower().str.contains(q_lower, na=False)
+                    df_filtered["dni"].fillna("").str.lower().str.contains(q_lower, na=False)
                 ]
 
             # Filtro por grupo
@@ -263,6 +268,9 @@ class ParticipantesService:
         """Verifica si el usuario puede modificar datos."""
         return _self.rol in ["admin", "gestor"]
 
-    def get_participantes_service(supabase, session_state) -> ParticipantesService:
-        """Factory function para obtener instancia del servicio de participantes."""
-        return ParticipantesService(supabase, session_state)
+# =========================
+# FUNCIÓN FACTORY (FUERA DE LA CLASE)
+# =========================
+def get_participantes_service(supabase, session_state) -> ParticipantesService:
+    """Factory function para obtener instancia del servicio de participantes."""
+    return ParticipantesService(supabase, session_state)
