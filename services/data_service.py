@@ -34,7 +34,7 @@ class DataService:
         """Obtiene participantes con información de grupo y empresa - SOLO CAMPOS REALES."""
         try:
             query = _self.supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, dni, email, telefono, 
+                id, nif, nombre, apellidos, nif, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, 
                 grupo_id, empresa_id,
                 grupo:grupos!fk_participante_grupo(id, codigo_grupo),
@@ -409,7 +409,7 @@ class DataService:
         try:
             if include_empresa:
                 query = _self.supabase.table("usuarios").select("""
-                    id, auth_id, email, rol, empresa_id, dni, nombre_completo, 
+                    id, auth_id, email, rol, empresa_id, nif, nombre_completo, 
                     telefono, nombre, grupo_id, created_at,
                     empresa:empresas(id, nombre, cif),
                     grupo:grupos(id, codigo_grupo)
@@ -665,7 +665,7 @@ class DataService:
                 df["nombre"].str.lower().str.contains(search_lower, na=False) |
                 df["apellidos"].str.lower().str.contains(search_lower, na=False) |
                 df["email"].str.lower().str.contains(search_lower, na=False) |
-                df["dni"].str.lower().str.contains(search_lower, na=False)
+                df["nif"].str.lower().str.contains(search_lower, na=False)
             )
             return df[mask]
         except Exception as e:
