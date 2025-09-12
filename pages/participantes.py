@@ -297,7 +297,14 @@ def main(supabase, session_state):
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
     # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
-    if puede_crear or not df_display.empty:
+     if puede_crear or not df_display.empty:
+
+            # Asegurarse de que campos_help sea un diccionario
+        if campos_help is None:
+            campos_help = {}
+        elif isinstance(campos_help, list):
+            campos_help = {campo: "" for campo in campos_help}
+        
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -310,7 +317,7 @@ def main(supabase, session_state):
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=puede_crear,
-            campos_help = campos_help or {}
+            campos_help=campos_help,
             campos_obligatorios=["nombre", "apellidos", "email"],
             reactive_fields=reactive_fields  # <-- agregado
         )
