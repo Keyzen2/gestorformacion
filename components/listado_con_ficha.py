@@ -188,11 +188,8 @@ def listado_con_ficha(
     # =========================
     st.markdown('<div class="tabla-container">', unsafe_allow_html=True)
     
-    # Preparar datos para mostrar - evitar columnas duplicadas
-    columnas_finales = columnas_disponibles.copy()
-    if id_col not in columnas_finales:
-        columnas_finales.append(id_col)
-    df_display = df[columnas_finales].copy()
+    # Preparar datos para mostrar
+    df_display = df[columnas_disponibles + [id_col]].copy()
     
     # Formatear datos para mejor visualización
     for col in df_display.columns:
@@ -313,7 +310,6 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, campos_
             col1, col2 = st.columns(2)
             columnas = [col1, col2]
         else:
-            # Crear una lista con el contenedor principal
             columnas = [st.container()]
         
         for i, campo in enumerate(campos_a_mostrar):
@@ -325,12 +321,7 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, campos_
                 valor_actual = ""
 
             # Determinar en qué columna mostrar el campo
-            if len(columnas) > 1:
-                col_actual = columnas[i % len(columnas)]
-            else:
-                col_actual = columnas[0]
-            
-            with col_actual:
+            with (columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]):
                 valor_editado = crear_campo_formulario(
                     campo, valor_actual, campos_select, campos_textarea, campos_file,
                     campos_readonly, campos_password, campos_obligatorios, 
@@ -418,23 +409,16 @@ def mostrar_formulario_creacion(titulo, on_create, campos_select, campos_textare
         # Añadir campos obligatorios
         todos_campos.update(campos_obligatorios)
         
-        # Organizar en columnas - CORREGIDO: usar containers en lugar del módulo st
+        # Organizar en columnas
         campos_lista = sorted(list(todos_campos))
         if len(campos_lista) > 6:
             col1, col2 = st.columns(2)
             columnas = [col1, col2]
         else:
-            # Crear una lista con un container en lugar de usar st directamente
             columnas = [st.container()]
         
         for i, campo in enumerate(campos_lista):
-            # Determinar columna actual - CORREGIDO
-            if len(columnas) > 1:
-                col_actual = columnas[i % len(columnas)]
-            else:
-                col_actual = columnas[0]
-            
-            with col_actual:
+            with (columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]):
                 valor = crear_campo_formulario(
                     campo, "", campos_select, campos_textarea, campos_file,
                     [], campos_password, campos_obligatorios, campos_help, "create"
