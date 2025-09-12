@@ -14,24 +14,23 @@ def main(supabase, session_state):
         return
 
     data_service = get_data_service(supabase, session_state)
-    empresa_id = session_state.user.get("empresa_id") if session_state.role == "gestor" else None
 
-   # =========================
-# Cargar datos
-# =========================
+    # =========================
+    # Cargar datos
+    # =========================
     with st.spinner("Cargando datos..."):
-        data_service = get_data_service(supabase, session_state)
         df_acciones = data_service.get_acciones_formativas()
         areas_dict = data_service.get_areas_dict()
         grupos_acciones_df = data_service.get_grupos_acciones()
 
-        # Obtener empresa_id del usuario (gestor)
-        empresa_id = session_state.user.get("empresa_id")
-
-        # Filtrar datos según rol
-        if session_state.role == "gestor":
-            # Solo mostrar acciones y grupos de la empresa del gestor
+    # =========================
+    # Filtrado por empresa (solo gestor)
+    # =========================
+    empresa_id = session_state.user.get("empresa_id")
+    if session_state.role == "gestor":
+        if "empresa_id" in df_acciones.columns:
             df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
+        if "empresa_id" in grupos_acciones_df.columns:
             grupos_acciones_df = grupos_acciones_df[grupos_acciones_df["empresa_id"] == empresa_id]
 
     # =========================
@@ -82,10 +81,6 @@ def main(supabase, session_state):
     if modalidad_filter != "Todas" and "modalidad" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["modalidad"] == modalidad_filter]
 
-    # Si es gestor, mostrar solo acciones de su empresa
-    if session_state.role == "gestor" and empresa_id and not df_filtered.empty:
-        df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id]
-
     st.divider()
 
     # =========================
@@ -107,7 +102,6 @@ def main(supabase, session_state):
                 grupos_dict = {g["nombre"]: g["codigo"] for _, g in grupos_filtrados.iterrows()}
                 datos_editados["codigo_grupo_accion"] = grupos_dict.get(grupo_sel, "")
 
-            # Validar fechas
             ini = datos_editados.get("fecha_inicio")
             fin = datos_editados.get("fecha_fin")
             if ini and fin and ini > fin:
@@ -142,9 +136,8 @@ def main(supabase, session_state):
                 datos_nuevos["codigo_grupo_accion"] = grupos_dict.get(grupo_sel, "")
 
             if session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = empresa_id
+                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
 
-            # Validar fechas
             ini = datos_nuevos.get("fecha_inicio")
             fin = datos_nuevos.get("fecha_fin")
             if ini and fin and ini > fin:
@@ -162,23 +155,18 @@ def main(supabase, session_state):
     # Campos dinámicos
     # =========================
     def get_campos_dinamicos(datos):
-        campos = [
+        return [
             "codigo_accion", "nombre", "descripcion", "objetivos", "contenidos",
             "requisitos", "horas", "num_horas", "modalidad", "fecha_inicio",
             "fecha_fin", "area_profesional", "nivel", "certificado_profesionalidad",
             "cod_area_profesional", "sector", "codigo_grupo_accion", "observaciones"
         ]
-        return campos
 
-    # =========================
-    # Configuración selects
-    # =========================
     campos_select = {
         "nivel": ["Básico", "Intermedio", "Avanzado"],
         "modalidad": ["Presencial", "Online", "Mixta"],
         "certificado_profesionalidad": [True, False],
-        "area_profesional_sel": list(areas_dict.keys()) if areas_dict else ["No disponible"],
-        "grupo_accion_sel": [""] + sorted(grupos_acciones_df["nombre"].tolist()) if not grupos_acciones_df.empty else [""]
+        "area_profesional_sel": list(areas_dict.keys()) if areas_dict else ["No disponible"]
     }
 
     campos_textarea = {
@@ -203,12 +191,15 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Mostrar listado y formulario
+    # Mostrar listado con formulario de creación
     # =========================
     if df_filtered.empty:
         st.info("ℹ️ No hay acciones formativas para mostrar.")
+        if data_service.can_modify_data():
+            st.markdown("### ➕ Crear primera acción formativa")
     else:
         df_display = df_filtered.copy()
+
         if "cod_area_profesional" in df_display.columns:
             df_display["area_profesional_sel"] = df_display.apply(
                 lambda row: next(
@@ -216,6 +207,7 @@ def main(supabase, session_state):
                     row.get("area_profesional", "")
                 ), axis=1
             )
+
         if "codigo_grupo_accion" in df_display.columns:
             df_display["grupo_accion_sel"] = df_display.apply(
                 lambda row: next(
@@ -225,25 +217,25 @@ def main(supabase, session_state):
                 ), axis=1
             )
 
-    listado_con_ficha(
-        df_display if not df_filtered.empty else pd.DataFrame(),
-        columnas_visibles=[
-            "codigo_accion", "nombre", "modalidad", "nivel", 
-            "num_horas", "certificado_profesionalidad", "fecha_inicio", "fecha_fin"
-        ],
-        titulo="Acción Formativa",
-        on_save=guardar_accion,
-        on_create=crear_accion if data_service.can_modify_data() else None,
-        id_col="id",
-        campos_select=campos_select,
-        campos_textarea=campos_textarea,
-        campos_dinamicos=get_campos_dinamicos,
-        campos_obligatorios=["codigo_accion", "nombre"],
-        search_columns=["nombre", "codigo_accion", "area_profesional"],
-        campos_readonly=["id", "created_at"],
-        allow_creation=data_service.can_modify_data(),
-        campos_help=campos_help
-    )
+        listado_con_ficha(
+            df_display,
+            columnas_visibles=[
+                "codigo_accion", "nombre", "modalidad", "nivel", 
+                "num_horas", "certificado_profesionalidad", "fecha_inicio", "fecha_fin"
+            ],
+            titulo="Acción Formativa",
+            on_save=guardar_accion,
+            on_create=crear_accion,
+            id_col="id",
+            campos_select=campos_select,
+            campos_textarea=campos_textarea,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=["codigo_accion", "nombre"],
+            search_columns=["nombre", "codigo_accion", "area_profesional"],
+            campos_readonly=["id", "created_at"],
+            allow_creation=data_service.can_modify_data(),
+            campos_help=campos_help
+        )
 
     st.divider()
     st.caption("💡 Las acciones formativas son la base para crear grupos y asignar participantes.")
