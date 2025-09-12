@@ -263,6 +263,14 @@ def main(supabase, session_state):
     }
 
     # =========================
+    # Campos reactivos
+    # =========================
+    reactive_fields = {
+        # Por ejemplo, si quieres que al cambiar el grupo se actualice algo en empresa
+        "grupo_sel": ["empresa_sel"]
+    }
+
+    # =========================
     # Mostrar interfaz principal
     # =========================
     puede_crear = (
@@ -303,7 +311,8 @@ def main(supabase, session_state):
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=puede_crear,
             campos_help=campos_help,
-            campos_obligatorios=["nombre", "apellidos", "email"]
+            campos_obligatorios=["nombre", "apellidos", "email"],
+            reactive_fields=reactive_fields  # <-- agregado
         )
     else:
         st.info("ℹ️ No hay participantes registrados.")
