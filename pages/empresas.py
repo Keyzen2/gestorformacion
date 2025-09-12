@@ -148,22 +148,22 @@ def main(supabase, session_state):
     # DEFINIR CAMPOS PARA FORMULARIOS
     # =========================
     def get_campos_dinamicos(datos):
-        """Define campos visibles según el contexto."""
-        # Campos base SIN id para creación/edición
-        campos_base = [
-            "nombre", "cif", "direccion", "ciudad", "provincia",
-            "codigo_postal", "telefono", "email", "web"
-        ]
+    """Define campos visibles según el contexto - CORREGIDO."""
+    # Campos base SIN id para creación/edición
+    campos_base = [
+        "nombre", "cif", "direccion", "ciudad", "provincia",
+        "codigo_postal", "telefono", "email"
+    ]
 
-        # Solo admin puede ver/editar módulos
-        if session_state.role == "admin":
-            campos_base.extend([
-                "formacion_activo", "iso_activo", "rgpd_activo",
-                "crm_activo", "docu_avanzada_activo"
-            ])
+    # Solo admin puede ver/editar módulos
+    if session_state.role == "admin":
+        campos_base.extend([
+            "formacion_activo", "iso_activo", "rgpd_activo",
+            "crm_activo", "docu_avanzada_activo"
+        ])
 
-        return campos_base
-
+    return campos_base
+    
     # Campos para select (solo admin puede modificar módulos)
     campos_select = {}
     if session_state.role == "admin":
