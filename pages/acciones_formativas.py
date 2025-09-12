@@ -24,25 +24,27 @@ def main(supabase, session_state):
         grupos_acciones_df = data_service.get_grupos_acciones()
 
     # =========================
-    # Filtrar acciones por empresa (gestor)
+    # Filtrar acciones por rol
     # =========================
     empresa_id = session_state.user.get("empresa_id")
-    df_acciones = data_service.get_acciones_formativas()
 
-    if session_state.role == "gestor":
-        df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
+    # Crear copia para filtros y tabla
+    df_filtered = df_acciones.copy() if not df_acciones.empty else pd.DataFrame()
 
-    # Mensaje si no hay acciones
-    if df_acciones.empty:
-        st.info("No hay acciones formativas para esta empresa todavía. Puedes crear una nueva acción.")
-    else:
-        st.markdown("### Acciones formativas disponibles")
-        st.dataframe(df_acciones)
+    if session_state.role == "gestor" and not df_filtered.empty:
+        # Filtrar acciones solo de la empresa del gestor
+        if "empresa_id" in df_filtered.columns:
+            df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id]
 
-    # Botón para crear nueva acción
-    if session_state.role == "gestor" or data_service.can_modify_data():
-        if st.button("➕ Crear nueva acción formativa"):
-            st.session_state.creando_accion = True
+    # DEBUG
+    st.write("DEBUG: session_state.user:", session_state.user)
+    st.write("DEBUG: empresa_id:", empresa_id)
+    st.write("DEBUG: columnas df_acciones:", df_acciones.columns.tolist())
+    st.write("DEBUG: filas antes de filtrar:", len(df_acciones))
+    st.write("DEBUG: filas después de filtrar por empresa:", len(df_filtered))
+
+    # Determinar si el usuario puede crear nuevas acciones
+    allow_creation = data_service.can_modify_data() or session_state.role == "gestor"
 
     # =========================
     # Métricas
