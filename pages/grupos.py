@@ -131,22 +131,14 @@ def main(supabase, session_state):
                 st.error("⚠️ El código de grupo es obligatorio.")
                 return
 
-            # Usar DataService para actualizar (simulando funcionalidad)
-            try:
-                # Añadir timestamp de actualización
-                datos_editados["updated_at"] = datetime.utcnow().isoformat()
-                
-                # Actualizar en Supabase
-                supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
-                
-                # Limpiar cache del DataService
-                data_service.get_grupos_completos.clear()
-                
-                st.success("✅ Grupo actualizado correctamente.")
-                st.rerun()
-                
-            except Exception as db_error:
-                st.error(f"❌ Error en base de datos: {db_error}")
+            # Actualizar en Supabase
+            supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
+            
+            # Limpiar cache del DataService
+            data_service.get_grupos_completos.clear()
+            
+            st.success("✅ Grupo actualizado correctamente.")
+            st.rerun()
                 
         except Exception as e:
             st.error(f"❌ Error al actualizar grupo: {e}")
@@ -219,13 +211,27 @@ def main(supabase, session_state):
             st.error(f"❌ Error al eliminar grupo: {e}")
 
     # =========================
-    # Campos dinámicos
+    # Campos dinámicos - SOLO CAMPOS REALES DEL SCHEMA
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente."""
+        """Determina campos a mostrar dinámicamente - SOLO campos reales."""
         campos = [
-            "codigo_grupo", "accion_sel", "fecha_inicio", "fecha_fin_prevista",
-            "localidad", "provincia", "cp", "n_participantes_previstos", "observaciones"
+            # CAMPOS QUE SÍ EXISTEN EN EL SCHEMA:
+            "codigo_grupo",           # EXISTS
+            "accion_sel",            # Virtual para select
+            "fecha_inicio",          # EXISTS  
+            "fecha_fin",             # EXISTS
+            "fecha_fin_prevista",    # EXISTS
+            "aula_virtual",          # EXISTS
+            "horario",               # EXISTS
+            "localidad",             # EXISTS
+            "provincia",             # EXISTS
+            "cp",                    # EXISTS
+            "n_participantes_previstos",      # EXISTS
+            "n_participantes_finalizados",    # EXISTS
+            "n_aptos",               # EXISTS
+            "n_no_aptos",           # EXISTS
+            "observaciones"          # EXISTS
         ]
         
         # Solo admin puede seleccionar empresa
@@ -234,9 +240,10 @@ def main(supabase, session_state):
             
         return campos
 
-    # Configurar opciones para selects
+    # Configurar opciones para selects - SOLO campos reales
     campos_select = {
-        "accion_sel": list(acciones_dict.keys()) if acciones_dict else ["No hay acciones disponibles"]
+        "accion_sel": list(acciones_dict.keys()) if acciones_dict else ["No hay acciones disponibles"],
+        "aula_virtual": [True, False]  # Campo boolean que SÍ existe
     }
     
     if session_state.role == "admin" and empresas_dict:
@@ -246,21 +253,29 @@ def main(supabase, session_state):
         "observaciones": {"label": "Observaciones del grupo"}
     }
 
-    # Campos de ayuda
+    # Campos de ayuda - SOLO para campos reales
     campos_help = {
         "codigo_grupo": "Código único identificativo del grupo",
         "accion_sel": "Acción formativa que se impartirá",
         "empresa_sel": "Empresa a la que pertenece el grupo",
         "fecha_inicio": "Fecha de inicio de la formación",
+        "fecha_fin": "Fecha de fin real",
         "fecha_fin_prevista": "Fecha prevista de finalización",
+        "aula_virtual": "Indica si se imparte en aula virtual",
+        "horario": "Horario de impartición",
         "localidad": "Ciudad donde se impartirá",
-        "n_participantes_previstos": "Número estimado de participantes"
+        "provincia": "Provincia donde se imparte",
+        "cp": "Código postal",
+        "n_participantes_previstos": "Número estimado de participantes",
+        "n_participantes_finalizados": "Número de participantes que finalizaron",
+        "n_aptos": "Número de participantes aptos",
+        "n_no_aptos": "Número de participantes no aptos"
     }
 
     campos_obligatorios = ["codigo_grupo"]
-    campos_readonly = ["id", "created_at", "updated_at"]
+    campos_readonly = ["id", "created_at"]
 
-    # Columnas visibles - usar solo las que sabemos que existen
+    # Columnas visibles - verificar que existen en el schema
     columnas_base = ["codigo_grupo", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos"]
     
     # Añadir columnas opcionales solo si existen
@@ -273,7 +288,6 @@ def main(supabase, session_state):
     if "accion_nombre" in df_grupos.columns:
         columnas_visibles.insert(1, "accion_nombre")
     elif "accion_formativa_id" in df_grupos.columns:
-        # Si tenemos el ID pero no el nombre, lo añadimos
         columnas_visibles.insert(1, "accion_formativa_id")
     
     # Para admin, añadir empresa si existe
@@ -291,7 +305,6 @@ def main(supabase, session_state):
         
         if session_state.role in ["admin", "gestor"]:
             st.markdown("### ➕ Crear primer grupo")
-            # El formulario de creación se mostrará automáticamente por listado_con_ficha
     else:
         # Preparar datos para mostrar
         df_display = df_filtered.copy()
@@ -300,7 +313,6 @@ def main(supabase, session_state):
         if "accion_nombre" in df_display.columns:
             df_display["accion_sel"] = df_display["accion_nombre"]
         else:
-            # Si no tenemos accion_nombre, crear un valor por defecto
             df_display["accion_sel"] = "Acción no disponible"
             
         if session_state.role == "admin" and empresas_dict:
