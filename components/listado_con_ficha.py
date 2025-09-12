@@ -527,6 +527,7 @@ def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_sele
 def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, campos_file,
                          campos_readonly, campos_password, campos_help, prefix, es_obligatorio=False):
     """Crea un campo de formulario avanzado según el tipo."""
+    campos_help = campos_help or {}
     
     label = campo.replace('_', ' ').title()
     help_text = campos_help.get(campo, "")
