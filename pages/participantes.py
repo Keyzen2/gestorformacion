@@ -270,28 +270,26 @@ def main(supabase, session_state):
         (session_state.role == "gestor" and empresa_id)
     )
 
+    # Preparar df_display para listado_con_ficha
     if df_filtered.empty:
-        if df_participantes.empty:
-            st.info("ℹ️ No hay participantes registrados.")
-        else:
-            st.warning("🔍 No se encontraron participantes que coincidan con los filtros.")
+        df_display = pd.DataFrame(columns=[
+            "nombre", "apellidos", "email", "dni", "telefono", "grupo_codigo",
+            "empresa_nombre"
+        ])
     else:
-        # Preparar datos para mostrar
         df_display = df_filtered.copy()
-        
-        # Añadir campos para selects
         df_display["grupo_sel"] = df_display["grupo_codigo"]
         if session_state.role == "admin":
             df_display["empresa_sel"] = df_display["empresa_nombre"]
 
-        # Columnas a mostrar (verificar que existen)
-        columnas_base = ["nombre", "apellidos", "email", "dni", "telefono", "grupo_codigo"]
-        if session_state.role == "admin":
-            columnas_base.append("empresa_nombre")
-        
-        columnas_visibles = [col for col in columnas_base if col in df_display.columns]
+    # Columnas visibles según rol
+    columnas_base = ["nombre", "apellidos", "email", "dni", "telefono", "grupo_codigo"]
+    if session_state.role == "admin":
+        columnas_base.append("empresa_nombre")
+    columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
-        # Mostrar tabla
+    # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
+    if puede_crear or not df_display.empty:
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -307,6 +305,8 @@ def main(supabase, session_state):
             campos_help=campos_help,
             campos_obligatorios=["nombre", "apellidos", "email"]
         )
+    else:
+        st.info("ℹ️ No hay participantes registrados.")
 
     # =========================
     # Exportación
