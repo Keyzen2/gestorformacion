@@ -37,25 +37,25 @@ class DataService:
                 id, nif, nombre, apellidos, dni, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, 
                 grupo_id, empresa_id,
-                grupo:grupos(id, codigo_grupo),
+                grupo:grupos!fk_participante_grupo(id, codigo_grupo),
                 empresa:empresas(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "participantes")
-            
+        
             res = query.order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data or [])
-            
+        
             if not df.empty:
                 if "grupo" in df.columns:
                     df["grupo_codigo"] = df["grupo"].apply(
                         lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
                     )
-                
+            
                 if "empresa" in df.columns:
                     df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
-            
+        
             return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
