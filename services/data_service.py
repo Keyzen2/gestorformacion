@@ -1,5 +1,3 @@
-# services/data_service.py - CORREGIDO PARA SCHEMA REAL
-
 import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any, Tuple
