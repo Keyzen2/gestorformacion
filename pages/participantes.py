@@ -8,7 +8,7 @@ from components.listado_con_ficha import listado_con_ficha
 
 def generar_plantilla_excel(rol):
     """Genera plantilla Excel para importación masiva de participantes."""
-    columnas = ["nombre", "apellidos", "email", "dni", "telefono"]
+    columnas = ["nombre", "apellidos", "email", "nif", "telefono"]
     if rol == "admin":
         columnas += ["grupo", "empresa"]
     
@@ -104,7 +104,7 @@ def main(supabase, session_state):
             df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
             df_filtered["apellidos"].str.lower().str.contains(q_lower, na=False) |
             df_filtered["email"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["dni"].fillna("").str.lower().str.contains(q_lower, na=False)
+            df_filtered["nif"].fillna("").str.lower().str.contains(q_lower, na=False)
         ]
     
     if grupo_filter != "Todos" and not df_filtered.empty:
@@ -126,8 +126,8 @@ def main(supabase, session_state):
                 st.error("⚠️ El email es obligatorio.")
                 return
                 
-            if datos_editados.get("dni") and not validar_dni_cif(datos_editados["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
+            if datos_editados.get("nif") and not validar_dni_cif(datos_editados["nif"]):
+                st.error("⚠️ NIF no válido.")
                 return
             
             # Convertir selects a IDs
@@ -163,8 +163,8 @@ def main(supabase, session_state):
                 st.error("⚠️ Nombre, apellidos y email son obligatorios.")
                 return
                 
-            if datos_nuevos.get("dni") and not validar_dni_cif(datos_nuevos["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
+            if datos_nuevos.get("nif") and not validar_dni_cif(datos_nuevos["nif"]):
+                st.error("⚠️ NIF no válido.")
                 return
 
             # Verificar email único
@@ -223,7 +223,7 @@ def main(supabase, session_state):
     def get_campos_dinamicos(datos):
         """Determina campos a mostrar dinámicamente - SOLO campos reales."""
         campos_base = [
-            "nombre", "apellidos", "dni", "nif", "email", "telefono",
+            "nombre", "apellidos", "nif", "email", "telefono",
             "fecha_nacimiento",
             "sexo",
             "grupo_sel"
@@ -254,7 +254,6 @@ def main(supabase, session_state):
     # Ayuda para campos
     campos_help = {
         "email": "Email único del participante (obligatorio)",
-        "dni": "DNI, NIE o CIF válido",
         "nif": "NIF del participante",
         "grupo_sel": "Grupo al que pertenece el participante",
         "empresa_sel": "Empresa del participante (solo admin)",
@@ -281,7 +280,7 @@ def main(supabase, session_state):
     # Preparar df_display para listado_con_ficha
     if df_filtered.empty:
         df_display = pd.DataFrame(columns=[
-            "nombre", "apellidos", "email", "dni", "telefono", "grupo_codigo",
+            "nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo",
             "empresa_nombre"
         ])
     else:
@@ -291,7 +290,7 @@ def main(supabase, session_state):
             df_display["empresa_sel"] = df_display["empresa_nombre"]
 
     # Columnas visibles según rol
-    columnas_base = ["nombre", "apellidos", "email", "dni", "telefono", "grupo_codigo"]
+    columnas_base = ["nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo"]
     if session_state.role == "admin":
         columnas_base.append("empresa_nombre")
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
@@ -384,7 +383,7 @@ def main(supabase, session_state):
                                     "nombre": row.get("nombre"),
                                     "apellidos": row.get("apellidos"),
                                     "email": row.get("email"),
-                                    "dni": row.get("dni"),
+                                    "nif": row.get("nif"),
                                     "telefono": row.get("telefono"),
                                     "created_at": datetime.utcnow().isoformat(),
                                     "updated_at": datetime.utcnow().isoformat()
