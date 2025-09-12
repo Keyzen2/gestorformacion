@@ -439,7 +439,8 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
 def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_select, campos_textarea, 
                               campos_file, campos_password, campos_help, campos_obligatorios, reactive_fields):
     """Formulario de creación avanzado con campos específicos."""
-    
+    campos_help = campos_help or {}
+                                  
     st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
     st.markdown(f"### ➕ Crear Nuevo {titulo}")
     st.caption("Completa los campos para crear un nuevo registro.")
