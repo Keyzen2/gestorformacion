@@ -35,34 +35,12 @@ def main(supabase, session_state):
     # =========================
     with st.spinner("Cargando datos..."):
         try:
-            # Obtener participantes con consulta directa (ya que el servicio especializado falla)
-            query = supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, dni, email, telefono, 
-                fecha_nacimiento, sexo, created_at, updated_at,
-                grupo_id, empresa_id
-            """)
-            
-            if session_state.role == "gestor" and empresa_id:
-                query = query.eq("empresa_id", empresa_id)
-            
-            res = query.order("created_at", desc=True).execute()
-            df_participantes = pd.DataFrame(res.data or [])
+            # Usar el método corregido del DataService
+            df_participantes = data_service.get_participantes_completos()
             
             # Obtener diccionarios de empresas y grupos
             empresas_dict = data_service.get_empresas_dict()
             grupos_dict = data_service.get_grupos_dict()
-            
-            # Mapear nombres
-            if not df_participantes.empty:
-                # Mapear empresa_id a nombre
-                df_participantes["empresa_nombre"] = df_participantes["empresa_id"].map(
-                    {v: k for k, v in empresas_dict.items()}
-                ).fillna("Sin empresa")
-                
-                # Mapear grupo_id a código
-                df_participantes["grupo_codigo"] = df_participantes["grupo_id"].map(
-                    {v: k for k, v in grupos_dict.items()}
-                ).fillna("Sin grupo")
             
             # Opciones para selects
             empresas_opciones = [""] + sorted(empresas_dict.keys())
