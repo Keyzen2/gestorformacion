@@ -298,7 +298,6 @@ def main(supabase, session_state):
 
     # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
     if puede_crear or not df_display.empty:
-        campos_help = {}
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -311,7 +310,7 @@ def main(supabase, session_state):
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
             allow_creation=puede_crear,
-            campos_help=campos_help,
+            campos_help = campos_help or {}
             campos_obligatorios=["nombre", "apellidos", "email"],
             reactive_fields=reactive_fields  # <-- agregado
         )
