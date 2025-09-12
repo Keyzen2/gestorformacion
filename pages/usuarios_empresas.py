@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from datetime import datetime
 from utils import validar_dni_cif, validar_email, export_csv, export_excel, generar_password_segura, get_ajustes_app
-from components.listado_con_ficha import listado_con_ficha
+from components.listado_con_ficha import listado_con_ficha, validar_campos_obligatorios
 from services.data_service import get_data_service
 
 EMAIL_REGEX = r"^[^@]+@[^@]+\.[^@]+$"
