@@ -1,3 +1,5 @@
+# pages/acciones_formativas.py - CORREGIDO PARA SCHEMA REAL
+
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -57,7 +59,7 @@ def main(supabase, session_state):
     with col2:
         modalidad_filter = st.selectbox(
             "Filtrar por modalidad", 
-            ["Todas", "PRESENCIAL", "TELEFORMACION", "MIXTA"]
+            ["Todas", "Presencial", "Online", "Mixta"]
         )
 
     df_filtered = df_acciones.copy()
@@ -147,79 +149,60 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear: {e}")
 
     # =========================
-    # Campos dinámicos para el formulario - Compatible con XML FUNDAE
+    # Campos dinámicos - SOLO CAMPOS REALES DEL SCHEMA
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente - Compatible con XML FUNDAE."""
+        """Determina campos a mostrar dinámicamente - SOLO campos reales."""
         campos = [
-            # Identificación (obligatorios XML)
-            "codigo_accion",           # Código acción
-            "nombre",                  # Denominación
-            "area_profesional_sel",    # Área profesional
-            "grupo_accion_sel",       # Grupo de acción
-            "modalidad",              # PRESENCIAL/TELEFORMACION/MIXTA
-            "num_horas",              # Horas totales
-            "nivel",                  # Nivel cualificación
-            
-            # Clasificación oficial (nuevos campos para XML)
-            "familia_profesional",      # Código familia profesional
-            "especialidad_formativa",   # Código especialidad SEPE
-            "nivel_cualificacion",      # Nivel 1/2/3
-            
-            # Contenidos
-            "objetivos",               # Objetivos formativos
-            "contenidos",              # Contenidos básicos
-            "contenidos_detallados",   # Contenidos completos (para XML)
-            "dirigido_a",             # Perfil destinatarios
-            "criterios_evaluacion",   # Criterios evaluación
-            "requisitos_acceso",      # Requisitos participación
-            
-            # Certificación
-            "certificado_profesionalidad", # Boolean
-            "competencias_clave",      # Competencias desarrolladas
-            
-            # Fechas
-            "fecha_inicio", "fecha_fin",
-            "observaciones"
+            # CAMPOS QUE SÍ EXISTEN EN EL SCHEMA:
+            "codigo_accion",           # EXISTS - UNIQUE
+            "nombre",                  # EXISTS - NOT NULL
+            "descripcion",             # EXISTS
+            "objetivos",               # EXISTS
+            "contenidos",              # EXISTS
+            "requisitos",              # EXISTS
+            "horas",                   # EXISTS
+            "num_horas",               # EXISTS (duplicate with horas)
+            "modalidad",               # EXISTS
+            "fecha_inicio",            # EXISTS
+            "fecha_fin",               # EXISTS
+            "area_profesional",        # EXISTS
+            "nivel",                   # EXISTS with CHECK constraint
+            "certificado_profesionalidad", # EXISTS boolean
+            "cod_area_profesional",    # EXISTS
+            "sector",                  # EXISTS
+            "codigo_grupo_accion",     # EXISTS
+            "observaciones"            # EXISTS
         ]
         
         return campos
 
     campos_select = {
-        "area_profesional_sel": list(areas_dict.keys()) if areas_dict else ["No disponible"],
-        "nivel": ["Básico", "Intermedio", "Avanzado"],
-        "modalidad": ["PRESENCIAL", "TELEFORMACION", "MIXTA"],  # Valores exactos XML FUNDAE
+        "nivel": ["Básico", "Intermedio", "Avanzado"],  # Matches CHECK constraint
+        "modalidad": ["Presencial", "Online", "Mixta"],
         "certificado_profesionalidad": [True, False],
-        "nivel_cualificacion": ["", "1", "2", "3"],
-        "familia_profesional": [
-            "", "AGA", "ADG", "COM", "EOC", "FME", "HOT", "IFC", "IMA", 
-            "INA", "MAP", "QUI", "SAN", "SSC", "TMV", "TCP", "VIC"
-        ]
+        "area_profesional_sel": list(areas_dict.keys()) if areas_dict else ["No disponible"]
     }
 
     campos_textarea = {
+        "descripcion": {"label": "Descripción de la acción"},
         "objetivos": {"label": "Objetivos del curso"},
-        "contenidos": {"label": "Contenidos temáticos básicos"},
-        "contenidos_detallados": {"label": "Contenidos formativos detallados (para XML)"},
-        "dirigido_a": {"label": "Perfil de destinatarios"},
-        "criterios_evaluacion": {"label": "Criterios de evaluación"},
-        "requisitos_acceso": {"label": "Requisitos de acceso"},
-        "competencias_clave": {"label": "Competencias clave desarrolladas"},
+        "contenidos": {"label": "Contenidos temáticos"},
+        "requisitos": {"label": "Requisitos de acceso"},
         "observaciones": {"label": "Observaciones adicionales"}
     }
 
     campos_help = {
-        "codigo_accion": "Código único de la acción formativa",
-        "nombre": "Denominación completa de la acción formativa",
-        "area_profesional_sel": "Área profesional oficial",
-        "modalidad": "Modalidad de impartición (obligatorio para XML FUNDAE)",
-        "num_horas": "Número total de horas formativas",
-        "familia_profesional": "Código de la familia profesional",
-        "especialidad_formativa": "Código de especialidad formativa SEPE",
-        "nivel_cualificacion": "Nivel de cualificación profesional (1/2/3)",
-        "contenidos_detallados": "Contenidos formativos completos para XML",
+        "codigo_accion": "Código único de la acción formativa (obligatorio)",
+        "nombre": "Denominación completa de la acción formativa (obligatorio)",
+        "descripcion": "Descripción detallada de la acción",
+        "horas": "Número de horas de la acción formativa",
+        "num_horas": "Duración en horas (campo alternativo)",
+        "modalidad": "Modalidad de impartición",
+        "nivel": "Nivel de dificultad (Básico, Intermedio, Avanzado)",
         "certificado_profesionalidad": "Indica si es un certificado de profesionalidad",
-        "competencias_clave": "Competencias desarrolladas en la acción formativa"
+        "sector": "Sector profesional al que se dirige",
+        "area_profesional": "Área profesional de la acción"
     }
 
     if df_filtered.empty:
@@ -249,8 +232,8 @@ def main(supabase, session_state):
         listado_con_ficha(
             df_display,
             columnas_visibles=[
-                "codigo_accion", "nombre", "area_profesional_sel", 
-                "modalidad", "nivel", "num_horas", "certificado_profesionalidad", "fecha_inicio", "fecha_fin"
+                "codigo_accion", "nombre", "modalidad", "nivel", 
+                "num_horas", "certificado_profesionalidad", "fecha_inicio", "fecha_fin"
             ],
             titulo="Acción Formativa",
             on_save=guardar_accion,
@@ -261,7 +244,7 @@ def main(supabase, session_state):
             campos_dinamicos=get_campos_dinamicos,
             campos_obligatorios=["codigo_accion", "nombre"],
             search_columns=["nombre", "codigo_accion", "area_profesional"],
-            campos_readonly=["id", "created_at", "updated_at"],
+            campos_readonly=["id", "created_at"],
             allow_creation=data_service.can_modify_data(),
             campos_help=campos_help
         )
