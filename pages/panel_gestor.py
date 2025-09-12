@@ -84,15 +84,6 @@ def main(supabase, session_state):
             total_participantes = 0
 
         try:
-            # Diplomas
-            total_diplomas = len(
-                supabase.table("diplomas").select("id").eq("empresa_id", empresa_id).execute().data or []
-            )
-        except Exception as e:
-            st.warning(f"⚠️ Error al cargar diplomas: {e}")
-            total_diplomas = 0
-
-        try:
             # Tutores
             total_tutores = len(
                 supabase.table("tutores").select("id").eq("empresa_id", empresa_id).execute().data or []
@@ -105,7 +96,7 @@ def main(supabase, session_state):
     # Métricas principales
     # =========================
     st.subheader("📌 Resumen general")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric("📚 Acciones", total_acciones)
@@ -114,8 +105,6 @@ def main(supabase, session_state):
     with col3:
         st.metric("🧑‍🎓 Participantes", total_participantes)
     with col4:
-        st.metric("🏅 Diplomas", total_diplomas)
-    with col5:
         st.metric("👨‍🏫 Tutores", total_tutores)
 
     st.divider()
