@@ -57,7 +57,7 @@ def main(supabase, session_state):
     with col2:
         modalidad_filter = st.selectbox(
             "Filtrar por modalidad", 
-            ["Todas", "Presencial", "Online", "Mixta"]
+            ["Todas", "PRESENCIAL", "TELEFORMACION", "MIXTA"]
         )
 
     df_filtered = df_acciones.copy()
@@ -147,28 +147,79 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear: {e}")
 
     # =========================
-    # Campos dinámicos para el formulario
+    # Campos dinámicos para el formulario - Compatible con XML FUNDAE
     # =========================
     def get_campos_dinamicos(datos):
+        """Determina campos a mostrar dinámicamente - Compatible con XML FUNDAE."""
         campos = [
-            "codigo_accion", "nombre", "area_profesional_sel", "grupo_accion_sel",
-            "sector", "objetivos", "contenidos", "nivel", "modalidad", 
-            "num_horas", "certificado_profesionalidad", "observaciones",
-            "fecha_inicio", "fecha_fin"
+            # Identificación (obligatorios XML)
+            "codigo_accion",           # Código acción
+            "nombre",                  # Denominación
+            "area_profesional_sel",    # Área profesional
+            "grupo_accion_sel",       # Grupo de acción
+            "modalidad",              # PRESENCIAL/TELEFORMACION/MIXTA
+            "num_horas",              # Horas totales
+            "nivel",                  # Nivel cualificación
+            
+            # Clasificación oficial (nuevos campos para XML)
+            "familia_profesional",      # Código familia profesional
+            "especialidad_formativa",   # Código especialidad SEPE
+            "nivel_cualificacion",      # Nivel 1/2/3
+            
+            # Contenidos
+            "objetivos",               # Objetivos formativos
+            "contenidos",              # Contenidos básicos
+            "contenidos_detallados",   # Contenidos completos (para XML)
+            "dirigido_a",             # Perfil destinatarios
+            "criterios_evaluacion",   # Criterios evaluación
+            "requisitos_acceso",      # Requisitos participación
+            
+            # Certificación
+            "certificado_profesionalidad", # Boolean
+            "competencias_clave",      # Competencias desarrolladas
+            
+            # Fechas
+            "fecha_inicio", "fecha_fin",
+            "observaciones"
         ]
+        
         return campos
 
     campos_select = {
         "area_profesional_sel": list(areas_dict.keys()) if areas_dict else ["No disponible"],
         "nivel": ["Básico", "Intermedio", "Avanzado"],
-        "modalidad": ["Presencial", "Online", "Mixta"],
-        "certificado_profesionalidad": [True, False]
+        "modalidad": ["PRESENCIAL", "TELEFORMACION", "MIXTA"],  # Valores exactos XML FUNDAE
+        "certificado_profesionalidad": [True, False],
+        "nivel_cualificacion": ["", "1", "2", "3"],
+        "familia_profesional": [
+            "", "AGA", "ADG", "COM", "EOC", "FME", "HOT", "IFC", "IMA", 
+            "INA", "MAP", "QUI", "SAN", "SSC", "TMV", "TCP", "VIC"
+        ]
     }
 
     campos_textarea = {
         "objetivos": {"label": "Objetivos del curso"},
-        "contenidos": {"label": "Contenidos temáticos"},
+        "contenidos": {"label": "Contenidos temáticos básicos"},
+        "contenidos_detallados": {"label": "Contenidos formativos detallados (para XML)"},
+        "dirigido_a": {"label": "Perfil de destinatarios"},
+        "criterios_evaluacion": {"label": "Criterios de evaluación"},
+        "requisitos_acceso": {"label": "Requisitos de acceso"},
+        "competencias_clave": {"label": "Competencias clave desarrolladas"},
         "observaciones": {"label": "Observaciones adicionales"}
+    }
+
+    campos_help = {
+        "codigo_accion": "Código único de la acción formativa",
+        "nombre": "Denominación completa de la acción formativa",
+        "area_profesional_sel": "Área profesional oficial",
+        "modalidad": "Modalidad de impartición (obligatorio para XML FUNDAE)",
+        "num_horas": "Número total de horas formativas",
+        "familia_profesional": "Código de la familia profesional",
+        "especialidad_formativa": "Código de especialidad formativa SEPE",
+        "nivel_cualificacion": "Nivel de cualificación profesional (1/2/3)",
+        "contenidos_detallados": "Contenidos formativos completos para XML",
+        "certificado_profesionalidad": "Indica si es un certificado de profesionalidad",
+        "competencias_clave": "Competencias desarrolladas en la acción formativa"
     }
 
     if df_filtered.empty:
@@ -198,7 +249,7 @@ def main(supabase, session_state):
         listado_con_ficha(
             df_display,
             columnas_visibles=[
-                "id", "codigo_accion", "nombre", "area_profesional_sel", 
+                "codigo_accion", "nombre", "area_profesional_sel", 
                 "modalidad", "nivel", "num_horas", "certificado_profesionalidad", "fecha_inicio", "fecha_fin"
             ],
             titulo="Acción Formativa",
@@ -211,7 +262,8 @@ def main(supabase, session_state):
             campos_obligatorios=["codigo_accion", "nombre"],
             search_columns=["nombre", "codigo_accion", "area_profesional"],
             campos_readonly=["id", "created_at", "updated_at"],
-            allow_creation=data_service.can_modify_data()
+            allow_creation=data_service.can_modify_data(),
+            campos_help=campos_help
         )
 
     st.divider()
