@@ -230,9 +230,9 @@ def main(supabase, session_state):
             "grupo_sel"         # Campo virtual para el select
         ]
         
-        # Admin puede ver empresa
-        if session_state.role == "admin":
-            campos_base.insert(-1, "empresa_sel")
+        # Admin y gestor pueden ver empresa
+        if session_state.role in ["admin", "gestor"]:
+            campos_select["empresa_sel"] = empresas_opciones
         
         return campos_base
 
