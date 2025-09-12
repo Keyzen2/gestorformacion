@@ -24,33 +24,34 @@ def main(supabase, session_state):
         grupos_acciones_df = data_service.get_grupos_acciones()
 
     # =========================
-    # Filtrado por empresa (solo gestor)
+    # Filtrar datos por rol
     # =========================
     empresa_id = session_state.user.get("empresa_id")
-    if session_state.role == "gestor":
-        if "empresa_id" in df_acciones.columns:
-            df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
-        if "empresa_id" in grupos_acciones_df.columns:
-            grupos_acciones_df = grupos_acciones_df[grupos_acciones_df["empresa_id"] == empresa_id]
+
+    if session_state.role == "gestor" and "empresa_id" in df_acciones.columns:
+        df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
+
+    df_filtered = df_acciones.copy()
+    allow_creation = data_service.can_modify_data() or session_state.role == "gestor"
 
     # =========================
     # Métricas
     # =========================
-    if not df_acciones.empty:
+    if not df_filtered.empty:
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("📚 Total Acciones", len(df_acciones))
+            st.metric("📚 Total Acciones", len(df_filtered))
         with col2:
-            if "fecha_creacion" in df_acciones.columns:
-                este_mes = df_acciones[
-                    pd.to_datetime(df_acciones["fecha_creacion"], errors="coerce").dt.month == datetime.now().month
+            if "fecha_creacion" in df_filtered.columns:
+                este_mes = df_filtered[
+                    pd.to_datetime(df_filtered["fecha_creacion"], errors="coerce").dt.month == datetime.now().month
                 ]
                 st.metric("🆕 Nuevas este mes", len(este_mes))
             else:
                 st.metric("🆕 Nuevas este mes", 0)
         with col3:
-            if "modalidad" in df_acciones.columns:
-                modalidad_top = df_acciones["modalidad"].value_counts().idxmax() if len(df_acciones) > 0 else "N/A"
+            if "modalidad" in df_filtered.columns:
+                modalidad_top = df_filtered["modalidad"].value_counts().idxmax() if len(df_filtered) > 0 else "N/A"
                 st.metric("📊 Modalidad principal", modalidad_top)
             else:
                 st.metric("📊 Modalidad principal", "N/A")
@@ -70,7 +71,6 @@ def main(supabase, session_state):
             ["Todas", "Presencial", "Online", "Mixta"]
         )
 
-    df_filtered = df_acciones.copy()
     if query:
         q_lower = query.lower()
         df_filtered = df_filtered[
@@ -80,8 +80,6 @@ def main(supabase, session_state):
         ]
     if modalidad_filter != "Todas" and "modalidad" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["modalidad"] == modalidad_filter]
-
-    st.divider()
 
     # =========================
     # Funciones CRUD
@@ -136,7 +134,7 @@ def main(supabase, session_state):
                 datos_nuevos["codigo_grupo_accion"] = grupos_dict.get(grupo_sel, "")
 
             if session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
+                datos_nuevos["empresa_id"] = empresa_id
 
             ini = datos_nuevos.get("fecha_inicio")
             fin = datos_nuevos.get("fecha_fin")
@@ -152,15 +150,16 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear: {e}")
 
     # =========================
-    # Campos dinámicos
+    # Campos dinámicos - SOLO CAMPOS REALES
     # =========================
     def get_campos_dinamicos(datos):
-        return [
+        campos = [
             "codigo_accion", "nombre", "descripcion", "objetivos", "contenidos",
             "requisitos", "horas", "num_horas", "modalidad", "fecha_inicio",
             "fecha_fin", "area_profesional", "nivel", "certificado_profesionalidad",
             "cod_area_profesional", "sector", "codigo_grupo_accion", "observaciones"
         ]
+        return campos
 
     campos_select = {
         "nivel": ["Básico", "Intermedio", "Avanzado"],
@@ -191,15 +190,14 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Mostrar listado con formulario de creación
+    # Mostrar listado
     # =========================
     if df_filtered.empty:
         st.info("ℹ️ No hay acciones formativas para mostrar.")
-        if data_service.can_modify_data():
+        if allow_creation:
             st.markdown("### ➕ Crear primera acción formativa")
     else:
         df_display = df_filtered.copy()
-
         if "cod_area_profesional" in df_display.columns:
             df_display["area_profesional_sel"] = df_display.apply(
                 lambda row: next(
@@ -225,7 +223,7 @@ def main(supabase, session_state):
             ],
             titulo="Acción Formativa",
             on_save=guardar_accion,
-            on_create=crear_accion,
+            on_create=crear_accion if allow_creation else None,
             id_col="id",
             campos_select=campos_select,
             campos_textarea=campos_textarea,
@@ -233,7 +231,7 @@ def main(supabase, session_state):
             campos_obligatorios=["codigo_accion", "nombre"],
             search_columns=["nombre", "codigo_accion", "area_profesional"],
             campos_readonly=["id", "created_at"],
-            allow_creation=data_service.can_modify_data(),
+            allow_creation=allow_creation,
             campos_help=campos_help
         )
 
