@@ -25,28 +25,7 @@ def listado_con_ficha(
     """
     Componente mejorado que muestra una tabla interactiva con Streamlit
     y formularios para editar/crear registros.
-    
-    Args:
-        df: DataFrame con los datos
-        columnas_visibles: Lista de columnas a mostrar en la tabla
-        titulo: Título para el formulario
-        on_save: Función para guardar cambios (id, datos_editados)
-        id_col: Nombre de la columna ID
-        on_create: Función para crear nuevos registros (datos_nuevos)
-        on_delete: Función para eliminar registros (id)  # ✅ CORREGIDO
-        campos_select: Dict con opciones para campos select
-        campos_textarea: Dict para campos de texto largo
-        campos_file: Dict para campos de archivo
-        campos_readonly: Lista de campos de solo lectura
-        campos_dinamicos: Función que devuelve campos según contexto
-        campos_password: Lista de campos tipo password
-        campos_obligatorios: Lista de campos obligatorios
-        allow_creation: Si permitir crear nuevos registros
-        campos_help: Dict con textos de ayuda
-        reactive_fields: Dict con campos que dependen de otros
-        search_columns: Columnas donde buscar
     """
-    
     # Inicializar valores por defecto
     campos_select = campos_select or {}
     campos_textarea = campos_textarea or {}
@@ -135,7 +114,7 @@ def listado_con_ficha(
         # Mostrar formulario de creación si está permitido
         if allow_creation and on_create:
             mostrar_formulario_creacion(
-                titulo, on_create, campos_select, campos_textarea, 
+                titulo, on_create, campos_dinamicos, campos_select, campos_textarea, 
                 campos_file, campos_password, campos_obligatorios, 
                 campos_help, reactive_fields
             )
@@ -205,7 +184,6 @@ def listado_con_ficha(
     for col in df_display.columns:
         if col == id_col:
             continue
-            
         if df_display[col].dtype == 'bool':
             df_display[col] = df_display[col].map({
                 True: '✅ Sí', 
@@ -215,7 +193,6 @@ def listado_con_ficha(
         elif pd.api.types.is_datetime64_any_dtype(df_display[col]):
             df_display[col] = pd.to_datetime(df_display[col], errors='coerce').dt.strftime('%d/%m/%Y')
         elif col.endswith('_url') and not df_display[col].isna().all():
-            # Para URLs, mostrar si existe o no
             df_display[col] = df_display[col].apply(
                 lambda x: '🔗 Disponible' if pd.notna(x) and x != '' else '⚫ No disponible'
             )
@@ -266,14 +243,10 @@ def listado_con_ficha(
     # =========================
     selected_row = None
     if event.selection and event.selection.get("rows"):
-        # Obtener la fila seleccionada
         selected_idx = event.selection["rows"][0]
         actual_idx = start_idx + selected_idx
-        
         if actual_idx < len(df):
             selected_row = df.iloc[actual_idx]
-            
-            # Mostrar formulario de edición
             mostrar_formulario_edicion(
                 selected_row, titulo, on_save, on_delete, id_col,
                 campos_select, campos_textarea, campos_file, campos_readonly,
@@ -285,19 +258,19 @@ def listado_con_ficha(
     # FORMULARIO DE CREACIÓN
     # =========================
     if allow_creation and on_create:
-    st.divider()
-    mostrar_formulario_creacion(
-        titulo=titulo,
-        on_create=on_create,
-        campos_dinamicos=campos_dinamicos,
-        campos_select=campos_select,
-        campos_textarea=campos_textarea,
-        campos_file=campos_file,
-        campos_password=campos_password,
-        campos_help=campos_help,
-        campos_obligatorios=campos_obligatorios,
-        reactive_fields=reactive_fields
-    )
+        st.divider()
+        mostrar_formulario_creacion(
+            titulo=titulo,
+            on_create=on_create,
+            campos_dinamicos=campos_dinamicos,
+            campos_select=campos_select,
+            campos_textarea=campos_textarea,
+            campos_file=campos_file,
+            campos_password=campos_password,
+            campos_help=campos_help,
+            campos_obligatorios=campos_obligatorios,
+            reactive_fields=reactive_fields
+        )
 
 def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, 
                              campos_select, campos_textarea, campos_file, campos_readonly, 
