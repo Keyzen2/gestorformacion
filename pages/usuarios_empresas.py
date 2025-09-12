@@ -140,23 +140,16 @@ def main(supabase, session_state):
                 st.error("⚠️ Email no válido.")
                 return
             
-            # ✅ CORREGIDO: Usar 'nif' en lugar de 'dni'
+            # Usar 'nif' en lugar de 'dni'
             if datos_editados.get("nif") and not validar_dni_cif(datos_editados["nif"]):
                 st.error("⚠️ NIF/CIF no válido.")
                 return
                 
-            # ✅ VALIDACIÓN: Verificar empresa obligatoria para gestor
-            if datos_editados.get("rol") == "gestor":
+            # VALIDACIÓN: Verificar empresa obligatoria para gestor y alumno
+            if datos_editados.get("rol") in ["gestor", "alumno"]:
                 empresa_sel = datos_editados.get("empresa_sel", "")
                 if not empresa_sel or empresa_sel not in empresas_dict:
-                    st.error("⚠️ Los usuarios con rol 'gestor' deben tener una empresa asignada.")
-                    return
-
-            # ✅ VALIDACIÓN: Verificar empresa obligatoria para alumno
-            if datos_editados.get("rol") == "alumno":
-                empresa_sel = datos_editados.get("empresa_sel", "")
-                if not empresa_sel or empresa_sel not in empresas_dict:
-                    st.error("⚠️ Los usuarios con rol 'alumno' deben tener una empresa asignada.")
+                    st.error(f"⚠️ Los usuarios con rol '{datos_editados.get('rol')}' deben tener una empresa asignada.")
                     return
 
             # Convertir selects a IDs
@@ -201,23 +194,16 @@ def main(supabase, session_state):
                 st.error("⚠️ Email no válido.")
                 return
             
-            # ✅ CORREGIDO: Usar 'nif' en lugar de 'dni'
+            # Usar 'nif' en lugar de 'dni'
             if datos_nuevos.get("nif") and not validar_dni_cif(datos_nuevos["nif"]):
                 st.error("⚠️ NIF/CIF no válido.")
                 return
 
-            # ✅ VALIDACIÓN: Verificar empresa obligatoria para gestor
-            if datos_nuevos.get("rol") == "gestor":
+            # VALIDACIÓN: Verificar empresa obligatoria para gestor y alumno
+            if datos_nuevos.get("rol") in ["gestor", "alumno"]:
                 empresa_sel = datos_nuevos.get("empresa_sel", "")
                 if not empresa_sel or empresa_sel not in empresas_dict:
-                    st.error("⚠️ Los usuarios con rol 'gestor' deben tener una empresa asignada.")
-                    return
-
-            # ✅ VALIDACIÓN: Verificar empresa obligatoria para alumno  
-            if datos_nuevos.get("rol") == "alumno":
-                empresa_sel = datos_nuevos.get("empresa_sel", "")
-                if not empresa_sel or empresa_sel not in empresas_dict:
-                    st.error("⚠️ Los usuarios con rol 'alumno' deben tener una empresa asignada.")
+                    st.error(f"⚠️ Los usuarios con rol '{datos_nuevos.get('rol')}' deben tener una empresa asignada.")
                     return
 
             # Verificar email único
@@ -255,14 +241,14 @@ def main(supabase, session_state):
                 
             auth_id = auth_res.user.id
 
-            # ✅ CORREGIDO: Preparar datos usando campos exactos del schema (nif en lugar de dni)
+            # Preparar datos usando campos exactos del schema (nif en lugar de dni)
             db_datos = {
                 "auth_id": auth_id,
                 "email": datos_nuevos["email"],
                 "nombre_completo": datos_nuevos.get("nombre_completo", ""),
                 "nombre": datos_nuevos.get("nombre", datos_nuevos.get("nombre_completo", "")[:50]),
                 "telefono": datos_nuevos.get("telefono"),
-                "nif": datos_nuevos.get("nif"),  # ✅ CAMBIADO: de 'dni' a 'nif'
+                "nif": datos_nuevos.get("nif"),  # CAMBIADO: de 'dni' a 'nif'
                 "rol": datos_nuevos.get("rol", "alumno"),
                 "empresa_id": empresa_id,
                 "grupo_id": grupo_id,
@@ -287,55 +273,20 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear usuario: {e}")
 
     # =========================
-    # ✅ CORREGIDO: Campos dinámicos con lógica reactiva mejorada
+    # SOLUCIÓN SIMPLE: Campos estáticos sin reactividad
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente - CORREGIDO con lógica reactiva."""
-        # Campos base siempre visibles
-        campos_base = ["email", "nombre_completo", "nombre", "telefono", "nif", "rol"]  # ✅ CAMBIADO: 'dni' por 'nif'
+        """Campos siempre visibles - sin complejidad reactiva."""
+        # Todos los campos siempre visibles
+        campos = ["email", "nombre_completo", "nombre", "telefono", "nif", "rol", "empresa_sel", "grupo_sel"]
         
-        try:
-            # Convertir datos a diccionario de forma segura
-            if datos is not None:
-                if hasattr(datos, 'to_dict'):
-                    datos_dict = datos.to_dict()
-                elif isinstance(datos, dict):
-                    datos_dict = datos
-                else:
-                    datos_dict = {}
-            else:
-                datos_dict = {}
+        # Si es creación (no tiene ID), añadir password
+        if not datos or not datos.get("id"):
+            campos.append("password")
                 
-            # Obtener rol actual
-            rol_actual = datos_dict.get("rol", "")
-            
-            # ✅ CORREGIDO: Lógica reactiva mejorada
-            # Para GESTOR: mostrar selector de empresa (obligatorio)
-            if str(rol_actual).lower() == "gestor":
-                if "empresa_sel" not in campos_base:
-                    campos_base.append("empresa_sel")
-            
-            # Para ALUMNO: mostrar selector de empresa (obligatorio) y opcional grupo
-            elif str(rol_actual).lower() == "alumno":
-                if "empresa_sel" not in campos_base:
-                    campos_base.append("empresa_sel")
-                if "grupo_sel" not in campos_base:
-                    campos_base.append("grupo_sel")
-            
-            # Para ADMIN: no necesita empresa ni grupo por defecto
-            
-            # Si es creación (no tiene ID), mostrar campo password
-            if not datos_dict or not datos_dict.get("id"):
-                if "password" not in campos_base:
-                    campos_base.append("password")
-                
-        except Exception:
-            # En caso de error, devolver campos base
-            pass
-        
-        return campos_base
+        return campos
 
-    # ✅ CORREGIDO: Configuración de campos con validaciones
+    # Configuración simple de campos
     campos_select = {
         "rol": ["", "admin", "gestor", "alumno"],
         "empresa_sel": empresas_opciones,
@@ -345,26 +296,20 @@ def main(supabase, session_state):
     campos_readonly = ["created_at", "auth_id"]
     campos_password = ["password"]
 
-    # ✅ CORREGIDO: Ayuda actualizada con NIF y reglas de negocio
+    # Ayuda clara sobre reglas de negocio
     campos_help = {
         "email": "Email único del usuario (obligatorio)",
-        "nif": "NIF, NIE o CIF válido (opcional)",  # ✅ CAMBIADO
+        "nif": "NIF, NIE o CIF válido (opcional)",
         "rol": "Rol del usuario en la plataforma",
-        "empresa_sel": "Empresa a la que pertenece el usuario (OBLIGATORIO para gestores y alumnos)",  # ✅ ACTUALIZADO
-        "grupo_sel": "Grupo asignado al usuario (opcional para alumnos)",
+        "empresa_sel": "Empresa del usuario (OBLIGATORIO para gestores y alumnos)",
+        "grupo_sel": "Grupo asignado al usuario (opcional)",
         "nombre": "Nombre corto del usuario",
         "nombre_completo": "Nombre completo del usuario (obligatorio)",
         "telefono": "Número de teléfono de contacto",
         "password": "Contraseña temporal para el usuario (solo al crear)"
     }
 
-    # ✅ CORREGIDO: Campos obligatorios según rol
     campos_obligatorios = ["email", "nombre_completo", "rol"]
-
-    # ✅ CORREGIDO: Campos reactivos mejorados
-    reactive_fields = {
-        "rol": ["empresa_sel", "grupo_sel"]  # Cuando cambie rol, mostrar/ocultar empresa y grupo
-    }
 
     # =========================
     # Mostrar interfaz principal
@@ -374,7 +319,7 @@ def main(supabase, session_state):
     else:
         df_display = df_filtered.copy()
         
-        # ✅ CORREGIDO: Preparar datos para display con campos correctos
+        # Preparar datos para display con campos correctos
         if "empresa_nombre" in df_display.columns:
             df_display["empresa_sel"] = df_display["empresa_nombre"]
         else:
@@ -385,16 +330,17 @@ def main(supabase, session_state):
         else:
             df_display["grupo_sel"] = ""
 
-        # ✅ CORREGIDO: Columnas visibles actualizadas
-        columnas_visibles = ["nombre_completo", "email", "telefono", "rol", "nif"]  # ✅ AÑADIDO: 'nif'
+        # Columnas visibles actualizadas
+        columnas_visibles = ["nombre_completo", "email", "telefono", "rol", "nif"]
         if "empresa_nombre" in df_display.columns:
             columnas_visibles.append("empresa_nombre")
         if "created_at" in df_display.columns:
             columnas_visibles.append("created_at")
 
-        # ✅ MENSAJE INFORMATIVO sobre reglas de negocio
-        st.info("💡 **Reglas importantes:** Los usuarios con rol 'gestor' y 'alumno' deben tener una empresa asignada obligatoriamente.")
+        # MENSAJE INFORMATIVO claro sobre reglas
+        st.info("💡 **Reglas importantes:** Los gestores y alumnos deben tener una empresa asignada. Los gestores gestionan su empresa, los alumnos pueden pertenecer a grupos de su empresa.")
 
+        # Usar listado_con_ficha estándar - sin reactive_fields
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -409,8 +355,7 @@ def main(supabase, session_state):
             campos_obligatorios=campos_obligatorios,
             allow_creation=True,
             campos_help=campos_help,
-            reactive_fields=reactive_fields,
-            search_columns=["nombre_completo", "email", "telefono", "nif"]  # ✅ AÑADIDO: búsqueda por NIF
+            search_columns=["nombre_completo", "email", "telefono", "nif"]
         )
 
     st.divider()
