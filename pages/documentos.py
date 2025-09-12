@@ -102,12 +102,28 @@ def main(supabase, session_state):
             st.write(f"**Área:** {accion.get('area_profesional', 'No especificada')}")
 
     # =========================
-    # SELECCIÓN DE GRUPO
+    # SELECCIÓN DE GRUPO - CORREGIDO
     # =========================
     st.markdown("### 👥 Selección de Grupo")
     
-    # Filtrar grupos por acción formativa seleccionada
-    grupos_accion = df_grupos[df_grupos['accion_formativa_id'] == accion['id']] if not df_grupos.empty else pd.DataFrame()
+    # Función para filtrar grupos por acción - CORREGIDO
+    def filtrar_grupos_por_accion(df_grupos, accion_id):
+        """Filtra grupos por acción formativa con verificación de columnas."""
+        if df_grupos.empty:
+            return pd.DataFrame()
+        
+        # Verificar qué columna existe para la relación
+        if 'accion_formativa_id' in df_grupos.columns:
+            return df_grupos[df_grupos['accion_formativa_id'] == accion_id]
+        elif 'accion_id' in df_grupos.columns:
+            return df_grupos[df_grupos['accion_id'] == accion_id]
+        else:
+            # Si no existe relación directa, devolver DataFrame vacío
+            st.warning("⚠️ No se puede filtrar grupos por acción formativa: campo de relación no encontrado")
+            return pd.DataFrame()
+
+    # Usar la función corregida
+    grupos_accion = filtrar_grupos_por_accion(df_grupos, accion['id'])
     
     if grupos_accion.empty:
         st.warning("⚠️ No hay grupos disponibles para esta acción formativa.")
@@ -229,7 +245,6 @@ def main(supabase, session_state):
                                         data=xml_content,
                                         file_name=f"AF_{accion.get('codigo_accion', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
                                         mime="application/xml",
-                                        use_container_width=True
                                     )
                                 else:
                                     st.error("❌ El XML no es válido según el esquema XSD")
