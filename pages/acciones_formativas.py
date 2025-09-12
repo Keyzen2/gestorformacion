@@ -194,24 +194,61 @@ def main(supabase, session_state):
     # Formulario de creación
     # =========================
     if allow_creation:
-        with st.expander("➕ Crear nueva acción formativa"):
-            nuevo_nombre = st.text_input("Nombre de la acción")
-            nuevo_codigo = st.text_input("Código de la acción")
-            nueva_modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
-            nueva_num_horas = st.number_input("Número de horas", min_value=1, step=1)
-            nueva_fecha_inicio = st.date_input("Fecha de inicio")
-            nueva_fecha_fin = st.date_input("Fecha fin")
+    with st.expander("➕ Crear nueva acción formativa"):
+        # Campos obligatorios
+        nuevo_codigo = st.text_input("Código de la acción")
+        nuevo_nombre = st.text_input("Nombre de la acción")
 
-            if st.button("Crear acción", key="crear_accion_btn"):
-                datos_nuevos = {
-                    "nombre": nuevo_nombre,
-                    "codigo_accion": nuevo_codigo,
-                    "modalidad": nueva_modalidad,
-                    "num_horas": nueva_num_horas,
-                    "fecha_inicio": str(nueva_fecha_inicio),
-                    "fecha_fin": str(nueva_fecha_fin)
-                }
-                crear_accion(datos_nuevos)
+        # Fechas y modalidad
+        nueva_modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
+        nueva_num_horas = st.number_input("Número de horas", min_value=1, step=1)
+        nueva_fecha_inicio = st.date_input("Fecha de inicio")
+        nueva_fecha_fin = st.date_input("Fecha fin")
+
+        # Área profesional
+        nueva_area_prof = st.selectbox(
+            "Área profesional",
+            list(areas_dict.keys()) if areas_dict else ["No disponible"]
+        )
+
+        # Nivel y certificado
+        nuevo_nivel = st.selectbox("Nivel", ["Básico", "Intermedio", "Avanzado"])
+        nuevo_certificado = st.checkbox("Certificado de profesionalidad")
+
+        # Sector
+        nuevo_sector = st.text_input("Sector")
+
+        # Textareas descriptivos
+        nueva_descripcion = st.text_area("Descripción")
+        nuevos_objetivos = st.text_area("Objetivos")
+        nuevos_contenidos = st.text_area("Contenidos")
+        nuevos_requisitos = st.text_area("Requisitos")
+        nuevas_observaciones = st.text_area("Observaciones")
+
+        # Botón de creación
+        if st.button("Crear acción", key="crear_accion_btn"):
+            datos_nuevos = {
+                "codigo_accion": nuevo_codigo,
+                "nombre": nuevo_nombre,
+                "modalidad": nueva_modalidad,
+                "num_horas": nueva_num_horas,
+                "fecha_inicio": str(nueva_fecha_inicio),
+                "fecha_fin": str(nueva_fecha_fin),
+                "area_profesional_sel": nueva_area_prof,
+                "nivel": nuevo_nivel,
+                "certificado_profesionalidad": nuevo_certificado,
+                "sector": nuevo_sector,
+                "descripcion": nueva_descripcion,
+                "objetivos": nuevos_objetivos,
+                "contenidos": nuevos_contenidos,
+                "requisitos": nuevos_requisitos,
+                "observaciones": nuevas_observaciones
+            }
+
+            if session_state.role == "gestor":
+                datos_nuevos["empresa_id"] = empresa_id
+
+            crear_accion(datos_nuevos)
 
     # =========================
     # Listado de acciones
