@@ -2,8 +2,17 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-from utils import generar_pdf, generar_xml_accion_formativa, generar_xml_inicio_grupo, generar_xml_finalizacion_grupo, validar_xml, get_ajustes_app, export_csv
+from utils import (
+    generar_pdf,
+    generar_xml_accion_formativa,
+    generar_xml_inicio_grupo,
+    generar_xml_finalizacion_grupo,
+    validar_xml,
+    get_ajustes_app,
+    export_csv
+)
 from services.data_service import get_data_service
+
 
 def main(supabase, session_state):
     st.title("📄 Generación de Documentos FUNDAE")
@@ -43,6 +52,13 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"⚠️ Error al cargar datos: {e}")
             return
+
+    # =========================
+    # FILTRAR GRUPOS POR ROL
+    # =========================
+    if session_state.role == "gestor":
+        empresa_id = session_state.user.get("empresa_id")
+        df_grupos = df_grupos[df_grupos["empresa_id"] == empresa_id] if not df_grupos.empty else pd.DataFrame()
 
     # =========================
     # MÉTRICAS DEL DASHBOARD
@@ -102,34 +118,28 @@ def main(supabase, session_state):
             st.write(f"**Área:** {accion.get('area_profesional', 'No especificada')}")
 
     # =========================
-    # SELECCIÓN DE GRUPO - CORREGIDO
+    # SELECCIÓN DE GRUPO
     # =========================
     st.markdown("### 👥 Selección de Grupo")
     
-    # Función para filtrar grupos por acción - CORREGIDO
+    # Filtrar grupos según acción
     def filtrar_grupos_por_accion(df_grupos, accion_id):
-        """Filtra grupos por acción formativa con verificación de columnas."""
         if df_grupos.empty:
             return pd.DataFrame()
-        
-        # Verificar qué columna existe para la relación
         if 'accion_formativa_id' in df_grupos.columns:
             return df_grupos[df_grupos['accion_formativa_id'] == accion_id]
         elif 'accion_id' in df_grupos.columns:
             return df_grupos[df_grupos['accion_id'] == accion_id]
         else:
-            # Si no existe relación directa, devolver DataFrame vacío
-            st.warning("⚠️ No se puede filtrar grupos por acción formativa: campo de relación no encontrado")
+            st.warning("⚠️ No se puede filtrar grupos por acción formativa: campo no encontrado")
             return pd.DataFrame()
 
-    # Usar la función corregida
     grupos_accion = filtrar_grupos_por_accion(df_grupos, accion['id'])
     
     if grupos_accion.empty:
         st.warning("⚠️ No hay grupos disponibles para esta acción formativa.")
         grupo = None
     else:
-        # Preparar opciones de grupos
         grupos_opciones = {}
         for _, grupo_row in grupos_accion.iterrows():
             display_name = f"{grupo_row.get('codigo_grupo', 'Sin código')} - {grupo_row.get('estado', 'Sin estado')}"
@@ -143,7 +153,6 @@ def main(supabase, session_state):
 
         grupo = grupos_opciones[grupo_seleccionado]
 
-        # Mostrar información del grupo seleccionado
         with st.expander("ℹ️ Información del Grupo", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
@@ -151,7 +160,7 @@ def main(supabase, session_state):
                 st.write(f"**Estado:** {grupo.get('estado', 'No especificado')}")
                 st.write(f"**Fecha Inicio:** {grupo.get('fecha_inicio', 'No especificada')}")
             with col2:
-                st.write(f"**Fecha Fin:** {grupo.get('fecha_fin_prevista', 'No especificada')}")
+                st.write(f"**Fecha Fin Prevista:** {grupo.get('fecha_fin_prevista', 'No especificada')}")
                 st.write(f"**Modalidad:** {grupo.get('modalidad', 'No especificada')}")
                 st.write(f"**Participantes:** {grupo.get('n_participantes_previstos', 0)}")
 
@@ -161,8 +170,6 @@ def main(supabase, session_state):
     # GENERACIÓN DE DOCUMENTOS
     # =========================
     st.markdown("### 🔧 Generar Documentos")
-    
-    # Organizar en tabs para mejor UX
     tab1, tab2, tab3, tab4 = st.tabs([
         "📄 PDF Acción",
         "📋 XML Acción",
@@ -170,15 +177,12 @@ def main(supabase, session_state):
         "🏁 XML Finalización"
     ])
 
-    # TAB 1: PDF de Acción Formativa
+    # TAB 1: PDF Acción
     with tab1:
         st.subheader("📄 Generar PDF de Acción Formativa")
-        st.caption("Genera un documento PDF con la información de la acción formativa")
-        
-        if st.button("🔧 Generar PDF", type="primary", use_container_width=True):
+        if st.button("🔧 Generar PDF Acción", type="primary", use_container_width=True):
             with st.spinner("Generando PDF..."):
                 try:
-                    # Preparar información para el PDF
                     lines = [
                         f"ACCIÓN FORMATIVA",
                         f"",
@@ -194,10 +198,8 @@ def main(supabase, session_state):
                         f"",
                         f"Fecha de generación: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
                     ]
-                    
                     buffer = BytesIO()
                     pdf_bytes = generar_pdf(buffer, lines)
-                    
                     if pdf_bytes:
                         st.success("✅ PDF generado correctamente")
                         st.download_button(
@@ -208,222 +210,137 @@ def main(supabase, session_state):
                             use_container_width=True
                         )
                     else:
-                        st.error("❌ Error al generar el PDF")
-                        
+                        st.error("❌ Error al generar PDF")
                 except Exception as e:
-                    st.error(f"❌ Error al generar PDF: {e}")
+                    st.error(f"❌ Error: {e}")
 
-    # TAB 2: XML de Acción Formativa
+    # TAB 2: XML Acción
     with tab2:
         st.subheader("📋 Generar XML de Acción Formativa")
-        st.caption("Genera XML oficial para comunicar la acción formativa a FUNDAE")
-        
-        # Verificar campos obligatorios
         campos_obligatorios = ['codigo_accion', 'nombre', 'modalidad', 'num_horas']
         campos_faltantes = [c for c in campos_obligatorios if not accion.get(c)]
-        
         if campos_faltantes:
             st.warning(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
-            st.info("Completa la información de la acción formativa antes de generar el XML")
         else:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("🔧 Generar XML Acción", type="primary", use_container_width=True):
-                    with st.spinner("Generando y validando XML..."):
-                        try:
-                            xml_content = generar_xml_accion_formativa(accion)
-                            
-                            if xml_content:
-                                # Validar contra XSD
-                                es_valido, errores = validar_xml(xml_content, xsd_urls['accion_formativa'])
-                                
-                                if es_valido:
-                                    st.success("✅ XML generado y validado correctamente")
-                                    st.download_button(
-                                        "📥 Descargar XML Acción Formativa",
-                                        data=xml_content,
-                                        file_name=f"AF_{accion.get('codigo_accion', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
-                                        mime="application/xml",
-                                    )
-                                else:
-                                    st.error("❌ El XML no es válido según el esquema XSD")
-                                    for error in errores[:5]:
-                                        st.error(f"• {error}")
-                            else:
-                                st.error("❌ Error al generar el XML")
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-            
-            with col2:
-                if st.button("👁️ Vista previa XML", use_container_width=True):
+            if st.button("🔧 Generar XML Acción", type="primary", use_container_width=True):
+                with st.spinner("Generando y validando XML..."):
                     try:
-                        xml_preview = generar_xml_accion_formativa(accion)
-                        if xml_preview:
-                            st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
+                        xml_content = generar_xml_accion_formativa(accion)
+                        es_valido, errores = validar_xml(xml_content, xsd_urls['accion_formativa'])
+                        if es_valido:
+                            st.success("✅ XML generado y validado correctamente")
+                            st.download_button(
+                                "📥 Descargar XML Acción Formativa",
+                                data=xml_content,
+                                file_name=f"AF_{accion.get('codigo_accion', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                mime="application/xml",
+                                use_container_width=True
+                            )
+                        else:
+                            st.error("❌ XML no válido")
+                            for error in errores[:5]:
+                                st.error(f"• {error}")
                     except Exception as e:
-                        st.error(f"❌ Error en vista previa: {e}")
+                        st.error(f"❌ Error: {e}")
 
-    # TAB 3: XML de Inicio de Grupo
+    # TAB 3: XML Inicio Grupo
     with tab3:
         st.subheader("🚀 Generar XML de Inicio de Grupo")
-        st.caption("Genera XML oficial para comunicar el inicio de grupo a FUNDAE")
-        
         if not grupo:
-            st.warning("⚠️ Selecciona un grupo para generar el XML de inicio")
-        elif not grupo.get("fecha_inicio") or not grupo.get("fecha_fin_prevista"):
-            st.error("⚠️ El grupo debe tener fechas de inicio y fin previstas")
+            st.warning("⚠️ Selecciona un grupo")
         else:
-            # Cargar participantes del grupo
-            participantes_grupo = df_participantes[df_participantes['grupo_id'] == grupo['id']] if not df_participantes.empty else pd.DataFrame()
-            
-            if participantes_grupo.empty:
-                st.warning("⚠️ No hay participantes asignados a este grupo")
-                st.info("Asigna participantes al grupo antes de generar el XML")
+            # Validación de campos obligatorios para inicio
+            campos_inicio_obligatorios = ['codigo_grupo', 'fecha_inicio', 'fecha_fin_prevista']
+            campos_faltantes = [c for c in campos_inicio_obligatorios if not grupo.get(c)]
+            if campos_faltantes:
+                st.warning(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
             else:
-                st.info(f"📊 Participantes encontrados: {len(participantes_grupo)}")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
+                participantes_grupo = df_participantes[df_participantes['grupo_id'] == grupo['id']] if not df_participantes.empty else pd.DataFrame()
+                if participantes_grupo.empty:
+                    st.warning("⚠️ No hay participantes asignados")
+                else:
                     if st.button("🔧 Generar XML Inicio", type="primary", use_container_width=True):
                         with st.spinner("Generando y validando XML..."):
                             try:
-                                # Convertir participantes a formato necesario
                                 participantes_list = participantes_grupo.to_dict('records')
-                                
                                 xml_content = generar_xml_inicio_grupo(grupo, participantes_list)
-                                
-                                if xml_content:
-                                    # Validar contra XSD
-                                    es_valido, errores = validar_xml(xml_content, xsd_urls['inicio_grupo'])
-                                    
-                                    if es_valido:
-                                        st.success("✅ XML de inicio generado y validado correctamente")
-                                        st.download_button(
-                                            "📥 Descargar XML Inicio Grupo",
-                                            data=xml_content,
-                                            file_name=f"IG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
-                                            mime="application/xml",
-                                            use_container_width=True
-                                        )
-                                    else:
-                                        st.error("❌ El XML no es válido según el esquema XSD")
-                                        for error in errores[:5]:
-                                            st.error(f"• {error}")
+                                es_valido, errores = validar_xml(xml_content, xsd_urls['inicio_grupo'])
+                                if es_valido:
+                                    st.success("✅ XML de inicio generado y validado correctamente")
+                                    st.download_button(
+                                        "📥 Descargar XML Inicio Grupo",
+                                        data=xml_content,
+                                        file_name=f"IG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                        mime="application/xml",
+                                        use_container_width=True
+                                    )
                                 else:
-                                    st.error("❌ Error al generar el XML")
-                                    
+                                    st.error("❌ XML no válido")
+                                    for error in errores[:5]:
+                                        st.error(f"• {error}")
                             except Exception as e:
                                 st.error(f"❌ Error: {e}")
-                
-                with col2:
-                    if st.button("👁️ Vista previa XML", use_container_width=True):
-                        try:
-                            participantes_list = participantes_grupo.to_dict('records')
-                            xml_preview = generar_xml_inicio_grupo(grupo, participantes_list)
-                            if xml_preview:
-                                st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
-                        except Exception as e:
-                            st.error(f"❌ Error en vista previa: {e}")
 
-    # TAB 4: XML de Finalización de Grupo
+    # TAB 4: XML Finalización Grupo
     with tab4:
         st.subheader("🏁 Generar XML de Finalización de Grupo")
-        st.caption("Genera XML oficial para comunicar la finalización de grupo a FUNDAE")
-        
         if not grupo:
-            st.warning("⚠️ Selecciona un grupo para generar el XML de finalización")
+            st.warning("⚠️ Selecciona un grupo")
         elif grupo.get("estado") != "cerrado":
-            st.error("⚠️ El grupo debe estar cerrado antes de generar el XML de finalización")
-            st.info("Cambia el estado del grupo a 'cerrado' en la gestión de grupos")
+            st.error("⚠️ El grupo debe estar cerrado antes de generar el XML")
         else:
-            # Cargar participantes del grupo
             participantes_grupo = df_participantes[df_participantes['grupo_id'] == grupo['id']] if not df_participantes.empty else pd.DataFrame()
-            
             if participantes_grupo.empty:
-                st.warning("⚠️ No hay participantes registrados en este grupo")
+                st.warning("⚠️ No hay participantes registrados")
             else:
-                st.info(f"📊 Participantes encontrados: {len(participantes_grupo)}")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    if st.button("🔧 Generar XML Finalización", type="primary", use_container_width=True):
-                        with st.spinner("Generando y validando XML..."):
-                            try:
-                                # Convertir participantes a formato necesario
-                                participantes_list = participantes_grupo.to_dict('records')
-                                
-                                xml_content = generar_xml_finalizacion_grupo(grupo, participantes_list)
-                                
-                                if xml_content:
-                                    # Validar contra XSD
-                                    es_valido, errores = validar_xml(xml_content, xsd_urls['finalizacion_grupo'])
-                                    
-                                    if es_valido:
-                                        st.success("✅ XML de finalización generado y validado correctamente")
-                                        st.download_button(
-                                            "📥 Descargar XML Finalización Grupo",
-                                            data=xml_content,
-                                            file_name=f"FG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
-                                            mime="application/xml",
-                                            use_container_width=True
-                                        )
-                                    else:
-                                        st.error("❌ El XML no es válido según el esquema XSD")
-                                        for error in errores[:5]:
-                                            st.error(f"• {error}")
-                                else:
-                                    st.error("❌ Error al generar el XML")
-                                    
-                            except Exception as e:
-                                st.error(f"❌ Error: {e}")
-                
-                with col2:
-                    if st.button("👁️ Vista previa XML", use_container_width=True):
+                if st.button("🔧 Generar XML Finalización", type="primary", use_container_width=True):
+                    with st.spinner("Generando y validando XML..."):
                         try:
                             participantes_list = participantes_grupo.to_dict('records')
-                            xml_preview = generar_xml_finalizacion_grupo(grupo, participantes_list)
-                            if xml_preview:
-                                st.code(xml_preview[:1000] + "..." if len(xml_preview) > 1000 else xml_preview, language="xml")
+                            xml_content = generar_xml_finalizacion_grupo(grupo, participantes_list)
+                            es_valido, errores = validar_xml(xml_content, xsd_urls['finalizacion_grupo'])
+                            if es_valido:
+                                st.success("✅ XML de finalización generado y validado correctamente")
+                                st.download_button(
+                                    "📥 Descargar XML Finalización Grupo",
+                                    data=xml_content,
+                                    file_name=f"FG_{grupo.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d')}.xml",
+                                    mime="application/xml",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.error("❌ XML no válido")
+                                for error in errores[:5]:
+                                    st.error(f"• {error}")
                         except Exception as e:
-                            st.error(f"❌ Error en vista previa: {e}")
+                            st.error(f"❌ Error: {e}")
 
     # =========================
-    # INFORMACIÓN ADICIONAL
+    # INFORMACIÓN ADICIONAL Y EXPORTACIÓN
     # =========================
     st.divider()
     st.markdown("### 📊 Resumen de Datos")
-    
-    if not df_acciones.empty:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 📈 Estadísticas")
-            st.write(f"• **Total acciones formativas:** {len(df_acciones)}")
-            st.write(f"• **Total grupos:** {len(df_grupos)}")
-            st.write(f"• **Total participantes:** {len(df_participantes)}")
-            
-            # Exportar datos para análisis
-            if st.button("📊 Exportar Datos para Análisis"):
-                export_csv(df_acciones, "acciones_formativas.csv")
-                export_csv(df_grupos, "grupos.csv")
-                export_csv(df_participantes, "participantes.csv")
-        
-        with col2:
-            st.markdown("#### ℹ️ Información")
-            st.info("""
-            **Documentos FUNDAE oficiales:**
-            
-            • **PDF Acción:** Documento informativo
-            • **XML Acción:** Comunicación oficial de acción formativa
-            • **XML Inicio:** Comunicación de inicio de grupo
-            • **XML Finalización:** Comunicación de finalización
-            
-            Todos los XMLs se validan contra esquemas XSD oficiales.
-            """)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### 📈 Estadísticas")
+        st.write(f"• Total acciones formativas: {len(df_acciones)}")
+        st.write(f"• Total grupos: {len(df_grupos)}")
+        st.write(f"• Total participantes: {len(df_participantes)}")
+        if st.button("📊 Exportar Datos para Análisis"):
+            export_csv(df_acciones, "acciones_formativas.csv")
+            export_csv(df_grupos, "grupos.csv")
+            export_csv(df_participantes, "participantes.csv")
+    with col2:
+        st.markdown("#### ℹ️ Información")
+        st.info("""
+        **Documentos FUNDAE oficiales:**
+        • PDF Acción: Documento informativo
+        • XML Acción: Comunicación oficial de acción formativa
+        • XML Inicio: Comunicación de inicio de grupo
+        • XML Finalización: Comunicación de finalización
+        Todos los XMLs se validan contra esquemas XSD oficiales.
+        """)
 
     st.divider()
     st.caption("💡 Los documentos generados cumplen con los estándares oficiales de FUNDAE y se validan automáticamente.")
+
