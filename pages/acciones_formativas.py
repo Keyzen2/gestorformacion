@@ -16,16 +16,22 @@ def main(supabase, session_state):
     data_service = get_data_service(supabase, session_state)
     empresa_id = session_state.user.get("empresa_id") if session_state.role == "gestor" else None
 
-    # =========================
-    # Cargar datos
-    # =========================
+   # =========================
+# Cargar datos
+# =========================
     with st.spinner("Cargando datos..."):
+        data_service = get_data_service(supabase, session_state)
         df_acciones = data_service.get_acciones_formativas()
         areas_dict = data_service.get_areas_dict()
         grupos_acciones_df = data_service.get_grupos_acciones()
 
-        # Filtrar grupos solo de la empresa del gestor
-        if session_state.role == "gestor" and empresa_id:
+        # Obtener empresa_id del usuario (gestor)
+        empresa_id = session_state.user.get("empresa_id")
+
+        # Filtrar datos según rol
+        if session_state.role == "gestor":
+            # Solo mostrar acciones y grupos de la empresa del gestor
+            df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
             grupos_acciones_df = grupos_acciones_df[grupos_acciones_df["empresa_id"] == empresa_id]
 
     # =========================
