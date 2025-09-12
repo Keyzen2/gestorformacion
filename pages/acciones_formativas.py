@@ -28,17 +28,20 @@ def main(supabase, session_state):
     # =========================
     empresa_id = session_state.user.get("empresa_id")
 
-    if session_state.role == "gestor":
-        # Filtrar acciones solo de la empresa del gestor
-        if "empresa_id" in df_acciones.columns:
-            df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
+    st.write("DEBUG: session_state.user:", session_state.user)
+    st.write("DEBUG: empresa_id:", empresa_id)
+    st.write("DEBUG: columnas df_acciones:", df_acciones.columns.tolist())
+    st.write("DEBUG: filas antes de filtrar:", len(df_acciones))
+
+    if session_state.role == "gestor" and "empresa_id" in df_acciones.columns:
+        df_acciones = df_acciones[df_acciones["empresa_id"] == empresa_id]
+        st.write("DEBUG: filas después de filtrar por empresa:", len(df_acciones))
 
     # Crear copia para filtros y tabla
     df_filtered = df_acciones.copy()
 
     # Determinar si el usuario puede crear nuevas acciones
     allow_creation = data_service.can_modify_data() or session_state.role == "gestor"
-
 
     # =========================
     # Métricas
