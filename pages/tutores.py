@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
+from io import BytesIO
+from datetime import datetime
+import uuid
 from utils import export_csv, validar_dni_cif
 from components.listado_con_ficha import listado_con_ficha
 from services.data_service import get_data_service
-import uuid
-from datetime import datetime
 
 def main(supabase, session_state):
     st.subheader("👨‍🏫 Tutores")
@@ -24,16 +25,14 @@ def main(supabase, session_state):
         return
 
     # =========================
-    # Cargar datos usando DataService
+    # Cargar datos
     # =========================
     try:
-        # Usar método mejorado del DataService
         df = data_service.get_tutores_completos()
         
-        # Cargar empresas para selects si es admin
+        # Empresas para admin
         empresas_dict = {}
         empresas_opciones = [""]
-        
         if session_state.role == "admin":
             try:
                 empresas_res = supabase.table("empresas").select("id, nombre").execute()
@@ -41,29 +40,24 @@ def main(supabase, session_state):
                 empresas_opciones = [""] + sorted(empresas_dict.keys())
             except Exception as e:
                 st.warning(f"⚠️ Error al cargar empresas: {e}")
-
     except Exception as e:
         st.error(f"❌ Error al cargar tutores: {e}")
         return
 
     # =========================
-    # Filtros avanzados
+    # Filtros
     # =========================
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
         search_text = st.text_input("🔍 Buscar", placeholder="Nombre, email, especialidad...")
-    
     with col2:
         filter_tipo = st.selectbox("Tipo de tutor", ["Todos", "interno", "externo"])
-    
     with col3:
         if session_state.role == "admin" and not df.empty:
             empresas_filtro = ["Todas"] + df["empresa_nombre"].dropna().unique().tolist()
             filter_empresa = st.selectbox("Empresa", empresas_filtro)
         else:
             filter_empresa = "Todas"
-    
     with col4:
         if not df.empty:
             specialties = df["especialidad"].dropna().unique().tolist()
@@ -71,9 +65,7 @@ def main(supabase, session_state):
         else:
             filter_especialidad = "Todas"
 
-    # Aplicar filtros
     df_filtered = df.copy()
-    
     if search_text:
         mask = (
             df_filtered["nombre"].str.contains(search_text, case=False, na=False) |
@@ -82,13 +74,10 @@ def main(supabase, session_state):
             df_filtered["especialidad"].str.contains(search_text, case=False, na=False)
         )
         df_filtered = df_filtered[mask]
-    
     if filter_tipo != "Todos":
         df_filtered = df_filtered[df_filtered["tipo_tutor"] == filter_tipo]
-    
     if filter_empresa != "Todas" and session_state.role == "admin":
         df_filtered = df_filtered[df_filtered["empresa_nombre"] == filter_empresa]
-    
     if filter_especialidad != "Todas":
         df_filtered = df_filtered[df_filtered["especialidad"] == filter_especialidad]
 
@@ -110,123 +99,78 @@ def main(supabase, session_state):
             st.metric("📄 Con CV", con_cv)
 
     # =========================
-    # Funciones de gestión de tutores
+    # Funciones de gestión
     # =========================
     def guardar_tutor(datos):
-        """Guarda o actualiza un tutor."""
         try:
-            # Validaciones básicas
             if not datos.get("nombre") or not datos.get("apellidos"):
                 st.error("⚠️ Nombre y apellidos son obligatorios.")
                 return False
-                
             if not datos.get("tipo_tutor"):
                 st.error("⚠️ El tipo de tutor es obligatorio.")
                 return False
-                
             if datos.get("email") and "@" not in datos.get("email", ""):
                 st.error("⚠️ Email no válido.")
                 return False
-                
             if datos.get("nif") and not validar_dni_cif(datos["nif"]):
                 st.error("⚠️ NIF/DNI no válido.")
                 return False
-            
-            # Procesar empresa según rol
             if session_state.role == "admin" and datos.get("empresa_sel"):
                 datos["empresa_id"] = empresas_dict.get(datos["empresa_sel"])
-                datos.pop("empresa_sel", None)  # Remover campo temporal
+                datos.pop("empresa_sel", None)
             elif session_state.role == "gestor":
                 datos["empresa_id"] = session_state.user.get("empresa_id")
-            
             if not datos.get("empresa_id"):
                 st.error("⚠️ Debes especificar una empresa válida.")
                 return False
-            
-            # Procesar archivo CV si existe
             if "cv_file" in datos and datos["cv_file"] is not None:
                 cv_file = datos.pop("cv_file")
                 tutor_id = datos.get("id") or str(uuid.uuid4())
                 empresa_id_tutor = datos.get("empresa_id")
-                
                 try:
-                    # Crear ruta única para el archivo
                     file_extension = cv_file.name.split(".")[-1] if "." in cv_file.name else "pdf"
                     file_path = f"empresa_{empresa_id_tutor}/tutores/{tutor_id}_{cv_file.name}"
-                    
-                    # Subir archivo a Supabase Storage
                     upload_res = supabase.storage.from_("curriculums").upload(
                         file_path,
                         cv_file.getvalue(),
                         {"upsert": True}
                     )
-                    
-                    # Obtener URL pública
                     public_url = supabase.storage.from_("curriculums").get_public_url(file_path)
                     datos["cv_url"] = public_url
-                    
                 except Exception as e:
                     st.warning(f"⚠️ Error al subir CV: {e}")
-            
-            # Limpiar campos temporales
-            datos_limpios = {k: v for k, v in datos.items() 
-                           if not k.endswith("_sel") and k != "cv_file"}
-            
-            # Usar DataService para guardar
+            datos_limpios = {k: v for k, v in datos.items() if not k.endswith("_sel") and k != "cv_file"}
             if datos_limpios.get("id"):
-                # Actualizar tutor existente
                 success = data_service.update_tutor(datos_limpios["id"], datos_limpios)
                 if success:
                     st.success("✅ Tutor actualizado correctamente.")
                     st.rerun()
             else:
-                # Crear nuevo tutor
                 success = data_service.create_tutor(datos_limpios)
                 if success:
                     st.success("✅ Tutor creado correctamente.")
                     st.rerun()
-            
-            return success
-            
+            return True
         except Exception as e:
             st.error(f"❌ Error al guardar tutor: {e}")
             return False
 
     def crear_tutor(datos):
-        """Crea un nuevo tutor."""
-        # Asegurar que no tiene ID para creación
         datos.pop("id", None)
         return guardar_tutor(datos)
 
-    # =========================
-    # Configuración de campos para listado_con_ficha
-    # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente - Compatible con XML FUNDAE."""
         campos_base = [
             "nombre", "apellidos", "nif", "email", "telefono",
-            "tipo_tutor",      # interno/externo
-            "especialidad",    # Especialidad formativa
-            
-            # Datos profesionales (para XML si se requiere)
-            "titulacion",      # Titulación académica
-            "experiencia_profesional", # Años experiencia
-            "experiencia_docente",     # Años docencia
-            
-            # Ubicación
+            "tipo_tutor", "especialidad",
+            "titulacion", "experiencia_profesional", "experiencia_docente",
             "direccion", "ciudad", "provincia", "codigo_postal",
-            
-            # Documentación
-            "cv_file"         # Curriculum vitae
+            "cv_file"
         ]
-        
-        # Solo admin puede seleccionar empresa
         if session_state.role == "admin":
-            campos_base.insert(-2, "empresa_sel")
-            
+            campos_base.insert(-1, "empresa_sel")
         return campos_base
 
-    # Especialidades disponibles
     especialidades_opciones = [
         "", "Administración y Gestión", "Comercio y Marketing", "Informática y Comunicaciones",
         "Sanidad", "Servicios Socioculturales", "Hostelería y Turismo", "Educación",
@@ -242,22 +186,14 @@ def main(supabase, session_state):
         "tipo_tutor": ["", "interno", "externo"],
         "especialidad": especialidades_opciones
     }
-    
     if session_state.role == "admin":
         campos_select["empresa_sel"] = empresas_opciones
 
     campos_readonly = ["id", "created_at"]
-    
     campos_file = {
-        "cv_file": {
-            "label": "📄 Curriculum Vitae",
-            "type": ["pdf", "doc", "docx"],
-            "help": "Subir CV del tutor (PDF recomendado, máximo 10MB)"
-        }
+        "cv_file": {"label": "📄 Curriculum Vitae", "type": ["pdf", "doc", "docx"], "help": "Subir CV del tutor (PDF recomendado, máximo 10MB)"}
     }
-    
     campos_obligatorios = ["nombre", "apellidos", "tipo_tutor"]
-
     campos_help = {
         "nombre": "Nombre del tutor (obligatorio)",
         "apellidos": "Apellidos del tutor (obligatorio)", 
@@ -278,206 +214,42 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Mostrar interfaz principal
+    # Mostrar listado y formulario
     # =========================
-    if df_filtered.empty:
-        if df.empty:
-            st.info("ℹ️ No hay tutores registrados.")
-        else:
-            st.warning(f"🔍 No hay tutores que coincidan con los filtros aplicados.")
-    else:
-        # Preparar datos para mostrar
-        df_display = df_filtered.copy()
-        
-        # Solo añadir empresa_sel si el usuario es admin Y existe la columna empresa_nombre
-        if session_state.role == "admin" and "empresa_nombre" in df_display.columns:
-            df_display["empresa_sel"] = df_display["empresa_nombre"]
-
-        # Mostrar tabla con componente optimizado
-        listado_con_ficha(
-            df_display,
-            columnas_visibles=[
-                "nombre", "apellidos", "email", "telefono",
-                "nif", "tipo_tutor", "especialidad", "cv_url", "empresa_nombre"
-            ],
-            titulo="Tutor",
-            on_save=guardar_tutor,
-            on_create=crear_tutor,
-            id_col="id",
-            campos_select=campos_select,
-            campos_readonly=campos_readonly,
-            campos_file=campos_file,
-            campos_dinamicos=get_campos_dinamicos,
-            campos_obligatorios=campos_obligatorios,
-            allow_creation=True,
-            campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "especialidad"]
-        )
+    listado_con_ficha(
+        df_filtered,
+        columnas_visibles=[
+            "nombre", "apellidos", "email", "telefono",
+            "nif", "tipo_tutor", "especialidad", "cv_url", "empresa_nombre"
+        ],
+        titulo="Tutor",
+        on_save=guardar_tutor,
+        on_create=crear_tutor,
+        id_col="id",
+        campos_select=campos_select,
+        campos_readonly=campos_readonly,
+        campos_file=campos_file,
+        campos_dinamicos=get_campos_dinamicos,
+        campos_obligatorios=campos_obligatorios,
+        allow_creation=True,
+        campos_help=campos_help,
+        search_columns=["nombre", "apellidos", "email", "especialidad"]
+    )
 
     st.divider()
 
     # =========================
-    # FUNCIONALIDADES ADICIONALES
-    # =========================
-    
-    # Asignación de tutores a grupos
-    if not df.empty:
-        st.markdown("### 👥 Asignación de Tutores a Grupos")
-        
-        try:
-            # Cargar grupos usando DataService
-            df_grupos = data_service.get_grupos_completos()
-            
-            if not df_grupos.empty:
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    # Selector de tutor
-                    tutor_options = df.apply(
-                        lambda t: f"{t['nombre']} {t.get('apellidos', '')} ({t.get('tipo_tutor', 'N/A')})", axis=1
-                    ).tolist()
-                    
-                    if tutor_options:
-                        tutor_sel = st.selectbox("Seleccionar tutor", tutor_options)
-                        tutor_idx = tutor_options.index(tutor_sel)
-                        tutor_data = df.iloc[tutor_idx]
-                
-                with col2:
-                    # Selector de grupo
-                    grupo_options = df_grupos.apply(
-                        lambda g: f"{g.get('codigo_grupo', 'Sin código')} - {g.get('accion_nombre', 'Sin acción')}", axis=1
-                    ).tolist()
-                    
-                    if grupo_options:
-                        grupo_sel = st.selectbox("Seleccionar grupo", grupo_options)
-                        grupo_idx = grupo_options.index(grupo_sel)
-                        grupo_data = df_grupos.iloc[grupo_idx]
-                
-                with col3:
-                    st.write("")  # Espaciado
-                    st.write("")  # Espaciado
-                    
-                    if st.button("🔗 Asignar Tutor al Grupo", use_container_width=True):
-                        try:
-                            # Verificar si ya existe la asignación
-                            existing = supabase.table("tutores_grupos").select("id").eq(
-                                "tutor_id", tutor_data["id"]
-                            ).eq("grupo_id", grupo_data["id"]).execute()
-                            
-                            if existing.data:
-                                st.warning("⚠️ Este tutor ya está asignado a este grupo.")
-                            else:
-                                # Crear nueva asignación
-                                res = supabase.table("tutores_grupos").insert({
-                                    "tutor_id": tutor_data["id"],
-                                    "grupo_id": grupo_data["id"],
-                                    "created_at": datetime.now().isoformat()
-                                }).execute()
-                                
-                                if res.data:
-                                    st.success("✅ Tutor asignado al grupo correctamente.")
-                                    st.rerun()
-                                else:
-                                    st.error("❌ Error al asignar tutor al grupo.")
-                        
-                        except Exception as e:
-                            st.error(f"❌ Error al asignar tutor: {e}")
-            else:
-                st.info("ℹ️ No hay grupos disponibles para asignación.")
-        
-        except Exception as e:
-            st.warning(f"⚠️ Error al cargar grupos: {e}")
-
-        # Mostrar asignaciones actuales
-        try:
-            st.markdown("#### 📋 Asignaciones Actuales")
-            
-            # Consulta SQL corregida con foreign key específica
-            asignaciones_res = supabase.table("tutores_grupos").select("""
-                id, created_at,
-                tutores!tutores_grupos_tutor_id_fkey(id, nombre, apellidos, tipo_tutor),
-                grupos(id, codigo_grupo, acciones_formativas(nombre))
-            """).execute()
-            
-            if asignaciones_res.data:
-                asignaciones_df = pd.DataFrame(asignaciones_res.data)
-                
-                # Aplanar datos para mostrar
-                asignaciones_display = []
-                for _, row in asignaciones_df.iterrows():
-                    tutor_info = row.get("tutores", {})
-                    grupo_info = row.get("grupos", {})
-                    accion_info = grupo_info.get("acciones_formativas", {}) if grupo_info else {}
-                    
-                    asignaciones_display.append({
-                        "ID": row["id"],
-                        "Tutor": f"{tutor_info.get('nombre', 'N/A')} {tutor_info.get('apellidos', '')}",
-                        "Tipo": tutor_info.get("tipo_tutor", "N/A"),
-                        "Grupo": grupo_info.get("codigo_grupo", "N/A"),
-                        "Acción Formativa": accion_info.get("nombre", "N/A"),
-                        "Fecha Asignación": row.get("created_at", "N/A")[:10]
-                    })
-                
-                if asignaciones_display:
-                    st.dataframe(
-                        pd.DataFrame(asignaciones_display),
-                        use_container_width=True,
-                        hide_index=True
-                    )
-                    
-                    # Opción para eliminar asignaciones
-                    with st.expander("🗑️ Eliminar Asignación"):
-                        asignacion_ids = [str(a["ID"]) for a in asignaciones_display]
-                        asignacion_names = [f"{a['Tutor']} → {a['Grupo']}" for a in asignaciones_display]
-                        
-                        if asignacion_names:
-                            sel_asignacion = st.selectbox(
-                                "Seleccionar asignación a eliminar",
-                                asignacion_names
-                            )
-                            
-                            if st.button("🗑️ Eliminar Asignación", type="secondary"):
-                                try:
-                                    idx = asignacion_names.index(sel_asignacion)
-                                    asignacion_id = asignacion_ids[idx]
-                                    
-                                    supabase.table("tutores_grupos").delete().eq("id", asignacion_id).execute()
-                                    st.success("✅ Asignación eliminada correctamente.")
-                                    st.rerun()
-                                    
-                                except Exception as e:
-                                    st.error(f"❌ Error al eliminar asignación: {e}")
-            else:
-                st.info("ℹ️ No hay asignaciones de tutores a grupos.")
-        
-        except Exception as e:
-            st.warning(f"⚠️ Error al cargar asignaciones: {e}")
-            # Fallback: mostrar consulta simple sin joins
-            try:
-                asignaciones_simple = supabase.table("tutores_grupos").select("*").execute()
-                if asignaciones_simple.data:
-                    st.dataframe(pd.DataFrame(asignaciones_simple.data), use_container_width=True)
-                else:
-                    st.info("ℹ️ No hay asignaciones registradas.")
-            except Exception as e2:
-                st.error(f"❌ Error crítico al cargar asignaciones: {e2}")
-
-    # =========================
-    # EXPORTAR DATOS
+    # Exportar datos
     # =========================
     if not df.empty:
         st.markdown("### 📊 Exportar Datos")
         col1, col2 = st.columns(2)
-        
         with col1:
             if st.button("📥 Exportar Tutores CSV", use_container_width=True):
                 export_csv(df_filtered, "tutores_export")
-        
         with col2:
-            # Estadísticas rápidas
             st.write("**Resumen:**")
             st.write(f"- Total tutores: {len(df)}")
             st.write(f"- Filtrados: {len(df_filtered)}")
-            if not df.empty:
-                internos_pct = (len(df[df["tipo_tutor"] == "interno"]) / len(df)) * 100
-                st.write(f"- Internos: {internos_pct:.1f}%")
+            internos_pct = (len(df[df["tipo_tutor"] == "interno"]) / len(df)) * 100 if len(df) else 0
+            st.write(f"- Internos: {internos_pct:.1f}%")
