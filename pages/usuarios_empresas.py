@@ -230,7 +230,7 @@ def main(supabase, session_state):
                 "auth_id": auth_id,
                 "email": datos_nuevos["email"],
                 "nombre_completo": datos_nuevos.get("nombre_completo", ""),
-                "nombre": datos_nuevos.get("nombre", datos_nuevos.get("nombre_completo", "")[:50]),  # Nombre corto
+                "nombre": datos_nuevos.get("nombre", datos_nuevos.get("nombre_completo", "")[:50]),
                 "telefono": datos_nuevos.get("telefono"),
                 "dni": datos_nuevos.get("dni"),
                 "rol": datos_nuevos.get("rol", "alumno"),
@@ -243,7 +243,6 @@ def main(supabase, session_state):
             result = supabase.table("usuarios").insert(db_datos).execute()
             
             if not result.data:
-                # Si falla, eliminar de Auth
                 try:
                     supabase.auth.admin.delete_user(auth_id)
                 except:
@@ -251,9 +250,7 @@ def main(supabase, session_state):
                 st.error("❌ Error al crear usuario en la base de datos.")
                 return
             
-            # Limpiar cache del DataService
             data_service.get_usuarios.clear()
-            
             st.success(f"✅ Usuario creado correctamente. Contraseña temporal: {password}")
             st.rerun()
         except Exception as e:
@@ -263,28 +260,36 @@ def main(supabase, session_state):
     # Campos dinámicos con lógica reactiva
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente según el rol."""
-        # Campos base que siempre se muestran (usando nombres exactos de la BD)
+        """Determina campos a mostrar dinámicamente - CORREGIDO para evitar errores."""
         campos_base = ["email", "nombre_completo", "nombre", "telefono", "dni", "rol"]
         
-        # Obtener rol actual
-        rol_actual = datos.get("rol", "") if isinstance(datos, dict) else ""
-        
-        # Si es gestor, mostrar selector de empresa
-        if rol_actual == "gestor":
-            campos_base.append("empresa_sel")
-        
-        # Si es alumno, mostrar selector de grupo
-        if rol_actual == "alumno":
-            campos_base.append("grupo_sel")
-        
-        # Para creación, añadir campo de contraseña
-        if not datos or not datos.get("id"):
-            campos_base.append("password")
+        try:
+            if datos is not None:
+                if hasattr(datos, 'to_dict'):
+                    datos_dict = datos.to_dict()
+                elif isinstance(datos, dict):
+                    datos_dict = datos
+                else:
+                    return campos_base
+                    
+                rol_actual = datos_dict.get("rol", "")
+                
+                if str(rol_actual).lower() == "gestor":
+                    if "empresa_sel" not in campos_base:
+                        campos_base.append("empresa_sel")
+                
+                if str(rol_actual).lower() == "alumno":
+                    if "grupo_sel" not in campos_base:
+                        campos_base.append("grupo_sel")
+            
+            if not datos or not datos.get("id"):
+                campos_base.append("password")
+                
+        except Exception:
+            pass
         
         return campos_base
 
-    # Configuración de campos
     campos_select = {
         "rol": ["", "admin", "gestor", "alumno"],
         "empresa_sel": empresas_opciones,
@@ -308,7 +313,6 @@ def main(supabase, session_state):
 
     campos_obligatorios = ["email", "nombre_completo", "rol"]
 
-    # Campos reactivos - campos que aparecen según el rol
     reactive_fields = {
         "rol": ["empresa_sel", "grupo_sel"]
     }
@@ -319,10 +323,8 @@ def main(supabase, session_state):
     if df_filtered.empty:
         st.warning("🔍 No se encontraron usuarios que coincidan con los filtros.")
     else:
-        # Preparar datos para mostrar
         df_display = df_filtered.copy()
         
-        # Añadir campos para selects usando datos ya existentes
         if "empresa_nombre" in df_display.columns:
             df_display["empresa_sel"] = df_display["empresa_nombre"]
         else:
@@ -333,14 +335,12 @@ def main(supabase, session_state):
         else:
             df_display["grupo_sel"] = ""
 
-        # Determinar columnas visibles (usando columnas reales de la BD)
         columnas_visibles = ["nombre_completo", "email", "telefono", "rol"]
         if "empresa_nombre" in df_display.columns:
             columnas_visibles.append("empresa_nombre")
         if "created_at" in df_display.columns:
             columnas_visibles.append("created_at")
 
-        # Interfaz principal con campos reactivos
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -360,3 +360,4 @@ def main(supabase, session_state):
 
     st.divider()
     st.caption("💡 Gestiona usuarios del sistema desde esta interfaz centralizada.")
+
