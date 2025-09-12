@@ -23,7 +23,6 @@ def main(supabase, session_state):
         df_grupos = data_service.get_grupos_completos()
         acciones_dict = data_service.get_acciones_dict()
         
-        # Cargar empresas solo si es admin
         if session_state.role == "admin":
             empresas_dict = data_service.get_empresas_dict()
         else:
@@ -38,25 +37,18 @@ def main(supabase, session_state):
     # =========================
     if not df_grupos.empty:
         col1, col2, col3, col4 = st.columns(4)
+        hoy = datetime.now()
+        activos = len(df_grupos[
+            (pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") <= hoy) & 
+            (df_grupos["fecha_fin"].isna() | (pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") >= hoy))
+        ])
+        proximos = len(df_grupos[pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") > hoy])
+        promedio = df_grupos["n_participantes_previstos"].mean() if "n_participantes_previstos" in df_grupos.columns else 0
         
-        with col1:
-            st.metric("👥 Total Grupos", len(df_grupos))
-        
-        with col2:
-            hoy = datetime.now()
-            activos = len(df_grupos[
-                (pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") <= hoy) & 
-                (df_grupos["fecha_fin"].isna() | (pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") >= hoy))
-            ])
-            st.metric("🟢 Activos", activos)
-        
-        with col3:
-            promedio = df_grupos["n_participantes_previstos"].mean() if "n_participantes_previstos" in df_grupos.columns else 0
-            st.metric("📊 Promedio Participantes", round(promedio, 1))
-        
-        with col4:
-            proximos = len(df_grupos[pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") > hoy])
-            st.metric("📅 Próximos", proximos)
+        col1.metric("👥 Total Grupos", len(df_grupos))
+        col2.metric("🟢 Activos", activos)
+        col3.metric("📊 Promedio Participantes", round(promedio, 1))
+        col4.metric("📅 Próximos", proximos)
 
     # =========================
     # Filtros de búsqueda
@@ -64,14 +56,10 @@ def main(supabase, session_state):
     st.divider()
     st.markdown("### 🔍 Buscar y Filtrar")
     col1, col2 = st.columns(2)
-    
     with col1:
         query = st.text_input("🔍 Buscar por código o acción formativa")
     with col2:
-        estado_filter = st.selectbox(
-            "Filtrar por estado", 
-            ["Todos", "Activos", "Finalizados", "Próximos"]
-        )
+        estado_filter = st.selectbox("Filtrar por estado", ["Todos", "Activos", "Finalizados", "Próximos"])
 
     df_filtered = df_grupos.copy()
     
@@ -83,7 +71,6 @@ def main(supabase, session_state):
         ]
     
     if estado_filter != "Todos" and not df_filtered.empty:
-        hoy = datetime.now()
         if estado_filter == "Activos":
             df_filtered = df_filtered[
                 (pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") <= hoy) & 
@@ -98,7 +85,6 @@ def main(supabase, session_state):
                 pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") > hoy
             ]
 
-    # Exportar CSV
     if not df_filtered.empty:
         export_csv(df_filtered, filename="grupos.csv")
 
@@ -111,18 +97,19 @@ def main(supabase, session_state):
         try:
             if "accion_sel" in datos_editados:
                 accion_sel = datos_editados.pop("accion_sel")
-                if accion_sel and accion_sel in acciones_dict:
+                if accion_sel in acciones_dict:
                     datos_editados["accion_formativa_id"] = acciones_dict[accion_sel]
 
             if session_state.role == "admin" and "empresa_sel" in datos_editados:
                 empresa_sel = datos_editados.pop("empresa_sel")
-                if empresa_sel and empresa_sel in empresas_dict:
+                if empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
 
             if not datos_editados.get("codigo_grupo"):
                 st.error("⚠️ El código de grupo es obligatorio.")
                 return
 
+            datos_editados["updated_at"] = datetime.utcnow().isoformat()
             supabase.table("grupos").update(datos_editados).eq("id", grupo_id).execute()
             data_service.get_grupos_completos.clear()
             st.success("✅ Grupo actualizado correctamente.")
@@ -135,12 +122,12 @@ def main(supabase, session_state):
         try:
             if "accion_sel" in datos_nuevos:
                 accion_sel = datos_nuevos.pop("accion_sel")
-                if accion_sel and accion_sel in acciones_dict:
+                if accion_sel in acciones_dict:
                     datos_nuevos["accion_formativa_id"] = acciones_dict[accion_sel]
 
             if session_state.role == "admin" and "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
-                if empresa_sel and empresa_sel in empresas_dict:
+                if empresa_sel in empresas_dict:
                     datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
             elif session_state.role == "gestor":
                 datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
@@ -183,24 +170,29 @@ def main(supabase, session_state):
             st.error(f"❌ Error al eliminar grupo: {e}")
 
     # =========================
-    # Campos dinámicos
+    # Campos dinámicos adaptativos (creación + finalización)
     # =========================
     def get_campos_dinamicos(datos):
         campos = [
-            "codigo_grupo", "accion_sel", "fecha_inicio", "fecha_fin",
-            "fecha_fin_prevista", "aula_virtual", "horario", "localidad",
-            "provincia", "cp", "n_participantes_previstos", "n_participantes_finalizados",
-            "n_aptos", "n_no_aptos", "observaciones"
+            "codigo_grupo", "accion_sel", "fecha_inicio", "fecha_fin_prevista",
+            "aula_virtual", "horario", "localidad", "provincia", "cp",
+            "n_participantes_previstos", "observaciones"
         ]
         if session_state.role == "admin":
             campos.insert(2, "empresa_sel")
+
+        # Mostrar campos de finalización si fecha_fin_prevista <= hoy o fecha_fin ya existe
+        hoy = datetime.now()
+        fecha_fin_prevista = pd.to_datetime(datos.get("fecha_fin_prevista"), errors="coerce")
+        if (fecha_fin_prevista and fecha_fin_prevista <= hoy) or datos.get("fecha_fin"):
+            campos += ["fecha_fin", "n_participantes_finalizados", "n_aptos", "n_no_aptos"]
+
         return campos
 
     campos_select = {
         "accion_sel": list(acciones_dict.keys()) if acciones_dict else ["No hay acciones disponibles"],
         "aula_virtual": [True, False]
     }
-    
     if session_state.role == "admin" and empresas_dict:
         campos_select["empresa_sel"] = list(empresas_dict.keys())
 
@@ -229,12 +221,10 @@ def main(supabase, session_state):
 
     columnas_base = ["codigo_grupo", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos"]
     columnas_visibles = [col for col in columnas_base if col in df_grupos.columns]
-
     if "accion_nombre" in df_grupos.columns:
         columnas_visibles.insert(1, "accion_nombre")
     elif "accion_formativa_id" in df_grupos.columns:
         columnas_visibles.insert(1, "accion_formativa_id")
-    
     if session_state.role == "admin":
         if "empresa_nombre" in df_grupos.columns:
             columnas_visibles.insert(2, "empresa_nombre")
@@ -242,7 +232,7 @@ def main(supabase, session_state):
             columnas_visibles.insert(2, "empresa_id")
 
     # =========================
-    # Mostrar interfaz principal
+    # Mostrar interfaz principal unificada
     # =========================
     if df_filtered.empty:
         st.info("ℹ️ No hay grupos para mostrar.")
@@ -286,49 +276,5 @@ def main(supabase, session_state):
         )
 
     st.divider()
-
-    # =========================
-    # Gestión de finalización de grupo
-    # =========================
-    if session_state.role in ["admin", "gestor"] and not df_grupos.empty:
-        st.markdown("### ✅ Finalizar Grupo")
-        grupo_finalizar = st.selectbox(
-            "Seleccionar grupo a finalizar",
-            [""] + df_grupos["codigo_grupo"].tolist()
-        )
-
-        if grupo_finalizar:
-            grupo_data = df_grupos[df_grupos["codigo_grupo"] == grupo_finalizar].iloc[0]
-            grupo_id = grupo_data["id"]
-
-            participantes = supabase.table("participantes").select("id, estado_finalizacion").eq("grupo_id", grupo_id).execute()
-            df_part = pd.DataFrame(participantes.data or [])
-
-            n_finalizados = len(df_part)
-            n_aptos = len(df_part[df_part["estado_finalizacion"] == "Apto"])
-            n_no_aptos = len(df_part[df_part["estado_finalizacion"] == "No apto"])
-
-            st.write(f"- Total participantes finalizados: {n_finalizados}")
-            st.write(f"- Participantes aptos: {n_aptos}")
-            st.write(f"- Participantes no aptos: {n_no_aptos}")
-
-            fecha_fin_real = st.date_input("Fecha de fin real", value=datetime.now())
-
-            if st.button("📌 Finalizar grupo"):
-                try:
-                    supabase.table("grupos").update({
-                        "fecha_fin": fecha_fin_real.isoformat(),
-                        "n_participantes_finalizados": n_finalizados,
-                        "n_aptos": n_aptos,
-                        "n_no_aptos": n_no_aptos
-                    }).eq("id", grupo_id).execute()
-
-                    data_service.get_grupos_completos.clear()
-                    st.success("✅ Grupo finalizado correctamente. Puedes exportar el XML de finalización.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al finalizar grupo: {e}")
-
-    st.divider()
-    st.caption("💡 Los grupos son la unidad básica para organizar participantes y gestionar la formación.")  
+    st.caption("💡 Los grupos son la unidad básica para organizar participantes y gestionar la formación.")
 
