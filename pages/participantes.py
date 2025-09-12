@@ -223,30 +223,35 @@ def main(supabase, session_state):
     def get_campos_dinamicos(datos):
         """Determina campos a mostrar dinámicamente - SOLO campos reales."""
         campos_base = [
-            # Campos que SÍ existen en el schema
             "nombre", "apellidos", "dni", "nif", "email", "telefono",
-            "fecha_nacimiento",  # EXISTS en schema
-            "sexo",             # EXISTS en schema 
-            "grupo_sel"         # Campo virtual para el select
+            "fecha_nacimiento",
+            "sexo",
+            "grupo_sel"
         ]
-        
-        # Admin y gestor pueden ver empresa
+    
+        # Mostrar empresa solo si admin o gestor
         if session_state.role in ["admin", "gestor"]:
-            campos_select["empresa_sel"] = empresas_opciones
-        
+            campos_base.append("empresa_sel")
+    
         return campos_base
 
-    # Configuración de campos - SOLO campos reales
+    # Configuración de selects
     campos_select = {
         "grupo_sel": grupos_opciones,
-        "sexo": ["", "M", "F"]  # Campo que SÍ existe en schema
+        "sexo": ["", "M", "F"]
     }
-    
+
     if session_state.role == "admin":
         campos_select["empresa_sel"] = empresas_opciones
 
+    # Campos readonly
     campos_readonly = ["id", "created_at", "updated_at"]
 
+    # Hacer readonly para gestor
+    if session_state.role == "gestor":
+        campos_readonly.append("empresa_sel")
+
+    # Ayuda para campos
     campos_help = {
         "email": "Email único del participante (obligatorio)",
         "dni": "DNI, NIE o CIF válido",
