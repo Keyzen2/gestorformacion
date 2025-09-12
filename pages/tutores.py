@@ -202,19 +202,27 @@ def main(supabase, session_state):
     # Configuración de campos para listado_con_ficha
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente."""
+        """Determina campos a mostrar dinámicamente - Compatible con XML FUNDAE."""
         campos_base = [
-            "nombre", "apellidos", "email", "telefono", "nif", 
-            "tipo_tutor", "especialidad", "direccion", "ciudad", 
-            "provincia", "codigo_postal"
+            "nombre", "apellidos", "nif", "email", "telefono",
+            "tipo_tutor",      # interno/externo
+            "especialidad",    # Especialidad formativa
+            
+            # Datos profesionales (para XML si se requiere)
+            "titulacion",      # Titulación académica
+            "experiencia_profesional", # Años experiencia
+            "experiencia_docente",     # Años docencia
+            
+            # Ubicación
+            "direccion", "ciudad", "provincia", "codigo_postal",
+            
+            # Documentación
+            "cv_file"         # Curriculum vitae
         ]
         
         # Solo admin puede seleccionar empresa
         if session_state.role == "admin":
-            campos_base.append("empresa_sel")
-            
-        # CV siempre al final
-        campos_base.append("cv_file")
+            campos_base.insert(-2, "empresa_sel")
             
         return campos_base
 
@@ -263,7 +271,10 @@ def main(supabase, session_state):
         "direccion": "Dirección completa",
         "ciudad": "Ciudad de residencia",
         "provincia": "Provincia",
-        "codigo_postal": "Código postal"
+        "codigo_postal": "Código postal",
+        "titulacion": "Titulación académica del tutor",
+        "experiencia_profesional": "Años de experiencia profesional",
+        "experiencia_docente": "Años de experiencia en docencia/formación"
     }
 
     # =========================
@@ -275,7 +286,7 @@ def main(supabase, session_state):
         else:
             st.warning(f"🔍 No hay tutores que coincidan con los filtros aplicados.")
     else:
-        # Preparar datos para mostrar - ¡AQUÍ ESTABA EL ERROR!
+        # Preparar datos para mostrar
         df_display = df_filtered.copy()
         
         # Solo añadir empresa_sel si el usuario es admin Y existe la columna empresa_nombre
@@ -283,17 +294,16 @@ def main(supabase, session_state):
             df_display["empresa_sel"] = df_display["empresa_nombre"]
 
         # Mostrar tabla con componente optimizado
-        # Mostrar tabla con componente optimizado
         listado_con_ficha(
             df_display,
             columnas_visibles=[
                 "nombre", "apellidos", "email", "telefono",
                 "nif", "tipo_tutor", "especialidad", "cv_url", "empresa_nombre"
-            ],  # ✅ REMOVIDO "id" de columnas_visibles ya que se añade automáticamente
+            ],
             titulo="Tutor",
             on_save=guardar_tutor,
             on_create=crear_tutor,
-            id_col="id",  # ✅ Se añade automáticamente, no debe estar en columnas_visibles
+            id_col="id",
             campos_select=campos_select,
             campos_readonly=campos_readonly,
             campos_file=campos_file,
@@ -382,7 +392,7 @@ def main(supabase, session_state):
         try:
             st.markdown("#### 📋 Asignaciones Actuales")
             
-            # Corregir la consulta especificando la relación exacta
+            # Consulta SQL corregida con foreign key específica
             asignaciones_res = supabase.table("tutores_grupos").select("""
                 id, created_at,
                 tutores!tutores_grupos_tutor_id_fkey(id, nombre, apellidos, tipo_tutor),
