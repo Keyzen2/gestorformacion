@@ -240,34 +240,43 @@ def main(supabase, session_state):
             st.error(f"❌ Error al eliminar participante: {e}")
 
     # =========================
-    # Campos dinámicos
+    # Campos dinámicos - SOLO CAMPOS REALES DEL SCHEMA
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente."""
-        campos_base = ["nombre", "apellidos", "email", "dni", "telefono", "grupo_sel"]
+        """Determina campos a mostrar dinámicamente - SOLO campos reales."""
+        campos_base = [
+            # Campos que SÍ existen en el schema
+            "nombre", "apellidos", "dni", "nif", "email", "telefono",
+            "fecha_nacimiento",  # EXISTS en schema
+            "sexo",             # EXISTS en schema 
+            "grupo_sel"         # Campo virtual para el select
+        ]
         
-        # Solo admin puede seleccionar empresa
+        # Admin puede ver empresa
         if session_state.role == "admin":
             campos_base.insert(-1, "empresa_sel")
-            
+        
         return campos_base
 
-    # Configuración de campos
+    # Configuración de campos - SOLO campos reales
     campos_select = {
         "grupo_sel": grupos_opciones,
-        "sexo": ["", "M", "F"]
+        "sexo": ["", "M", "F"]  # Campo que SÍ existe en schema
     }
     
     if session_state.role == "admin":
         campos_select["empresa_sel"] = empresas_opciones
 
-    campos_readonly = ["created_at", "updated_at"]
+    campos_readonly = ["id", "created_at", "updated_at"]
 
     campos_help = {
         "email": "Email único del participante (obligatorio)",
-        "dni": "DNI, NIE o CIF válido (opcional)",
+        "dni": "DNI, NIE o CIF válido",
+        "nif": "NIF del participante",
         "grupo_sel": "Grupo al que pertenece el participante",
-        "empresa_sel": "Empresa del participante (solo admin)"
+        "empresa_sel": "Empresa del participante (solo admin)",
+        "fecha_nacimiento": "Fecha de nacimiento del participante",
+        "sexo": "Sexo del participante (M/F)"
     }
 
     # =========================
