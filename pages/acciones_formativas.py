@@ -27,12 +27,9 @@ def main(supabase, session_state):
     # Filtrar acciones por rol
     # =========================
     empresa_id = session_state.user.get("empresa_id")
-
-    # Crear copia para filtros y tabla
     df_filtered = df_acciones.copy() if not df_acciones.empty else pd.DataFrame()
 
     if session_state.role == "gestor" and not df_filtered.empty:
-        # Filtrar acciones solo de la empresa del gestor
         if "empresa_id" in df_filtered.columns:
             df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id]
 
@@ -43,7 +40,6 @@ def main(supabase, session_state):
     st.write("DEBUG: filas antes de filtrar:", len(df_acciones))
     st.write("DEBUG: filas después de filtrar por empresa:", len(df_filtered))
 
-    # Determinar si el usuario puede crear nuevas acciones
     allow_creation = data_service.can_modify_data() or session_state.role == "gestor"
 
     # =========================
@@ -162,7 +158,7 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear: {e}")
 
     # =========================
-    # Campos dinámicos - SOLO CAMPOS REALES
+    # Campos dinámicos
     # =========================
     def get_campos_dinamicos(datos):
         campos = [
@@ -202,13 +198,32 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # Mostrar listado
+    # Formulario de creación siempre visible
     # =========================
-    if df_filtered.empty:
-        st.info("ℹ️ No hay acciones formativas para mostrar.")
-        if allow_creation:
-            st.markdown("### ➕ Crear primera acción formativa")
-    else:
+    if allow_creation:
+        with st.expander("➕ Crear nueva acción formativa"):
+            nuevo_nombre = st.text_input("Nombre de la acción")
+            nuevo_codigo = st.text_input("Código de la acción")
+            nueva_modalidad = st.selectbox("Modalidad", ["Presencial", "Online", "Mixta"])
+            nueva_num_horas = st.number_input("Número de horas", min_value=1, step=1)
+            nueva_fecha_inicio = st.date_input("Fecha de inicio")
+            nueva_fecha_fin = st.date_input("Fecha fin")
+
+            if st.button("Crear acción", key="crear_accion_btn"):
+                datos_nuevos = {
+                    "nombre": nuevo_nombre,
+                    "codigo_accion": nuevo_codigo,
+                    "modalidad": nueva_modalidad,
+                    "num_horas": nueva_num_horas,
+                    "fecha_inicio": str(nueva_fecha_inicio),
+                    "fecha_fin": str(nueva_fecha_fin)
+                }
+                crear_accion(datos_nuevos)
+
+    # =========================
+    # Mostrar listado de acciones
+    # =========================
+    if not df_filtered.empty:
         df_display = df_filtered.copy()
         if "cod_area_profesional" in df_display.columns:
             df_display["area_profesional_sel"] = df_display.apply(
@@ -235,7 +250,7 @@ def main(supabase, session_state):
             ],
             titulo="Acción Formativa",
             on_save=guardar_accion,
-            on_create=crear_accion if allow_creation else None,
+            on_create=None,  # Ya creamos arriba
             id_col="id",
             campos_select=campos_select,
             campos_textarea=campos_textarea,
@@ -243,9 +258,11 @@ def main(supabase, session_state):
             campos_obligatorios=["codigo_accion", "nombre"],
             search_columns=["nombre", "codigo_accion", "area_profesional"],
             campos_readonly=["id", "created_at"],
-            allow_creation=allow_creation,
+            allow_creation=False,
             campos_help=campos_help
         )
+    else:
+        st.info("ℹ️ No hay acciones formativas para mostrar.")
 
     st.divider()
     st.caption("💡 Las acciones formativas son la base para crear grupos y asignar participantes.")
