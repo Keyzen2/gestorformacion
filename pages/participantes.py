@@ -156,7 +156,7 @@ def main(supabase, session_state):
             st.error(f"❌ Error al guardar participante: {e}")
 
     def crear_participante(datos_nuevos):
-        """Crea un nuevo participante."""
+        """Crea un nuevo participante.""" 
         try:
             # Validaciones
             if not datos_nuevos.get("email") or not datos_nuevos.get("nombre") or not datos_nuevos.get("apellidos"):
@@ -188,7 +188,7 @@ def main(supabase, session_state):
 
             # Limpiar campos temporales
             datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                           if not k.endswith("_sel") and k != "contraseña" and v}
+                             if not k.endswith("_sel") and k != "contraseña" and v}
             
             # Añadir timestamps
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
@@ -207,7 +207,7 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear participante: {e}")
 
     def eliminar_participante(participante_id):
-        """Elimina un participante."""
+        """Elimina un participante.""" 
         try:
             # Eliminar participante
             supabase.table("participantes").delete().eq("id", participante_id).execute()
@@ -297,9 +297,9 @@ def main(supabase, session_state):
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
     # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
-     if puede_crear or not df_display.empty:
+    if puede_crear or not df_display.empty:
 
-            # Asegurarse de que campos_help sea un diccionario
+        # Asegurarse de que campos_help sea un diccionario
         if campos_help is None:
             campos_help = {}
         elif isinstance(campos_help, list):
