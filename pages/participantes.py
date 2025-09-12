@@ -298,6 +298,7 @@ def main(supabase, session_state):
 
     # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
     if puede_crear or not df_display.empty:
+        campos_help = {}
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
