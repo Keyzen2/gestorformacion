@@ -285,13 +285,19 @@ def listado_con_ficha(
     # FORMULARIO DE CREACIÓN
     # =========================
     if allow_creation and on_create:
-        st.divider()
-        mostrar_formulario_creacion(
-            titulo, on_create, campos_dinamicos, campos_select, 
-            campos_textarea, campos_file, campos_password, 
-            campos_help, campos_obligatorios, reactive_fields
-        )
-
+    st.divider()
+    mostrar_formulario_creacion(
+        titulo=titulo,
+        on_create=on_create,
+        campos_dinamicos=campos_dinamicos,
+        campos_select=campos_select,
+        campos_textarea=campos_textarea,
+        campos_file=campos_file,
+        campos_password=campos_password,
+        campos_help=campos_help,
+        campos_obligatorios=campos_obligatorios,
+        reactive_fields=reactive_fields
+    )
 
 def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col, 
                              campos_select, campos_textarea, campos_file, campos_readonly, 
