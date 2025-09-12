@@ -232,7 +232,6 @@ def main(supabase, session_state):
         # Mostrar empresa solo si admin o gestor
         if session_state.role in ["admin", "gestor"]:
             campos_base.append("empresa_sel")
-    
         return campos_base
 
     # Configuración de selects
@@ -297,13 +296,6 @@ def main(supabase, session_state):
 
     # Llamar a listado_con_ficha siempre que pueda_crear o haya registros
     if puede_crear or not df_display.empty:
-
-        # Asegurarse de que campos_help sea un diccionario
-        if campos_help is None:
-            campos_help = {}
-        elif isinstance(campos_help, list):
-            campos_help = {campo: "" for campo in campos_help}
-        
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
