@@ -543,13 +543,373 @@ def procesar_eliminacion(record_id, on_delete, confirm_key):
 
 def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_select, campos_textarea, 
                               campos_file, campos_password, campos_help, campos_obligatorios, reactive_fields):
-    """✅ CORREGIDO: Formulario de creación con mejor manejo."""
-    campos_help = campos_help or {}
+    """Formulario de creación con mejor manejo de errores y validaciones."""
+    # ✅ CORRECCIÓN CRÍTICA: Validación robusta de parámetros
+    if not isinstance(campos_help, dict):
+        campos_help = {}
+    if not isinstance(campos_obligatorios, list):
+        campos_obligatorios = []
+    if not isinstance(campos_select, dict):
+        campos_select = {}
+    if not isinstance(campos_textarea, dict):
+        campos_textarea = {}
+    if not isinstance(campos_file, dict):
+        campos_file = {}
+    if not isinstance(campos_password, list):
+        campos_password = []
                                   
     st.markdown('<div class="crear-container">', unsafe_allow_html=True)
     st.markdown(f"### ➕ Crear Nuevo {titulo}")
     st.caption("Completa los campos para crear un nuevo registro.")
     
     # Obtener campos para creación
-    campos_crear = obtener_campos_creacion(
-        campos_dinamicos, campos_select, campos_textarea, campos_file, campos_password
+    try:
+        campos_crear = obtener_campos_creacion(
+            campos_dinamicos, campos_select, campos_textarea, campos_file, campos_password
+        )
+    except Exception as e:
+        st.error(f"❌ Error al obtener campos: {e}")
+        campos_crear = []
+    
+    if not campos_crear:
+        st.warning("⚠️ No se han definido campos para la creación.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    # ✅ CORRECCIÓN CRÍTICA: Clave única para formulario de creación
+    form_key = f"form_crear_{titulo.lower().replace(' ', '_')}_{len(campos_crear)}"
+    
+    with st.form(form_key, clear_on_submit=True):
+        datos_nuevos = {}
+        
+        # Organizar en columnas
+        columnas = organizar_en_columnas(len(campos_crear))
+        
+        # ✅ CORRECCIÓN: Asegurar que siempre se creen los campos
+        for i, campo in enumerate(campos_crear):
+            try:
+                col_actual = columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]
+                
+                with col_actual:
+                    valor = crear_campo_formulario(
+                        campo, "", campos_select, campos_textarea, campos_file,
+                        [], campos_password, campos_help, "create",
+                        es_obligatorio=(campo in campos_obligatorios)
+                    )
+                    
+                    if valor is not None and str(valor).strip() != "":
+                        datos_nuevos[campo] = valor
+            except Exception as e:
+                st.error(f"❌ Error al crear campo {campo}: {e}")
+                continue
+        
+        # Información sobre campos obligatorios
+        if campos_obligatorios:
+            st.info(f"📋 Campos obligatorios: {', '.join([c.replace('_', ' ').title() for c in campos_obligatorios])}")
+
+        # ✅ CORRECCIÓN CRÍTICA: Siempre mostrar el botón de crear
+        btn_crear = st.form_submit_button("➕ Crear", type="primary", use_container_width=True)
+        
+        if btn_crear:
+            procesar_creacion(datos_nuevos, on_create, campos_obligatorios)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def obtener_campos_creacion(campos_dinamicos, campos_select, campos_textarea, campos_file, campos_password):
+    """Obtiene los campos que deben aparecer en el formulario de creación con manejo robusto."""
+    # ✅ CORRECCIÓN: Validación robusta de parámetros
+    if not isinstance(campos_select, dict):
+        campos_select = {}
+    if not isinstance(campos_textarea, dict):
+        campos_textarea = {}
+    if not isinstance(campos_file, dict):
+        campos_file = {}
+    if not isinstance(campos_password, list):
+        campos_password = []
+    
+    if campos_dinamicos and callable(campos_dinamicos):
+        try:
+            campos_crear = campos_dinamicos({})  # Pasar dict vacío para creación
+            if not isinstance(campos_crear, list):
+                campos_crear = []
+        except Exception as e:
+            # Fallback: usar todos los campos disponibles
+            campos_crear = list(set(
+                list(campos_select.keys()) + 
+                list(campos_textarea.keys()) + 
+                list(campos_file.keys()) + 
+                campos_password
+            ))
+    else:
+        # Si no hay función dinámica, usar todos los campos disponibles
+        campos_crear = list(set(
+            list(campos_select.keys()) + 
+            list(campos_textarea.keys()) + 
+            list(campos_file.keys()) + 
+            campos_password
+        ))
+    
+    # Quitar campos que no deben aparecer en creación
+    campos_crear = [c for c in campos_crear if c not in ['id', 'created_at', 'updated_at']]
+    
+    return campos_crear
+
+
+def procesar_creacion(datos_nuevos, on_create, campos_obligatorios):
+    """Procesa la creación de un nuevo registro."""
+    # Validar campos obligatorios
+    campos_faltantes = validar_campos_obligatorios(datos_nuevos, campos_obligatorios)
+    
+    if campos_faltantes:
+        st.error(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
+    else:
+        try:
+            on_create(datos_nuevos)
+            st.success("✅ Registro creado correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al crear: {e}")
+
+
+def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, campos_file,
+                         campos_readonly, campos_password, campos_help, prefix, es_obligatorio=False):
+    """✅ CORREGIDO: Crea un campo de formulario con mejor manejo de tipos y validaciones."""
+    # ✅ CORRECCIÓN CRÍTICA: Asegurar que campos_help siempre sea un diccionario
+    if not isinstance(campos_help, dict):
+        campos_help = {}
+    
+    label = campo.replace('_', ' ').title()
+    help_text = campos_help.get(campo, "") if isinstance(campos_help, dict) else ""
+    
+    # Añadir asterisco si es obligatorio
+    if es_obligatorio:
+        label = f"{label} *"
+        st.markdown(f'<div class="campo-obligatorio">', unsafe_allow_html=True)
+    
+    resultado = None
+    
+    try:
+        # Campo readonly
+        if campo in campos_readonly:
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual), 
+                disabled=True, 
+                help=help_text, 
+                key=f"{prefix}_{campo}_{hash(str(valor_actual))}"
+            )
+            return valor_actual
+        
+        # Campo select
+        if campo in campos_select:
+            resultado = crear_campo_select(campo, valor_actual, campos_select, label, help_text, prefix)
+        
+        # Campo textarea
+        elif campo in campos_textarea:
+            resultado = crear_campo_textarea(campo, valor_actual, campos_textarea, label, help_text, prefix)
+        
+        # Campo file
+        elif campo in campos_file:
+            resultado = crear_campo_file(campo, campos_file, label, help_text, prefix)
+        
+        # Campo password
+        elif campo in campos_password:
+            resultado = st.text_input(
+                label, 
+                type="password", 
+                help=help_text, 
+                key=f"{prefix}_{campo}",
+                placeholder="Introduce la contraseña..."
+            )
+        
+        # Campo fecha
+        elif 'fecha' in campo.lower():
+            resultado = crear_campo_fecha(campo, valor_actual, label, help_text, prefix)
+        
+        # Campo booleano
+        elif isinstance(valor_actual, bool):
+            resultado = st.checkbox(
+                label, 
+                value=valor_actual, 
+                help=help_text, 
+                key=f"{prefix}_{campo}"
+            )
+        
+        # Campo numérico
+        elif isinstance(valor_actual, (int, float)) and not isinstance(valor_actual, bool):
+            resultado = crear_campo_numerico(campo, valor_actual, label, help_text, prefix)
+        
+        # Campo email
+        elif 'email' in campo.lower():
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual) if valor_actual else "", 
+                help=help_text, 
+                key=f"{prefix}_{campo}",
+                placeholder="usuario@ejemplo.com"
+            )
+        
+        # Campo teléfono
+        elif 'telefono' in campo.lower() or 'phone' in campo.lower():
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual) if valor_actual else "", 
+                help=help_text, 
+                key=f"{prefix}_{campo}",
+                placeholder="123456789"
+            )
+        
+        # Campo URL
+        elif 'url' in campo.lower() or 'web' in campo.lower():
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual) if valor_actual else "", 
+                help=help_text, 
+                key=f"{prefix}_{campo}",
+                placeholder="https://ejemplo.com"
+            )
+        
+        # Campo texto por defecto
+        else:
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual) if valor_actual else "", 
+                help=help_text, 
+                key=f"{prefix}_{campo}"
+            )
+    
+    except Exception as e:
+        st.error(f"❌ Error al crear campo {campo}: {e}")
+        # Fallback a input de texto simple
+        resultado = st.text_input(
+            label, 
+            value=str(valor_actual) if valor_actual else "", 
+            key=f"{prefix}_{campo}_fallback"
+        )
+    
+    finally:
+        if es_obligatorio:
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+    return resultado
+
+
+def crear_campo_select(campo, valor_actual, campos_select, label, help_text, prefix):
+    """Crea un campo de selección con manejo robusto de opciones."""
+    opciones = campos_select[campo]
+    if not isinstance(opciones, list):
+        opciones = list(opciones)
+    
+    try:
+        # Buscar el índice del valor actual
+        if valor_actual in opciones:
+            index = opciones.index(valor_actual)
+        elif str(valor_actual) in [str(op) for op in opciones]:
+            # Buscar por string conversion
+            index = [str(op) for op in opciones].index(str(valor_actual))
+        else:
+            index = 0
+    except (ValueError, TypeError):
+        index = 0
+    
+    return st.selectbox(
+        label, 
+        opciones, 
+        index=index, 
+        help=help_text, 
+        key=f"{prefix}_{campo}"
+    )
+
+
+def crear_campo_textarea(campo, valor_actual, campos_textarea, label, help_text, prefix):
+    """Crea un campo de área de texto con configuración personalizada."""
+    config = campos_textarea[campo]
+    return st.text_area(
+        config.get("label", label), 
+        value=str(valor_actual) if valor_actual else "", 
+        height=config.get("height", 100),
+        help=help_text,
+        key=f"{prefix}_{campo}",
+        max_chars=config.get("max_chars", None)
+    )
+
+
+def crear_campo_file(campo, campos_file, label, help_text, prefix):
+    """Crea un campo de carga de archivos."""
+    config = campos_file[campo]
+    return st.file_uploader(
+        config.get("label", label),
+        type=config.get("type", None),
+        help=help_text,
+        key=f"{prefix}_{campo}",
+        accept_multiple_files=config.get("multiple", False)
+    )
+
+
+def crear_campo_fecha(campo, valor_actual, label, help_text, prefix):
+    """Crea un campo de fecha con manejo robusto de formatos."""
+    try:
+        if isinstance(valor_actual, str) and valor_actual.strip():
+            fecha_val = pd.to_datetime(valor_actual).date()
+        elif hasattr(valor_actual, 'date'):
+            fecha_val = valor_actual.date()
+        else:
+            fecha_val = None
+            
+        if fecha_val:
+            return st.date_input(
+                label, 
+                value=fecha_val, 
+                help=help_text, 
+                key=f"{prefix}_{campo}"
+            )
+        else:
+            return st.date_input(
+                label, 
+                value=None, 
+                help=help_text, 
+                key=f"{prefix}_{campo}"
+            )
+    except:
+        # Si falla el parsing de fecha, usar input de texto
+        return st.text_input(
+            label, 
+            value=str(valor_actual) if valor_actual else "", 
+            help=help_text, 
+            key=f"{prefix}_{campo}",
+            placeholder="dd/mm/yyyy"
+        )
+
+
+def crear_campo_numerico(campo, valor_actual, label, help_text, prefix):
+    """Crea un campo numérico con el tipo apropiado."""
+    if isinstance(valor_actual, int):
+        return st.number_input(
+            label, 
+            value=int(valor_actual), 
+            help=help_text, 
+            key=f"{prefix}_{campo}",
+            step=1
+        )
+    else:
+        return st.number_input(
+            label, 
+            value=float(valor_actual), 
+            help=help_text, 
+            key=f"{prefix}_{campo}",
+            step=0.01,
+            format="%.2f"
+        )
+
+
+def validar_campos_obligatorios(datos, campos_obligatorios):
+    """Valida que todos los campos obligatorios tengan valor."""
+    campos_faltantes = []
+    
+    for campo in campos_obligatorios:
+        valor = datos.get(campo)
+        if valor is None or valor == "" or (isinstance(valor, str) and not valor.strip()):
+            campos_faltantes.append(campo.replace('_', ' ').title())
+    
+    return campos_faltantes
