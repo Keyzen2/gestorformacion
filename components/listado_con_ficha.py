@@ -9,7 +9,7 @@ def listado_con_ficha(
     on_save: Callable,
     id_col: str = "id",
     on_create: Optional[Callable] = None,
-    on_delete: Optional[Callable] = None,  # ✅ Soporte para eliminación
+    on_delete: Optional[Callable] = None,
     campos_select: Optional[Dict[str, List]] = None,
     campos_textarea: Optional[Dict[str, Dict]] = None,
     campos_file: Optional[Dict[str, Dict]] = None,
@@ -83,12 +83,10 @@ def listado_con_ficha(
         border: 1px solid #e1e5e9;
     }
     
-    /* ✅ CORREGIDO: Mejor manejo de elementos vacíos */
     .elemento-oculto {
         display: none !important;
     }
     
-    /* ✅ AÑADIDO: Estilos para confirmación de eliminación */
     .confirmar-eliminar {
         background-color: #fff3cd;
         border: 1px solid #ffeaa7;
@@ -102,6 +100,13 @@ def listado_con_ficha(
         0% { border-color: #ffeaa7; }
         50% { border-color: #fdcb6e; }
         100% { border-color: #ffeaa7; }
+    }
+    
+    /* Estilo para campos readonly */
+    .readonly-field {
+        background-color: #f5f5f5 !important;
+        color: #666666 !important;
+        border: 1px solid #ddd !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -119,9 +124,7 @@ def listado_con_ficha(
             )
         return
 
-    # =========================
-    # BÚSQUEDA INTEGRADA
-    # =========================
+    # Búsqueda integrada
     if search_columns:
         st.markdown("### 🔍 Búsqueda rápida")
         search_term = st.text_input(
@@ -143,9 +146,7 @@ def listado_con_ficha(
                 st.warning(f"🔍 No se encontraron resultados para '{search_term}'")
                 return
 
-    # =========================
-    # TABLA PRINCIPAL MEJORADA
-    # =========================
+    # Tabla principal mejorada
     st.markdown(f"### 📊 Lista de {titulo}s")
     
     # Métricas rápidas
@@ -165,9 +166,7 @@ def listado_con_ficha(
     if not validar_columnas_disponibles(df, columnas_visibles, id_col):
         return
 
-    # =========================
-    # TABLA INTERACTIVA MEJORADA
-    # =========================
+    # Tabla interactiva mejorada
     st.markdown('<div class="tabla-container">', unsafe_allow_html=True)
     
     # Preparar datos para mostrar
@@ -203,7 +202,6 @@ def listado_con_ficha(
     # Mostrar tabla con selección
     st.markdown("#### 👀 Datos")
     
-    # ✅ CORREGIDO: Manejo más robusto de selección
     try:
         event = st.dataframe(
             df_page,
@@ -219,9 +217,7 @@ def listado_con_ficha(
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # =========================
-    # MANEJO DE SELECCIÓN MEJORADO
-    # =========================
+    # Manejo de selección mejorado
     selected_row = None
     if event and hasattr(event, 'selection') and event.selection.get("rows"):
         try:
@@ -238,9 +234,7 @@ def listado_con_ficha(
         except Exception as e:
             st.error(f"❌ Error al procesar selección: {e}")
 
-    # =========================
-    # FORMULARIO DE CREACIÓN
-    # =========================
+    # Formulario de creación
     if allow_creation and on_create:
         st.divider()
         mostrar_formulario_creacion(
@@ -300,7 +294,7 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
                              campos_select, campos_textarea, campos_file, campos_readonly, 
                              campos_dinamicos, campos_password, campos_obligatorios, 
                              campos_help, reactive_fields):
-    """✅ CORREGIDO: Formulario de edición con manejo mejorado de submit y confirmaciones."""
+    """Formulario de edición con manejo mejorado de submit y confirmaciones."""
     
     st.markdown('<div class="ficha-container">', unsafe_allow_html=True)
     st.markdown(f"### ✏️ Editar {titulo}")
@@ -311,34 +305,33 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
     # Determinar campos a mostrar
     campos_a_mostrar = obtener_campos_a_mostrar(fila, campos_dinamicos, id_col, campos_readonly)
 
-    # ✅ CORREGIDO: Clave única para evitar conflictos de formulario
+    # Clave única para evitar conflictos de formulario
     form_key = f"form_editar_{titulo}_{fila[id_col]}_{hash(str(fila))}"
     
     with st.form(form_key, clear_on_submit=False):
         datos_editados = {}
         
-        # Organizar campos en columnas
-        columnas = organizar_en_columnas(len(campos_a_mostrar))
+        # Organizar campos - USAR UNA SOLA COLUMNA PARA ORDEN CORRECTO
+        st.markdown("#### 📝 Información")
         
-        # Crear campos del formulario
-        for i, campo in enumerate(campos_a_mostrar):
+        # Crear campos del formulario en orden secuencial
+        for campo in campos_a_mostrar:
             if campo == id_col:
                 continue
                 
             valor_actual = obtener_valor_campo(fila, campo)
-            col_actual = columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]
             
-            with col_actual:
-                # ✅ CORREGIDO: Campos reactivos funcionando
-                if es_campo_visible(campo, fila, reactive_fields):
-                    valor_editado = crear_campo_formulario(
-                        campo, valor_actual, campos_select, campos_textarea, campos_file,
-                        campos_readonly, campos_password, campos_help, f"edit_{fila[id_col]}",
-                        es_obligatorio=(campo in campos_obligatorios)
-                    )
-                    
-                    if valor_editado is not None:
-                        datos_editados[campo] = valor_editado
+            # Verificar si campo debe ser visible según campos reactivos
+            if es_campo_visible(campo, fila, reactive_fields):
+                valor_editado = crear_campo_formulario(
+                    campo, valor_actual, campos_select, campos_textarea, campos_file,
+                    campos_readonly, campos_password, campos_help, f"edit_{fila[id_col]}",
+                    es_obligatorio=(campo in campos_obligatorios)
+                )
+                
+                # Solo añadir si no es readonly y tiene valor
+                if valor_editado is not None and campo not in campos_readonly:
+                    datos_editados[campo] = valor_editado
 
         # Mostrar información adicional solo lectura
         if campos_readonly:
@@ -346,7 +339,7 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
 
         st.divider()
 
-        # ✅ CORREGIDO: Botones de acción mejorados
+        # Botones de acción mejorados
         procesar_botones_accion_edicion(
             fila, id_col, datos_editados, on_save, on_delete, 
             campos_obligatorios, titulo
@@ -355,196 +348,10 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def mostrar_info_registro(fila, id_col):
-    """Muestra información básica del registro que se está editando."""
-    if 'nombre' in fila:
-        st.caption(f"Editando: {fila.get('nombre')}")
-    elif 'nombre_completo' in fila:
-        st.caption(f"Editando: {fila.get('nombre_completo')}")
-    elif 'titulo' in fila:
-        st.caption(f"Editando: {fila.get('titulo')}")
-    else:
-        st.caption(f"ID: {fila.get(id_col)}")
-
-
-def obtener_campos_a_mostrar(fila, campos_dinamicos, id_col, campos_readonly):
-    """Obtiene la lista de campos que se deben mostrar en el formulario."""
-    if campos_dinamicos:
-        try:
-            # Convertir Series a dict de forma segura
-            if isinstance(fila, pd.Series):
-                datos_dict = fila.to_dict()
-            else:
-                datos_dict = fila
-            campos_a_mostrar = campos_dinamicos(datos_dict)
-        except Exception as e:
-            st.error(f"❌ Error en campos dinámicos: {e}")
-            # Usar todas las columnas disponibles como fallback
-            campos_a_mostrar = [col for col in fila.keys() if col != id_col]
-    else:
-        campos_a_mostrar = [col for col in fila.keys() if col != id_col]
-
-    # Filtrar campos que no deben mostrarse en edición
-    campos_a_mostrar = [
-        campo for campo in campos_a_mostrar 
-        if campo not in ['created_at', 'updated_at'] and campo not in campos_readonly
-    ]
-    
-    return campos_a_mostrar
-
-
-def obtener_valor_campo(fila, campo):
-    """Obtiene el valor actual de un campo de forma segura."""
-    valor_actual = fila.get(campo, "")
-    if pd.isna(valor_actual):
-        valor_actual = ""
-    return valor_actual
-
-
-def organizar_en_columnas(num_campos):
-    """Organiza los campos en columnas según su cantidad."""
-    if num_campos > 8:
-        st.markdown("#### 📝 Información básica")
-        col1, col2 = st.columns(2)
-        columnas = [col1, col2]
-    elif num_campos > 4:
-        col1, col2 = st.columns(2)
-        columnas = [col1, col2]
-    else:
-        columnas = [st.container()]
-    
-    return columnas
-
-
-def es_campo_visible(campo, fila, reactive_fields):
-    """✅ CORREGIDO: Verifica si un campo debe ser visible según campos reactivos."""
-    if not reactive_fields:
-        return True
-    
-    # Verificar si el campo es dependiente de algún otro campo
-    for trigger_field, dependent_fields in reactive_fields.items():
-        if campo in dependent_fields:
-            trigger_value = fila.get(trigger_field)
-            # Lógica: mostrar campo dependiente solo si trigger no está vacío
-            return bool(trigger_value and str(trigger_value).strip())
-    
-    # Si no es un campo dependiente, siempre visible
-    return True
-
-
-def mostrar_info_readonly(fila, campos_readonly):
-    """Muestra información adicional de solo lectura."""
-    with st.expander("ℹ️ Información adicional", expanded=False):
-        for campo in campos_readonly:
-            if campo in fila:
-                valor = fila[campo]
-                if pd.notna(valor):
-                    valor_formateado = formatear_valor_readonly(campo, valor)
-                    st.text(f"{campo.replace('_', ' ').title()}: {valor_formateado}")
-
-
-def formatear_valor_readonly(campo, valor):
-    """Formatea valores para campos de solo lectura."""
-    if 'fecha' in campo.lower() or 'created' in campo.lower() or 'updated' in campo.lower():
-        try:
-            fecha = pd.to_datetime(valor)
-            return fecha.strftime("%d/%m/%Y %H:%M")
-        except:
-            return str(valor)
-    else:
-        return str(valor)
-
-
-def procesar_botones_accion_edicion(fila, id_col, datos_editados, on_save, on_delete, 
-                                   campos_obligatorios, titulo):
-    """✅ CORREGIDO: Procesamiento mejorado de botones de acción."""
-    
-    # Configurar estado de confirmación
-    confirm_key = f"confirmar_eliminar_{titulo}_{fila[id_col]}"
-    
-    # Mostrar advertencia de confirmación si está activa
-    if st.session_state.get(confirm_key, False):
-        st.markdown('<div class="confirmar-eliminar">', unsafe_allow_html=True)
-        st.warning("⚠️ **¿Confirmas la eliminación?** Esta acción no se puede deshacer.")
-        st.caption(f"Se eliminará el registro: {fila.get('nombre', fila.get(id_col))}")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Botones de acción
-    if on_delete:
-        col_save, col_delete = st.columns(2)
-        with col_save:
-            btn_guardar = st.form_submit_button(
-                "💾 Guardar Cambios", 
-                type="primary", 
-                use_container_width=True
-            )
-        with col_delete:
-            texto_eliminar = "⚠️ ¡CONFIRMAR ELIMINAR!" if st.session_state.get(confirm_key, False) else "🗑️ Eliminar"
-            btn_eliminar = st.form_submit_button(
-                texto_eliminar, 
-                use_container_width=True,
-                help="Eliminar este registro permanentemente",
-                type="secondary" if not st.session_state.get(confirm_key, False) else "primary"
-            )
-    else:
-        btn_guardar = st.form_submit_button(
-            "💾 Guardar Cambios", 
-            type="primary", 
-            use_container_width=True
-        )
-        btn_eliminar = False
-
-    # ✅ CORREGIDO: Procesamiento de acciones mejorado
-    if btn_guardar:
-        procesar_guardado(fila[id_col], datos_editados, on_save, campos_obligatorios, confirm_key)
-    
-    if btn_eliminar and on_delete:
-        procesar_eliminacion(fila[id_col], on_delete, confirm_key)
-
-
-def procesar_guardado(record_id, datos_editados, on_save, campos_obligatorios, confirm_key):
-    """Procesa el guardado de cambios con validaciones."""
-    # Limpiar confirmación de eliminación si existía
-    if confirm_key in st.session_state:
-        st.session_state[confirm_key] = False
-    
-    # Validar campos obligatorios
-    campos_faltantes = validar_campos_obligatorios(datos_editados, campos_obligatorios)
-    
-    if campos_faltantes:
-        st.error(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
-    else:
-        try:
-            on_save(record_id, datos_editados)
-            st.success("✅ Cambios guardados correctamente.")
-            # ✅ CORREGIDO: Rerun seguro
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error al guardar: {e}")
-
-
-def procesar_eliminacion(record_id, on_delete, confirm_key):
-    """✅ CORREGIDO: Procesamiento de eliminación con confirmación robusta."""
-    if not st.session_state.get(confirm_key, False):
-        # Primera vez: solicitar confirmación
-        st.session_state[confirm_key] = True
-        st.rerun()
-    else:
-        # Segunda vez: ejecutar eliminación
-        try:
-            on_delete(record_id)
-            st.session_state[confirm_key] = False
-            st.success("✅ Registro eliminado correctamente.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error al eliminar: {e}")
-            st.session_state[confirm_key] = False
-
-
 def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_select, campos_textarea, 
                               campos_file, campos_password, campos_help, campos_obligatorios, reactive_fields):
     """Formulario de creación con mejor manejo de errores y validaciones."""
-    # ✅ CORRECCIÓN CRÍTICA: Validación robusta de parámetros
+    # Validación robusta de parámetros
     if not isinstance(campos_help, dict):
         campos_help = {}
     if not isinstance(campos_obligatorios, list):
@@ -576,29 +383,26 @@ def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_sele
         st.markdown('</div>', unsafe_allow_html=True)
         return
     
-    # ✅ CORRECCIÓN CRÍTICA: Clave única para formulario de creación
+    # Clave única para formulario de creación
     form_key = f"form_crear_{titulo.lower().replace(' ', '_')}_{len(campos_crear)}"
     
     with st.form(form_key, clear_on_submit=True):
         datos_nuevos = {}
         
-        # Organizar en columnas
-        columnas = organizar_en_columnas(len(campos_crear))
+        st.markdown("#### 📝 Información del nuevo registro")
         
-        # ✅ CORRECCIÓN: Asegurar que siempre se creen los campos
-        for i, campo in enumerate(campos_crear):
+        # Crear campos del formulario en orden secuencial
+        for campo in campos_crear:
             try:
-                col_actual = columnas[i % len(columnas)] if len(columnas) > 1 else columnas[0]
+                valor = crear_campo_formulario(
+                    campo, "", campos_select, campos_textarea, campos_file,
+                    [], campos_password, campos_help, "create",
+                    es_obligatorio=(campo in campos_obligatorios)
+                )
                 
-                with col_actual:
-                    valor = crear_campo_formulario(
-                        campo, "", campos_select, campos_textarea, campos_file,
-                        [], campos_password, campos_help, "create",
-                        es_obligatorio=(campo in campos_obligatorios)
-                    )
-                    
-                    if valor is not None and str(valor).strip() != "":
-                        datos_nuevos[campo] = valor
+                # Solo añadir valores no vacíos
+                if valor is not None and str(valor).strip() != "":
+                    datos_nuevos[campo] = valor
             except Exception as e:
                 st.error(f"❌ Error al crear campo {campo}: {e}")
                 continue
@@ -607,7 +411,7 @@ def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_sele
         if campos_obligatorios:
             st.info(f"📋 Campos obligatorios: {', '.join([c.replace('_', ' ').title() for c in campos_obligatorios])}")
 
-        # ✅ CORRECCIÓN CRÍTICA: Siempre mostrar el botón de crear
+        # Siempre mostrar el botón de crear
         btn_crear = st.form_submit_button("➕ Crear", type="primary", use_container_width=True)
         
         if btn_crear:
@@ -616,66 +420,10 @@ def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_sele
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def obtener_campos_creacion(campos_dinamicos, campos_select, campos_textarea, campos_file, campos_password):
-    """Obtiene los campos que deben aparecer en el formulario de creación con manejo robusto."""
-    # ✅ CORRECCIÓN: Validación robusta de parámetros
-    if not isinstance(campos_select, dict):
-        campos_select = {}
-    if not isinstance(campos_textarea, dict):
-        campos_textarea = {}
-    if not isinstance(campos_file, dict):
-        campos_file = {}
-    if not isinstance(campos_password, list):
-        campos_password = []
-    
-    if campos_dinamicos and callable(campos_dinamicos):
-        try:
-            campos_crear = campos_dinamicos({})  # Pasar dict vacío para creación
-            if not isinstance(campos_crear, list):
-                campos_crear = []
-        except Exception as e:
-            # Fallback: usar todos los campos disponibles
-            campos_crear = list(set(
-                list(campos_select.keys()) + 
-                list(campos_textarea.keys()) + 
-                list(campos_file.keys()) + 
-                campos_password
-            ))
-    else:
-        # Si no hay función dinámica, usar todos los campos disponibles
-        campos_crear = list(set(
-            list(campos_select.keys()) + 
-            list(campos_textarea.keys()) + 
-            list(campos_file.keys()) + 
-            campos_password
-        ))
-    
-    # Quitar campos que no deben aparecer en creación
-    campos_crear = [c for c in campos_crear if c not in ['id', 'created_at', 'updated_at']]
-    
-    return campos_crear
-
-
-def procesar_creacion(datos_nuevos, on_create, campos_obligatorios):
-    """Procesa la creación de un nuevo registro."""
-    # Validar campos obligatorios
-    campos_faltantes = validar_campos_obligatorios(datos_nuevos, campos_obligatorios)
-    
-    if campos_faltantes:
-        st.error(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
-    else:
-        try:
-            on_create(datos_nuevos)
-            st.success("✅ Registro creado correctamente.")
-            st.rerun()
-        except Exception as e:
-            st.error(f"❌ Error al crear: {e}")
-
-
 def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, campos_file,
                          campos_readonly, campos_password, campos_help, prefix, es_obligatorio=False):
-    """✅ CORREGIDO: Crea un campo de formulario con mejor manejo de tipos y validaciones."""
-    # ✅ CORRECCIÓN CRÍTICA: Asegurar que campos_help siempre sea un diccionario
+    """Crea un campo de formulario con mejor manejo de tipos y validaciones."""
+    # Asegurar que campos_help siempre sea un diccionario
     if not isinstance(campos_help, dict):
         campos_help = {}
     
@@ -690,16 +438,14 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
     resultado = None
     
     try:
-        # Campo readonly
+        # Campo readonly - MOSTRAR COMO REALMENTE NO EDITABLE
         if campo in campos_readonly:
-            resultado = st.text_input(
-                label, 
-                value=str(valor_actual), 
-                disabled=True, 
-                help=help_text, 
-                key=f"{prefix}_{campo}_{hash(str(valor_actual))}"
-            )
-            return valor_actual
+            st.markdown(f"**{label}:**")
+            # Mostrar valor en texto gris no editable
+            st.markdown(f'<div style="background-color: #f5f5f5; padding: 8px; border-radius: 4px; border: 1px solid #ddd; color: #666;">{str(valor_actual) if valor_actual else "No asignado"}</div>', unsafe_allow_html=True)
+            if help_text:
+                st.caption(help_text)
+            return valor_actual  # Devolver valor original, no cambios
         
         # Campo select
         if campo in campos_select:
@@ -793,6 +539,233 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
             st.markdown('</div>', unsafe_allow_html=True)
     
     return resultado
+
+
+# Funciones auxiliares
+def mostrar_info_registro(fila, id_col):
+    """Muestra información básica del registro que se está editando."""
+    if 'nombre' in fila:
+        st.caption(f"Editando: {fila.get('nombre')}")
+    elif 'nombre_completo' in fila:
+        st.caption(f"Editando: {fila.get('nombre_completo')}")
+    elif 'titulo' in fila:
+        st.caption(f"Editando: {fila.get('titulo')}")
+    else:
+        st.caption(f"ID: {fila.get(id_col)}")
+
+
+def obtener_campos_a_mostrar(fila, campos_dinamicos, id_col, campos_readonly):
+    """Obtiene la lista de campos que se deben mostrar en el formulario."""
+    if campos_dinamicos:
+        try:
+            # Convertir Series a dict de forma segura
+            if isinstance(fila, pd.Series):
+                datos_dict = fila.to_dict()
+            else:
+                datos_dict = fila
+            campos_a_mostrar = campos_dinamicos(datos_dict)
+        except Exception as e:
+            st.error(f"❌ Error en campos dinámicos: {e}")
+            # Usar todas las columnas disponibles como fallback
+            campos_a_mostrar = [col for col in fila.keys() if col != id_col]
+    else:
+        campos_a_mostrar = [col for col in fila.keys() if col != id_col]
+
+    # Filtrar campos que no deben mostrarse en edición (pero incluir readonly)
+    campos_a_mostrar = [
+        campo for campo in campos_a_mostrar 
+        if campo not in ['created_at', 'updated_at']
+    ]
+    
+    return campos_a_mostrar
+
+
+def obtener_valor_campo(fila, campo):
+    """Obtiene el valor actual de un campo de forma segura."""
+    valor_actual = fila.get(campo, "")
+    if pd.isna(valor_actual):
+        valor_actual = ""
+    return valor_actual
+
+
+def es_campo_visible(campo, fila, reactive_fields):
+    """Verifica si un campo debe ser visible según campos reactivos."""
+    if not reactive_fields:
+        return True
+    
+    # Verificar si el campo es dependiente de algún otro campo
+    for trigger_field, dependent_fields in reactive_fields.items():
+        if campo in dependent_fields:
+            trigger_value = fila.get(trigger_field)
+            # Lógica: mostrar campo dependiente solo si trigger no está vacío
+            return bool(trigger_value and str(trigger_value).strip())
+    
+    # Si no es un campo dependiente, siempre visible
+    return True
+
+
+def mostrar_info_readonly(fila, campos_readonly):
+    """Muestra información adicional de solo lectura."""
+    with st.expander("ℹ️ Información adicional", expanded=False):
+        for campo in campos_readonly:
+            if campo in fila:
+                valor = fila[campo]
+                if pd.notna(valor):
+                    valor_formateado = formatear_valor_readonly(campo, valor)
+                    st.text(f"{campo.replace('_', ' ').title()}: {valor_formateado}")
+
+
+def formatear_valor_readonly(campo, valor):
+    """Formatea valores para campos de solo lectura."""
+    if 'fecha' in campo.lower() or 'created' in campo.lower() or 'updated' in campo.lower():
+        try:
+            fecha = pd.to_datetime(valor)
+            return fecha.strftime("%d/%m/%Y %H:%M")
+        except:
+            return str(valor)
+    else:
+        return str(valor)
+
+
+def procesar_botones_accion_edicion(fila, id_col, datos_editados, on_save, on_delete, 
+                                   campos_obligatorios, titulo):
+    """Procesamiento mejorado de botones de acción."""
+    
+    # Configurar estado de confirmación
+    confirm_key = f"confirmar_eliminar_{titulo}_{fila[id_col]}"
+    
+    # Mostrar advertencia de confirmación si está activa
+    if st.session_state.get(confirm_key, False):
+        st.markdown('<div class="confirmar-eliminar">', unsafe_allow_html=True)
+        st.warning("⚠️ **¿Confirmas la eliminación?** Esta acción no se puede deshacer.")
+        st.caption(f"Se eliminará el registro: {fila.get('nombre', fila.get(id_col))}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Botones de acción
+    if on_delete:
+        col_save, col_delete = st.columns(2)
+        with col_save:
+            btn_guardar = st.form_submit_button(
+                "💾 Guardar Cambios", 
+                type="primary", 
+                use_container_width=True
+            )
+        with col_delete:
+            texto_eliminar = "⚠️ ¡CONFIRMAR ELIMINAR!" if st.session_state.get(confirm_key, False) else "🗑️ Eliminar"
+            btn_eliminar = st.form_submit_button(
+                texto_eliminar, 
+                use_container_width=True,
+                help="Eliminar este registro permanentemente",
+                type="secondary" if not st.session_state.get(confirm_key, False) else "primary"
+            )
+    else:
+        btn_guardar = st.form_submit_button(
+            "💾 Guardar Cambios", 
+            type="primary", 
+            use_container_width=True
+        )
+        btn_eliminar = False
+
+    # Procesamiento de acciones mejorado
+    if btn_guardar:
+        procesar_guardado(fila[id_col], datos_editados, on_save, campos_obligatorios, confirm_key)
+    
+    if btn_eliminar and on_delete:
+        procesar_eliminacion(fila[id_col], on_delete, confirm_key)
+
+
+def procesar_guardado(record_id, datos_editados, on_save, campos_obligatorios, confirm_key):
+    """Procesa el guardado de cambios con validaciones."""
+    # Limpiar confirmación de eliminación si existía
+    if confirm_key in st.session_state:
+        st.session_state[confirm_key] = False
+    
+    # Validar campos obligatorios
+    campos_faltantes = validar_campos_obligatorios(datos_editados, campos_obligatorios)
+    
+    if campos_faltantes:
+        st.error(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
+    else:
+        try:
+            on_save(record_id, datos_editados)
+            st.success("✅ Cambios guardados correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al guardar: {e}")
+
+
+def procesar_eliminacion(record_id, on_delete, confirm_key):
+    """Procesamiento de eliminación con confirmación robusta."""
+    if not st.session_state.get(confirm_key, False):
+        # Primera vez: solicitar confirmación
+        st.session_state[confirm_key] = True
+        st.rerun()
+    else:
+        # Segunda vez: ejecutar eliminación
+        try:
+            on_delete(record_id)
+            st.session_state[confirm_key] = False
+            st.success("✅ Registro eliminado correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al eliminar: {e}")
+            st.session_state[confirm_key] = False
+
+
+def obtener_campos_creacion(campos_dinamicos, campos_select, campos_textarea, campos_file, campos_password):
+    """Obtiene los campos que deben aparecer en el formulario de creación con manejo robusto."""
+    # Validación robusta de parámetros
+    if not isinstance(campos_select, dict):
+        campos_select = {}
+    if not isinstance(campos_textarea, dict):
+        campos_textarea = {}
+    if not isinstance(campos_file, dict):
+        campos_file = {}
+    if not isinstance(campos_password, list):
+        campos_password = []
+    
+    if campos_dinamicos and callable(campos_dinamicos):
+        try:
+            campos_crear = campos_dinamicos({})  # Pasar dict vacío para creación
+            if not isinstance(campos_crear, list):
+                campos_crear = []
+        except Exception as e:
+            # Fallback: usar todos los campos disponibles
+            campos_crear = list(set(
+                list(campos_select.keys()) + 
+                list(campos_textarea.keys()) + 
+                list(campos_file.keys()) + 
+                campos_password
+            ))
+    else:
+        # Si no hay función dinámica, usar todos los campos disponibles
+        campos_crear = list(set(
+            list(campos_select.keys()) + 
+            list(campos_textarea.keys()) + 
+            list(campos_file.keys()) + 
+            campos_password
+        ))
+    
+    # Quitar campos que no deben aparecer en creación
+    campos_crear = [c for c in campos_crear if c not in ['id', 'created_at', 'updated_at']]
+    
+    return campos_crear
+
+
+def procesar_creacion(datos_nuevos, on_create, campos_obligatorios):
+    """Procesa la creación de un nuevo registro."""
+    # Validar campos obligatorios
+    campos_faltantes = validar_campos_obligatorios(datos_nuevos, campos_obligatorios)
+    
+    if campos_faltantes:
+        st.error(f"⚠️ Faltan campos obligatorios: {', '.join(campos_faltantes)}")
+    else:
+        try:
+            on_create(datos_nuevos)
+            st.success("✅ Registro creado correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al crear: {e}")
 
 
 def crear_campo_select(campo, valor_actual, campos_select, label, help_text, prefix):
