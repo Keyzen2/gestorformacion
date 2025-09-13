@@ -138,14 +138,14 @@ def main(supabase, session_state):
                 else:
                     datos_editados["grupo_id"] = None
                     
-            # ✅ CORRECCIÓN: Manejo diferenciado de empresa según rol
+            # Manejo diferenciado de empresa según rol
             if "empresa_sel" in datos_editados:
                 empresa_sel = datos_editados.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
-            elif "empresa_readonly" in datos_editados:
-                # Para gestores, empresa_readonly se ignora (no se actualiza)
-                datos_editados.pop("empresa_readonly", None)
+            elif "empresa_asignada" in datos_editados:
+                # Para gestores, empresa_asignada se ignora (no se actualiza)
+                datos_editados.pop("empresa_asignada", None)
                 # La empresa ya está asignada y no se cambia
             
             # Para gestores, asegurar que la empresa se mantiene
@@ -186,14 +186,14 @@ def main(supabase, session_state):
                 if grupo_sel and grupo_sel in grupos_dict:
                     datos_nuevos["grupo_id"] = grupos_dict[grupo_sel]
                     
-            # ✅ CORRECCIÓN: Manejo diferenciado de empresa según rol
+            # Manejo diferenciado de empresa según rol
             if "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
-            elif "empresa_readonly" in datos_nuevos:
-                # Para gestores, empresa_readonly se ignora
-                datos_nuevos.pop("empresa_readonly", None)
+            elif "empresa_asignada" in datos_nuevos:
+                # Para gestores, empresa_asignada se ignora
+                datos_nuevos.pop("empresa_asignada", None)
             
             # Para gestores, siempre asignar su empresa
             if session_state.role == "gestor":
@@ -231,34 +231,36 @@ def main(supabase, session_state):
             st.error(f"❌ Error al eliminar participante: {e}")
 
     # =========================
-    # Campos dinámicos - CORRECCIÓN CRÍTICA
+    # Configuración de campos para formulario
     # =========================
     def get_campos_dinamicos(datos):
-        """Determina campos a mostrar dinámicamente - SOLO campos reales."""
-        # ✅ CORRECCIÓN: Validar que datos es un diccionario
+        """Determina campos a mostrar dinámicamente - ORDEN CORRECTO."""
+        # Validar que datos es un diccionario
         if not isinstance(datos, dict):
             datos = {}
             
-        # ✅ CORRECCIÓN: Orden correcto de campos con apellidos después de nombre
+        # ORDEN SECUENCIAL CORRECTO: Nombre → Apellidos → Email → etc.
         campos_base = [
-            "nombre", "apellidos",  # Orden correcto
-            "email", "nif", "telefono",
+            "nombre", 
+            "apellidos",  # Justo después de nombre para orden correcto
+            "email", 
+            "nif", 
+            "telefono",
             "fecha_nacimiento",
             "sexo",
             "grupo_sel"
         ]
     
-        # ✅ CORRECCIÓN: Solo mostrar empresa_sel si es admin
-        # Los gestores no pueden cambiar empresa, se asigna automáticamente
+        # Solo mostrar empresa_sel si es admin
+        # Los gestores ven empresa_asignada como readonly al final
         if session_state.role == "admin":
             campos_base.append("empresa_sel")
         elif session_state.role == "gestor":
-            # Para gestores, mostrar empresa como readonly con nombre más claro
+            # Para gestores, mostrar empresa como readonly al final
             campos_base.append("empresa_asignada")
             
         return campos_base
 
-    # ✅ CORRECCIÓN CRÍTICA: Asegurar tipos correctos para todos los parámetros
     # Configuración de selects
     campos_select = {
         "grupo_sel": grupos_opciones,
@@ -278,20 +280,20 @@ def main(supabase, session_state):
     # Campos readonly
     campos_readonly = ["id", "created_at", "updated_at"]
 
-    # ✅ CORRECCIÓN: Para gestores, empresa_readonly es de solo lectura
+    # CLAVE: Para gestores, empresa_asignada es de solo lectura
     if session_state.role == "gestor":
-        campos_readonly.append("empresa_readonly")
+        campos_readonly.append("empresa_asignada")
 
     # Campos password (debe ser lista)
     campos_password = []
 
-    # ✅ CORRECCIÓN CRÍTICA: Asegurar que campos_help siempre sea un diccionario
+    # Asegurar que campos_help siempre sea un diccionario
     campos_help = {
         "email": "Email único del participante (obligatorio)",
         "nif": "NIF del participante",
         "grupo_sel": "Grupo al que pertenece el participante",
         "empresa_sel": "Empresa del participante (solo admin)",
-        "empresa_readonly": "Empresa asignada automáticamente (no modificable)",
+        "empresa_asignada": "Su empresa asignada",
         "fecha_nacimiento": "Fecha de nacimiento del participante",
         "sexo": "Sexo del participante (M/F)",
         "nombre": "Nombre del participante (obligatorio)",
@@ -302,9 +304,7 @@ def main(supabase, session_state):
     # Campos obligatorios (debe ser lista)
     campos_obligatorios = ["nombre", "apellidos", "email"]
 
-    # =========================
     # Campos reactivos
-    # =========================
     reactive_fields = {
         # Por ejemplo, si quieres que al cambiar el grupo se actualice algo en empresa
         "grupo_sel": ["empresa_sel"]
@@ -326,22 +326,22 @@ def main(supabase, session_state):
         ])
     else:
         df_display = df_filtered.copy()
-        # ✅ CORRECCIÓN: Asegurar que las columnas de selección existan
+        # Asegurar que las columnas de selección existan
         if "grupo_codigo" in df_display.columns:
             df_display["grupo_sel"] = df_display["grupo_codigo"]
         else:
             df_display["grupo_sel"] = ""
             
-        # ✅ CORRECCIÓN: Manejo diferenciado por rol
+        # Manejo diferenciado por rol para empresa
         if session_state.role == "admin":
             if "empresa_nombre" in df_display.columns:
                 df_display["empresa_sel"] = df_display["empresa_nombre"]
             else:
                 df_display["empresa_sel"] = ""
         elif session_state.role == "gestor":
-            # Para gestores, mostrar empresa como readonly
+            # Para gestores, mostrar empresa como readonly con nombre claro
             if "empresa_nombre" in df_display.columns:
-                df_display["empresa_readonly"] = df_display["empresa_nombre"]
+                df_display["empresa_asignada"] = df_display["empresa_nombre"]
             else:
                 # Buscar el nombre de la empresa del gestor
                 empresa_gestor_nombre = ""
@@ -349,7 +349,7 @@ def main(supabase, session_state):
                     if id_emp == empresa_id:
                         empresa_gestor_nombre = nombre
                         break
-                df_display["empresa_readonly"] = empresa_gestor_nombre
+                df_display["empresa_asignada"] = empresa_gestor_nombre
 
     # Columnas visibles según rol
     columnas_base = ["nombre", "apellidos", "email", "nif", "telefono"]
@@ -363,7 +363,7 @@ def main(supabase, session_state):
     
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
-    # ✅ CORRECCIÓN CRÍTICA: Llamada con parámetros validados
+    # Llamada con parámetros validados
     try:
         listado_con_ficha(
             df=df_display,
@@ -373,17 +373,17 @@ def main(supabase, session_state):
             on_create=crear_participante if puede_crear else None,
             on_delete=eliminar_participante if session_state.role == "admin" else None,
             id_col="id",
-            campos_select=campos_select,  # Dict validado
-            campos_textarea=campos_textarea,  # Dict vacío pero válido
-            campos_file=campos_file,  # Dict vacío pero válido
-            campos_readonly=campos_readonly,  # Lista validada
-            campos_dinamicos=get_campos_dinamicos,  # Función validada
-            campos_password=campos_password,  # Lista vacía pero válida
+            campos_select=campos_select,
+            campos_textarea=campos_textarea,
+            campos_file=campos_file,
+            campos_readonly=campos_readonly,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_password=campos_password,
             allow_creation=puede_crear,
-            campos_help=campos_help,  # Dict validado
-            campos_obligatorios=campos_obligatorios,  # Lista validada
-            reactive_fields=reactive_fields,  # Dict validado
-            search_columns=["nombre", "apellidos", "email", "nif"]  # Lista validada
+            campos_help=campos_help,
+            campos_obligatorios=campos_obligatorios,
+            reactive_fields=reactive_fields,
+            search_columns=["nombre", "apellidos", "email", "nif"]
         )
     except Exception as e:
         st.error(f"❌ Error al mostrar listado: {e}")
