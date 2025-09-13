@@ -138,12 +138,19 @@ def main(supabase, session_state):
                 else:
                     datos_editados["grupo_id"] = None
                     
+            # ✅ CORRECCIÓN: Manejo diferenciado de empresa según rol
             if "empresa_sel" in datos_editados:
                 empresa_sel = datos_editados.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
-                elif session_state.role == "gestor":
-                    datos_editados["empresa_id"] = empresa_id
+            elif "empresa_readonly" in datos_editados:
+                # Para gestores, empresa_readonly se ignora (no se actualiza)
+                datos_editados.pop("empresa_readonly", None)
+                # La empresa ya está asignada y no se cambia
+            
+            # Para gestores, asegurar que la empresa se mantiene
+            if session_state.role == "gestor":
+                datos_editados["empresa_id"] = empresa_id
             
             # Actualizar en base de datos
             datos_editados["updated_at"] = datetime.utcnow().isoformat()
@@ -179,16 +186,22 @@ def main(supabase, session_state):
                 if grupo_sel and grupo_sel in grupos_dict:
                     datos_nuevos["grupo_id"] = grupos_dict[grupo_sel]
                     
+            # ✅ CORRECCIÓN: Manejo diferenciado de empresa según rol
             if "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
-                elif session_state.role == "gestor":
-                    datos_nuevos["empresa_id"] = empresa_id
+            elif "empresa_readonly" in datos_nuevos:
+                # Para gestores, empresa_readonly se ignora
+                datos_nuevos.pop("empresa_readonly", None)
+            
+            # Para gestores, siempre asignar su empresa
+            if session_state.role == "gestor":
+                datos_nuevos["empresa_id"] = empresa_id
 
             # Limpiar campos temporales
             datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                             if not k.endswith("_sel") and k != "contraseña" and v}
+                             if not k.endswith("_sel") and not k.endswith("_readonly") and k != "contraseña" and v}
             
             # Añadir timestamps
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
@@ -233,9 +246,14 @@ def main(supabase, session_state):
             "grupo_sel"
         ]
     
-        # Mostrar empresa solo si admin o gestor
-        if session_state.role in ["admin", "gestor"]:
+        # ✅ CORRECCIÓN: Solo mostrar empresa_sel si es admin
+        # Los gestores no pueden cambiar empresa, se asigna automáticamente
+        if session_state.role == "admin":
             campos_base.append("empresa_sel")
+        elif session_state.role == "gestor":
+            # Para gestores, mostrar empresa como readonly
+            campos_base.append("empresa_readonly")
+            
         return campos_base
 
     # ✅ CORRECCIÓN CRÍTICA: Asegurar tipos correctos para todos los parámetros
@@ -245,6 +263,7 @@ def main(supabase, session_state):
         "sexo": ["", "M", "F"]
     }
 
+    # Solo admin puede seleccionar empresa
     if session_state.role == "admin":
         campos_select["empresa_sel"] = empresas_opciones
 
@@ -257,9 +276,9 @@ def main(supabase, session_state):
     # Campos readonly
     campos_readonly = ["id", "created_at", "updated_at"]
 
-    # Hacer readonly para gestor
+    # ✅ CORRECCIÓN: Para gestores, empresa_readonly es de solo lectura
     if session_state.role == "gestor":
-        campos_readonly.append("empresa_sel")
+        campos_readonly.append("empresa_readonly")
 
     # Campos password (debe ser lista)
     campos_password = []
@@ -270,6 +289,7 @@ def main(supabase, session_state):
         "nif": "NIF del participante",
         "grupo_sel": "Grupo al que pertenece el participante",
         "empresa_sel": "Empresa del participante (solo admin)",
+        "empresa_readonly": "Empresa asignada automáticamente (no modificable)",
         "fecha_nacimiento": "Fecha de nacimiento del participante",
         "sexo": "Sexo del participante (M/F)",
         "nombre": "Nombre del participante (obligatorio)",
@@ -310,11 +330,24 @@ def main(supabase, session_state):
         else:
             df_display["grupo_sel"] = ""
             
+        # ✅ CORRECCIÓN: Manejo diferenciado por rol
         if session_state.role == "admin":
             if "empresa_nombre" in df_display.columns:
                 df_display["empresa_sel"] = df_display["empresa_nombre"]
             else:
                 df_display["empresa_sel"] = ""
+        elif session_state.role == "gestor":
+            # Para gestores, mostrar empresa como readonly
+            if "empresa_nombre" in df_display.columns:
+                df_display["empresa_readonly"] = df_display["empresa_nombre"]
+            else:
+                # Buscar el nombre de la empresa del gestor
+                empresa_gestor_nombre = ""
+                for nombre, id_emp in empresas_dict.items():
+                    if id_emp == empresa_id:
+                        empresa_gestor_nombre = nombre
+                        break
+                df_display["empresa_readonly"] = empresa_gestor_nombre
 
     # Columnas visibles según rol
     columnas_base = ["nombre", "apellidos", "email", "nif", "telefono"]
