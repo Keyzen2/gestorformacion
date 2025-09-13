@@ -218,10 +218,14 @@ def main(supabase, session_state):
             st.error(f"❌ Error al eliminar participante: {e}")
 
     # =========================
-    # Campos dinámicos - SOLO CAMPOS REALES DEL SCHEMA
+    # Campos dinámicos - CORRECCIÓN CRÍTICA
     # =========================
     def get_campos_dinamicos(datos):
         """Determina campos a mostrar dinámicamente - SOLO campos reales."""
+        # ✅ CORRECCIÓN: Validar que datos es un diccionario
+        if not isinstance(datos, dict):
+            datos = {}
+            
         campos_base = [
             "nombre", "apellidos", "nif", "email", "telefono",
             "fecha_nacimiento",
@@ -234,6 +238,7 @@ def main(supabase, session_state):
             campos_base.append("empresa_sel")
         return campos_base
 
+    # ✅ CORRECCIÓN CRÍTICA: Asegurar tipos correctos para todos los parámetros
     # Configuración de selects
     campos_select = {
         "grupo_sel": grupos_opciones,
@@ -243,6 +248,12 @@ def main(supabase, session_state):
     if session_state.role == "admin":
         campos_select["empresa_sel"] = empresas_opciones
 
+    # Campos textarea (vacío pero debe ser diccionario)
+    campos_textarea = {}
+    
+    # Campos file (vacío pero debe ser diccionario)
+    campos_file = {}
+
     # Campos readonly
     campos_readonly = ["id", "created_at", "updated_at"]
 
@@ -250,7 +261,10 @@ def main(supabase, session_state):
     if session_state.role == "gestor":
         campos_readonly.append("empresa_sel")
 
-    # ✅ CORRECCIÓN: Asegurar que campos_help siempre sea un diccionario
+    # Campos password (debe ser lista)
+    campos_password = []
+
+    # ✅ CORRECCIÓN CRÍTICA: Asegurar que campos_help siempre sea un diccionario
     campos_help = {
         "email": "Email único del participante (obligatorio)",
         "nif": "NIF del participante",
@@ -262,6 +276,9 @@ def main(supabase, session_state):
         "apellidos": "Apellidos del participante (obligatorio)",
         "telefono": "Número de teléfono de contacto"
     }
+
+    # Campos obligatorios (debe ser lista)
+    campos_obligatorios = ["nombre", "apellidos", "email"]
 
     # =========================
     # Campos reactivos
@@ -282,39 +299,67 @@ def main(supabase, session_state):
     # Preparar df_display para listado_con_ficha
     if df_filtered.empty:
         df_display = pd.DataFrame(columns=[
-            "nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo",
+            "id", "nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo",
             "empresa_nombre"
         ])
     else:
         df_display = df_filtered.copy()
-        df_display["grupo_sel"] = df_display["grupo_codigo"]
+        # ✅ CORRECCIÓN: Asegurar que las columnas de selección existan
+        if "grupo_codigo" in df_display.columns:
+            df_display["grupo_sel"] = df_display["grupo_codigo"]
+        else:
+            df_display["grupo_sel"] = ""
+            
         if session_state.role == "admin":
-            df_display["empresa_sel"] = df_display["empresa_nombre"]
+            if "empresa_nombre" in df_display.columns:
+                df_display["empresa_sel"] = df_display["empresa_nombre"]
+            else:
+                df_display["empresa_sel"] = ""
 
     # Columnas visibles según rol
-    columnas_base = ["nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo"]
-    if session_state.role == "admin":
-        columnas_base.append("empresa_nombre")
+    columnas_base = ["nombre", "apellidos", "email", "nif", "telefono"]
+    
+    # Añadir columnas adicionales si existen en el dataframe
+    if not df_display.empty:
+        if "grupo_codigo" in df_display.columns:
+            columnas_base.append("grupo_codigo")
+        if session_state.role == "admin" and "empresa_nombre" in df_display.columns:
+            columnas_base.append("empresa_nombre")
+    
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
-    # ✅ CORRECCIÓN: Siempre llamar a listado_con_ficha, incluso si no hay datos
-    listado_con_ficha(
-        df=df_display,
-        columnas_visibles=columnas_visibles,
-        titulo="Participante",
-        on_save=guardar_participante,
-        on_create=crear_participante if puede_crear else None,
-        on_delete=eliminar_participante if session_state.role == "admin" else None,
-        id_col="id",
-        campos_select=campos_select,
-        campos_readonly=campos_readonly,
-        campos_dinamicos=get_campos_dinamicos,
-        allow_creation=puede_crear,
-        campos_help=campos_help,  # ✅ Ya está garantizado que es diccionario
-        campos_obligatorios=["nombre", "apellidos", "email"],
-        reactive_fields=reactive_fields,
-        search_columns=["nombre", "apellidos", "email", "nif"]
-    )
+    # ✅ CORRECCIÓN CRÍTICA: Llamada con parámetros validados
+    try:
+        listado_con_ficha(
+            df=df_display,
+            columnas_visibles=columnas_visibles,
+            titulo="Participante",
+            on_save=guardar_participante,
+            on_create=crear_participante if puede_crear else None,
+            on_delete=eliminar_participante if session_state.role == "admin" else None,
+            id_col="id",
+            campos_select=campos_select,  # Dict validado
+            campos_textarea=campos_textarea,  # Dict vacío pero válido
+            campos_file=campos_file,  # Dict vacío pero válido
+            campos_readonly=campos_readonly,  # Lista validada
+            campos_dinamicos=get_campos_dinamicos,  # Función validada
+            campos_password=campos_password,  # Lista vacía pero válida
+            allow_creation=puede_crear,
+            campos_help=campos_help,  # Dict validado
+            campos_obligatorios=campos_obligatorios,  # Lista validada
+            reactive_fields=reactive_fields,  # Dict validado
+            search_columns=["nombre", "apellidos", "email", "nif"]  # Lista validada
+        )
+    except Exception as e:
+        st.error(f"❌ Error al mostrar listado: {e}")
+        st.error("Detalles técnicos para debugging:")
+        st.code(f"""
+        df_display shape: {df_display.shape if not df_display.empty else 'Empty'}
+        columnas_visibles: {columnas_visibles}
+        campos_select: {type(campos_select)} - {list(campos_select.keys())}
+        campos_help: {type(campos_help)} - {len(campos_help)} items
+        campos_obligatorios: {type(campos_obligatorios)} - {campos_obligatorios}
+        """)
 
     # =========================
     # Exportación
