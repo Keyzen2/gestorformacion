@@ -201,7 +201,7 @@ def main(supabase, session_state):
 
             # Limpiar campos temporales
             datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                             if not k.endswith("_sel") and not k.endswith("_readonly") and k != "contraseña" and v}
+                             if not k.endswith("_sel") and not k.endswith("_asignada") and k != "contraseña" and v}
             
             # Añadir timestamps
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
@@ -239,8 +239,10 @@ def main(supabase, session_state):
         if not isinstance(datos, dict):
             datos = {}
             
+        # ✅ CORRECCIÓN: Orden correcto de campos con apellidos después de nombre
         campos_base = [
-            "nombre", "apellidos", "nif", "email", "telefono",
+            "nombre", "apellidos",  # Orden correcto
+            "email", "nif", "telefono",
             "fecha_nacimiento",
             "sexo",
             "grupo_sel"
@@ -251,8 +253,8 @@ def main(supabase, session_state):
         if session_state.role == "admin":
             campos_base.append("empresa_sel")
         elif session_state.role == "gestor":
-            # Para gestores, mostrar empresa como readonly
-            campos_base.append("empresa_readonly")
+            # Para gestores, mostrar empresa como readonly con nombre más claro
+            campos_base.append("empresa_asignada")
             
         return campos_base
 
