@@ -429,7 +429,304 @@ def main(supabase, session_state):
         
         with col2:
             st.metric("📋 Registros mostrados", len(df_filtered))
+    # AÑADIR AL FINAL DEL ARCHIVO participantes.py, DESPUÉS DE LA SECCIÓN DE IMPORTACIÓN MASIVA
 
+    # =========================
+    # GESTIÓN DE DIPLOMAS
+    # =========================
+    if session_state.role in ["admin", "gestor"]:
+        st.divider()
+        st.markdown("### 🏅 Gestión de Diplomas")
+        st.caption("Subir y gestionar diplomas para participantes de grupos finalizados.")
+        
+        try:
+            # Obtener grupos finalizados
+            hoy = datetime.now().date()
+            
+            # Consulta para obtener grupos con sus participantes
+            query_grupos = supabase.table("grupos").select("""
+                id, codigo_grupo, fecha_fin, fecha_fin_prevista, empresa_id,
+                accion_formativa:acciones_formativas(nombre)
+            """)
+            
+            if session_state.role == "gestor" and empresa_id:
+                query_grupos = query_grupos.eq("empresa_id", empresa_id)
+            
+            grupos_res = query_grupos.execute()
+            grupos_data = grupos_res.data or []
+            
+            # Filtrar grupos finalizados
+            grupos_finalizados = []
+            for grupo in grupos_data:
+                fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
+                if fecha_fin:
+                    try:
+                        fecha_fin_dt = pd.to_datetime(fecha_fin, errors='coerce').date()
+                        if fecha_fin_dt < hoy:
+                            grupos_finalizados.append(grupo)
+                    except:
+                        continue
+            
+            if not grupos_finalizados:
+                st.info("ℹ️ No hay grupos finalizados disponibles para gestionar diplomas.")
+            else:
+                # Obtener participantes de grupos finalizados
+                grupos_finalizados_ids = [g["id"] for g in grupos_finalizados]
+                
+                query_participantes = supabase.table("participantes").select("""
+                    id, nombre, apellidos, email, grupo_id
+                """).in_("grupo_id", grupos_finalizados_ids)
+                
+                if session_state.role == "gestor" and empresa_id:
+                    query_participantes = query_participantes.eq("empresa_id", empresa_id)
+                
+                participantes_res = query_participantes.execute()
+                participantes_finalizados = participantes_res.data or []
+                
+                if not participantes_finalizados:
+                    st.info("ℹ️ No hay participantes en grupos finalizados.")
+                else:
+                    # Crear diccionario de grupos para mapeo
+                    grupos_dict_completo = {g["id"]: g for g in grupos_finalizados}
+                    
+                    # Mostrar métricas
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("👥 Participantes", len(participantes_finalizados))
+                    with col2:
+                        st.metric("📚 Grupos Finalizados", len(grupos_finalizados))
+                    with col3:
+                        # Calcular diplomas existentes
+                        diplomas_res = supabase.table("diplomas").select("participante_id").in_(
+                            "participante_id", [p["id"] for p in participantes_finalizados]
+                        ).execute()
+                        diplomas_count = len(diplomas_res.data or [])
+                        st.metric("🏅 Diplomas Subidos", diplomas_count)
+                    
+                    st.markdown("#### 🎯 Seleccionar Participante")
+                    
+                    # Crear opciones mejoradas para el selector
+                    opciones_participantes = []
+                    for p in participantes_finalizados:
+                        grupo_info = grupos_dict_completo.get(p["grupo_id"], {})
+                        grupo_codigo = grupo_info.get("codigo_grupo", "Sin código")
+                        accion_nombre = grupo_info.get("accion_formativa", {}).get("nombre", "Sin acción") if grupo_info.get("accion_formativa") else "Sin acción"
+                        
+                        nombre_completo = f"{p['nombre']} {p.get('apellidos', '')}".strip()
+                        opcion = f"{nombre_completo} - {grupo_codigo} ({accion_nombre})"
+                        opciones_participantes.append((opcion, p))
+                    
+                    if opciones_participantes:
+                        participante_seleccionado = st.selectbox(
+                            "Seleccionar participante para gestionar diploma:",
+                            options=[None] + [op[0] for op in opciones_participantes],
+                            format_func=lambda x: "Seleccionar..." if x is None else x,
+                            key="diploma_participante_selector"
+                        )
+                        
+                        if participante_seleccionado:
+                            # Encontrar datos del participante seleccionado
+                            participante_data = None
+                            for opcion, data in opciones_participantes:
+                                if opcion == participante_seleccionado:
+                                    participante_data = data
+                                    break
+                            
+                            if participante_data:
+                                grupo_info = grupos_dict_completo.get(participante_data["grupo_id"], {})
+                                
+                                with st.container():
+                                    st.markdown("#### 📋 Información del Participante")
+                                    
+                                    col1, col2 = st.columns(2)
+                                    with col1:
+                                        st.markdown(f"**👤 Nombre:** {participante_data['nombre']} {participante_data.get('apellidos', '')}")
+                                        st.markdown(f"**📧 Email:** {participante_data['email']}")
+                                    
+                                    with col2:
+                                        st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
+                                        fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
+                                        if fecha_fin:
+                                            fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                                            st.markdown(f"**📅 Finalizado:** {fecha_str}")
+                                    
+                                    # Gestión de diplomas existentes
+                                    st.markdown("#### 🏅 Diplomas Registrados")
+                                    
+                                    try:
+                                        diplomas_existentes = supabase.table("diplomas").select("*").eq(
+                                            "participante_id", participante_data["id"]
+                                        ).execute()
+                                        diplomas = diplomas_existentes.data or []
+                                        
+                                        if diplomas:
+                                            for i, diploma in enumerate(diplomas):
+                                                with st.expander(f"📄 Diploma {i+1} - {diploma.get('archivo_nombre', 'Sin nombre')}"):
+                                                    col_info, col_actions = st.columns([3, 1])
+                                                    
+                                                    with col_info:
+                                                        fecha_subida = diploma.get('fecha_subida')
+                                                        if fecha_subida:
+                                                            fecha_str = pd.to_datetime(fecha_subida).strftime('%d/%m/%Y %H:%M')
+                                                            st.markdown(f"**📅 Subido:** {fecha_str}")
+                                                        st.markdown(f"**🔗 URL:** [Ver diploma]({diploma['url']})")
+                                                    
+                                                    with col_actions:
+                                                        if st.button("🗑️ Eliminar", key=f"delete_diploma_{diploma['id']}"):
+                                                            confirm_key = f"confirm_delete_diploma_{diploma['id']}"
+                                                            if st.session_state.get(confirm_key, False):
+                                                                supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
+                                                                st.success("✅ Diploma eliminado.")
+                                                                st.rerun()
+                                                            else:
+                                                                st.session_state[confirm_key] = True
+                                                                st.warning("⚠️ Haz clic de nuevo para confirmar")
+                                        else:
+                                            st.info("ℹ️ Este participante no tiene diplomas registrados.")
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error al cargar diplomas: {e}")
+                                    
+                                    # Subir nuevo diploma
+                                    st.markdown("#### 📤 Subir Nuevo Diploma")
+                                    
+                                    if diplomas:
+                                        st.warning("⚠️ **Atención:** Ya existe un diploma para este participante. El nuevo archivo lo reemplazará.")
+                                    
+                                    diploma_file = st.file_uploader(
+                                        "📄 Seleccionar archivo de diploma (PDF)",
+                                        type=["pdf"],
+                                        key=f"diploma_uploader_{participante_data['id']}",
+                                        help="Solo se permiten archivos PDF. Máximo 10MB."
+                                    )
+                                    
+                                    if diploma_file:
+                                        # Validar tamaño
+                                        file_size_mb = diploma_file.size / (1024 * 1024)
+                                        st.info(f"📁 **Archivo:** {diploma_file.name} ({file_size_mb:.2f} MB)")
+                                        
+                                        if file_size_mb > 10:
+                                            st.error("❌ El archivo es demasiado grande. Máximo 10MB.")
+                                        else:
+                                            col_upload, col_cancel = st.columns([2, 1])
+                                            
+                                            with col_upload:
+                                                if st.button("📤 Subir Diploma", type="primary", key=f"upload_btn_{participante_data['id']}"):
+                                                    try:
+                                                        with st.spinner("📤 Subiendo diploma..."):
+                                                            # Usar función de utils.py
+                                                            from utils import subir_archivo_supabase
+                                                            
+                                                            url = subir_archivo_supabase(
+                                                                supabase,
+                                                                diploma_file,
+                                                                empresa_id=session_state.user.get("empresa_id"),
+                                                                bucket="diplomas"
+                                                            )
+                                                            
+                                                            if url:
+                                                                # Eliminar diplomas existentes si los hay
+                                                                if diplomas:
+                                                                    for d in diplomas:
+                                                                        supabase.table("diplomas").delete().eq("id", d["id"]).execute()
+                                                                
+                                                                # Insertar nuevo diploma (usando estructura exacta de tu tabla)
+                                                                supabase.table("diplomas").insert({
+                                                                    "participante_id": participante_data["id"],
+                                                                    "grupo_id": participante_data["grupo_id"],
+                                                                    "url": url,
+                                                                    "archivo_nombre": diploma_file.name
+                                                                    # fecha_subida se añade automáticamente con DEFAULT NOW()
+                                                                }).execute()
+                                                                
+                                                                st.success("✅ Diploma subido correctamente.")
+                                                                st.balloons()
+                                                                st.rerun()
+                                                            else:
+                                                                st.error("❌ Error al obtener la URL del diploma.")
+                                                    
+                                                    except ImportError:
+                                                        st.error("❌ Error: No se pudo importar la función de subida de archivos.")
+                                                    except Exception as e:
+                                                        st.error(f"❌ Error al subir diploma: {e}")
+                                            
+                                            with col_cancel:
+                                                if st.button("❌ Cancelar", key=f"cancel_btn_{participante_data['id']}"):
+                                                    st.rerun()
+        
+        except Exception as e:
+            st.error(f"❌ Error al cargar datos para gestión de diplomas: {e}")
+
+        # =========================
+        # ESTADÍSTICAS DE DIPLOMAS
+        # =========================
+        with st.expander("📊 Estadísticas de Diplomas"):
+            try:
+                # Obtener estadísticas generales
+                if session_state.role == "admin":
+                    # Estadísticas globales para admin
+                    total_grupos_query = supabase.table("grupos").select("id, fecha_fin, fecha_fin_prevista")
+                    total_diplomas_query = supabase.table("diplomas").select("id")
+                else:
+                    # Estadísticas por empresa para gestor
+                    total_grupos_query = supabase.table("grupos").select("id, fecha_fin, fecha_fin_prevista").eq("empresa_id", empresa_id)
+                    # Para diplomas, necesitamos un join o filtrar por participantes de la empresa
+                    participantes_empresa = supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute()
+                    participantes_ids = [p["id"] for p in participantes_empresa.data or []]
+                    
+                    if participantes_ids:
+                        total_diplomas_query = supabase.table("diplomas").select("id").in_("participante_id", participantes_ids)
+                    else:
+                        total_diplomas_query = None
+                
+                total_grupos_res = total_grupos_query.execute()
+                if total_diplomas_query:
+                    total_diplomas_res = total_diplomas_query.execute()
+                    total_diplomas = len(total_diplomas_res.data or [])
+                else:
+                    total_diplomas = 0
+                
+                # Calcular grupos finalizados
+                total_finalizados = 0
+                for grupo in total_grupos_res.data or []:
+                    fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
+                    if fecha_fin:
+                        try:
+                            if pd.to_datetime(fecha_fin, errors='coerce').date() < hoy:
+                                total_finalizados += 1
+                        except:
+                            continue
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("📚 Grupos Finalizados", total_finalizados)
+                
+                with col2:
+                    st.metric("🏅 Total Diplomas", total_diplomas)
+                
+                with col3:
+                    pendientes = max(0, total_finalizados - total_diplomas)
+                    st.metric("⏳ Pendientes", pendientes)
+                
+                with col4:
+                    if total_finalizados > 0:
+                        progreso = (total_diplomas / total_finalizados) * 100
+                        st.metric("📈 Progreso", f"{progreso:.1f}%")
+                    else:
+                        st.metric("📈 Progreso", "0%")
+                
+                # Barra de progreso
+                if total_finalizados > 0:
+                    progreso_decimal = total_diplomas / total_finalizados
+                    st.progress(progreso_decimal, text=f"Diplomas completados: {progreso_decimal:.1%}")
+                
+            except Exception as e:
+                st.error(f"❌ Error al cargar estadísticas: {e}")
+
+    st.divider()
+    st.caption("💡 Los participantes son usuarios que pertenecen a grupos formativos y pueden obtener diplomas al completar los cursos.")
+    
     # =========================
     # Importación masiva - CORREGIDA PARA NIF
     # =========================
