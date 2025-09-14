@@ -138,17 +138,13 @@ def main(supabase, session_state):
                 else:
                     datos_editados["grupo_id"] = None
                     
-            # Manejo diferenciado de empresa según rol
+            # Solo para admin: convertir empresa_sel
             if "empresa_sel" in datos_editados:
                 empresa_sel = datos_editados.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
-            elif "empresa_asignada" in datos_editados:
-                # Para gestores, empresa_asignada se ignora (no se actualiza)
-                datos_editados.pop("empresa_asignada", None)
-                # La empresa ya está asignada y no se cambia
             
-            # Para gestores, asegurar que la empresa se mantiene
+            # Para gestores, asegurar que mantienen su empresa
             if session_state.role == "gestor":
                 datos_editados["empresa_id"] = empresa_id
             
@@ -186,14 +182,11 @@ def main(supabase, session_state):
                 if grupo_sel and grupo_sel in grupos_dict:
                     datos_nuevos["grupo_id"] = grupos_dict[grupo_sel]
                     
-            # Manejo diferenciado de empresa según rol
+            # Solo para admin: convertir empresa_sel
             if "empresa_sel" in datos_nuevos:
                 empresa_sel = datos_nuevos.pop("empresa_sel")
                 if session_state.role == "admin" and empresa_sel and empresa_sel in empresas_dict:
                     datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
-            elif "empresa_asignada" in datos_nuevos:
-                # Para gestores, empresa_asignada se ignora
-                datos_nuevos.pop("empresa_asignada", None)
             
             # Para gestores, siempre asignar su empresa
             if session_state.role == "gestor":
@@ -201,7 +194,7 @@ def main(supabase, session_state):
 
             # Limpiar campos temporales
             datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                             if not k.endswith("_sel") and not k.endswith("_asignada") and k != "contraseña" and v}
+                             if not k.endswith("_sel") and k != "contraseña" and v}
             
             # Añadir timestamps
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
@@ -251,13 +244,10 @@ def main(supabase, session_state):
             "grupo_sel"
         ]
     
-        # Solo mostrar empresa_sel si es admin
-        # Los gestores ven empresa_asignada como readonly al final
+        # SOLUCIÓN SIMPLE: Solo admin ve empresa
+        # Gestores NO ven campo empresa (se asigna automáticamente)
         if session_state.role == "admin":
             campos_base.append("empresa_sel")
-        elif session_state.role == "gestor":
-            # Para gestores, mostrar empresa como readonly al final
-            campos_base.append("empresa_asignada")
             
         return campos_base
 
@@ -277,37 +267,35 @@ def main(supabase, session_state):
     # Campos file (vacío pero debe ser diccionario)
     campos_file = {}
 
-    # Campos readonly
+    # Campos readonly - SIN problemas de empresa
     campos_readonly = ["id", "created_at", "updated_at"]
-
-    # CLAVE: Para gestores, empresa_asignada es de solo lectura
-    if session_state.role == "gestor":
-        campos_readonly.append("empresa_asignada")
 
     # Campos password (debe ser lista)
     campos_password = []
 
-    # Asegurar que campos_help siempre sea un diccionario
+    # Campos de ayuda
     campos_help = {
-        "email": "Email único del participante (obligatorio)",
-        "nif": "NIF del participante",
-        "grupo_sel": "Grupo al que pertenece el participante",
-        "empresa_sel": "Empresa del participante (solo admin)",
-        "empresa_asignada": "Su empresa asignada",
-        "fecha_nacimiento": "Fecha de nacimiento del participante",
-        "sexo": "Sexo del participante (M/F)",
         "nombre": "Nombre del participante (obligatorio)",
         "apellidos": "Apellidos del participante (obligatorio)",
-        "telefono": "Número de teléfono de contacto"
+        "email": "Email único del participante (obligatorio)",
+        "nif": "NIF del participante",
+        "telefono": "Número de teléfono de contacto",
+        "fecha_nacimiento": "Fecha de nacimiento del participante",
+        "sexo": "Sexo del participante (M/F)",
+        "grupo_sel": "Grupo al que pertenece el participante"
     }
 
-    # Campos obligatorios (debe ser lista)
+    # Solo añadir help de empresa para admin
+    if session_state.role == "admin":
+        campos_help["empresa_sel"] = "Empresa del participante (solo admin)"
+
+    # Campos obligatorios
     campos_obligatorios = ["nombre", "apellidos", "email"]
 
     # Campos reactivos
     reactive_fields = {
-        # Por ejemplo, si quieres que al cambiar el grupo se actualice algo en empresa
-        "grupo_sel": ["empresa_sel"]
+        # Si cambias el grupo, podrías querer actualizar algo relacionado
+        "grupo_sel": []
     }
 
     # =========================
@@ -332,24 +320,12 @@ def main(supabase, session_state):
         else:
             df_display["grupo_sel"] = ""
             
-        # Manejo diferenciado por rol para empresa
+        # Solo admin necesita empresa_sel
         if session_state.role == "admin":
             if "empresa_nombre" in df_display.columns:
                 df_display["empresa_sel"] = df_display["empresa_nombre"]
             else:
                 df_display["empresa_sel"] = ""
-        elif session_state.role == "gestor":
-            # Para gestores, mostrar empresa como readonly con nombre claro
-            if "empresa_nombre" in df_display.columns:
-                df_display["empresa_asignada"] = df_display["empresa_nombre"]
-            else:
-                # Buscar el nombre de la empresa del gestor
-                empresa_gestor_nombre = ""
-                for nombre, id_emp in empresas_dict.items():
-                    if id_emp == empresa_id:
-                        empresa_gestor_nombre = nombre
-                        break
-                df_display["empresa_asignada"] = empresa_gestor_nombre
 
     # Columnas visibles según rol
     columnas_base = ["nombre", "apellidos", "email", "nif", "telefono"]
@@ -363,7 +339,7 @@ def main(supabase, session_state):
     
     columnas_visibles = [col for col in columnas_base if col in df_display.columns]
 
-    # Llamada con parámetros validados
+    # Llamada con parámetros validados y manejo de errores
     try:
         listado_con_ficha(
             df=df_display,
@@ -505,4 +481,4 @@ def main(supabase, session_state):
                     st.error(f"❌ Error al procesar archivo: {e}")
 
     st.divider()
-    st.caption("💡 Los participantes son los alumnos que realizan la formación en los grupos.")
+    st.caption("💡 Los participantes son los alumnos q
