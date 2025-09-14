@@ -481,4 +481,4 @@ def main(supabase, session_state):
                     st.error(f"❌ Error al procesar archivo: {e}")
 
     st.divider()
-    st.caption("💡 Los participantes son los alumnos q
+    st.caption("💡 Los participantes son los alumnos que realizan la formación en los grupos.")
