@@ -34,7 +34,7 @@ class DataService:
         """Obtiene participantes con información de grupo y empresa - SOLO CAMPOS REALES."""
         try:
             query = _self.supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, nif, email, telefono, 
+                id, nif, nombre, apellidos, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, 
                 grupo_id, empresa_id,
                 grupo:grupos!fk_participante_grupo(id, codigo_grupo),
