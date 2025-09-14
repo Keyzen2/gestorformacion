@@ -416,4 +416,51 @@ def main(supabase, session_state):
                         with col2:
                             if st.button("✅ Validar XML", key="validar_xml_fin") and xsd_urls['finalizacion_grupo']:
                                 with st.spinner("Validando XML..."):
-                
+                                    xml_content = generar_xml_finalizacion_grupo(grupo_data, participantes_data)
+                                    
+                                    if xml_content:
+                                        es_valido, errores = validar_xml(xml_content, xsd_urls['finalizacion_grupo'])
+                                        
+                                        if es_valido:
+                                            st.success("✅ El XML es válido según el esquema FUNDAE")
+                                        else:
+                                            st.error("❌ El XML no es válido según el esquema XSD")
+                                            for error in errores[:5]:
+                                                st.caption(f"• {error}")
+                                            if len(errores) > 5:
+                                                st.caption(f"... y {len(errores) - 5} errores más")
+                                    
+                except Exception as e:
+                    st.error(f"❌ Error al cargar participantes: {e}")
+    
+    # =========================
+    # Información adicional
+    # =========================
+    st.divider()
+    
+    with st.expander("ℹ️ Información sobre documentos FUNDAE", expanded=False):
+        st.markdown("""
+        ### 📋 Tipos de documentos FUNDAE:
+        
+        **XML Acción Formativa:**
+        - Describe la acción formativa en detalle
+        - Incluye objetivos, contenidos, modalidad y certificación
+        - Necesario antes de iniciar la formación
+        
+        **XML Inicio de Grupo:**
+        - Declara el inicio de un grupo específico
+        - Lista todos los participantes inscritos
+        - Se envía al comenzar la formación
+        
+        **XML Finalización de Grupo:**
+        - Certifica la finalización del grupo
+        - Incluye resultados de los participantes (APTO/NO APTO)
+        - Se envía tras completar la formación
+        
+        ### ⚠️ Notas importantes:
+        - Los XMLs se validan automáticamente contra los esquemas oficiales de FUNDAE
+        - Todos los campos obligatorios deben estar completos
+        - Los participantes deben tener NIF y datos de contacto válidos
+        """)
+    
+    st.caption("💡 Los documentos FUNDAE son obligatorios para justificar la formación bonificada")
