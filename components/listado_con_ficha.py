@@ -468,8 +468,7 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 key=f"{prefix}_{campo}",
                 placeholder="Introduce la contraseña..."
             )
-        
-        # Campo fecha - RANGO AMPLIADO
+        # Campo fecha - RANGO DINÁMICO SIN DATEUTIL
         elif 'fecha' in campo.lower():
             try:
                 if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
@@ -478,14 +477,21 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                     fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
                 else:
                     fecha_val = None
-                    
-                # RANGO AMPLIADO: desde 1920 hasta 2010 para fechas de nacimiento
+            
+                # RANGO DINÁMICO: desde 1920 hasta hace 18 años para fechas de nacimiento
                 from datetime import date
+        
                 min_date = date(1920, 1, 1)
-                max_date = date(2010, 12, 31)
-                
-                # Si es fecha de nacimiento, usar el rango específico
+        
+                # Si es fecha de nacimiento, limitar a mayores de 18 años
                 if 'nacimiento' in campo.lower():
+                    # Calcular fecha máxima: hace 18 años desde hoy (método simple)
+                    año_actual = date.today().year
+                    mes_actual = date.today().month
+                    dia_actual = date.today().day
+            
+                    max_date = date(año_actual - 18, mes_actual, dia_actual)
+            
                     resultado = st.date_input(
                         label, 
                         value=fecha_val, 
@@ -495,12 +501,14 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                         max_value=max_date
                     )
                 else:
-                    # Para otras fechas, usar rango más amplio
+                    # Para otras fechas, usar rango más amplio (hasta hoy)
                     resultado = st.date_input(
                         label, 
                         value=fecha_val, 
                         help=help_text, 
-                        key=f"{prefix}_{campo}"
+                        key=f"{prefix}_{campo}",
+                        min_value=min_date,
+                        max_value=date.today()
                     )
             except Exception as e:
                 # Si falla el parsing de fecha, usar input de texto
