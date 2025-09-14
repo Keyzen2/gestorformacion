@@ -177,9 +177,6 @@ def main(supabase, session_state):
             
         except Exception as e:
             st.error(f"❌ Error al guardar participante: {e}")
-            # Debug info para desarrollo
-            if st.session_state.get("debug_mode"):
-                st.error(f"Datos enviados: {list(datos_editados.keys()) if 'datos_editados' in locals() else 'N/A'}")
 
     def crear_participante(datos_nuevos):
         """Crea un nuevo participante - CORREGIDO.""" 
@@ -252,9 +249,6 @@ def main(supabase, session_state):
                 
         except Exception as e:
             st.error(f"❌ Error al crear participante: {e}")
-            # Debug info para desarrollo
-            if st.session_state.get("debug_mode"):
-                st.error(f"Datos procesados: {list(datos_limpios.keys()) if 'datos_limpios' in locals() else 'N/A'}")
 
     def eliminar_participante(participante_id):
         """Elimina un participante.""" 
@@ -279,7 +273,7 @@ def main(supabase, session_state):
         # ORDEN SECUENCIAL CORRECTO: Nombre → Apellidos → Email → etc.
         campos_base = [
             "nombre", 
-            "apellidos",  # Justo después de nombre para orden correcto
+            "apellidos",
             "email", 
             "nif", 
             "telefono",
@@ -289,7 +283,6 @@ def main(supabase, session_state):
         ]
     
         # SOLUCIÓN SIMPLE: Solo admin ve empresa
-        # Gestores NO ven campo empresa (se asigna automáticamente)
         if session_state.role == "admin":
             campos_base.append("empresa_sel")
             
@@ -338,7 +331,6 @@ def main(supabase, session_state):
 
     # Campos reactivos
     reactive_fields = {
-        # Si cambias el grupo, podrías querer actualizar algo relacionado
         "grupo_sel": []
     }
 
@@ -357,7 +349,6 @@ def main(supabase, session_state):
         # Convertir valores problemáticos
         for col in df_display.columns:
             if df_display[col].dtype == 'object':
-                # Convertir None a string vacío para evitar problemas JSON
                 df_display[col] = df_display[col].fillna("")
         
         # Campos de selección
@@ -414,14 +405,6 @@ def main(supabase, session_state):
         )
     except Exception as e:
         st.error(f"❌ Error al mostrar listado: {e}")
-        st.error("Detalles técnicos para debugging:")
-        st.code(f"""
-        df_display shape: {df_display.shape if not df_display.empty else 'Empty'}
-        columnas_visibles: {columnas_visibles}
-        campos_select: {type(campos_select)} - {list(campos_select.keys())}
-        campos_help: {type(campos_help)} - {len(campos_help)} items
-        campos_obligatorios: {type(campos_obligatorios)} - {campos_obligatorios}
-        """)
 
     # =========================
     # Exportación
@@ -498,7 +481,7 @@ def main(supabase, session_state):
                                             fecha_obj = row["fecha_nacimiento"]
                                         datos_participante["fecha_nacimiento"] = fecha_obj.isoformat() if hasattr(fecha_obj, 'isoformat') else str(fecha_obj)
                                     except:
-                                        pass  # Ignorar fecha inválida
+                                        pass
                                 
                                 # Asignar empresa y grupo
                                 if session_state.role == "admin":
@@ -534,7 +517,7 @@ def main(supabase, session_state):
                         
                         if errores:
                             st.error(f"❌ Errores en {len(errores)} registros:")
-                            for error in errores[:5]:  # Mostrar solo los primeros 5
+                            for error in errores[:5]:
                                 st.text(f"  • {error}")
                             if len(errores) > 5:
                                 st.text(f"  • ... y {len(errores)-5} errores más")
