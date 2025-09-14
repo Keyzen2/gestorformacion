@@ -82,20 +82,20 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # Filtros de búsqueda
+    # Filtros de búsqueda - CORREGIDO: usar 'nif' en lugar de 'dni'
     # =========================
     st.markdown("### 🔍 Buscar y Filtrar")
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        query = st.text_input("🔍 Buscar por nombre, email o DNI")
+        query = st.text_input("🔍 Buscar por nombre, email o NIF")
     with col2:
         grupo_filter = st.selectbox("Filtrar por grupo", ["Todos"] + sorted(grupos_dict.keys()))
     with col3:
         if session_state.role == "admin":
             empresa_filter = st.selectbox("Filtrar por empresa", ["Todas"] + sorted(empresas_dict.keys()))
 
-    # Aplicar filtros
+    # Aplicar filtros - CORREGIDO: usar 'nif'
     df_filtered = df_participantes.copy()
     
     if query and not df_filtered.empty:
@@ -104,7 +104,7 @@ def main(supabase, session_state):
             df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
             df_filtered["apellidos"].str.lower().str.contains(q_lower, na=False) |
             df_filtered["email"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["nif"].fillna("").str.lower().str.contains(q_lower, na=False)
+            df_filtered["nif"].fillna("").str.lower().str.contains(q_lower, na=False)  # ✅ nif
         ]
     
     if grupo_filter != "Todos" and not df_filtered.empty:
@@ -116,10 +116,10 @@ def main(supabase, session_state):
         df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id_filter]
 
     # =========================
-    # Funciones CRUD CORREGIDAS
+    # Funciones CRUD CORREGIDAS CON LIMPIEZA DE CACHE
     # =========================
     def guardar_participante(participante_id, datos_editados):
-        """Guarda cambios en un participante - CORREGIDO."""
+        """Guarda cambios en un participante - CORREGIDO CON CACHE."""
         try:
             # Validaciones básicas
             if not datos_editados.get("email"):
@@ -172,6 +172,9 @@ def main(supabase, session_state):
             # Actualizar en base de datos
             supabase.table("participantes").update(datos_limpios).eq("id", participante_id).execute()
             
+            # ✅ AÑADIDO: Limpiar cache para forzar recarga
+            data_service.get_participantes_completos.clear()
+            
             st.success("✅ Participante actualizado correctamente.")
             st.rerun()
             
@@ -179,7 +182,7 @@ def main(supabase, session_state):
             st.error(f"❌ Error al guardar participante: {e}")
 
     def crear_participante(datos_nuevos):
-        """Crea un nuevo participante - CORREGIDO.""" 
+        """Crea un nuevo participante - CORREGIDO CON CACHE.""" 
         try:
             # Validaciones
             if not datos_nuevos.get("email") or not datos_nuevos.get("nombre") or not datos_nuevos.get("apellidos"):
@@ -242,6 +245,9 @@ def main(supabase, session_state):
             result = supabase.table("participantes").insert(datos_limpios).execute()
             
             if result.data:
+                # ✅ AÑADIDO: Limpiar cache para forzar recarga
+                data_service.get_participantes_completos.clear()
+                
                 st.success("✅ Participante creado correctamente.")
                 st.rerun()
             else:
@@ -251,10 +257,14 @@ def main(supabase, session_state):
             st.error(f"❌ Error al crear participante: {e}")
 
     def eliminar_participante(participante_id):
-        """Elimina un participante.""" 
+        """Elimina un participante - CON LIMPIEZA DE CACHE.""" 
         try:
             # Eliminar participante
             supabase.table("participantes").delete().eq("id", participante_id).execute()
+            
+            # ✅ AÑADIDO: Limpiar cache para forzar recarga
+            data_service.get_participantes_completos.clear()
+            
             st.success("✅ Participante eliminado correctamente.")
             st.rerun()
             
@@ -317,7 +327,7 @@ def main(supabase, session_state):
         "email": "Email único del participante (obligatorio)",
         "nif": "NIF/DNI del participante (opcional)",
         "telefono": "Número de teléfono de contacto",
-        "fecha_nacimiento": "Fecha de nacimiento (mayores de 18 años)",
+        "fecha_nacimiento": "Fecha de nacimiento (mayores de 18 años)",  # ✅ Actualizado
         "sexo": "Sexo del participante (M/F)",
         "grupo_sel": "Grupo al que pertenece el participante"
     }
@@ -401,7 +411,7 @@ def main(supabase, session_state):
             campos_help=campos_help,
             campos_obligatorios=campos_obligatorios,
             reactive_fields=reactive_fields,
-            search_columns=["nombre", "apellidos", "email", "nif"]
+            search_columns=["nombre", "apellidos", "email", "nif"]  # ✅ nif en search
         )
     except Exception as e:
         st.error(f"❌ Error al mostrar listado: {e}")
@@ -421,7 +431,7 @@ def main(supabase, session_state):
             st.metric("📋 Registros mostrados", len(df_filtered))
 
     # =========================
-    # Importación masiva
+    # Importación masiva - CORREGIDA PARA NIF
     # =========================
     if puede_crear:
         st.divider()
@@ -466,7 +476,7 @@ def main(supabase, session_state):
                                     "nombre": row.get("nombre"),
                                     "apellidos": row.get("apellidos"),
                                     "email": row.get("email"),
-                                    "nif": row.get("nif"),
+                                    "nif": row.get("nif"),  # ✅ nif
                                     "telefono": row.get("telefono"),
                                     "created_at": datetime.utcnow().isoformat(),
                                     "updated_at": datetime.utcnow().isoformat()
@@ -512,6 +522,9 @@ def main(supabase, session_state):
                         progress_bar.empty()
                         
                         if creados > 0:
+                            # ✅ AÑADIDO: Limpiar cache después de importación masiva
+                            data_service.get_participantes_completos.clear()
+                            
                             st.success(f"✅ Se crearon {creados} participantes correctamente.")
                             st.rerun()
                         
