@@ -317,7 +317,7 @@ def main(supabase, session_state):
         "email": "Email único del participante (obligatorio)",
         "nif": "NIF/DNI del participante (opcional)",
         "telefono": "Número de teléfono de contacto",
-        "fecha_nacimiento": "Fecha de nacimiento (entre 1920 y 2010)",
+        "fecha_nacimiento": "Fecha de nacimiento (mayores de 18 años)",
         "sexo": "Sexo del participante (M/F)",
         "grupo_sel": "Grupo al que pertenece el participante"
     }
