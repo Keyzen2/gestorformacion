@@ -639,101 +639,106 @@ class DataService:
             return _self._handle_query_error("cargar tutores", e)
 
     # =========================
-    # DOCUMENTOS - USAR CAMPOS REALES
-    # =========================
-    @st.cache_data(ttl=300)
-    def get_documentos(_self, tipo: Optional[str] = None) -> pd.DataFrame:
-        """Obtiene documentos según el rol y tipo opcional."""
-        try:
-            query = _self.supabase.table("documentos").select("*")
-            query = _self._apply_empresa_filter(query, "documentos")
-            
-            if tipo:
-                query = query.eq("tipo", tipo)
-            
-            res = query.order("created_at", desc=True).execute()
-            return pd.DataFrame(res.data or [])
-        except Exception as e:
-            return _self._handle_query_error("cargar documentos", e)
-
-    @st.cache_data(ttl=300)
-    def get_documentos_completos(_self) -> pd.DataFrame:
-        """Obtiene documentos con información de grupo."""
-        try:
-            query = _self.supabase.table("documentos").select("""
-                id, tipo, archivo_path, fecha_subida, created_at, empresa_id,
-                grupo:grupos(id, codigo_grupo),
-                accion_formativa:acciones_formativas(id, nombre)
-            """)
-            query = _self._apply_empresa_filter(query, "documentos")
-            
-            res = query.order("created_at", desc=True).execute()
-            df = pd.DataFrame(res.data or [])
-            
-            # Aplanar relaciones
-            if not df.empty:
-                if "grupo" in df.columns:
-                    df["grupo_codigo"] = df["grupo"].apply(
-                        lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
-                    )
-                
-                if "accion_formativa" in df.columns:
-                    df["accion_nombre"] = df["accion_formativa"].apply(
-                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                    )
-            
-            return df
-        except Exception as e:
-            return _self._handle_query_error("cargar documentos", e)
-
-    # =========================
-    # BÚSQUEDAS OPTIMIZADAS - MANTENER PARA COMPATIBILIDAD
-    # =========================
-    def search_participantes(_self, search_term: str) -> pd.DataFrame:
-        """Búsqueda optimizada de participantes."""
-        if not search_term:
-            return _self.get_participantes_completos()
+# DOCUMENTOS - USAR CAMPOS REALES
+# =========================
+@st.cache_data(ttl=300)
+def get_documentos(_self, tipo: Optional[str] = None) -> pd.DataFrame:
+    """Obtiene documentos según el rol y tipo opcional."""
+    try:
+        query = _self.supabase.table("documentos").select("*")
+        query = _self._apply_empresa_filter(query, "documentos")
         
+        if tipo:
+            query = query.eq("tipo", tipo)
+        
+        res = query.order("created_at", desc=True).execute()
+        return pd.DataFrame(res.data or [])
+    except Exception as e:
+        return _self._handle_query_error("cargar documentos", e)
+
+
+@st.cache_data(ttl=300)
+def get_documentos_completos(_self) -> pd.DataFrame:
+    """Obtiene documentos con información de grupo."""
+    try:
+        query = _self.supabase.table("documentos").select("""
+            id, tipo, archivo_path, fecha_subida, created_at, empresa_id,
+            grupo:grupos(id, codigo_grupo),
+            accion_formativa:acciones_formativas(id, nombre)
+        """)
+        query = _self._apply_empresa_filter(query, "documentos")
+        
+        res = query.order("created_at", desc=True).execute()
+        df = pd.DataFrame(res.data or [])
+        
+        # Aplanar relaciones
+        if not df.empty:
+            if "grupo" in df.columns:
+                df["grupo_codigo"] = df["grupo"].apply(
+                    lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
+                )
+            
+            if "accion_formativa" in df.columns:
+                df["accion_nombre"] = df["accion_formativa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+        
+        return df
+    except Exception as e:
+        return _self._handle_query_error("cargar documentos", e)
+
+
+# =========================
+# BÚSQUEDAS OPTIMIZADAS - MANTENER PARA COMPATIBILIDAD
+# =========================
+def search_participantes(_self, search_term: str) -> pd.DataFrame:
+    """Búsqueda optimizada de participantes."""
+    if not search_term:
+        return _self.get_participantes_completos()
+    
+    try:
         try:
-            try:
-                res = _self.supabase.rpc('search_usuarios', {'search_term': search_term}).execute()
-                return pd.DataFrame(res.data or [])
-            except Exception:
-                pass
-            
-            df = _self.get_participantes_completos()
-            if df.empty:
-                return df
-            
-            search_lower = search_term.lower()
-            mask = (
-                df["nombre"].str.lower().str.contains(search_lower, na=False) |
-                df["apellidos"].str.lower().str.contains(search_lower, na=False) |
-                df["email"].str.lower().str.contains(search_lower, na=False) |
-                df["nif"].str.lower().str.contains(search_lower, na=False)
-            )
-            return df[mask]
-        except Exception as e:
-            return _self._handle_query_error("buscar participantes", e)
+            res = _self.supabase.rpc('search_usuarios', {'search_term': search_term}).execute()
+            return pd.DataFrame(res.data or [])
+        except Exception:
+            pass
+        
+        df = _self.get_participantes_completos()
+        if df.empty:
+            return df
+        
+        search_lower = search_term.lower()
+        mask = (
+            df["nombre"].str.lower().str.contains(search_lower, na=False) |
+            df["apellidos"].str.lower().str.contains(search_lower, na=False) |
+            df["email"].str.lower().str.contains(search_lower, na=False) |
+            df["nif"].str.lower().str.contains(search_lower, na=False)
+        )
+        return df[mask]
+    except Exception as e:
+        return _self._handle_query_error("buscar participantes", e)
 
-    # =========================
-    # VALIDACIÓN DE PERMISOS
-    # =========================
-    def can_access_empresa_data(_self, empresa_id: str) -> bool:
-        """Verifica si el usuario puede acceder a datos de una empresa."""
-        if _self.rol == "admin":
-            return True
-        if _self.rol == "gestor":
-            return empresa_id == _self.empresa_id
-        return False
 
-    def can_modify_data(_self) -> bool:
-        """Verifica si el usuario puede modificar datos."""
-        return _self.rol in ["admin", "gestor"]
+# =========================
+# VALIDACIÓN DE PERMISOS
+# =========================
+def can_access_empresa_data(_self, empresa_id: str) -> bool:
+    """Verifica si el usuario puede acceder a datos de una empresa."""
+    if _self.rol == "admin":
+        return True
+    if _self.rol == "gestor":
+        return empresa_id == _self.empresa_id
+    return False
 
-    def can_create_users(_self) -> bool:
-        """Verifica si el usuario puede crear usuarios."""
-        return _self.rol == "admin"
+
+def can_modify_data(_self) -> bool:
+    """Verifica si el usuario puede modificar datos."""
+    return _self.rol in ["admin", "gestor"]
+
+
+def can_create_users(_self) -> bool:
+    """Verifica si el usuario puede crear usuarios."""
+    return _self.rol == "admin"
 
 
 # =========================
