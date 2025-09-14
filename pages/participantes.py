@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from io import BytesIO
 from utils import validar_dni_cif, export_csv, get_ajustes_app
 from services.data_service import get_data_service
@@ -116,10 +116,10 @@ def main(supabase, session_state):
         df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id_filter]
 
     # =========================
-    # Funciones CRUD
+    # Funciones CRUD CORREGIDAS
     # =========================
     def guardar_participante(participante_id, datos_editados):
-        """Guarda cambios en un participante."""
+        """Guarda cambios en un participante - CORREGIDO."""
         try:
             # Validaciones básicas
             if not datos_editados.get("email"):
@@ -148,18 +148,41 @@ def main(supabase, session_state):
             if session_state.role == "gestor":
                 datos_editados["empresa_id"] = empresa_id
             
+            # CORRECCIÓN JSON: Convertir fecha a string ISO si es date object
+            if "fecha_nacimiento" in datos_editados:
+                fecha = datos_editados["fecha_nacimiento"]
+                if hasattr(fecha, 'isoformat'):
+                    datos_editados["fecha_nacimiento"] = fecha.isoformat()
+                elif fecha:
+                    datos_editados["fecha_nacimiento"] = str(fecha)
+            
+            # CORRECCIÓN JSON: Limpiar valores None y vacíos problemáticos
+            datos_limpios = {}
+            for key, value in datos_editados.items():
+                if value is not None and value != "":
+                    # Convertir datetime objects a string
+                    if hasattr(value, 'isoformat'):
+                        datos_limpios[key] = value.isoformat()
+                    else:
+                        datos_limpios[key] = value
+            
+            # Actualizar timestamp
+            datos_limpios["updated_at"] = datetime.utcnow().isoformat()
+            
             # Actualizar en base de datos
-            datos_editados["updated_at"] = datetime.utcnow().isoformat()
-            supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+            supabase.table("participantes").update(datos_limpios).eq("id", participante_id).execute()
             
             st.success("✅ Participante actualizado correctamente.")
             st.rerun()
             
         except Exception as e:
             st.error(f"❌ Error al guardar participante: {e}")
+            # Debug info para desarrollo
+            if st.session_state.get("debug_mode"):
+                st.error(f"Datos enviados: {list(datos_editados.keys()) if 'datos_editados' in locals() else 'N/A'}")
 
     def crear_participante(datos_nuevos):
-        """Crea un nuevo participante.""" 
+        """Crea un nuevo participante - CORREGIDO.""" 
         try:
             # Validaciones
             if not datos_nuevos.get("email") or not datos_nuevos.get("nombre") or not datos_nuevos.get("apellidos"):
@@ -192,9 +215,27 @@ def main(supabase, session_state):
             if session_state.role == "gestor":
                 datos_nuevos["empresa_id"] = empresa_id
 
-            # Limpiar campos temporales
-            datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                             if not k.endswith("_sel") and k != "contraseña" and v}
+            # CORRECCIÓN JSON: Procesar fecha de nacimiento
+            if "fecha_nacimiento" in datos_nuevos:
+                fecha = datos_nuevos["fecha_nacimiento"]
+                if hasattr(fecha, 'isoformat'):
+                    datos_nuevos["fecha_nacimiento"] = fecha.isoformat()
+                elif fecha:
+                    datos_nuevos["fecha_nacimiento"] = str(fecha)
+
+            # CORRECCIÓN JSON: Limpiar campos temporales y procesar valores
+            datos_limpios = {}
+            for key, value in datos_nuevos.items():
+                # Saltar campos temporales
+                if key.endswith("_sel") or key == "contraseña":
+                    continue
+                # Solo incluir valores no vacíos
+                if value is not None and value != "":
+                    # Convertir datetime objects a string
+                    if hasattr(value, 'isoformat'):
+                        datos_limpios[key] = value.isoformat()
+                    else:
+                        datos_limpios[key] = value
             
             # Añadir timestamps
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
@@ -211,6 +252,9 @@ def main(supabase, session_state):
                 
         except Exception as e:
             st.error(f"❌ Error al crear participante: {e}")
+            # Debug info para desarrollo
+            if st.session_state.get("debug_mode"):
+                st.error(f"Datos procesados: {list(datos_limpios.keys()) if 'datos_limpios' in locals() else 'N/A'}")
 
     def eliminar_participante(participante_id):
         """Elimina un participante.""" 
@@ -273,21 +317,21 @@ def main(supabase, session_state):
     # Campos password (debe ser lista)
     campos_password = []
 
-    # Campos de ayuda
+    # Campos de ayuda CORREGIDOS
     campos_help = {
         "nombre": "Nombre del participante (obligatorio)",
         "apellidos": "Apellidos del participante (obligatorio)",
         "email": "Email único del participante (obligatorio)",
-        "nif": "NIF del participante",
+        "nif": "NIF/DNI del participante (opcional)",
         "telefono": "Número de teléfono de contacto",
-        "fecha_nacimiento": "Fecha de nacimiento del participante",
+        "fecha_nacimiento": "Fecha de nacimiento (entre 1920 y 2010)",
         "sexo": "Sexo del participante (M/F)",
         "grupo_sel": "Grupo al que pertenece el participante"
     }
 
     # Solo añadir help de empresa para admin
     if session_state.role == "admin":
-        campos_help["empresa_sel"] = "Empresa del participante (solo admin)"
+        campos_help["empresa_sel"] = "Empresa del participante"
 
     # Campos obligatorios
     campos_obligatorios = ["nombre", "apellidos", "email"]
@@ -306,26 +350,33 @@ def main(supabase, session_state):
         (session_state.role == "gestor" and empresa_id)
     )
 
-    # Preparar df_display para listado_con_ficha
-    if df_filtered.empty:
-        df_display = pd.DataFrame(columns=[
-            "id", "nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo",
-            "empresa_nombre"
-        ])
-    else:
+    # Preparar df_display CORREGIDO
+    if not df_filtered.empty:
         df_display = df_filtered.copy()
-        # Asegurar que las columnas de selección existan
+        
+        # Convertir valores problemáticos
+        for col in df_display.columns:
+            if df_display[col].dtype == 'object':
+                # Convertir None a string vacío para evitar problemas JSON
+                df_display[col] = df_display[col].fillna("")
+        
+        # Campos de selección
         if "grupo_codigo" in df_display.columns:
-            df_display["grupo_sel"] = df_display["grupo_codigo"]
+            df_display["grupo_sel"] = df_display["grupo_codigo"].fillna("")
         else:
             df_display["grupo_sel"] = ""
             
         # Solo admin necesita empresa_sel
         if session_state.role == "admin":
             if "empresa_nombre" in df_display.columns:
-                df_display["empresa_sel"] = df_display["empresa_nombre"]
+                df_display["empresa_sel"] = df_display["empresa_nombre"].fillna("")
             else:
                 df_display["empresa_sel"] = ""
+    else:
+        df_display = pd.DataFrame(columns=[
+            "id", "nombre", "apellidos", "email", "nif", "telefono", "grupo_codigo",
+            "empresa_nombre"
+        ])
 
     # Columnas visibles según rol
     columnas_base = ["nombre", "apellidos", "email", "nif", "telefono"]
@@ -427,7 +478,7 @@ def main(supabase, session_state):
                             try:
                                 progress_bar.progress((i + 1) / len(df_import))
                                 
-                                # Preparar datos
+                                # Preparar datos con conversión de fecha
                                 datos_participante = {
                                     "nombre": row.get("nombre"),
                                     "apellidos": row.get("apellidos"),
@@ -437,6 +488,17 @@ def main(supabase, session_state):
                                     "created_at": datetime.utcnow().isoformat(),
                                     "updated_at": datetime.utcnow().isoformat()
                                 }
+                                
+                                # Procesar fecha de nacimiento si existe
+                                if row.get("fecha_nacimiento"):
+                                    try:
+                                        if isinstance(row["fecha_nacimiento"], str):
+                                            fecha_obj = pd.to_datetime(row["fecha_nacimiento"]).date()
+                                        else:
+                                            fecha_obj = row["fecha_nacimiento"]
+                                        datos_participante["fecha_nacimiento"] = fecha_obj.isoformat() if hasattr(fecha_obj, 'isoformat') else str(fecha_obj)
+                                    except:
+                                        pass  # Ignorar fecha inválida
                                 
                                 # Asignar empresa y grupo
                                 if session_state.role == "admin":
@@ -481,4 +543,4 @@ def main(supabase, session_state):
                     st.error(f"❌ Error al procesar archivo: {e}")
 
     st.divider()
-    st.caption("💡 Los participantes son los alumnos que realizan la formación en los grupos.")
+    st.caption("Los participantes son los alumnos que realizan la formacion en los grupos.")
