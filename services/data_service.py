@@ -60,6 +60,7 @@ class DataService:
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
 
+    # ✅ MÉTODO AÑADIDO ESPECÍFICAMENTE PARA SOLUCIONAR EL PROBLEMA DEL CAMPO EMPRESA READONLY
     @st.cache_data(ttl=300)
     def get_participantes_para_formulario(_self, rol: str, empresa_id_gestor: str = None) -> pd.DataFrame:
         """Obtiene participantes preparados específicamente para el formulario según el rol."""
