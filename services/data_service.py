@@ -678,7 +678,6 @@ class DataService:
                     )
                 
                 if "accion_formativa" in df.columns:
-                if "accion_formativa" in df.columns:
                     df["accion_nombre"] = df["accion_formativa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
