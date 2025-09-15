@@ -406,9 +406,6 @@ class DataService:
         df = _self.get_acciones_formativas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
-    # COPIAR ESTE BLOQUE DENTRO DE LA CLASE DataService
-# (con 4 espacios de indentación desde el margen izquierdo)
-
     # =========================
     # GRUPOS - MÉTODOS PRINCIPALES
     # =========================
