@@ -471,64 +471,62 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 placeholder="Introduce la contraseña..."
             )
      # Campo fecha - VERSIÓN CORREGIDA
-elif 'fecha' in campo.lower():
-    import hashlib
-    from datetime import date
-    
-    try:
-        # Procesar valor de fecha
-        if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
-            fecha_val = pd.to_datetime(valor_actual).date()
-        elif hasattr(valor_actual, 'date'):
-            fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
-        else:
-            fecha_val = None
+    elif 'fecha' in campo.lower():
+       
+        try:
+            # Procesar valor de fecha
+            if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
+                fecha_val = pd.to_datetime(valor_actual).date()
+            elif hasattr(valor_actual, 'date'):
+                fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
+            else:
+                fecha_val = None
         
-        # GENERAR KEY ÚNICA BASADA EN CONTEXTO
-        context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:8]
-        unique_key = f"{prefix}_{campo}_{context_hash}"
+            # GENERAR KEY ÚNICA BASADA EN CONTEXTO
+            context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:8]
+            unique_key = f"{prefix}_{campo}_{context_hash}"
         
-        # Configurar límites de fecha
-        min_date = date(1920, 1, 1)
+            # Configurar límites de fecha
+            min_date = date(1920, 1, 1)
         
-        if 'nacimiento' in campo.lower():
-            # Para fechas de nacimiento - máximo 18 años atrás
-            año_actual = date.today().year
-            mes_actual = date.today().month
-            dia_actual = date.today().day
-            max_date = date(año_actual - 18, mes_actual, dia_actual)
+            if 'nacimiento' in campo.lower():
+                # Para fechas de nacimiento - máximo 18 años atrás
+                año_actual = date.today().year
+                mes_actual = date.today().month
+                dia_actual = date.today().day
+                max_date = date(año_actual - 18, mes_actual, dia_actual)
             
-            resultado = st.date_input(
-                label, 
-                value=fecha_val, 
-                help=help_text, 
-                key=unique_key,  # KEY ÚNICA
-                min_value=min_date,
-                max_value=max_date
-            )
-        else:
-            # Para otras fechas - máximo fecha actual
-            resultado = st.date_input(
-                label, 
-                value=fecha_val, 
-                help=help_text, 
-                key=unique_key,  # KEY ÚNICA
-                min_value=min_date,
-                max_value=date.today()
-            )
+                resultado = st.date_input(
+                    label, 
+                    value=fecha_val, 
+                    help=help_text, 
+                    key=unique_key,  # KEY ÚNICA
+                    min_value=min_date,
+                    max_value=max_date
+                )
+            else:
+                # Para otras fechas - máximo fecha actual
+                resultado = st.date_input(
+                    label, 
+                    value=fecha_val, 
+                    help=help_text, 
+                    key=unique_key,  # KEY ÚNICA
+                    min_value=min_date,
+                    max_value=date.today()
+                )
             
-    except Exception as e:
-        # Fallback con key única también
-        fallback_hash = hashlib.md5(f"{prefix}_{campo}_error_{str(e)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:6]
-        unique_key = f"{prefix}_{campo}_fallback_{fallback_hash}"
+        except Exception as e:
+            # Fallback con key única también
+            fallback_hash = hashlib.md5(f"{prefix}_{campo}_error_{str(e)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:6]
+            unique_key = f"{prefix}_{campo}_fallback_{fallback_hash}"
         
-        resultado = st.text_input(
-            label, 
-            value=str(valor_actual) if valor_actual else "", 
-            help=help_text, 
-            key=unique_key,
-            placeholder="dd/mm/yyyy"
-        )    
+            resultado = st.text_input(
+                label, 
+                value=str(valor_actual) if valor_actual else "", 
+                help=help_text, 
+                key=unique_key,
+                placeholder="dd/mm/yyyy"
+            )    
         
         # Campo numérico
         elif isinstance(valor_actual, (int, float)) and not isinstance(valor_actual, bool):
