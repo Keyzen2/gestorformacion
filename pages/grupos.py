@@ -285,7 +285,7 @@ def mostrar_tab_tutores(supabase, session_state, data_service, df_grupos):
         st.info("ℹ️ No hay grupos creados todavía.")
         return
 
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist())
+    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_tutores")
     if not grupo_sel:
         return
     grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
@@ -331,7 +331,7 @@ def mostrar_tab_empresas(supabase, session_state, data_service, df_grupos, empre
         st.info("ℹ️ No hay grupos creados todavía.")
         return
 
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist())
+    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_empresas")
     if not grupo_sel:
         return
     grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
@@ -378,7 +378,7 @@ def mostrar_tab_participantes(supabase, session_state, data_service, df_grupos):
         st.info("ℹ️ No hay grupos creados todavía.")
         return
 
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist())
+    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_participantes")
     if not grupo_sel:
         return
     grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
@@ -424,7 +424,7 @@ def mostrar_tab_costes_fundae(supabase, session_state, data_service, df_grupos):
         st.info("ℹ️ No hay grupos creados todavía.")
         return
 
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist())
+    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_costes")
     if not grupo_sel:
         return
     grupo = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]
