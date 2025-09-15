@@ -407,246 +407,263 @@ class DataService:
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
     # =========================
-    # GRUPOS - USAR CAMPOS REALES
-    # =========================
-    @st.cache_data(ttl=300)
-    def get_grupos_completos(_self) -> pd.DataFrame:
-        """Obtiene grupos con información de acción formativa - CAMPOS REALES."""
-        try:
-            query = _self.supabase.table("grupos").select("""
-                id, codigo_grupo, fecha_inicio, fecha_fin, fecha_fin_prevista,
-                aula_virtual, horario, localidad, provincia, cp,
-                n_participantes_previstos, n_participantes_finalizados,
-                n_aptos, n_no_aptos, observaciones, empresa_id, created_at,
-                accion_formativa:acciones_formativas(id, nombre, modalidad, num_horas)
-            """)
-            query = _self._apply_empresa_filter(query, "grupos")
-            
-            res = query.order("fecha_inicio", desc=True).execute()
-            df = pd.DataFrame(res.data or [])
-            
-            if not df.empty and "accion_formativa" in df.columns:
-                df["accion_nombre"] = df["accion_formativa"].apply(
-                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                )
-                df["accion_modalidad"] = df["accion_formativa"].apply(
-                    lambda x: x.get("modalidad") if isinstance(x, dict) else ""
-                )
-                df["accion_horas"] = df["accion_formativa"].apply(
-                    lambda x: x.get("num_horas") if isinstance(x, dict) else 0
-                )
-            
-            return df
-        except Exception as e:
-            return _self._handle_query_error("cargar grupos", e)
+# GRUPOS - USAR CAMPOS REALES
+# =========================
 
-    def get_grupos_dict(_self) -> Dict[str, str]:
-        """Obtiene diccionario codigo_grupo -> id de grupos."""
-        df = _self.get_grupos_completos()
-        return {row["codigo_grupo"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
-        
-    def get_tutores_por_empresa(_self, empresa_id: str = None) -> pd.DataFrame:
-        """Obtiene tutores filtrados por empresa."""
-        try:
-            query = _self.supabase.table("tutores").select("""
-                id, nombre, apellidos, email, telefono, nif, tipo_tutor,
-                direccion, ciudad, provincia, codigo_postal, cv_url, 
-                especialidad, created_at, empresa_id,
-                empresa:empresas(id, nombre)
-            """)
-        
+@st.cache_data(ttl=300)
+def get_grupos_completos(_self) -> pd.DataFrame:
+    """Obtiene grupos con información de acción formativa - CAMPOS REALES."""
+    try:
+        query = _self.supabase.table("grupos").select("""
+            id, codigo_grupo, fecha_inicio, fecha_fin, fecha_fin_prevista,
+            aula_virtual, horario, localidad, provincia, cp,
+            n_participantes_previstos, n_participantes_finalizados,
+            n_aptos, n_no_aptos, observaciones, empresa_id, created_at,
+            accion_formativa:acciones_formativas(id, nombre, modalidad, num_horas)
+        """)
+        query = _self._apply_empresa_filter(query, "grupos")
+
+        res = query.order("fecha_inicio", desc=True).execute()
+        df = pd.DataFrame(res.data or [])
+
+        if not df.empty and "accion_formativa" in df.columns:
+            df["accion_nombre"] = df["accion_formativa"].apply(
+                lambda x: x.get("nombre") if isinstance(x, dict) else ""
+            )
+            df["accion_modalidad"] = df["accion_formativa"].apply(
+                lambda x: x.get("modalidad") if isinstance(x, dict) else ""
+            )
+            df["accion_horas"] = df["accion_formativa"].apply(
+                lambda x: x.get("num_horas") if isinstance(x, dict) else 0
+            )
+
+        return df
+    except Exception as e:
+        return _self._handle_query_error("cargar grupos", e)
+
+
+def get_grupos_dict(_self) -> Dict[str, str]:
+    """Obtiene diccionario codigo_grupo -> id de grupos."""
+    df = _self.get_grupos_completos()
+    return {row["codigo_grupo"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+
+
+def get_tutores_por_empresa(_self, empresa_id: str = None) -> pd.DataFrame:
+    """Obtiene tutores filtrados por empresa."""
+    try:
+        query = _self.supabase.table("tutores").select("""
+            id, nombre, apellidos, email, telefono, nif, tipo_tutor,
+            direccion, ciudad, provincia, codigo_postal, cv_url, 
+            especialidad, created_at, empresa_id,
+            empresa:empresas(id, nombre)
+        """)
+
         # Aplicar filtro de empresa
-            if _self.rol == "gestor" and _self.empresa_id:
-                query = query.eq("empresa_id", _self.empresa_id)
-            elif empresa_id:
-                query = query.eq("empresa_id", empresa_id)
-        
-            res = query.order("nombre").execute()
-            df = pd.DataFrame(res.data or [])
-        
+        if _self.rol == "gestor" and _self.empresa_id:
+            query = query.eq("empresa_id", _self.empresa_id)
+        elif empresa_id:
+            query = query.eq("empresa_id", empresa_id)
+
+        res = query.order("nombre").execute()
+        df = pd.DataFrame(res.data or [])
+
         # Aplanar empresa
-            if not df.empty and "empresa" in df.columns:
-                df["empresa_nombre"] = df["empresa"].apply(
-                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                )
-        
-            return df
-        except Exception as e:
-            return _self._handle_query_error("cargar tutores por empresa", e)
+        if not df.empty and "empresa" in df.columns:
+            df["empresa_nombre"] = df["empresa"].apply(
+                lambda x: x.get("nombre") if isinstance(x, dict) else ""
+            )
 
-     def create_grupo_coste(_self, datos_coste: Dict[str, Any]) -> bool:
-            """Crea registro de costes para un grupo."""
-            try:
-                _self.supabase.table("grupo_costes").insert(datos_coste).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al crear costes de grupo: {e}")
-                return False
+        return df
+    except Exception as e:
+        return _self._handle_query_error("cargar tutores por empresa", e)
 
-    def update_grupo_coste(_self, grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
-            """Actualiza costes de un grupo."""
-            try:
-                _self.supabase.table("grupo_costes").update(datos_coste).eq("grupo_id", grupo_id).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al actualizar costes de grupo: {e}")
-                return False
-            
-    @st.cache_data(ttl=300, show_spinner="Cargando costes FUNDAE...")
-    def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
-        """Obtiene costes de un grupo específico."""
-            try:
-                res = _self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
-                return res.data[0] if res.data else {}
-            except Exception as e:
-                st.error(f"❌ Error al cargar costes de grupo: {e}")
-                return {}
-    
-    @st.cache_data(ttl=300, show_spinner="Cargando bonificaciones...")
-    def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene bonificaciones de un grupo."""
-            try:
-                res = _self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
-                return pd.DataFrame(res.data or [])
-            except Exception as e:
-                return _self._handle_query_error("cargar bonificaciones de grupo", e)
 
-    def create_grupo_bonificacion(_self, datos_bonif: Dict[str, Any]) -> bool:
-        """Crea una bonificación mensual para un grupo."""
-            try:
-                _self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al crear bonificación: {e}")
-                return False
+def create_grupo_coste(_self, datos_coste: Dict[str, Any]) -> bool:
+    """Crea registro de costes para un grupo."""
+    try:
+        _self.supabase.table("grupo_costes").insert(datos_coste).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al crear costes de grupo: {e}")
+        return False
 
-    def delete_grupo_bonificacion(_self, bonificacion_id: str) -> bool:
-        """Elimina una bonificación."""
-            try:
-                _self.supabase.table("grupo_bonificaciones").delete().eq("id", bonificacion_id).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al eliminar bonificación: {e}")
-                return False
-   
-    @st.cache_data(ttl=600, show_spinner="Cargando empresas de grupo...")
-    def get_empresas_grupo(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene empresas asignadas a un grupo."""
-            try:
-                 res = _self.supabase.table("empresas_grupos").select("""
-                id, grupo_id, empresa_id, created_at,
-                empresa:empresas(id, nombre, cif)
-                """).eq("grupo_id", grupo_id).execute()
-        
-                df = pd.DataFrame(res.data or [])
-                if not df.empty and "empresa" in df.columns:
-                    df["empresa_nombre"] = df["empresa"].apply(
-                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                    )
-                return df
-            except Exception as e:
-                return _self._handle_query_error("cargar empresas de grupo", e)
 
-    def create_empresa_grupo(_self, grupo_id: str, empresa_id: str) -> bool:
-        """Asigna una empresa a un grupo."""
-            try:
-                _self.supabase.table("empresas_grupos").insert({
-                    "grupo_id": grupo_id,
-                    "empresa_id": empresa_id,
-                    "created_at": datetime.utcnow().isoformat()
-                }).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al asignar empresa a grupo: {e}")
-                return False
+def update_grupo_coste(_self, grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
+    """Actualiza costes de un grupo."""
+    try:
+        _self.supabase.table("grupo_costes").update(datos_coste).eq("grupo_id", grupo_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al actualizar costes de grupo: {e}")
+        return False
 
-    def delete_empresa_grupo(_self, relacion_id: str) -> bool:
-        """Elimina la relación empresa-grupo."""
-            try:
-                _self.supabase.table("empresas_grupos").delete().eq("id", relacion_id).execute()
-                return True
-            except Exception as e:
-                st.error(f"❌ Error al eliminar empresa de grupo: {e}")
-                return False
 
-    @st.cache_data(ttl=300, show_spinner="Cargando tutores de grupo...")
-    def get_tutores_grupo(self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene tutores asignados a un grupo específico."""
-        try:
-            res = self.supabase.table("tutores_grupos").select("""
-                id, grupo_id, tutor_id, created_at,
-                tutor:tutores(id, nombre, apellidos, email, especialidad)
-            """).eq("grupo_id", grupo_id).execute()
-        
-            df = pd.DataFrame(res.data or [])
-            if not df.empty and "tutor" in df.columns:
-                df["tutor_nombre"] = df["tutor"].apply(
-                    lambda x: f"{x.get('nombre', '')} {x.get('apellidos', '')}" if isinstance(x, dict) else ""
-                )
-            return df
-        except Exception as e:
-            return self._handle_query_error("cargar tutores de grupo", e)
+@st.cache_data(ttl=300, show_spinner="Cargando costes FUNDAE...")
+def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
+    """Obtiene costes de un grupo específico."""
+    try:
+        res = _self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
+        return res.data[0] if res.data else {}
+    except Exception as e:
+        st.error(f"❌ Error al cargar costes de grupo: {e}")
+        return {}
 
-    def create_tutor_grupo(self, grupo_id: str, tutor_id: str) -> bool:
-        """Asigna un tutor a un grupo."""
-        try:
-            self.supabase.table("tutores_grupos").insert({
-                "grupo_id": grupo_id,
-                "tutor_id": tutor_id,
-                "created_at": datetime.utcnow().isoformat()
-            }).execute()
-            return True
-        except Exception as e:
-            st.error(f"❌ Error al asignar tutor a grupo: {e}")
-            return False
 
-    def delete_tutor_grupo(self, relacion_id: str) -> bool:
-        """Elimina la relación tutor-grupo."""
-        try:
-            self.supabase.table("tutores_grupos").delete().eq("id", relacion_id).execute()
-            return True
-        except Exception as e:
-            st.error(f"❌ Error al eliminar tutor de grupo: {e}")
-            return False
+@st.cache_data(ttl=300, show_spinner="Cargando bonificaciones...")
+def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene bonificaciones de un grupo."""
+    try:
+        res = _self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
+        return pd.DataFrame(res.data or [])
+    except Exception as e:
+        return _self._handle_query_error("cargar bonificaciones de grupo", e)
 
-    def calcular_limite_fundae(self, modalidad: str, horas: int, participantes: int) -> tuple:
-        """Calcula límite máximo FUNDAE según modalidad."""
-        try:
-            # FUNDAE: Presencial=13€/hora, Teleformación=7.5€/hora
-            tarifa = 7.5 if modalidad in ["Teleformación", "TELEFORMACION"] else 13.0
-            limite = tarifa * horas * participantes
-            return limite, tarifa
-        except:
-            return 0, 0
 
-    def limpiar_cache_grupos(self):
-        """Limpia cache relacionado con grupos - FUNCIÓN CRÍTICA."""
-        try:
-            # Limpiar todos los caches relacionados con grupos
-            if hasattr(self, 'get_grupos_completos'):
-                self.get_grupos_completos.clear()
-            if hasattr(self, 'get_participantes_completos'):
-                self.get_participantes_completos.clear()
-            if hasattr(self, 'get_tutores_completos'):
-                self.get_tutores_completos.clear()
-            if hasattr(self, 'get_acciones_formativas'):
-                self.get_acciones_formativas.clear()
-            if hasattr(self, 'get_empresas'):
-                self.get_empresas.clear()
-            if hasattr(self, 'get_empresas_con_modulos'):
-                self.get_empresas_con_modulos.clear()
-            # Caches específicos de grupos
-            if hasattr(self, 'get_grupo_costes'):
-                self.get_grupo_costes.clear()
-            if hasattr(self, 'get_grupo_bonificaciones'):
-                self.get_grupo_bonificaciones.clear()
-            if hasattr(self, 'get_tutores_grupo'):
-                self.get_tutores_grupo.clear()
-            if hasattr(self, 'get_empresas_grupo'):
-                self.get_empresas_grupo.clear()
-        except Exception as e:
-            # Fallar silenciosamente - el cache se limpiará eventualmente
-            pass
+def create_grupo_bonificacion(_self, datos_bonif: Dict[str, Any]) -> bool:
+    """Crea una bonificación mensual para un grupo."""
+    try:
+        _self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al crear bonificación: {e}")
+        return False
+
+
+def delete_grupo_bonificacion(_self, bonificacion_id: str) -> bool:
+    """Elimina una bonificación."""
+    try:
+        _self.supabase.table("grupo_bonificaciones").delete().eq("id", bonificacion_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al eliminar bonificación: {e}")
+        return False
+
+
+@st.cache_data(ttl=600, show_spinner="Cargando empresas de grupo...")
+def get_empresas_grupo(_self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene empresas asignadas a un grupo."""
+    try:
+        res = _self.supabase.table("empresas_grupos").select("""
+            id, grupo_id, empresa_id, created_at,
+            empresa:empresas(id, nombre, cif)
+        """).eq("grupo_id", grupo_id).execute()
+
+        df = pd.DataFrame(res.data or [])
+        if not df.empty and "empresa" in df.columns:
+            df["empresa_nombre"] = df["empresa"].apply(
+                lambda x: x.get("nombre") if isinstance(x, dict) else ""
+            )
+        return df
+    except Exception as e:
+        return _self._handle_query_error("cargar empresas de grupo", e)
+
+
+def create_empresa_grupo(_self, grupo_id: str, empresa_id: str) -> bool:
+    """Asigna una empresa a un grupo."""
+    try:
+        _self.supabase.table("empresas_grupos").insert({
+            "grupo_id": grupo_id,
+            "empresa_id": empresa_id,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al asignar empresa a grupo: {e}")
+        return False
+
+
+def delete_empresa_grupo(_self, relacion_id: str) -> bool:
+    """Elimina la relación empresa-grupo."""
+    try:
+        _self.supabase.table("empresas_grupos").delete().eq("id", relacion_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al eliminar empresa de grupo: {e}")
+        return False
+
+
+@st.cache_data(ttl=300, show_spinner="Cargando tutores de grupo...")
+def get_tutores_grupo(self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene tutores asignados a un grupo específico."""
+    try:
+        res = self.supabase.table("tutores_grupos").select("""
+            id, grupo_id, tutor_id, created_at,
+            tutor:tutores(id, nombre, apellidos, email, especialidad)
+        """).eq("grupo_id", grupo_id).execute()
+
+        df = pd.DataFrame(res.data or [])
+        if not df.empty and "tutor" in df.columns:
+            df["tutor_nombre"] = df["tutor"].apply(
+                lambda x: f"{x.get('nombre', '')} {x.get('apellidos', '')}" if isinstance(x, dict) else ""
+            )
+        return df
+    except Exception as e:
+        return self._handle_query_error("cargar tutores de grupo", e)
+
+
+def create_tutor_grupo(self, grupo_id: str, tutor_id: str) -> bool:
+    """Asigna un tutor a un grupo."""
+    try:
+        self.supabase.table("tutores_grupos").insert({
+            "grupo_id": grupo_id,
+            "tutor_id": tutor_id,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al asignar tutor a grupo: {e}")
+        return False
+
+
+def delete_tutor_grupo(self, relacion_id: str) -> bool:
+    """Elimina la relación tutor-grupo."""
+    try:
+        self.supabase.table("tutores_grupos").delete().eq("id", relacion_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al eliminar tutor de grupo: {e}")
+        return False
+
+
+def calcular_limite_fundae(self, modalidad: str, horas: int, participantes: int) -> tuple:
+    """Calcula límite máximo FUNDAE según modalidad."""
+    try:
+        # FUNDAE: Presencial=13€/hora, Teleformación=7.5€/hora
+        tarifa = 7.5 if modalidad in ["Teleformación", "TELEFORMACION"] else 13.0
+        limite = tarifa * horas * participantes
+        return limite, tarifa
+    except:
+        return 0, 0
+
+
+def limpiar_cache_grupos(self):
+    """Limpia cache relacionado con grupos - FUNCIÓN CRÍTICA."""
+    try:
+        # Limpiar todos los caches relacionados con grupos
+        if hasattr(self, 'get_grupos_completos'):
+            self.get_grupos_completos.clear()
+        if hasattr(self, 'get_participantes_completos'):
+            self.get_participantes_completos.clear()
+        if hasattr(self, 'get_tutores_completos'):
+            self.get_tutores_completos.clear()
+        if hasattr(self, 'get_acciones_formativas'):
+            self.get_acciones_formativas.clear()
+        if hasattr(self, 'get_empresas'):
+            self.get_empresas.clear()
+        if hasattr(self, 'get_empresas_con_modulos'):
+            self.get_empresas_con_modulos.clear()
+        # Caches específicos de grupos
+        if hasattr(self, 'get_grupo_costes'):
+            self.get_grupo_costes.clear()
+        if hasattr(self, 'get_grupo_bonificaciones'):
+            self.get_grupo_bonificaciones.clear()
+        if hasattr(self, 'get_tutores_grupo'):
+            self.get_tutores_grupo.clear()
+        if hasattr(self, 'get_empresas_grupo'):
+            self.get_empresas_grupo.clear()
+    except Exception as e:
+        # Fallar silenciosamente - el cache se limpiará eventualmente
+        pass
         
     # =========================
     # USUARIOS
