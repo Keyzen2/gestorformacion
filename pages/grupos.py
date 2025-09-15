@@ -33,9 +33,6 @@ def main(supabase, session_state):
         st.error(f"❌ Error al cargar datos: {e}")
         return
 
-    # Mostrar avisos inteligentes
-    mostrar_avisos_grupos(grupos_service, df_grupos)
-
     # Determinar qué mostrar
     if st.session_state.mostrar_formulario:
         mostrar_formulario_grupo(grupos_service, acciones_dict, empresas_dict, session_state)
@@ -94,6 +91,9 @@ def mostrar_vista_principal(df_grupos, grupos_service, session_state):
     """Muestra la tabla principal de grupos con selector dropdown."""
     st.markdown("### 📊 Grupos Formativos")
 
+     # Mostrar avisos inteligentes
+    mostrar_avisos_grupos(grupos_service, df_grupos)
+    
     if df_grupos.empty:
         st.info("ℹ️ No hay grupos registrados.")
         if st.button("➕ Crear Primer Grupo", type="primary"):
@@ -181,7 +181,6 @@ def mostrar_formulario_grupo(grupos_service, acciones_dict, empresas_dict, sessi
     if st.button("← Volver a la lista"):
         st.session_state.mostrar_formulario = False
         st.session_state.grupo_editando = None
-        st.rerun()
 
     # Título del formulario
     if es_creacion:
