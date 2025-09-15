@@ -1217,7 +1217,6 @@ def mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, gru
             }
             
             try:
-            try:
                 if costes_actuales:
                     # Actualizar existente
                     if grupos_service.update_grupo_coste(grupo_id, datos_costes):
