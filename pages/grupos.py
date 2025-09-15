@@ -1217,21 +1217,25 @@ def mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, gru
             }
             
             try:
-                    if costes_actuales:
-                        # Actualizar existente
-                        if grupos_service.update_grupo_coste(grupo_id, datos_costes):
-                            st.success("✅ Costes actualizados correctamente.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al actualizar costes.")
+            try:
+                if costes_actuales:
+                    # Actualizar existente
+                    if grupos_service.update_grupo_coste(grupo_id, datos_costes):
+                        st.success("✅ Costes actualizados correctamente.")
+                        st.rerun()
                     else:
-                        # Crear nuevo registro
-                        datos_costes["created_at"] = datetime.utcnow().isoformat()
-                        if grupos_service.create_grupo_coste(datos_costes):
-                            st.success("✅ Costes guardados correctamente.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar costes.")
+                        st.error("❌ Error al actualizar costes.")
+                else:
+                    # Crear nuevo registro
+                    datos_costes["created_at"] = datetime.utcnow().isoformat()
+                    if grupos_service.create_grupo_coste(datos_costes):
+                        st.success("✅ Costes guardados correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al guardar costes.")
+                        
+            except Exception as e:
+                st.error(f"❌ Error al guardar costes: {e}")
     
     # === BONIFICACIONES MENSUALES ===
     st.divider()
