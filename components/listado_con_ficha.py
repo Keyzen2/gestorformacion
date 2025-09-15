@@ -349,7 +349,6 @@ def mostrar_formulario_edicion(fila, titulo, on_save, on_delete, id_col,
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_select, campos_textarea, 
                               campos_file, campos_password, campos_help, campos_obligatorios, reactive_fields):
     """Formulario de creación con mejor manejo de errores y validaciones."""
@@ -421,171 +420,176 @@ def mostrar_formulario_creacion(titulo, on_create, campos_dinamicos, campos_sele
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, campos_file,
-                         campos_readonly, campos_password, campos_help, prefix, es_obligatorio=False):
+                           campos_readonly, campos_password, campos_help, prefix, es_obligatorio=False):
     """Crea un campo de formulario con mejor manejo de tipos y validaciones."""
     # Asegurar que campos_help siempre sea un diccionario
     if not isinstance(campos_help, dict):
         campos_help = {}
-    
+
     label = campo.replace('_', ' ').title()
     help_text = campos_help.get(campo, "") if isinstance(campos_help, dict) else ""
-    
+
     # Añadir asterisco si es obligatorio
     if es_obligatorio:
         label = f"{label} *"
         st.markdown(f'<div class="campo-obligatorio">', unsafe_allow_html=True)
-    
+
     resultado = None
-    
+
     try:
         # Campo readonly - MOSTRAR COMO REALMENTE NO EDITABLE
         if campo in campos_readonly:
             st.markdown(f"**{label}:**")
-            # Mostrar valor en texto gris no editable
-            st.markdown(f'<div style="background-color: #f5f5f5; padding: 8px; border-radius: 4px; border: 1px solid #ddd; color: #666;">{str(valor_actual) if valor_actual else "No asignado"}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="background-color: #f5f5f5; padding: 8px; border-radius: 4px; '
+                f'border: 1px solid #ddd; color: #666;">{str(valor_actual) if valor_actual else "No asignado"}</div>',
+                unsafe_allow_html=True
+            )
             if help_text:
                 st.caption(help_text)
-            return valor_actual  # Devolver valor original, no cambios
-        
+            return valor_actual
+
         # Campo select
         if campo in campos_select:
             resultado = crear_campo_select(campo, valor_actual, campos_select, label, help_text, prefix)
-        
+
         # Campo textarea
         elif campo in campos_textarea:
             resultado = crear_campo_textarea(campo, valor_actual, campos_textarea, label, help_text, prefix)
-        
+
         # Campo file
         elif campo in campos_file:
             resultado = crear_campo_file(campo, campos_file, label, help_text, prefix)
-        
+
         # Campo password
         elif campo in campos_password:
             resultado = st.text_input(
-                label, 
-                type="password", 
-                help=help_text, 
+                label,
+                type="password",
+                help=help_text,
                 key=f"{prefix}_{campo}",
                 placeholder="Introduce la contraseña..."
             )
-     # Campo fecha - VERSIÓN CORREGIDA
-    elif 'fecha' in campo.lower():
-       
-        try:
-            # Procesar valor de fecha
-            if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
-                fecha_val = pd.to_datetime(valor_actual).date()
-            elif hasattr(valor_actual, 'date'):
-                fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
-            else:
-                fecha_val = None
-        
-            # GENERAR KEY ÚNICA BASADA EN CONTEXTO
-            context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:8]
-            unique_key = f"{prefix}_{campo}_{context_hash}"
-        
-            # Configurar límites de fecha
-            min_date = date(1920, 1, 1)
-        
-            if 'nacimiento' in campo.lower():
-                # Para fechas de nacimiento - máximo 18 años atrás
-                año_actual = date.today().year
-                mes_actual = date.today().month
-                dia_actual = date.today().day
-                max_date = date(año_actual - 18, mes_actual, dia_actual)
-            
-                resultado = st.date_input(
-                    label, 
-                    value=fecha_val, 
-                    help=help_text, 
-                    key=unique_key,  # KEY ÚNICA
-                    min_value=min_date,
-                    max_value=max_date
+
+        # Campo fecha - VERSIÓN CORREGIDA
+        elif 'fecha' in campo.lower():
+            try:
+                # Procesar valor de fecha
+                if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
+                    fecha_val = pd.to_datetime(valor_actual).date()
+                elif hasattr(valor_actual, 'date'):
+                    fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
+                else:
+                    fecha_val = None
+
+                # GENERAR KEY ÚNICA BASADA EN CONTEXTO
+                context_hash = hashlib.md5(
+                    f"{prefix}_{campo}_{str(valor_actual)}_{pd.Timestamp.now().nanosecond}".encode()
+                ).hexdigest()[:8]
+                unique_key = f"{prefix}_{campo}_{context_hash}"
+
+                # Configurar límites de fecha
+                min_date = date(1920, 1, 1)
+
+                if 'nacimiento' in campo.lower():
+                    # Para fechas de nacimiento - máximo 18 años atrás
+                    año_actual = date.today().year
+                    mes_actual = date.today().month
+                    dia_actual = date.today().day
+                    max_date = date(año_actual - 18, mes_actual, dia_actual)
+
+                    resultado = st.date_input(
+                        label,
+                        value=fecha_val,
+                        help=help_text,
+                        key=unique_key,
+                        min_value=min_date,
+                        max_value=max_date
+                    )
+                else:
+                    # Para otras fechas - máximo fecha actual
+                    resultado = st.date_input(
+                        label,
+                        value=fecha_val,
+                        help=help_text,
+                        key=unique_key,
+                        min_value=min_date,
+                        max_value=date.today()
+                    )
+
+            except Exception as e:
+                # Fallback con key única también
+                fallback_hash = hashlib.md5(
+                    f"{prefix}_{campo}_error_{str(e)}_{pd.Timestamp.now().nanosecond}".encode()
+                ).hexdigest()[:6]
+                unique_key = f"{prefix}_{campo}_fallback_{fallback_hash}"
+
+                resultado = st.text_input(
+                    label,
+                    value=str(valor_actual) if valor_actual else "",
+                    help=help_text,
+                    key=unique_key,
+                    placeholder="dd/mm/yyyy"
                 )
-            else:
-                # Para otras fechas - máximo fecha actual
-                resultado = st.date_input(
-                    label, 
-                    value=fecha_val, 
-                    help=help_text, 
-                    key=unique_key,  # KEY ÚNICA
-                    min_value=min_date,
-                    max_value=date.today()
-                )
-            
-        except Exception as e:
-            # Fallback con key única también
-            fallback_hash = hashlib.md5(f"{prefix}_{campo}_error_{str(e)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:6]
-            unique_key = f"{prefix}_{campo}_fallback_{fallback_hash}"
-        
-            resultado = st.text_input(
-                label, 
-                value=str(valor_actual) if valor_actual else "", 
-                help=help_text, 
-                key=unique_key,
-                placeholder="dd/mm/yyyy"
-            )    
-        
+
         # Campo numérico
         elif isinstance(valor_actual, (int, float)) and not isinstance(valor_actual, bool):
             resultado = crear_campo_numerico(campo, valor_actual, label, help_text, prefix)
-        
+
         # Campo email
         elif 'email' in campo.lower():
             resultado = st.text_input(
-                label, 
-                value=str(valor_actual) if valor_actual else "", 
-                help=help_text, 
+                label,
+                value=str(valor_actual) if valor_actual else "",
+                help=help_text,
                 key=f"{prefix}_{campo}",
                 placeholder="usuario@ejemplo.com"
             )
-        
+
         # Campo teléfono
         elif 'telefono' in campo.lower() or 'phone' in campo.lower():
             resultado = st.text_input(
-                label, 
-                value=str(valor_actual) if valor_actual else "", 
-                help=help_text, 
+                label,
+                value=str(valor_actual) if valor_actual else "",
+                help=help_text,
                 key=f"{prefix}_{campo}",
                 placeholder="123456789"
             )
-        
+
         # Campo URL
         elif 'url' in campo.lower() or 'web' in campo.lower():
             resultado = st.text_input(
-                label, 
-                value=str(valor_actual) if valor_actual else "", 
-                help=help_text, 
+                label,
+                value=str(valor_actual) if valor_actual else "",
+                help=help_text,
                 key=f"{prefix}_{campo}",
                 placeholder="https://ejemplo.com"
             )
-        
+
         # Campo texto por defecto
         else:
             resultado = st.text_input(
-                label, 
-                value=str(valor_actual) if valor_actual else "", 
-                help=help_text, 
+                label,
+                value=str(valor_actual) if valor_actual else "",
+                help=help_text,
                 key=f"{prefix}_{campo}"
             )
-    
+
     except Exception as e:
         st.error(f"❌ Error al crear campo {campo}: {e}")
         # Fallback a input de texto simple
         resultado = st.text_input(
-            label, 
-            value=str(valor_actual) if valor_actual else "", 
+            label,
+            value=str(valor_actual) if valor_actual else "",
             key=f"{prefix}_{campo}_fallback"
         )
-    
+
     finally:
         if es_obligatorio:
             st.markdown('</div>', unsafe_allow_html=True)
-    
-    return resultado
 
+    return resultado
 
 # Funciones auxiliares
 def mostrar_info_registro(fila, id_col):
