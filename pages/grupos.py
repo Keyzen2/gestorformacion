@@ -1,4 +1,338 @@
-else:
+import streamlit as st
+import pandas as pd
+from datetime import datetime, time
+from utils import export_csv, validar_dni_cif, get_ajustes_app
+from components.listado_con_ficha import listado_con_ficha
+from typing import Dict, Any, Tuple, List
+from services.grupos_service import get_grupos_service
+
+# =========================
+# FUNCIÓN PRINCIPAL
+# =========================
+
+def main(supabase, session_state):
+    st.title("👥 Gestión de Grupos")
+    st.caption("Creación y administración de grupos formativos según estándares FUNDAE.")
+
+    if session_state.role not in ["admin", "gestor"]:
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
+        return
+
+    # Inicializar servicio especializado de grupos
+    grupos_service = get_grupos_service(supabase, session_state)
+
+    # =========================
+    # CARGAR DATOS PRINCIPALES
+    # =========================
+    try:
+        df_grupos = grupos_service.get_grupos_completos()
+        acciones_dict = grupos_service.get_acciones_dict()
+        
+        if session_state.role == "admin":
+            empresas_dict = grupos_service.get_empresas_dict()
+        else:
+            empresas_dict = {}
+            
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+        return
+
+    # =========================
+    # PARTE SUPERIOR: KPIs + FILTROS + TABLA
+    # =========================
+    mostrar_kpis_grupos(df_grupos)
+    df_filtered = mostrar_filtros_busqueda(df_grupos)
+    mostrar_tabla_informativa(df_filtered)
+
+    # =========================
+    # SELECTOR GLOBAL DE GRUPO
+    # =========================
+    st.divider()
+    grupo_seleccionado = mostrar_selector_grupo(df_grupos)
+    
+    # =========================
+    # SISTEMA DE TABS MEJORADO
+    # =========================
+    # Solo habilitar tabs si hay grupo seleccionado, excepto Descripción
+    if grupo_seleccionado:
+        tabs_habilitadas = [
+            "📝 Descripción",
+            "👨‍🏫 Tutores / Centro Gestor", 
+            "🏢 Empresas",
+            "👥 Participantes",
+            "💰 Costes FUNDAE"
+        ]
+    else:
+        tabs_habilitadas = ["📝 Descripción"]
+        # Mostrar mensaje informativo
+        st.info("ℹ️ Selecciona un grupo existente o crea uno nuevo en la pestaña Descripción.")
+    
+    tabs = st.tabs(tabs_habilitadas)
+    
+    # TAB 1: DESCRIPCIÓN (Crear/Editar)
+    with tabs[0]:
+        mostrar_tab_descripcion(supabase, session_state, grupos_service, acciones_dict, empresas_dict, grupo_seleccionado)
+    
+    # TABS ADICIONALES (solo si hay grupo seleccionado)
+    if grupo_seleccionado:
+        with tabs[1]:
+            mostrar_tab_tutores_centro(supabase, session_state, grupos_service, grupo_seleccionado)
+        
+        with tabs[2]:
+            mostrar_tab_empresas(supabase, session_state, grupos_service, grupo_seleccionado, empresas_dict)
+        
+        with tabs[3]:
+            mostrar_tab_participantes_nuevo(supabase, session_state, grupos_service, grupo_seleccionado)
+        
+        with tabs[4]:
+            mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, grupo_seleccionado)
+
+
+def mostrar_kpis_grupos(df_grupos):
+    """Muestra KPIs rápidos de grupos."""
+    if not df_grupos.empty:
+        col1, col2, col3, col4 = st.columns(4)
+        hoy = datetime.now()
+        
+        activos = len(df_grupos[
+            (pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") <= hoy) & 
+            (df_grupos["fecha_fin"].isna() | (pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") >= hoy))
+        ])
+        finalizados = len(df_grupos[pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") < hoy])
+        proximos = len(df_grupos[pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") > hoy])
+        
+        col1.metric("👥 Total Grupos", len(df_grupos))
+        col2.metric("🟢 Activos", activos)
+        col3.metric("🔴 Finalizados", finalizados)
+        col4.metric("📅 Próximos", proximos)
+
+
+def mostrar_filtros_busqueda(df_grupos):
+    """Muestra filtros de búsqueda y devuelve DataFrame filtrado."""
+    st.markdown("### 🔍 Filtros y Búsqueda")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        query = st.text_input("🔍 Buscar por código o acción formativa")
+    with col2:
+        estado_filter = st.selectbox("Filtrar por estado", ["Todos", "Activos", "Finalizados", "Próximos"])
+
+    df_filtered = df_grupos.copy()
+    
+    if query and not df_filtered.empty:
+        q_lower = query.lower()
+        df_filtered = df_filtered[
+            df_filtered["codigo_grupo"].str.lower().str.contains(q_lower, na=False) |
+            df_filtered["accion_nombre"].fillna("").str.lower().str.contains(q_lower, na=False)
+        ]
+    
+    if estado_filter != "Todos" and not df_filtered.empty:
+        hoy = datetime.now()
+        if estado_filter == "Activos":
+            df_filtered = df_filtered[
+                (pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") <= hoy) & 
+                (df_filtered["fecha_fin"].isna() | (pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") >= hoy))
+            ]
+        elif estado_filter == "Finalizados":
+            df_filtered = df_filtered[pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") < hoy]
+        elif estado_filter == "Próximos":
+            df_filtered = df_filtered[pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") > hoy]
+
+    return df_filtered
+
+
+def mostrar_tabla_informativa(df_filtered):
+    """Muestra tabla informativa (solo lectura) con export CSV."""
+    st.markdown("### 📊 Vista General de Grupos")
+    
+    if df_filtered.empty:
+        st.info("ℹ️ No hay grupos para mostrar.")
+        return
+
+    # Preparar columnas para mostrar
+    columnas_mostrar = [
+        "codigo_grupo", "accion_nombre", "modalidad", 
+        "fecha_inicio", "fecha_fin_prevista", "localidad", 
+        "n_participantes_previstos"
+    ]
+    
+    # Filtrar columnas que existen
+    columnas_existentes = [col for col in columnas_mostrar if col in df_filtered.columns]
+    
+    # Mostrar tabla
+    st.dataframe(
+        df_filtered[columnas_existentes],
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Export CSV
+    export_csv(df_filtered, filename="grupos.csv")
+
+
+def mostrar_selector_grupo(df_grupos):
+    """Muestra selector global de grupo."""
+    st.markdown("### 🎯 Selector de Grupo")
+    
+    if df_grupos.empty:
+        st.info("ℹ️ No hay grupos disponibles. Crea uno nuevo en la pestaña Descripción.")
+        return None
+    
+    # Preparar opciones
+    opciones_grupos = [""] + df_grupos["codigo_grupo"].tolist()
+    
+    grupo_codigo_sel = st.selectbox(
+        "Selecciona un grupo para gestionar:",
+        options=opciones_grupos,
+        key="grupo_selector_global",
+        help="Escoge un grupo existente para editar o gestionar sus componentes"
+    )
+    
+    if grupo_codigo_sel:
+        # Obtener ID del grupo seleccionado
+        grupo_info = df_grupos[df_grupos["codigo_grupo"] == grupo_codigo_sel]
+        if not grupo_info.empty:
+            grupo_id = grupo_info.iloc[0]["id"]
+            
+            # Mostrar información básica del grupo seleccionado
+            with st.expander("ℹ️ Información del Grupo Seleccionado", expanded=False):
+                col1, col2, col3 = st.columns(3)
+                grupo_data = grupo_info.iloc[0]
+                
+                with col1:
+                    st.write(f"**Código:** {grupo_data.get('codigo_grupo', '')}")
+                    st.write(f"**Modalidad:** {grupo_data.get('modalidad', '')}")
+                
+                with col2:
+                    st.write(f"**Fecha Inicio:** {grupo_data.get('fecha_inicio', '')}")
+                    st.write(f"**Acción:** {grupo_data.get('accion_nombre', 'No asignada')}")
+                
+                with col3:
+                    st.write(f"**Participantes Previstos:** {grupo_data.get('n_participantes_previstos', 0)}")
+                    st.write(f"**Localidad:** {grupo_data.get('localidad', '')}")
+            
+            return grupo_id
+    
+    return None
+
+
+# =========================
+# TAB 1: DESCRIPCIÓN (Crear/Editar)
+# =========================
+
+def mostrar_tab_descripcion(supabase, session_state, grupos_service, acciones_dict, empresas_dict, grupo_id):
+    """Tab 1: Crear o editar grupo (mismo formulario para ambos)."""
+    
+    # Determinar si es creación o edición
+    es_edicion = grupo_id is not None
+    titulo = "✏️ Editar Grupo" if es_edicion else "➕ Crear Nuevo Grupo"
+    
+    st.markdown(f"#### {titulo}")
+    
+    # Obtener datos del grupo si es edición
+    datos_grupo_actual = {}
+    if es_edicion:
+        try:
+            resultado = supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+            if resultado.data:
+                datos_grupo_actual = resultado.data[0]
+        except Exception as e:
+            st.error(f"❌ Error al cargar datos del grupo: {e}")
+            return
+    
+    # Formulario unificado
+    with st.form("form_descripcion_grupo"):
+        # === INFORMACIÓN BÁSICA ===
+        st.markdown("### 📋 Información Básica")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            codigo_grupo = st.text_input(
+                "Código de Grupo *", 
+                value=datos_grupo_actual.get("codigo_grupo", ""),
+                help="Código único identificativo (máx. 50 caracteres)",
+                disabled=es_edicion  # No permitir cambiar código en edición
+            )
+            
+            accion_actual = ""
+            if es_edicion and datos_grupo_actual.get("accion_formativa_id"):
+                # Buscar nombre de la acción actual
+                for nombre, id_accion in acciones_dict.items():
+                    if id_accion == datos_grupo_actual["accion_formativa_id"]:
+                        accion_actual = nombre
+                        break
+            
+            accion_sel = st.selectbox(
+                "Acción Formativa *", 
+                options=[""] + list(acciones_dict.keys()),
+                index=list(acciones_dict.keys()).index(accion_actual) + 1 if accion_actual else 0,
+                help="Selecciona la acción formativa"
+            )
+            
+            modalidad = st.selectbox(
+                "Modalidad *", 
+                ["PRESENCIAL", "TELEFORMACION", "MIXTA"],
+                index=["PRESENCIAL", "TELEFORMACION", "MIXTA"].index(datos_grupo_actual.get("modalidad", "PRESENCIAL"))
+            )
+            
+            localidad = st.text_input(
+                "Localidad *", 
+                value=datos_grupo_actual.get("localidad", ""),
+                help="Obligatorio para FUNDAE"
+            )
+            
+            provincia = st.text_input(
+                "Provincia", 
+                value=datos_grupo_actual.get("provincia", "")
+            )
+        
+        with col2:
+            fecha_inicio = st.date_input(
+                "Fecha de Inicio *",
+                value=datetime.fromisoformat(datos_grupo_actual["fecha_inicio"]).date() if datos_grupo_actual.get("fecha_inicio") else None
+            )
+            
+            fecha_fin_prevista = st.date_input(
+                "Fecha Fin Prevista *",
+                value=datetime.fromisoformat(datos_grupo_actual["fecha_fin_prevista"]).date() if datos_grupo_actual.get("fecha_fin_prevista") else None
+            )
+            
+            n_participantes_previstos = st.number_input(
+                "Participantes Previstos *", 
+                min_value=1, 
+                max_value=30, 
+                value=int(datos_grupo_actual.get("n_participantes_previstos", 10)),
+                help="Entre 1 y 30 participantes (requisito FUNDAE)"
+            )
+            
+            cp = st.text_input(
+                "Código Postal", 
+                value=datos_grupo_actual.get("cp", "")
+            )
+            
+            lugar_imparticion = st.text_area(
+                "Lugar de Impartición", 
+                value=datos_grupo_actual.get("lugar_imparticion", ""),
+                help="Dirección completa del lugar de formación"
+            )
+        
+        # === HORARIOS DINÁMICOS ===
+        st.markdown("### 🕐 Horarios de Impartición")
+        
+        # Parsear horario actual si existe
+        horario_actual = datos_grupo_actual.get("horario", "")
+        m_inicio, m_fin, t_inicio, t_fin, dias_actuales = grupos_service.parse_horario(horario_actual)
+        
+        # Tipo de horario
+        tipo_horario_opciones = ["Solo Mañana", "Solo Tarde", "Mañana y Tarde"]
+        tipo_horario_default = 0
+        
+        if m_inicio and t_inicio:
+            tipo_horario_default = 2  # Mañana y Tarde
+        elif t_inicio:
+            tipo_horario_default = 1  # Solo Tarde
+        else:
             tipo_horario_default = 0  # Solo Mañana
         
         tipo_horario = st.radio(
@@ -139,337 +473,7 @@ else:
             
             if errores:
                 for error in errores:
-                    st.error(f"❌ Error al asignar participantes: {e}")
-        else:
-            st.info("ℹ️ No hay participantes disponibles para asignar.")
-    
-    with tab_masivo:
-        st.markdown("**Instrucciones:**")
-        st.markdown("1. Sube un archivo Excel (.xlsx) con una columna llamada 'dni' o 'nif'")
-        st.markdown("2. El sistema buscará automáticamente los participantes por NIF")
-        st.markdown("3. Solo se asignarán los participantes que existan en el sistema y estén disponibles")
-        
-        uploaded_file = st.file_uploader("Subir archivo Excel", type=["xlsx"], key="excel_participantes_nuevo")
-        
-        if uploaded_file:
-            try:
-                df_import = pd.read_excel(uploaded_file)
-                
-                # Verificar columnas válidas
-                columna_nif = None
-                for col in ["dni", "nif", "DNI", "NIF"]:
-                    if col in df_import.columns:
-                        columna_nif = col
-                        break
-                
-                if not columna_nif:
-                    st.error("⚠️ El archivo debe contener una columna llamada 'dni' o 'nif'")
-                else:
-                    # Mostrar preview
-                    st.markdown("**Vista previa del archivo:**")
-                    st.dataframe(df_import.head(), use_container_width=True)
-                    
-                    if st.button("🚀 Procesar Archivo Excel", type="primary"):
-                        # Procesar NIFs
-                        nifs_import = [str(d).strip() for d in df_import[columna_nif] if pd.notna(d)]
-                        nifs_validos = [d for d in nifs_import if validar_dni_cif(d)]
-                        nifs_invalidos = set(nifs_import) - set(nifs_validos)
-
-                        if nifs_invalidos:
-                            st.warning(f"⚠️ NIFs inválidos detectados: {', '.join(list(nifs_invalidos)[:5])}")
-
-                        # Buscar participantes existentes y disponibles
-                        df_disponibles_masivo = grupos_service.get_participantes_disponibles(grupo_id)
-                        participantes_disponibles = {p["nif"]: p["id"] for _, p in df_disponibles_masivo.iterrows()}
-
-                        # Procesar asignaciones
-                        asignados = 0
-                        errores = []
-
-                        for nif in nifs_validos:
-                            participante_id = participantes_disponibles.get(nif)
-                            
-                            if not participante_id:
-                                errores.append(f"NIF {nif} no encontrado o no disponible")
-                                continue
-                                
-                            try:
-                                grupos_service.asignar_participante_a_grupo(participante_id, grupo_id)
-                                asignados += 1
-                            except Exception as e:
-                                errores.append(f"NIF {nif} - Error: {str(e)}")
-
-                        # Mostrar resultados
-                        if asignados > 0:
-                            st.success(f"✅ Se han asignado {asignados} participantes al grupo.")
-                            
-                        if errores:
-                            st.warning(f"⚠️ Se encontraron {len(errores)} errores:")
-                            for error in errores[:10]:  # Mostrar máximo 10 errores
-                                st.warning(f"• {error}")
-                        
-                        if asignados > 0:
-                            st.rerun()
-                            
-            except Exception as e:
-                st.error(f"❌ Error al procesar archivo: {e}")
-
-
-# =========================
-# TAB 5: COSTES FUNDAE
-# =========================
-
-def mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, grupo_id):
-    """Tab 5: Gestión de costes FUNDAE mejorada."""
-    st.markdown("#### 💰 Costes FUNDAE")
-    
-    # Obtener información del grupo para cálculos
-    try:
-        grupo_info = supabase.table("grupos").select("""
-            modalidad, n_participantes_previstos,
-            accion_formativa:acciones_formativas(num_horas)
-        """).eq("id", grupo_id).execute()
-        
-        if not grupo_info.data:
-            st.error("❌ No se pudo cargar información del grupo.")
-            return
-        
-        grupo_data = grupo_info.data[0]
-        modalidad = grupo_data.get("modalidad", "PRESENCIAL")
-        participantes = int(grupo_data.get("n_participantes_previstos", 0))
-        
-        accion_data = grupo_data.get("accion_formativa", {})
-        horas = int(accion_data.get("num_horas", 0)) if isinstance(accion_data, dict) else 0
-        
-    except Exception as e:
-        st.error(f"❌ Error al cargar datos del grupo: {e}")
-        return
-    
-    # Calcular límite FUNDAE
-    limite_boni, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
-    
-    # Mostrar información del grupo
-    with st.expander("ℹ️ Información para Cálculo FUNDAE", expanded=True):
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Modalidad", modalidad)
-        with col2:
-            st.metric("Participantes", participantes)
-        with col3:
-            st.metric("Horas", horas)
-        with col4:
-            st.metric("Límite Bonificación", f"{limite_boni:,.2f} €")
-    
-    # === GESTIÓN DE COSTES ===
-    st.markdown("### 💵 Costes del Grupo")
-    
-    # Obtener costes actuales
-    costes_actuales = grupos_service.get_grupo_costes(grupo_id)
-    
-    with st.form("form_costes_fundae"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            costes_directos = st.number_input(
-                "Costes Directos (€)", 
-                value=float(costes_actuales.get("costes_directos", 0)),
-                min_value=0.0,
-                help="Costes directamente imputables (salarios formadores, material, etc.)"
-            )
-            
-            costes_indirectos = st.number_input(
-                "Costes Indirectos (€)", 
-                value=float(costes_actuales.get("costes_indirectos", 0)),
-                min_value=0.0,
-                help="Costes indirectos (máx. 30% de directos según FUNDAE)"
-            )
-            
-            costes_organizacion = st.number_input(
-                "Costes Organización (€)", 
-                value=float(costes_actuales.get("costes_organizacion", 0)),
-                min_value=0.0,
-                help="Costes de organización y gestión"
-            )
-        
-        with col2:
-            costes_salariales = st.number_input(
-                "Costes Salariales (€)", 
-                value=float(costes_actuales.get("costes_salariales", 0)),
-                min_value=0.0,
-                help="Costes salariales de participantes"
-            )
-            
-            cofinanciacion_privada = st.number_input(
-                "Cofinanciación Privada (€)", 
-                value=float(costes_actuales.get("cofinanciacion_privada", 0)),
-                min_value=0.0,
-                help="Aportación privada de la empresa"
-            )
-            
-            tarifa_hora = st.number_input(
-                "Tarifa por Hora (€)", 
-                value=float(costes_actuales.get("tarifa_hora", tarifa_max)),
-                min_value=0.0,
-                max_value=tarifa_max,
-                help=f"Máximo permitido: {tarifa_max} €/hora para {modalidad}"
-            )
-        
-        # Cálculos automáticos
-        total_costes = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
-        limite_calculado = tarifa_hora * horas * participantes
-        
-        col_calc1, col_calc2 = st.columns(2)
-        with col_calc1:
-            st.metric("💰 Total Costes Formación", f"{total_costes:,.2f} €")
-        with col_calc2:
-            st.metric("🎯 Límite Bonificación Calculado", f"{limite_calculado:,.2f} €")
-        
-        # Validaciones
-        validacion_ok = True
-        
-        if costes_directos > 0:
-            porcentaje_indirectos = (costes_indirectos / costes_directos) * 100
-            if porcentaje_indirectos > 30:
-                st.error(f"⚠️ Costes indirectos ({porcentaje_indirectos:.1f}%) superan el 30% permitido")
-                validacion_ok = False
-            else:
-                st.success(f"✅ Costes indirectos dentro del límite ({porcentaje_indirectos:.1f}%)")
-        
-        if tarifa_hora > tarifa_max:
-            st.error(f"⚠️ Tarifa/hora ({tarifa_hora}€) supera el máximo de {tarifa_max}€ para {modalidad}")
-            validacion_ok = False
-        
-        observaciones_costes = st.text_area(
-            "Observaciones",
-            value=costes_actuales.get("observaciones", ""),
-            help="Detalles adicionales sobre los costes"
-        )
-        
-        # Botón guardar
-        guardar_costes = st.form_submit_button("💾 Guardar Costes", use_container_width=True)
-        
-        if guardar_costes and validacion_ok:
-            datos_costes = {
-                "grupo_id": grupo_id,
-                "costes_directos": costes_directos,
-                "costes_indirectos": costes_indirectos,
-                "costes_organizacion": costes_organizacion,
-                "costes_salariales": costes_salariales,
-                "cofinanciacion_privada": cofinanciacion_privada,
-                "tarifa_hora": tarifa_hora,
-                "modalidad": modalidad,
-                "total_costes_formacion": total_costes,
-                "limite_maximo_bonificacion": limite_calculado,
-                "observaciones": observaciones_costes,
-                "updated_at": datetime.utcnow().isoformat()
-            }
-            
-            try:
-                if costes_actuales:
-                    # Actualizar
-                    if grupos_service.update_grupo_coste(grupo_id, datos_costes):
-                        st.success("✅ Costes actualizados correctamente.")
-                        st.rerun()
-                else:
-                    # Crear
-                    datos_costes["created_at"] = datetime.utcnow().isoformat()
-                    if grupos_service.create_grupo_coste(datos_costes):
-                        st.success("✅ Costes guardados correctamente.")
-                        st.rerun()
-                
-            except Exception as e:
-                st.error(f"❌ Error al guardar costes: {e}")
-    
-    # === BONIFICACIONES MENSUALES ===
-    st.divider()
-    st.markdown("### 📅 Bonificaciones Mensuales")
-    
-    df_bonificaciones = grupos_service.get_grupo_bonificaciones(grupo_id)
-    
-    if not df_bonificaciones.empty:
-        # Mostrar bonificaciones existentes
-        st.dataframe(
-            df_bonificaciones[["mes", "importe", "observaciones"]],
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        total_bonificado = float(df_bonificaciones["importe"].sum())
-        disponible = limite_calculado - total_bonificado
-        
-        col_boni1, col_boni2 = st.columns(2)
-        with col_boni1:
-            st.metric("💰 Total Bonificado", f"{total_bonificado:,.2f} €")
-        with col_boni2:
-            st.metric("💳 Disponible", f"{disponible:,.2f} €")
-    else:
-        st.info("ℹ️ No hay bonificaciones registradas.")
-        total_bonificado = 0
-        disponible = limite_calculado
-    
-    # Añadir nueva bonificación
-    with st.expander("➕ Añadir Bonificación Mensual"):
-        with st.form("form_bonificacion"):
-            col_boni1, col_boni2 = st.columns(2)
-            
-            with col_boni1:
-                mes_bonificacion = st.selectbox(
-                    "Mes",
-                    options=[
-                        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-                        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
-                    ]
-                )
-                
-                importe_bonificacion = st.number_input(
-                    "Importe (€)",
-                    min_value=0.0,
-                    max_value=disponible,
-                    help=f"Máximo disponible: {disponible:,.2f} €"
-                )
-            
-            with col_boni2:
-                observaciones_boni = st.text_area("Observaciones Bonificación")
-            
-            crear_bonificacion = st.form_submit_button("💰 Añadir Bonificación")
-            
-            if crear_bonificacion:
-                if importe_bonificacion <= 0:
-                    st.error("⚠️ El importe debe ser mayor que 0")
-                elif total_bonificado + importe_bonificacion > limite_calculado:
-                    st.error("⚠️ La suma superaría el límite de bonificación")
-                else:
-                    datos_bonificacion = {
-                        "grupo_id": grupo_id,
-                        "mes": mes_bonificacion,
-                        "importe": importe_bonificacion,
-                        "observaciones": observaciones_boni,
-                        "created_at": datetime.utcnow().isoformat()
-                    }
-                    
-                    if grupos_service.create_grupo_bonificacion(datos_bonificacion):
-                        st.success("✅ Bonificación añadida correctamente.")
-                        st.rerun()
-    
-    # Información FUNDAE
-    with st.expander("ℹ️ Información FUNDAE"):
-        st.markdown("""
-        **Tarifas máximas FUNDAE:**
-        - PRESENCIAL/MIXTA: 13 €/hora
-        - TELEFORMACION: 7.5 €/hora
-        
-        **Costes Indirectos:**
-        - Máximo 30% de los costes directos
-        
-        **Límite de Bonificación:**
-        - Tarifa/hora × Horas × Participantes
-        - No puede superar el total de costes de formación
-        """)
-
-
-if __name__ == "__main__":
-    # Para testing local
-    pass(f"⚠️ {error}")
+                    st.error(f"⚠️ {error}")
                 return
             
             # Construir horario
@@ -987,341 +991,334 @@ def mostrar_tab_participantes_nuevo(supabase, session_state, grupos_service, gru
                     st.rerun()
                     
                 except Exception as e:
-                    st.errorimport streamlit as st
-import pandas as pd
-from datetime import datetime, time
-from utils import export_csv, validar_dni_cif, get_ajustes_app
-from components.listado_con_ficha import listado_con_ficha
-from typing import Dict, Any, Tuple, List
-
-# IMPORTS DEL NUEVO SERVICIO
-from services.grupos_service import get_grupos_service
-
-# =========================
-# FUNCIÓN PRINCIPAL
-# =========================
-
-def main(supabase, session_state):
-    st.title("👥 Gestión de Grupos")
-    st.caption("Creación y administración de grupos formativos según estándares FUNDAE.")
-
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 No tienes permisos para acceder a esta sección.")
-        return
-
-    # Inicializar servicio especializado de grupos
-    grupos_service = get_grupos_service(supabase, session_state)
-
-    # =========================
-    # CARGAR DATOS PRINCIPALES
-    # =========================
-    try:
-        df_grupos = grupos_service.get_grupos_completos()
-        acciones_dict = grupos_service.get_acciones_dict()
-        
-        if session_state.role == "admin":
-            empresas_dict = grupos_service.get_empresas_dict()
+                    st.error(f"❌ Error al asignar participantes: {e}")
         else:
-            empresas_dict = {}
-            
-    except Exception as e:
-        st.error(f"❌ Error al cargar datos: {e}")
-        return
-
-    # =========================
-    # PARTE SUPERIOR: KPIs + FILTROS + TABLA
-    # =========================
-    mostrar_kpis_grupos(df_grupos)
-    df_filtered = mostrar_filtros_busqueda(df_grupos)
-    mostrar_tabla_informativa(df_filtered)
-
-    # =========================
-    # SELECTOR GLOBAL DE GRUPO
-    # =========================
-    st.divider()
-    grupo_seleccionado = mostrar_selector_grupo(df_grupos)
+            st.info("ℹ️ No hay participantes disponibles para asignar.")
     
-    # =========================
-    # SISTEMA DE TABS MEJORADO
-    # =========================
-    # Solo habilitar tabs si hay grupo seleccionado, excepto Descripción
-    if grupo_seleccionado:
-        tabs_habilitadas = [
-            "📝 Descripción",
-            "👨‍🏫 Tutores / Centro Gestor", 
-            "🏢 Empresas",
-            "👥 Participantes",
-            "💰 Costes FUNDAE"
-        ]
-    else:
-        tabs_habilitadas = ["📝 Descripción"]
-        # Mostrar mensaje informativo
-        st.info("ℹ️ Selecciona un grupo existente o crea uno nuevo en la pestaña Descripción.")
-    
-    tabs = st.tabs(tabs_habilitadas)
-    
-    # TAB 1: DESCRIPCIÓN (Crear/Editar)
-    with tabs[0]:
-        mostrar_tab_descripcion(supabase, session_state, grupos_service, acciones_dict, empresas_dict, grupo_seleccionado)
-    
-    # TABS ADICIONALES (solo si hay grupo seleccionado)
-    if grupo_seleccionado:
-        with tabs[1]:
-            mostrar_tab_tutores_centro(supabase, session_state, grupos_service, grupo_seleccionado)
+    with tab_masivo:
+        st.markdown("**Instrucciones:**")
+        st.markdown("1. Sube un archivo Excel (.xlsx) con una columna llamada 'dni' o 'nif'")
+        st.markdown("2. El sistema buscará automáticamente los participantes por NIF")
+        st.markdown("3. Solo se asignarán los participantes que existan en el sistema y estén disponibles")
         
-        with tabs[2]:
-            mostrar_tab_empresas(supabase, session_state, grupos_service, grupo_seleccionado, empresas_dict)
+        uploaded_file = st.file_uploader("Subir archivo Excel", type=["xlsx"], key="excel_participantes_nuevo")
         
-        with tabs[3]:
-            mostrar_tab_participantes_nuevo(supabase, session_state, grupos_service, grupo_seleccionado)
-        
-        with tabs[4]:
-            mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, grupo_seleccionado)
-
-
-def mostrar_kpis_grupos(df_grupos):
-    """Muestra KPIs rápidos de grupos."""
-    if not df_grupos.empty:
-        col1, col2, col3, col4 = st.columns(4)
-        hoy = datetime.now()
-        
-        activos = len(df_grupos[
-            (pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") <= hoy) & 
-            (df_grupos["fecha_fin"].isna() | (pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") >= hoy))
-        ])
-        finalizados = len(df_grupos[pd.to_datetime(df_grupos["fecha_fin"], errors="coerce") < hoy])
-        proximos = len(df_grupos[pd.to_datetime(df_grupos["fecha_inicio"], errors="coerce") > hoy])
-        
-        col1.metric("👥 Total Grupos", len(df_grupos))
-        col2.metric("🟢 Activos", activos)
-        col3.metric("🔴 Finalizados", finalizados)
-        col4.metric("📅 Próximos", proximos)
-
-
-def mostrar_filtros_busqueda(df_grupos):
-    """Muestra filtros de búsqueda y devuelve DataFrame filtrado."""
-    st.markdown("### 🔍 Filtros y Búsqueda")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        query = st.text_input("🔍 Buscar por código o acción formativa")
-    with col2:
-        estado_filter = st.selectbox("Filtrar por estado", ["Todos", "Activos", "Finalizados", "Próximos"])
-
-    df_filtered = df_grupos.copy()
-    
-    if query and not df_filtered.empty:
-        q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered["codigo_grupo"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["accion_nombre"].fillna("").str.lower().str.contains(q_lower, na=False)
-        ]
-    
-    if estado_filter != "Todos" and not df_filtered.empty:
-        hoy = datetime.now()
-        if estado_filter == "Activos":
-            df_filtered = df_filtered[
-                (pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") <= hoy) & 
-                (df_filtered["fecha_fin"].isna() | (pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") >= hoy))
-            ]
-        elif estado_filter == "Finalizados":
-            df_filtered = df_filtered[pd.to_datetime(df_filtered["fecha_fin"], errors="coerce") < hoy]
-        elif estado_filter == "Próximos":
-            df_filtered = df_filtered[pd.to_datetime(df_filtered["fecha_inicio"], errors="coerce") > hoy]
-
-    return df_filtered
-
-
-def mostrar_tabla_informativa(df_filtered):
-    """Muestra tabla informativa (solo lectura) con export CSV."""
-    st.markdown("### 📊 Vista General de Grupos")
-    
-    if df_filtered.empty:
-        st.info("ℹ️ No hay grupos para mostrar.")
-        return
-
-    # Preparar columnas para mostrar
-    columnas_mostrar = [
-        "codigo_grupo", "accion_nombre", "modalidad", 
-        "fecha_inicio", "fecha_fin_prevista", "localidad", 
-        "n_participantes_previstos"
-    ]
-    
-    # Filtrar columnas que existen
-    columnas_existentes = [col for col in columnas_mostrar if col in df_filtered.columns]
-    
-    # Mostrar tabla
-    st.dataframe(
-        df_filtered[columnas_existentes],
-        use_container_width=True,
-        hide_index=True
-    )
-    
-    # Export CSV
-    export_csv(df_filtered, filename="grupos.csv")
-
-
-def mostrar_selector_grupo(df_grupos):
-    """Muestra selector global de grupo."""
-    st.markdown("### 🎯 Selector de Grupo")
-    
-    if df_grupos.empty:
-        st.info("ℹ️ No hay grupos disponibles. Crea uno nuevo en la pestaña Descripción.")
-        return None
-    
-    # Preparar opciones
-    opciones_grupos = [""] + df_grupos["codigo_grupo"].tolist()
-    
-    grupo_codigo_sel = st.selectbox(
-        "Selecciona un grupo para gestionar:",
-        options=opciones_grupos,
-        key="grupo_selector_global",
-        help="Escoge un grupo existente para editar o gestionar sus componentes"
-    )
-    
-    if grupo_codigo_sel:
-        # Obtener ID del grupo seleccionado
-        grupo_info = df_grupos[df_grupos["codigo_grupo"] == grupo_codigo_sel]
-        if not grupo_info.empty:
-            grupo_id = grupo_info.iloc[0]["id"]
-            
-            # Mostrar información básica del grupo seleccionado
-            with st.expander("ℹ️ Información del Grupo Seleccionado", expanded=False):
-                col1, col2, col3 = st.columns(3)
-                grupo_data = grupo_info.iloc[0]
+        if uploaded_file:
+            try:
+                df_import = pd.read_excel(uploaded_file)
                 
-                with col1:
-                    st.write(f"**Código:** {grupo_data.get('codigo_grupo', '')}")
-                    st.write(f"**Modalidad:** {grupo_data.get('modalidad', '')}")
+                # Verificar columnas válidas
+                columna_nif = None
+                for col in ["dni", "nif", "DNI", "NIF"]:
+                    if col in df_import.columns:
+                        columna_nif = col
+                        break
                 
-                with col2:
-                    st.write(f"**Fecha Inicio:** {grupo_data.get('fecha_inicio', '')}")
-                    st.write(f"**Acción:** {grupo_data.get('accion_nombre', 'No asignada')}")
-                
-                with col3:
-                    st.write(f"**Participantes Previstos:** {grupo_data.get('n_participantes_previstos', 0)}")
-                    st.write(f"**Localidad:** {grupo_data.get('localidad', '')}")
-            
-            return grupo_id
-    
-    return None
+                if not columna_nif:
+                    st.error("⚠️ El archivo debe contener una columna llamada 'dni' o 'nif'")
+                else:
+                    # Mostrar preview
+                    st.markdown("**Vista previa del archivo:**")
+                    st.dataframe(df_import.head(), use_container_width=True)
+                    
+                    if st.button("🚀 Procesar Archivo Excel", type="primary"):
+                        # Procesar NIFs
+                        nifs_import = [str(d).strip() for d in df_import[columna_nif] if pd.notna(d)]
+                        nifs_validos = [d for d in nifs_import if validar_dni_cif(d)]
+                        nifs_invalidos = set(nifs_import) - set(nifs_validos)
+
+                        if nifs_invalidos:
+                            st.warning(f"⚠️ NIFs inválidos detectados: {', '.join(list(nifs_invalidos)[:5])}")
+
+                        # Buscar participantes existentes y disponibles
+                        df_disponibles_masivo = grupos_service.get_participantes_disponibles(grupo_id)
+                        participantes_disponibles = {p["nif"]: p["id"] for _, p in df_disponibles_masivo.iterrows()}
+
+                        # Procesar asignaciones
+                        asignados = 0
+                        errores = []
+
+                        for nif in nifs_validos:
+                            participante_id = participantes_disponibles.get(nif)
+                            
+                            if not participante_id:
+                                errores.append(f"NIF {nif} no encontrado o no disponible")
+                                continue
+                                
+                            try:
+                                grupos_service.asignar_participante_a_grupo(participante_id, grupo_id)
+                                asignados += 1
+                            except Exception as e:
+                                errores.append(f"NIF {nif} - Error: {str(e)}")
+
+                        # Mostrar resultados
+                        if asignados > 0:
+                            st.success(f"✅ Se han asignado {asignados} participantes al grupo.")
+                            
+                        if errores:
+                            st.warning(f"⚠️ Se encontraron {len(errores)} errores:")
+                            for error in errores[:10]:  # Mostrar máximo 10 errores
+                                st.warning(f"• {error}")
+                        
+                        if asignados > 0:
+                            st.rerun()
+                            
+            except Exception as e:
+                st.error(f"❌ Error al procesar archivo: {e}")
 
 
 # =========================
-# TAB 1: DESCRIPCIÓN (Crear/Editar)
+# TAB 5: COSTES FUNDAE
 # =========================
 
-def mostrar_tab_descripcion(supabase, session_state, grupos_service, acciones_dict, empresas_dict, grupo_id):
-    """Tab 1: Crear o editar grupo (mismo formulario para ambos)."""
+def mostrar_tab_costes_fundae_nuevo(supabase, session_state, grupos_service, grupo_id):
+    """Tab 5: Gestión de costes FUNDAE mejorada."""
+    st.markdown("#### 💰 Costes FUNDAE")
     
-    # Determinar si es creación o edición
-    es_edicion = grupo_id is not None
-    titulo = "✏️ Editar Grupo" if es_edicion else "➕ Crear Nuevo Grupo"
-    
-    st.markdown(f"#### {titulo}")
-    
-    # Obtener datos del grupo si es edición
-    datos_grupo_actual = {}
-    if es_edicion:
-        try:
-            resultado = supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-            if resultado.data:
-                datos_grupo_actual = resultado.data[0]
-        except Exception as e:
-            st.error(f"❌ Error al cargar datos del grupo: {e}")
+    # Obtener información del grupo para cálculos
+    try:
+        grupo_info = supabase.table("grupos").select("""
+            modalidad, n_participantes_previstos,
+            accion_formativa:acciones_formativas(num_horas)
+        """).eq("id", grupo_id).execute()
+        
+        if not grupo_info.data:
+            st.error("❌ No se pudo cargar información del grupo.")
             return
-    
-    # Formulario unificado
-    with st.form("form_descripcion_grupo"):
-        # === INFORMACIÓN BÁSICA ===
-        st.markdown("### 📋 Información Básica")
         
+        grupo_data = grupo_info.data[0]
+        modalidad = grupo_data.get("modalidad", "PRESENCIAL")
+        participantes = int(grupo_data.get("n_participantes_previstos", 0))
+        
+        accion_data = grupo_data.get("accion_formativa", {})
+        horas = int(accion_data.get("num_horas", 0)) if isinstance(accion_data, dict) else 0
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos del grupo: {e}")
+        return
+    
+    # Calcular límite FUNDAE
+    limite_boni, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
+    
+    # Mostrar información del grupo
+    with st.expander("ℹ️ Información para Cálculo FUNDAE", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Modalidad", modalidad)
+        with col2:
+            st.metric("Participantes", participantes)
+        with col3:
+            st.metric("Horas", horas)
+        with col4:
+            st.metric("Límite Bonificación", f"{limite_boni:,.2f} €")
+    
+    # === GESTIÓN DE COSTES ===
+    st.markdown("### 💵 Costes del Grupo")
+    
+    # Obtener costes actuales
+    costes_actuales = grupos_service.get_grupo_costes(grupo_id)
+    
+    with st.form("form_costes_fundae"):
         col1, col2 = st.columns(2)
         
         with col1:
-            codigo_grupo = st.text_input(
-                "Código de Grupo *", 
-                value=datos_grupo_actual.get("codigo_grupo", ""),
-                help="Código único identificativo (máx. 50 caracteres)",
-                disabled=es_edicion  # No permitir cambiar código en edición
+            costes_directos = st.number_input(
+                "Costes Directos (€)", 
+                value=float(costes_actuales.get("costes_directos", 0)),
+                min_value=0.0,
+                help="Costes directamente imputables (salarios formadores, material, etc.)"
             )
             
-            accion_actual = ""
-            if es_edicion and datos_grupo_actual.get("accion_formativa_id"):
-                # Buscar nombre de la acción actual
-                for nombre, id_accion in acciones_dict.items():
-                    if id_accion == datos_grupo_actual["accion_formativa_id"]:
-                        accion_actual = nombre
-                        break
-            
-            accion_sel = st.selectbox(
-                "Acción Formativa *", 
-                options=[""] + list(acciones_dict.keys()),
-                index=list(acciones_dict.keys()).index(accion_actual) + 1 if accion_actual else 0,
-                help="Selecciona la acción formativa"
+            costes_indirectos = st.number_input(
+                "Costes Indirectos (€)", 
+                value=float(costes_actuales.get("costes_indirectos", 0)),
+                min_value=0.0,
+                help="Costes indirectos (máx. 30% de directos según FUNDAE)"
             )
             
-            modalidad = st.selectbox(
-                "Modalidad *", 
-                ["PRESENCIAL", "TELEFORMACION", "MIXTA"],
-                index=["PRESENCIAL", "TELEFORMACION", "MIXTA"].index(datos_grupo_actual.get("modalidad", "PRESENCIAL"))
-            )
-            
-            localidad = st.text_input(
-                "Localidad *", 
-                value=datos_grupo_actual.get("localidad", ""),
-                help="Obligatorio para FUNDAE"
-            )
-            
-            provincia = st.text_input(
-                "Provincia", 
-                value=datos_grupo_actual.get("provincia", "")
+            costes_organizacion = st.number_input(
+                "Costes Organización (€)", 
+                value=float(costes_actuales.get("costes_organizacion", 0)),
+                min_value=0.0,
+                help="Costes de organización y gestión"
             )
         
         with col2:
-            fecha_inicio = st.date_input(
-                "Fecha de Inicio *",
-                value=datetime.fromisoformat(datos_grupo_actual["fecha_inicio"]).date() if datos_grupo_actual.get("fecha_inicio") else None
+            costes_salariales = st.number_input(
+                "Costes Salariales (€)", 
+                value=float(costes_actuales.get("costes_salariales", 0)),
+                min_value=0.0,
+                help="Costes salariales de participantes"
             )
             
-            fecha_fin_prevista = st.date_input(
-                "Fecha Fin Prevista *",
-                value=datetime.fromisoformat(datos_grupo_actual["fecha_fin_prevista"]).date() if datos_grupo_actual.get("fecha_fin_prevista") else None
+            cofinanciacion_privada = st.number_input(
+                "Cofinanciación Privada (€)", 
+                value=float(costes_actuales.get("cofinanciacion_privada", 0)),
+                min_value=0.0,
+                help="Aportación privada de la empresa"
             )
             
-            n_participantes_previstos = st.number_input(
-                "Participantes Previstos *", 
-                min_value=1, 
-                max_value=30, 
-                value=int(datos_grupo_actual.get("n_participantes_previstos", 10)),
-                help="Entre 1 y 30 participantes (requisito FUNDAE)"
+            tarifa_hora = st.number_input(
+                "Tarifa por Hora (€)", 
+                value=float(costes_actuales.get("tarifa_hora", tarifa_max)),
+                min_value=0.0,
+                max_value=tarifa_max,
+                help=f"Máximo permitido: {tarifa_max} €/hora para {modalidad}"
             )
+        
+        # Cálculos automáticos
+        total_costes = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
+        limite_calculado = tarifa_hora * horas * participantes
+        
+        col_calc1, col_calc2 = st.columns(2)
+        with col_calc1:
+            st.metric("💰 Total Costes Formación", f"{total_costes:,.2f} €")
+        with col_calc2:
+            st.metric("🎯 Límite Bonificación Calculado", f"{limite_calculado:,.2f} €")
+        
+        # Validaciones
+        validacion_ok = True
+        
+        if costes_directos > 0:
+            porcentaje_indirectos = (costes_indirectos / costes_directos) * 100
+            if porcentaje_indirectos > 30:
+                st.error(f"⚠️ Costes indirectos ({porcentaje_indirectos:.1f}%) superan el 30% permitido")
+                validacion_ok = False
+            else:
+                st.success(f"✅ Costes indirectos dentro del límite ({porcentaje_indirectos:.1f}%)")
+        
+        if tarifa_hora > tarifa_max:
+            st.error(f"⚠️ Tarifa/hora ({tarifa_hora}€) supera el máximo de {tarifa_max}€ para {modalidad}")
+            validacion_ok = False
+        
+        observaciones_costes = st.text_area(
+            "Observaciones",
+            value=costes_actuales.get("observaciones", ""),
+            help="Detalles adicionales sobre los costes"
+        )
+        
+        # Botón guardar
+        guardar_costes = st.form_submit_button("💾 Guardar Costes", use_container_width=True)
+        
+        if guardar_costes and validacion_ok:
+            datos_costes = {
+                "grupo_id": grupo_id,
+                "costes_directos": costes_directos,
+                "costes_indirectos": costes_indirectos,
+                "costes_organizacion": costes_organizacion,
+                "costes_salariales": costes_salariales,
+                "cofinanciacion_privada": cofinanciacion_privada,
+                "tarifa_hora": tarifa_hora,
+                "modalidad": modalidad,
+                "total_costes_formacion": total_costes,
+                "limite_maximo_bonificacion": limite_calculado,
+                "observaciones": observaciones_costes,
+                "updated_at": datetime.utcnow().isoformat()
+            }
             
-            cp = st.text_input(
-                "Código Postal", 
-                value=datos_grupo_actual.get("cp", "")
-            )
+            try:
+                if costes_actuales:
+                    # Actualizar
+                    if grupos_service.update_grupo_coste(grupo_id, datos_costes):
+                        st.success("✅ Costes actualizados correctamente.")
+                        st.rerun()
+                else:
+                    # Crear
+                    datos_costes["created_at"] = datetime.utcnow().isoformat()
+                    if grupos_service.create_grupo_coste(datos_costes):
+                        st.success("✅ Costes guardados correctamente.")
+                        st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Error al guardar costes: {e}")
+    
+    # === BONIFICACIONES MENSUALES ===
+    st.divider()
+    st.markdown("### 📅 Bonificaciones Mensuales")
+    
+    df_bonificaciones = grupos_service.get_grupo_bonificaciones(grupo_id)
+    
+    if not df_bonificaciones.empty:
+        # Mostrar bonificaciones existentes
+        st.dataframe(
+            df_bonificaciones[["mes", "importe", "observaciones"]],
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        total_bonificado = float(df_bonificaciones["importe"].sum())
+        disponible = limite_calculado - total_bonificado
+        
+        col_boni1, col_boni2 = st.columns(2)
+        with col_boni1:
+            st.metric("💰 Total Bonificado", f"{total_bonificado:,.2f} €")
+        with col_boni2:
+            st.metric("💳 Disponible", f"{disponible:,.2f} €")
+    else:
+        st.info("ℹ️ No hay bonificaciones registradas.")
+        total_bonificado = 0
+        disponible = limite_calculado
+    
+    # Añadir nueva bonificación
+    with st.expander("➕ Añadir Bonificación Mensual"):
+        with st.form("form_bonificacion"):
+            col_boni1, col_boni2 = st.columns(2)
             
-            lugar_imparticion = st.text_area(
-                "Lugar de Impartición", 
-                value=datos_grupo_actual.get("lugar_imparticion", ""),
-                help="Dirección completa del lugar de formación"
-            )
+            with col_boni1:
+                mes_bonificacion = st.selectbox(
+                    "Mes",
+                    options=[
+                        "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                        "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+                    ]
+                )
+                
+                importe_bonificacion = st.number_input(
+                    "Importe (€)",
+                    min_value=0.0,
+                    max_value=disponible,
+                    help=f"Máximo disponible: {disponible:,.2f} €"
+                )
+            
+            with col_boni2:
+                observaciones_boni = st.text_area("Observaciones Bonificación")
+            
+            crear_bonificacion = st.form_submit_button("💰 Añadir Bonificación")
+            
+            if crear_bonificacion:
+                if importe_bonificacion <= 0:
+                    st.error("⚠️ El importe debe ser mayor que 0")
+                elif total_bonificado + importe_bonificacion > limite_calculado:
+                    st.error("⚠️ La suma superaría el límite de bonificación")
+                else:
+                    datos_bonificacion = {
+                        "grupo_id": grupo_id,
+                        "mes": mes_bonificacion,
+                        "importe": importe_bonificacion,
+                        "observaciones": observaciones_boni,
+                        "created_at": datetime.utcnow().isoformat()
+                    }
+                    
+                    if grupos_service.create_grupo_bonificacion(datos_bonificacion):
+                        st.success("✅ Bonificación añadida correctamente.")
+                        st.rerun()
+    
+    # Información FUNDAE
+    with st.expander("ℹ️ Información FUNDAE"):
+        st.markdown("""
+        **Tarifas máximas FUNDAE:**
+        - PRESENCIAL/MIXTA: 13 €/hora
+        - TELEFORMACION: 7.5 €/hora
         
-        # === HORARIOS DINÁMICOS ===
-        st.markdown("### 🕐 Horarios de Impartición")
+        **Costes Indirectos:**
+        - Máximo 30% de los costes directos
         
-        # Parsear horario actual si existe
-        horario_actual = datos_grupo_actual.get("horario", "")
-        m_inicio, m_fin, t_inicio, t_fin, dias_actuales = grupos_service.parse_horario(horario_actual)
-        
-        # Tipo de horario
-        tipo_horario_opciones = ["Solo Mañana", "Solo Tarde", "Mañana y Tarde"]
-        tipo_horario_default = 0
-        
-        if m_inicio and t_inicio:
-            tipo_horario_default = 2  # Mañana y Tarde
-        elif t_inicio:
-            tipo_horario_default = 1  # Solo Tarde
-        else:
-            tipo_horario_default = 0  #
+        **Límite de Bonificación:**
+        - Tarifa/hora × Horas × Participantes
+        - No puede superar el total de costes de formación
+        """)
+
+
+if __name__ == "__main__":
+    # Para testing local
+    pass
