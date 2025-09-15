@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, List, Callable, Any, Optional
+from datetime import date
+import hashlib
 
 def listado_con_ficha(
     df: pd.DataFrame,
@@ -469,17 +471,14 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 placeholder="Introduce la contraseña..."
             )
         # Campo fecha - CORREGIR KEYS DUPLICADAS
-elif 'fecha' in campo.lower():
-    try:
-        if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
-            fecha_val = pd.to_datetime(valor_actual).date()
+        elif 'fecha' in campo.lower():
+            try:
+                if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
+                    fecha_val = pd.to_datetime(valor_actual).date()
         elif hasattr(valor_actual, 'date'):
-            fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
-        else:
-            fecha_val = None
-
-        from datetime import date
-        import hashlib
+                    fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
+                else:
+                    fecha_val = None
 
         # GENERAR KEY ÚNICA BASADA EN CONTEXTO
         context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}".encode()).hexdigest()[:8]
