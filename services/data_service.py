@@ -491,7 +491,8 @@ class DataService:
         except Exception as e:
             st.error(f"❌ Error al actualizar costes de grupo: {e}")
             return False
-
+            
+    @st.cache_data(ttl=300, show_spinner="Cargando costes FUNDAE...")
     def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene costes de un grupo específico."""
         try:
@@ -500,7 +501,8 @@ class DataService:
         except Exception as e:
             st.error(f"❌ Error al cargar costes de grupo: {e}")
             return {}
-
+    
+    @st.cache_data(ttl=300, show_spinner="Cargando bonificaciones...")
     def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene bonificaciones de un grupo."""
         try:
@@ -526,7 +528,8 @@ class DataService:
         except Exception as e:
             st.error(f"❌ Error al eliminar bonificación: {e}")
             return False
-
+   
+    @st.cache_data(ttl=600, show_spinner="Cargando empresas de grupo...")
     def get_empresas_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene empresas asignadas a un grupo."""
         try:
@@ -565,7 +568,8 @@ class DataService:
         except Exception as e:
             st.error(f"❌ Error al eliminar empresa de grupo: {e}")
             return False
-            
+
+    @st.cache_data(ttl=300, show_spinner="Cargando tutores de grupo...")
     def get_tutores_grupo(self, grupo_id: str) -> pd.DataFrame:
     """Obtiene tutores asignados a un grupo específico."""
     try:
