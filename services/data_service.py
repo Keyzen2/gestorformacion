@@ -444,6 +444,7 @@ class DataService:
         """Obtiene diccionario codigo_grupo -> id de grupos."""
         df = _self.get_grupos_completos()
         return {row["codigo_grupo"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+        
     def get_tutores_por_empresa(_self, empresa_id: str = None) -> pd.DataFrame:
     """Obtiene tutores filtrados por empresa."""
     try:
