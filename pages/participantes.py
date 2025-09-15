@@ -5,6 +5,7 @@ from io import BytesIO
 from utils import validar_dni_cif, export_csv, get_ajustes_app
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
+from services.grupos_service import get_grupos_service
 
 def generar_plantilla_excel(rol):
     """Genera plantilla Excel para importación masiva de participantes."""
