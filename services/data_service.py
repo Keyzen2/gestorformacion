@@ -566,6 +566,84 @@ class DataService:
             st.error(f"❌ Error al eliminar empresa de grupo: {e}")
             return False
             
+    def get_tutores_grupo(self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene tutores asignados a un grupo específico."""
+    try:
+        res = self.supabase.table("tutores_grupos").select("""
+            id, grupo_id, tutor_id, created_at,
+            tutor:tutores(id, nombre, apellidos, email, especialidad)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        df = pd.DataFrame(res.data or [])
+        if not df.empty and "tutor" in df.columns:
+            df["tutor_nombre"] = df["tutor"].apply(
+                lambda x: f"{x.get('nombre', '')} {x.get('apellidos', '')}" if isinstance(x, dict) else ""
+            )
+        return df
+    except Exception as e:
+        return self._handle_query_error("cargar tutores de grupo", e)
+
+def create_tutor_grupo(self, grupo_id: str, tutor_id: str) -> bool:
+    """Asigna un tutor a un grupo."""
+    try:
+        self.supabase.table("tutores_grupos").insert({
+            "grupo_id": grupo_id,
+            "tutor_id": tutor_id,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al asignar tutor a grupo: {e}")
+        return False
+
+def delete_tutor_grupo(self, relacion_id: str) -> bool:
+    """Elimina la relación tutor-grupo."""
+    try:
+        self.supabase.table("tutores_grupos").delete().eq("id", relacion_id).execute()
+        return True
+    except Exception as e:
+        st.error(f"❌ Error al eliminar tutor de grupo: {e}")
+        return False
+
+def calcular_limite_fundae(self, modalidad: str, horas: int, participantes: int) -> tuple:
+    """Calcula límite máximo FUNDAE según modalidad."""
+    try:
+        # FUNDAE: Presencial=13€/hora, Teleformación=7.5€/hora
+        tarifa = 7.5 if modalidad in ["Teleformación", "TELEFORMACION"] else 13.0
+        limite = tarifa * horas * participantes
+        return limite, tarifa
+    except:
+        return 0, 0
+
+def limpiar_cache_grupos(self):
+    """Limpia cache relacionado con grupos - FUNCIÓN CRÍTICA."""
+    try:
+        # Limpiar todos los caches relacionados con grupos
+        if hasattr(self, 'get_grupos_completos'):
+            self.get_grupos_completos.clear()
+        if hasattr(self, 'get_participantes_completos'):
+            self.get_participantes_completos.clear()
+        if hasattr(self, 'get_tutores_completos'):
+            self.get_tutores_completos.clear()
+        if hasattr(self, 'get_acciones_formativas'):
+            self.get_acciones_formativas.clear()
+        if hasattr(self, 'get_empresas'):
+            self.get_empresas.clear()
+        if hasattr(self, 'get_empresas_con_modulos'):
+            self.get_empresas_con_modulos.clear()
+        # Caches específicos de grupos
+        if hasattr(self, 'get_grupo_costes'):
+            self.get_grupo_costes.clear()
+        if hasattr(self, 'get_grupo_bonificaciones'):
+            self.get_grupo_bonificaciones.clear()
+        if hasattr(self, 'get_tutores_grupo'):
+            self.get_tutores_grupo.clear()
+        if hasattr(self, 'get_empresas_grupo'):
+            self.get_empresas_grupo.clear()
+    except Exception as e:
+        # Fallar silenciosamente - el cache se limpiará eventualmente
+        pass
+        
     # =========================
     # USUARIOS
     # =========================
