@@ -88,7 +88,6 @@ def main(supabase, session_state):
         on_create=on_create,
         on_save=on_save,
         on_delete=on_delete,
-        nombre_seccion="grupo"
     )
 
     # =========================
