@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
-from utils import export_csv, formato_fecha
+from datetime import datetime
+from utils import export_csv
 from services.data_service import get_data_service
 from components.listado_con_ficha import listado_con_ficha
 
@@ -17,7 +17,6 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
-    # Inicializar servicio de datos
     data_service = get_data_service(supabase, session_state)
 
     try:
@@ -35,10 +34,25 @@ def main(supabase, session_state):
     df_filtered = mostrar_filtros_busqueda(df_grupos)
     mostrar_tabla_grupos(df_filtered, data_service, supabase, session_state, acciones_dict, empresas_dict)
 
+    st.divider()
+
+    # =========================
+    # Selección global de grupo
+    # =========================
+    grupo_sel = st.selectbox(
+        "📌 Selecciona un grupo para gestionar:",
+        [""] + df_grupos["codigo_grupo"].tolist(),
+        key="grupo_selector_global"
+    )
+    if grupo_sel:
+        grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
+        st.session_state["grupo_actual"] = grupo_id
+    else:
+        st.session_state["grupo_actual"] = None
+
     # =========================
     # SISTEMA DE TABS
     # =========================
-    st.divider()
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📝 Descripción",
         "👨‍🏫 Tutores",
@@ -50,17 +64,21 @@ def main(supabase, session_state):
     with tab1:
         mostrar_tab_descripcion(supabase, session_state, data_service, acciones_dict, empresas_dict)
 
+    if not st.session_state.get("grupo_actual"):
+        st.info("Selecciona primero un grupo para habilitar las demás pestañas.")
+        return
+
     with tab2:
-        mostrar_tab_tutores(supabase, session_state, data_service, df_grupos)
+        mostrar_tab_tutores(supabase, session_state, data_service)
 
     with tab3:
-        mostrar_tab_empresas(supabase, session_state, data_service, df_grupos, empresas_dict)
+        mostrar_tab_empresas(supabase, session_state, data_service, empresas_dict)
 
     with tab4:
-        mostrar_tab_participantes(supabase, session_state, data_service, df_grupos)
+        mostrar_tab_participantes(supabase, session_state, data_service)
 
     with tab5:
-        mostrar_tab_costes_fundae(supabase, session_state, data_service, df_grupos)
+        mostrar_tab_costes_fundae(supabase, session_state, data_service)
 
 
 # =========================
@@ -142,7 +160,6 @@ def mostrar_tabla_grupos(df_filtered, data_service, supabase, session_state, acc
                 if empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
 
-            # Validación FUNDAE: coherencia en finalización
             if "n_participantes_finalizados" in datos_editados:
                 n_finalizados = datos_editados.get("n_participantes_finalizados", 0)
                 aptos = datos_editados.get("n_aptos", 0)
@@ -208,14 +225,31 @@ def mostrar_tab_descripcion(supabase, session_state, data_service, acciones_dict
             n_participantes_previstos = st.number_input("Participantes Previstos *", min_value=1, max_value=200, value=10)
 
             st.markdown("**🕐 Horario FUNDAE**")
-            hora_m_inicio = st.time_input("Mañana - Inicio", value=None, step=900)
-            hora_m_fin = st.time_input("Mañana - Fin", value=None, step=900)
-            hora_t_inicio = st.time_input("Tarde - Inicio", value=None, step=900)
-            hora_t_fin = st.time_input("Tarde - Fin", value=None, step=900)
+            add_maniana = st.checkbox("Añadir tramo de Mañana")
+            if add_maniana:
+                hora_m_inicio = st.time_input("Mañana - Inicio", key="m_inicio")
+                hora_m_fin = st.time_input("Mañana - Fin", key="m_fin")
+            else:
+                hora_m_inicio = hora_m_fin = None
 
-            dias_semana = st.multiselect("Días de impartición", ["L", "M", "X", "J", "V", "S", "D"])
+            add_tarde = st.checkbox("Añadir tramo de Tarde")
+            if add_tarde:
+                hora_t_inicio = st.time_input("Tarde - Inicio", key="t_inicio")
+                hora_t_fin = st.time_input("Tarde - Fin", key="t_fin")
+            else:
+                hora_t_inicio = hora_t_fin = None
+
+            dias_semana = st.multiselect("Días de impartición", ["L", "M", "X", "J", "V", "S", "D"], key="dias_semana")
 
         observaciones = st.text_area("Observaciones")
+
+        empresa_sel = None
+        if session_state.role == "admin":
+            st.markdown("**🏢 Empresa**")
+            if not empresas_dict:
+                st.warning("No hay empresas disponibles.")
+            else:
+                empresa_sel = st.selectbox("Empresa *", options=list(empresas_dict.keys()), key="empresa_sel_descripcion")
 
         btn_crear = st.form_submit_button("🚀 Crear Grupo", type="primary")
         if btn_crear:
@@ -223,7 +257,6 @@ def mostrar_tab_descripcion(supabase, session_state, data_service, acciones_dict
                 st.error("⚠️ Todos los campos obligatorios deben estar completos.")
                 return
 
-            # Verificar código único
             existe = supabase.table("grupos").select("id").eq("codigo_grupo", codigo_grupo).execute()
             if existe.data:
                 st.error("⚠️ Ya existe un grupo con ese código.")
@@ -256,12 +289,10 @@ def mostrar_tab_descripcion(supabase, session_state, data_service, acciones_dict
                 "updated_at": datetime.utcnow().isoformat()
             }
 
-            # Empresa: admin selecciona, gestor fija su empresa
             if session_state.role == "admin":
-                if not empresas_dict:
-                    st.error("⚠️ No hay empresas disponibles.")
+                if not empresa_sel:
+                    st.error("⚠️ Selecciona una empresa.")
                     return
-                empresa_sel = st.selectbox("Empresa *", options=list(empresas_dict.keys()))
                 datos_grupo["empresa_id"] = empresas_dict[empresa_sel]
             else:
                 datos_grupo["empresa_id"] = session_state.user.get("empresa_id")
@@ -274,47 +305,40 @@ def mostrar_tab_descripcion(supabase, session_state, data_service, acciones_dict
                 st.rerun()
             else:
                 st.error("❌ Error al crear grupo.")
-
-
 # =========================
 # TAB TUTORES
 # =========================
-def mostrar_tab_tutores(supabase, session_state, data_service, df_grupos):
+def mostrar_tab_tutores(supabase, session_state, data_service):
     st.markdown("#### 👨‍🏫 Tutores por Grupo")
-    if df_grupos.empty:
-        st.info("ℹ️ No hay grupos creados todavía.")
+    grupo_id = st.session_state.get("grupo_actual")
+    if not grupo_id:
         return
-
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_tutores")
-    if not grupo_sel:
-        return
-    grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
 
     try:
-        tutores_asignados = data_service.get_tutores_grupo(grupo_id)
-        st.write("**Tutores asignados:**")
-        st.table(tutores_asignados[["nombre", "apellidos", "email"]])
+        df_asignados = data_service.get_tutores_grupo(grupo_id)
+        if not df_asignados.empty:
+            df_asignados["nombre"] = df_asignados["tutor"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+            df_asignados["apellidos"] = df_asignados["tutor"].apply(lambda x: x.get("apellidos") if isinstance(x, dict) else "")
+            df_asignados["email"] = df_asignados["tutor"].apply(lambda x: x.get("email") if isinstance(x, dict) else "")
+            df_asignados["especialidad"] = df_asignados["tutor"].apply(lambda x: x.get("especialidad") if isinstance(x, dict) else "")
+            st.dataframe(df_asignados[["nombre", "apellidos", "email", "especialidad"]])
 
         df_tutores = data_service.get_tutores_por_empresa(None if session_state.role == "admin" else session_state.empresa_id)
         if not df_tutores.empty:
-            tutor_opciones = {f"{t['nombre']} {t['apellidos']}": t["id"] for _, t in df_tutores.iterrows()}
-            tutor_sel = st.multiselect("Añadir tutores:", options=list(tutor_opciones.keys()))
-            if tutor_sel and st.button("➕ Asignar"):
-                for ts in tutor_sel:
-                    supabase.table("tutores_grupos").insert({
-                        "grupo_id": grupo_id,
-                        "tutor_id": tutor_opciones[ts],
-                        "created_at": datetime.utcnow().isoformat()
-                    }).execute()
+            opciones = {f"{r['nombre']} {r.get('apellidos','')}": r["id"] for _, r in df_tutores.iterrows()}
+            nuevos = st.multiselect("Añadir tutores:", options=list(opciones.keys()), key="tutores_add")
+            if nuevos and st.button("➕ Asignar", key="btn_tutores_add"):
+                for nom in nuevos:
+                    data_service.create_tutor_grupo(grupo_id, opciones[nom])
                 limpiar_cache_completo(data_service)
                 st.success("✅ Tutores asignados.")
                 st.rerun()
 
-        if not tutores_asignados.empty:
-            tutor_quitar = st.selectbox("Quitar tutor:", [""] + tutores_asignados["nombre"].tolist())
-            if tutor_quitar and st.button("❌ Quitar"):
-                tutor_id = tutores_asignados[tutores_asignados["nombre"] == tutor_quitar].iloc[0]["id"]
-                supabase.table("tutores_grupos").delete().eq("grupo_id", grupo_id).eq("tutor_id", tutor_id).execute()
+        if not df_asignados.empty:
+            rel_map = {f"{r.get('nombre','')} {r.get('apellidos','')}": r["id"] for _, r in df_asignados.iterrows()}
+            quitar = st.selectbox("Quitar tutor:", [""] + list(rel_map.keys()), key="tutor_quitar")
+            if quitar and st.button("❌ Quitar", key="btn_tutor_quitar"):
+                data_service.delete_tutor_grupo(rel_map[quitar])
                 limpiar_cache_completo(data_service)
                 st.success("✅ Tutor eliminado.")
                 st.rerun()
@@ -325,43 +349,35 @@ def mostrar_tab_tutores(supabase, session_state, data_service, df_grupos):
 # =========================
 # TAB EMPRESAS
 # =========================
-def mostrar_tab_empresas(supabase, session_state, data_service, df_grupos, empresas_dict):
+def mostrar_tab_empresas(supabase, session_state, data_service, empresas_dict):
     st.markdown("#### 🏢 Empresas por Grupo")
-    if df_grupos.empty:
-        st.info("ℹ️ No hay grupos creados todavía.")
+    grupo_id = st.session_state.get("grupo_actual")
+    if not grupo_id:
         return
-
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_empresas")
-    if not grupo_sel:
-        return
-    grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
 
     try:
-        empresas_asignadas = data_service.get_empresas_grupo(grupo_id)
-        st.write("**Empresas asignadas:**")
-        st.table(empresas_asignadas[["nombre", "cif"]])
+        df_asignadas = data_service.get_empresas_grupo(grupo_id)
+        if not df_asignadas.empty:
+            df_asignadas["nombre"] = df_asignadas["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+            df_asignadas["cif"] = df_asignadas["empresa"].apply(lambda x: x.get("cif") if isinstance(x, dict) else "")
+            st.dataframe(df_asignadas[["nombre", "cif"]])
 
-        if session_state.role == "admin":
-            if empresas_dict:
-                empresa_sel = st.multiselect("Añadir empresas:", options=list(empresas_dict.keys()))
-                if empresa_sel and st.button("➕ Asignar Empresas"):
-                    for es in empresa_sel:
-                        supabase.table("empresas_grupos").insert({
-                            "grupo_id": grupo_id,
-                            "empresa_id": empresas_dict[es],
-                            "created_at": datetime.utcnow().isoformat()
-                        }).execute()
-                    limpiar_cache_completo(data_service)
-                    st.success("✅ Empresas asignadas.")
-                    st.rerun()
-        else:
+        if session_state.role == "admin" and empresas_dict:
+            nuevas = st.multiselect("Añadir empresas:", options=list(empresas_dict.keys()), key="empresas_add")
+            if nuevas and st.button("➕ Asignar Empresas", key="btn_emp_add"):
+                for nom in nuevas:
+                    data_service.create_empresa_grupo(grupo_id, empresas_dict[nom])
+                limpiar_cache_completo(data_service)
+                st.success("✅ Empresas asignadas.")
+                st.rerun()
+        elif session_state.role != "admin":
             st.info("ℹ️ Como gestor, tu empresa ya está vinculada al grupo.")
 
-        if not empresas_asignadas.empty and session_state.role == "admin":
-            empresa_quitar = st.selectbox("Quitar empresa:", [""] + empresas_asignadas["nombre"].tolist())
-            if empresa_quitar and st.button("❌ Quitar Empresa"):
-                empresa_id = empresas_asignadas[empresas_asignadas["nombre"] == empresa_quitar].iloc[0]["id"]
-                supabase.table("empresas_grupos").delete().eq("grupo_id", grupo_id).eq("empresa_id", empresa_id).execute()
+        if session_state.role == "admin" and not df_asignadas.empty:
+            rel_map = {r.get("nombre",""): r["id"] for _, r in df_asignadas.iterrows()}
+            quitar = st.selectbox("Quitar empresa:", [""] + list(rel_map.keys()), key="empresa_quitar")
+            if quitar and st.button("❌ Quitar Empresa", key="btn_emp_quitar"):
+                data_service.delete_empresa_grupo(rel_map[quitar])
                 limpiar_cache_completo(data_service)
                 st.success("✅ Empresa eliminada.")
                 st.rerun()
@@ -372,42 +388,40 @@ def mostrar_tab_empresas(supabase, session_state, data_service, df_grupos, empre
 # =========================
 # TAB PARTICIPANTES
 # =========================
-def mostrar_tab_participantes(supabase, session_state, data_service, df_grupos):
+def mostrar_tab_participantes(supabase, session_state, data_service):
     st.markdown("#### 👥 Gestión de Participantes")
-    if df_grupos.empty:
-        st.info("ℹ️ No hay grupos creados todavía.")
+    grupo_id = st.session_state.get("grupo_actual")
+    if not grupo_id:
         return
-
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_participantes")
-    if not grupo_sel:
-        return
-    grupo_id = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]["id"]
 
     try:
-        participantes_asignados = data_service.get_participantes_grupo(grupo_id)
-        st.write("**Participantes asignados:**")
-        st.table(participantes_asignados[["nombre", "apellidos", "email"]])
+        df_asignados = data_service.get_participantes_grupo(grupo_id)
+        if not df_asignados.empty:
+            df_asignados["nombre_completo"] = df_asignados.apply(
+                lambda r: f"{r.get('nombre','')} {r.get('apellidos','')}".strip(), axis=1
+            )
+            st.dataframe(df_asignados[["nombre_completo", "email"]])
 
-        disponibles = data_service.get_participantes_sin_grupo()
-        if not disponibles.empty:
-            part_opciones = {f"{p['nombre']} {p['apellidos']}": p["id"] for _, p in disponibles.iterrows()}
-            part_sel = st.multiselect("Añadir participantes:", options=list(part_opciones.keys()))
-            if part_sel and st.button("➕ Asignar Participantes"):
-                for ps in part_sel:
+        libres = data_service.get_participantes_sin_grupo()
+        if not libres.empty:
+            opciones = {f"{r['nombre']} {r.get('apellidos','')}".strip(): r["id"] for _, r in libres.iterrows()}
+            nuevos = st.multiselect("Añadir participantes:", options=list(opciones.keys()), key="parts_add")
+            if nuevos and st.button("➕ Asignar Participantes", key="btn_parts_add"):
+                for nom in nuevos:
                     supabase.table("participantes_grupos").insert({
                         "grupo_id": grupo_id,
-                        "participante_id": part_opciones[ps],
+                        "participante_id": opciones[nom],
                         "fecha_asignacion": datetime.utcnow().isoformat()
                     }).execute()
                 limpiar_cache_completo(data_service)
                 st.success("✅ Participantes asignados.")
                 st.rerun()
 
-        if not participantes_asignados.empty:
-            part_quitar = st.selectbox("Quitar participante:", [""] + participantes_asignados["nombre"].tolist())
-            if part_quitar and st.button("❌ Quitar Participante"):
-                part_id = participantes_asignados[participantes_asignados["nombre"] == part_quitar].iloc[0]["id"]
-                supabase.table("participantes_grupos").delete().eq("grupo_id", grupo_id).eq("participante_id", part_id).execute()
+        if not df_asignados.empty:
+            rel_map = {r["nombre_completo"]: r["id"] for _, r in df_asignados.iterrows()}
+            quitar = st.selectbox("Quitar participante:", [""] + list(rel_map.keys()), key="part_quitar")
+            if quitar and st.button("❌ Quitar Participante", key="btn_part_quitar"):
+                supabase.table("participantes_grupos").delete().eq("grupo_id", grupo_id).eq("participante_id", rel_map[quitar]).execute()
                 limpiar_cache_completo(data_service)
                 st.success("✅ Participante eliminado.")
                 st.rerun()
@@ -418,42 +432,38 @@ def mostrar_tab_participantes(supabase, session_state, data_service, df_grupos):
 # =========================
 # TAB COSTES FUNDAE
 # =========================
-def mostrar_tab_costes_fundae(supabase, session_state, data_service, df_grupos):
+def mostrar_tab_costes_fundae(supabase, session_state, data_service):
     st.markdown("#### 💰 Costes FUNDAE")
-    if df_grupos.empty:
-        st.info("ℹ️ No hay grupos creados todavía.")
+    grupo_id = st.session_state.get("grupo_actual")
+    if not grupo_id:
         return
-
-    grupo_sel = st.selectbox("Seleccionar Grupo:", [""] + df_grupos["codigo_grupo"].tolist(), key="grupo_sel_costes")
-    if not grupo_sel:
-        return
-    grupo = df_grupos[df_grupos["codigo_grupo"] == grupo_sel].iloc[0]
-    grupo_id = grupo["id"]
 
     try:
+        grupo = data_service.get_grupos_completos()
+        grupo = grupo[grupo["id"] == grupo_id].iloc[0]
+
         coste = data_service.get_grupo_costes(grupo_id)
+        horas = int(grupo.get("accion_horas") or 0)
+        participantes = int(grupo.get("n_participantes_previstos") or 1)
+        tarifa_max = 13 if grupo["modalidad"] == "PRESENCIAL" else 7.5
+
         with st.form("form_costes", clear_on_submit=False):
             costes_directos = st.number_input("Costes Directos (€)", min_value=0.0, value=float(coste.get("costes_directos", 0)))
             costes_indirectos = st.number_input("Costes Indirectos (€)", min_value=0.0, value=float(coste.get("costes_indirectos", 0)))
             costes_organizacion = st.number_input("Costes de Organización (€)", min_value=0.0, value=float(coste.get("costes_organizacion", 0)))
             costes_salariales = st.number_input("Costes Salariales Cofinanciación (€)", min_value=0.0, value=float(coste.get("costes_salariales", 0)))
             cofinanciacion_privada = st.number_input("Aportación Privada (€)", min_value=0.0, value=float(coste.get("cofinanciacion_privada", 0)))
-
-            modalidad = grupo["modalidad"]
-            horas = grupo.get("duracion_horas") or grupo.get("num_horas") or 0
-            participantes = grupo.get("n_participantes_previstos") or 1
-            tarifa_max = 13 if modalidad == "PRESENCIAL" else 7.5
             tarifa_hora = st.number_input("Tarifa Hora (€)", min_value=0.0, value=float(coste.get("tarifa_hora", tarifa_max)))
 
-            total_calculado = float(horas) * float(participantes) * tarifa_hora
-            st.info(f"💡 Total calculado: {total_calculado:.2f} € (horas {horas} × {participantes} × {tarifa_hora} €/h)")
+            limite_boni = horas * participantes * tarifa_hora
+            total_costes = costes_directos + costes_indirectos + costes_organizacion
+
+            st.metric("Total Costes Formación", f"{total_costes:.2f} €")
+            st.info(f"💡 Límite de bonificación: {limite_boni:.2f} €")
 
             if tarifa_hora > tarifa_max:
-                st.error(f"⚠️ La tarifa por hora no puede superar {tarifa_max} € para modalidad {modalidad}.")
+                st.error(f"⚠️ La tarifa por hora no puede superar {tarifa_max} € para modalidad {grupo['modalidad']}.")
                 return
-
-            total_costes = costes_directos + costes_indirectos + costes_organizacion
-            st.metric("Total Costes Formación", f"{total_costes:.2f} €")
 
             btn_guardar = st.form_submit_button("💾 Guardar Costes", type="primary")
             if btn_guardar:
@@ -465,9 +475,9 @@ def mostrar_tab_costes_fundae(supabase, session_state, data_service, df_grupos):
                     "total_costes_formacion": total_costes,
                     "costes_salariales": costes_salariales,
                     "cofinanciacion_privada": cofinanciacion_privada,
-                    "modalidad": modalidad,
+                    "modalidad": grupo["modalidad"],
                     "tarifa_hora": tarifa_hora,
-                    "limite_maximo_bonificacion": total_calculado,
+                    "limite_maximo_bonificacion": limite_boni,
                     "updated_at": datetime.utcnow().isoformat()
                 }
                 if coste:
@@ -494,15 +504,19 @@ def mostrar_tab_costes_fundae(supabase, session_state, data_service, df_grupos):
                 if existe.data:
                     st.error("⚠️ Ya existe una bonificación para ese mes.")
                 else:
-                    supabase.table("grupo_bonificaciones").insert({
-                        "grupo_id": grupo_id,
-                        "mes": mes,
-                        "importe": importe,
-                        "created_at": datetime.utcnow().isoformat()
-                    }).execute()
-                    limpiar_cache_completo(data_service)
-                    st.success("✅ Bonificación añadida.")
-                    st.rerun()
+                    total_bonificado = float(bonificaciones["importe"].fillna(0).sum()) if not bonificaciones.empty else 0
+                    if total_bonificado + importe > limite_boni:
+                        st.error(f"⚠️ La suma de bonificaciones ({total_bonificado + importe:.2f} €) supera el límite ({limite_boni:.2f} €).")
+                    else:
+                        supabase.table("grupo_bonificaciones").insert({
+                            "grupo_id": grupo_id,
+                            "mes": mes,
+                            "importe": importe,
+                            "created_at": datetime.utcnow().isoformat()
+                        }).execute()
+                        limpiar_cache_completo(data_service)
+                        st.success("✅ Bonificación añadida.")
+                        st.rerun()
     except Exception as e:
         st.error(f"❌ Error en costes FUNDAE: {e}")
 
