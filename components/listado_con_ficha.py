@@ -864,9 +864,8 @@ def crear_campo_file(campo, campos_file, label, help_text, prefix):
         accept_multiple_files=config.get("multiple", False)
     )
 
-
 def crear_campo_fecha(campo, valor_actual, label, help_text, prefix):
-    """Crea un campo de fecha con manejo robusto de formatos."""
+    """Crea un campo de fecha con manejo robusto y keys únicas."""
     try:
         if isinstance(valor_actual, str) and valor_actual.strip():
             fecha_val = pd.to_datetime(valor_actual).date()
@@ -874,31 +873,18 @@ def crear_campo_fecha(campo, valor_actual, label, help_text, prefix):
             fecha_val = valor_actual.date()
         else:
             fecha_val = None
-            
+        
+        # KEY ÚNICA CON HASH
+        unique_key = f"{prefix}_{campo}_{hashlib.md5(f'{prefix}_{campo}_{valor_actual}_{pd.Timestamp.now().nanosecond}'.encode()).hexdigest()[:8]}"
+        
         if fecha_val:
-            return st.date_input(
-                label, 
-                value=fecha_val, 
-                help=help_text, 
-                key=f"{prefix}_{campo}"
-            )
+            return st.date_input(label, value=fecha_val, help=help_text, key=unique_key)
         else:
-            return st.date_input(
-                label, 
-                value=None, 
-                help=help_text, 
-                key=f"{prefix}_{campo}"
-            )
+            return st.date_input(label, value=None, help=help_text, key=unique_key)
     except:
-        # Si falla el parsing de fecha, usar input de texto
-        return st.text_input(
-            label, 
-            value=str(valor_actual) if valor_actual else "", 
-            help=help_text, 
-            key=f"{prefix}_{campo}",
-            placeholder="dd/mm/yyyy"
-        )
-
+        # Fallback con key única
+        fallback_key = f"{prefix}_{campo}_txt_{hashlib.md5(f'{prefix}_{campo}_error_{pd.Timestamp.now().nanosecond}'.encode()).hexdigest()[:6]}"
+        return st.text_input(label, value=str(valor_actual) if valor_actual else "", help=help_text, key=fallback_key, placeholder="dd/mm/yyyy")
 
 def crear_campo_numerico(campo, valor_actual, label, help_text, prefix):
     """Crea un campo numérico con el tipo apropiado."""
@@ -919,7 +905,6 @@ def crear_campo_numerico(campo, valor_actual, label, help_text, prefix):
             step=0.01,
             format="%.2f"
         )
-
 
 def validar_campos_obligatorios(datos, campos_obligatorios):
     """Valida que todos los campos obligatorios tengan valor."""
