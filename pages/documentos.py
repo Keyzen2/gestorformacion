@@ -12,6 +12,7 @@ from utils import (
     get_ajustes_app
 )
 from services.data_service import get_data_service
+from services.grupos_service import get_grupos_service
 
 def filtrar_grupos_por_accion(supabase, accion_formativa_id, empresa_id=None, rol="admin"):
     """
