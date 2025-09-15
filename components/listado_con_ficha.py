@@ -470,28 +470,34 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 key=f"{prefix}_{campo}",
                 placeholder="Introduce la contraseña..."
             )
-        # Campo fecha - CORREGIR KEYS DUPLICADAS
-        elif 'fecha' in campo.lower():
-            try:
-                if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
-                    fecha_val = pd.to_datetime(valor_actual).date()
+     # Campo fecha - VERSIÓN CORREGIDA
+elif 'fecha' in campo.lower():
+    import hashlib
+    from datetime import date
+    
+    try:
+        # Procesar valor de fecha
+        if valor_actual and isinstance(valor_actual, str) and valor_actual.strip():
+            fecha_val = pd.to_datetime(valor_actual).date()
         elif hasattr(valor_actual, 'date'):
-                    fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
-                else:
-                    fecha_val = None
-
+            fecha_val = valor_actual.date() if callable(getattr(valor_actual, 'date', None)) else valor_actual
+        else:
+            fecha_val = None
+        
         # GENERAR KEY ÚNICA BASADA EN CONTEXTO
-        context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}".encode()).hexdigest()[:8]
+        context_hash = hashlib.md5(f"{prefix}_{campo}_{str(valor_actual)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:8]
         unique_key = f"{prefix}_{campo}_{context_hash}"
-
+        
+        # Configurar límites de fecha
         min_date = date(1920, 1, 1)
-
+        
         if 'nacimiento' in campo.lower():
+            # Para fechas de nacimiento - máximo 18 años atrás
             año_actual = date.today().year
             mes_actual = date.today().month
             dia_actual = date.today().day
             max_date = date(año_actual - 18, mes_actual, dia_actual)
-
+            
             resultado = st.date_input(
                 label, 
                 value=fecha_val, 
@@ -501,6 +507,7 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 max_value=max_date
             )
         else:
+            # Para otras fechas - máximo fecha actual
             resultado = st.date_input(
                 label, 
                 value=fecha_val, 
@@ -509,17 +516,19 @@ def crear_campo_formulario(campo, valor_actual, campos_select, campos_textarea, 
                 min_value=min_date,
                 max_value=date.today()
             )
-
+            
     except Exception as e:
         # Fallback con key única también
-        unique_key = f"{prefix}_{campo}_fallback_{hashlib.md5(str(e).encode()).hexdigest()[:6]}"
+        fallback_hash = hashlib.md5(f"{prefix}_{campo}_error_{str(e)}_{pd.Timestamp.now().nanosecond}".encode()).hexdigest()[:6]
+        unique_key = f"{prefix}_{campo}_fallback_{fallback_hash}"
+        
         resultado = st.text_input(
             label, 
             value=str(valor_actual) if valor_actual else "", 
             help=help_text, 
             key=unique_key,
             placeholder="dd/mm/yyyy"
-        )
+        )    
         
         # Campo numérico
         elif isinstance(valor_actual, (int, float)) and not isinstance(valor_actual, bool):
@@ -789,7 +798,6 @@ def obtener_campos_creacion(campos_dinamicos, campos_select, campos_textarea, ca
     campos_crear = [c for c in campos_crear if c not in ['id', 'created_at', 'updated_at']]
     
     return campos_crear
-
 
 def procesar_creacion(datos_nuevos, on_create, campos_obligatorios):
     """Procesa la creación de un nuevo registro."""
