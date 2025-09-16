@@ -137,20 +137,30 @@ class GruposService:
             return False, "Debe incluir horas en formato HH:MM"
         
         return True, ""
-
+   
     def normalizar_modalidad_fundae(self, modalidad_input: str, aula_virtual: bool = None) -> str:
-        """Convierte modalidad a formato FUNDAE."""
-        if modalidad_input == "Presencial":
-            return "PRESENCIAL"
-        elif modalidad_input == "Teleformación":
-            return "TELEFORMACION"
-        elif modalidad_input == "Mixta":
-            return "MIXTA"
-        elif modalidad_input in ["PRESENCIAL", "TELEFORMACION", "MIXTA"]:
-            return modalidad_input  # Ya está en formato FUNDAE
-        else:
-            # Retrocompatibilidad con aula_virtual
+        """Convierte modalidad de acciones a formato FUNDAE."""
+        if not modalidad_input:
             return "TELEFORMACION" if aula_virtual else "PRESENCIAL"
+    
+        m = (modalidad_input or "").strip().lower()
+    
+        # equivalencias
+        online_syns = {"online", "en línea", "en linea", "on line", "on-line", "aula virtual"}
+    
+        if m == "presencial":
+            return "PRESENCIAL"
+        if m == "mixta":
+            return "MIXTA"
+        if m == "teleformación" or m == "teleformacion" or m in online_syns:
+            return "TELEFORMACION"
+    
+        # Si ya viene en formato FUNDAE, respetar
+        if modalidad_input in ["PRESENCIAL", "TELEFORMACION", "MIXTA"]:
+            return modalidad_input
+    
+        # Fallback razonable
+        return "TELEFORMACION" if aula_virtual else "PRESENCIAL"
 
     def fecha_pasada(self, fecha_str: str) -> bool:
         """Verifica si una fecha ya pasó."""
