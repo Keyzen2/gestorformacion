@@ -290,7 +290,7 @@ class GruposService:
             return False
             
     def delete_grupo(self, grupo_id: str) -> bool:
-    """Elimina un grupo y todas sus relaciones."""
+        """Elimina un grupo y todas sus relaciones."""
         try:
             # CORRECCIÓN: Verificar dependencias en tabla correcta
             participantes = self.supabase.table("participantes_grupos").select("id").eq("grupo_id", grupo_id).execute()
