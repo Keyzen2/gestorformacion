@@ -588,203 +588,203 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             # Crear nuevo horario
             horario_nuevo = crear_selector_horario_fundae("new")
     
-# =====================
-# SECCIÓN 3: FINALIZACIÓN (Condicional)
-# =====================
-# CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
-if mostrar_finalizacion:
-    with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
-        st.markdown("**Complete los datos de finalización para FUNDAE**")
-        
-        if estado_actual == "FINALIZAR":
-            st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fecha_fin_real = st.date_input(
-                "Fecha Fin Real *",
-                value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
-                help="Fecha real de finalización del grupo",
-                key="form_fecha_fin_real"
-            )
-            
-            # CORRECCIÓN: Manejo seguro de valores NaN
-            n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
-            n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
-            
-            n_finalizados = st.number_input(
-                "Participantes Finalizados *",
-                min_value=0,
-                max_value=n_participantes_previstos,
-                value=n_finalizados_actual,
-                help="Número de participantes que finalizaron la formación",
-                key="form_n_finalizados"
-            )
-        
-        with col2:
-            # CORRECCIÓN: Manejo seguro de valores NaN para aptos
-            n_aptos_raw = datos_grupo.get("n_aptos")
-            n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
-            
-            # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
-            n_no_aptos_raw = datos_grupo.get("n_no_aptos")
-            n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
-            
-            n_aptos = st.number_input(
-                "Participantes Aptos *",
-                min_value=0,
-                max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                value=n_aptos_actual,
-                help="Número de participantes aptos",
-                key="form_n_aptos"
-            )
-            
-            n_no_aptos = st.number_input(
-                "Participantes No Aptos *",
-                min_value=0,
-                max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                value=n_no_aptos_actual,
-                help="Número de participantes no aptos",
-                key="form_n_no_aptos"
-            )
-        
-        # Validación en tiempo real
-        if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
-            st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
-        elif n_finalizados > 0:
-            st.success("✅ Números de finalización coherentes")
-        
-        datos_finalizacion = {
-            "fecha_fin": fecha_fin_real.isoformat(),
-            "n_participantes_finalizados": n_finalizados,
-            "n_aptos": n_aptos,
-            "n_no_aptos": n_no_aptos
-        }
-
     # =====================
-    # BOTONES DE ACCIÓN
+    # SECCIÓN 3: FINALIZACIÓN (Condicional)
     # =====================
-    st.divider()
+    # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
+    if mostrar_finalizacion:
+        with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
+            st.markdown("**Complete los datos de finalización para FUNDAE**")
+            
+            if estado_actual == "FINALIZAR":
+                st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fecha_fin_real = st.date_input(
+                    "Fecha Fin Real *",
+                    value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
+                    help="Fecha real de finalización del grupo",
+                    key="form_fecha_fin_real"
+                )
+                
+                # CORRECCIÓN: Manejo seguro de valores NaN
+                n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
+                n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
+                
+                n_finalizados = st.number_input(
+                    "Participantes Finalizados *",
+                    min_value=0,
+                    max_value=n_participantes_previstos,
+                    value=n_finalizados_actual,
+                    help="Número de participantes que finalizaron la formación",
+                    key="form_n_finalizados"
+                )
+            
+            with col2:
+                # CORRECCIÓN: Manejo seguro de valores NaN para aptos
+                n_aptos_raw = datos_grupo.get("n_aptos")
+                n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
+                
+                # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
+                n_no_aptos_raw = datos_grupo.get("n_no_aptos")
+                n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
+                
+                n_aptos = st.number_input(
+                    "Participantes Aptos *",
+                    min_value=0,
+                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                    value=n_aptos_actual,
+                    help="Número de participantes aptos",
+                    key="form_n_aptos"
+                )
+                
+                n_no_aptos = st.number_input(
+                    "Participantes No Aptos *",
+                    min_value=0,
+                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                    value=n_no_aptos_actual,
+                    help="Número de participantes no aptos",
+                    key="form_n_no_aptos"
+                )
+            
+            # Validación en tiempo real
+            if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
+                st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
+            elif n_finalizados > 0:
+                st.success("✅ Números de finalización coherentes")
+            
+            datos_finalizacion = {
+                "fecha_fin": fecha_fin_real.isoformat(),
+                "n_participantes_finalizados": n_finalizados,
+                "n_aptos": n_aptos,
+                "n_no_aptos": n_no_aptos
+            }
     
-    if es_creacion:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
-                # Preparar datos para crear
-                datos_crear = {
-                    "codigo_grupo": codigo_grupo,
-                    "accion_formativa_id": acciones_dict[accion_formativa],
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "localidad": localidad,
-                    "provincia": provincia,
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-                
-                # CORRECCIÓN: Asignar empresa según rol automáticamente
-                if grupos_service.rol == "gestor":
-                    datos_crear["empresa_id"] = grupos_service.empresa_id
-                # Para admin, se asignará la empresa en la sección empresas participantes
-                
-                # Validar datos obligatorios
-                errores = validar_campos_obligatorios_fundae(datos_crear)
-                
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Crear grupo
-                    try:
-                        exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
-                        if exito:
-                            st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                            # CORRECCIÓN: Cargar el grupo recién creado para edición
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                st.rerun()
-                        else:
-                            st.error("❌ Error al crear el grupo")
-                    except Exception as e:
-                        st.error(f"❌ Error al crear grupo: {e}")
+        # =====================
+        # BOTONES DE ACCIÓN
+        # =====================
+        st.divider()
         
-        with col2:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
-    
-    else:
-        # Botones para edición
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                # Preparar datos para actualizar
-                datos_actualizar = {
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "localidad": localidad,
-                    "provincia": provincia,
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-                
-                # Agregar datos de finalización si están disponibles
-                if datos_finalizacion:
-                    datos_actualizar.update(datos_finalizacion)
-                
-                # Validar datos
-                errores = validar_campos_obligatorios_fundae(datos_actualizar)
-                if datos_finalizacion:
-                    errores.extend(validar_datos_finalizacion(datos_actualizar))
-                
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Actualizar grupo
-                    try:
-                        if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
-                            st.success("✅ Cambios guardados correctamente")
-                            # CORRECCIÓN: Recargar datos del grupo actualizado
-                            grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                            if grupo_actualizado.data:
-                                st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar cambios")
-                    except Exception as e:
-                        st.error(f"❌ Error al actualizar: {e}")
-        
-        with col2:
-            if st.button("🔄 Recargar", use_container_width=True):
-                # CORRECCIÓN: Recargar datos del grupo desde BD
-                try:
-                    grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                    if grupo_recargado.data:
-                        st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+        if es_creacion:
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
+                    # Preparar datos para crear
+                    datos_crear = {
+                        "codigo_grupo": codigo_grupo,
+                        "accion_formativa_id": acciones_dict[accion_formativa],
+                        "modalidad": modalidad,
+                        "fecha_inicio": fecha_inicio.isoformat(),
+                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                        "localidad": localidad,
+                        "provincia": provincia,
+                        "cp": cp,
+                        "n_participantes_previstos": n_participantes_previstos,
+                        "lugar_imparticion": lugar_imparticion,
+                        "observaciones": observaciones,
+                        "horario": horario_nuevo if horario_nuevo else None
+                    }
+                    
+                    # CORRECCIÓN: Asignar empresa según rol automáticamente
+                    if grupos_service.rol == "gestor":
+                        datos_crear["empresa_id"] = grupos_service.empresa_id
+                    # Para admin, se asignará la empresa en la sección empresas participantes
+                    
+                    # Validar datos obligatorios
+                    errores = validar_campos_obligatorios_fundae(datos_crear)
+                    
+                    if errores:
+                        st.error("❌ Errores de validación:")
+                        for error in errores:
+                            st.error(f"• {error}")
+                    else:
+                        # Crear grupo
+                        try:
+                            exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
+                            if exito:
+                                st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+                                # CORRECCIÓN: Cargar el grupo recién creado para edición
+                                grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                                if grupo_creado.data:
+                                    st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                                    st.rerun()
+                            else:
+                                st.error("❌ Error al crear el grupo")
+                        except Exception as e:
+                            st.error(f"❌ Error al crear grupo: {e}")
+            
+            with col2:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    st.session_state.grupo_seleccionado = None
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Error al recargar: {e}")
         
-        with col3:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
-    
-    return datos_grupo.get("id") if datos_grupo else None
+        else:
+            # Botones para edición
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                    # Preparar datos para actualizar
+                    datos_actualizar = {
+                        "modalidad": modalidad,
+                        "fecha_inicio": fecha_inicio.isoformat(),
+                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                        "localidad": localidad,
+                        "provincia": provincia,
+                        "cp": cp,
+                        "n_participantes_previstos": n_participantes_previstos,
+                        "lugar_imparticion": lugar_imparticion,
+                        "observaciones": observaciones,
+                        "horario": horario_nuevo if horario_nuevo else None
+                    }
+                    
+                    # Agregar datos de finalización si están disponibles
+                    if datos_finalizacion:
+                        datos_actualizar.update(datos_finalizacion)
+                    
+                    # Validar datos
+                    errores = validar_campos_obligatorios_fundae(datos_actualizar)
+                    if datos_finalizacion:
+                        errores.extend(validar_datos_finalizacion(datos_actualizar))
+                    
+                    if errores:
+                        st.error("❌ Errores de validación:")
+                        for error in errores:
+                            st.error(f"• {error}")
+                    else:
+                        # Actualizar grupo
+                        try:
+                            if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
+                                st.success("✅ Cambios guardados correctamente")
+                                # CORRECCIÓN: Recargar datos del grupo actualizado
+                                grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                                if grupo_actualizado.data:
+                                    st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al guardar cambios")
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar: {e}")
+            
+            with col2:
+                if st.button("🔄 Recargar", use_container_width=True):
+                    # CORRECCIÓN: Recargar datos del grupo desde BD
+                    try:
+                        grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                        if grupo_recargado.data:
+                            st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al recargar: {e}")
+            
+            with col3:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    st.session_state.grupo_seleccionado = None
+                    st.rerun()
+        
+        return datos_grupo.get("id") if datos_grupo else None
 
 # CORRECCIÓN adicional para validar_datos_finalizacion
 def validar_datos_finalizacion(datos):
