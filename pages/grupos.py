@@ -261,8 +261,8 @@ def mostrar_avisos_grupos(grupos_pendientes):
                     st.rerun()
 
 def crear_selector_horario_fundae(prefix=""):
-    """Crea un selector de horario compatible con FUNDAE."""
-    st.markdown("#### ⏰ Configuración de Horarios FUNDAE")
+    """Crea un selector de horario compatible con FUNDAE - IMPLEMENTACIÓN COMPLETA."""
+    st.markdown("#### Configuración de Horarios FUNDAE")
     st.caption("Intervalos de 15 minutos obligatorios según normativa FUNDAE")
     
     # Opción de configuración
@@ -277,59 +277,76 @@ def crear_selector_horario_fundae(prefix=""):
     
     manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
     
+    # Generar intervalos de tiempo correctamente
+    intervalos_manana = []
+    intervalos_tarde = []
+    
+    for h in range(6, 15):  # 06:00 a 14:45
+        for m in [0, 15, 30, 45]:
+            hora_str = f"{h:02d}:{m:02d}"
+            intervalos_manana.append(hora_str)
+    
+    for h in range(15, 24):  # 15:00 a 23:45
+        for m in [0, 15, 30, 45]:
+            if h == 23 and m > 0:  # Máximo 23:00
+                break
+            hora_str = f"{h:02d}:{m:02d}"
+            intervalos_tarde.append(hora_str)
+    
     # Tramo mañana
     if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
         with col1:
-            st.markdown("**🌅 Tramo Mañana (06:00 - 15:00)**")
+            st.markdown("**Tramo Mañana (06:00 - 15:00)**")
             
             sub_col1, sub_col2 = st.columns(2)
             with sub_col1:
                 manana_inicio = st.selectbox(
                     "Hora inicio:",
-                    [t for t in INTERVALOS_TIEMPO if "06:" <= t <= "14:45"],
+                    intervalos_manana[:-1],  # Hasta 14:45
                     index=12,  # 09:00
                     key=f"{prefix}_manana_inicio"
                 )
             with sub_col2:
-                horas_fin_manana = [t for t in INTERVALOS_TIEMPO if "06:15" <= t <= "15:00"]
                 if manana_inicio:
-                    # Filtrar para que fin sea después de inicio
-                    horas_fin_manana = [t for t in horas_fin_manana if t > manana_inicio]
-                
-                manana_fin = st.selectbox(
-                    "Hora fin:",
-                    horas_fin_manana,
-                    index=min(15, len(horas_fin_manana)-1) if horas_fin_manana else 0,  # 13:00
-                    key=f"{prefix}_manana_fin"
-                )
+                    # Filtrar horas fin que sean posteriores al inicio
+                    idx_inicio = intervalos_manana.index(manana_inicio)
+                    horas_fin_validas = intervalos_manana[idx_inicio + 1:]
+                    
+                    manana_fin = st.selectbox(
+                        "Hora fin:",
+                        horas_fin_validas,
+                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
+                        key=f"{prefix}_manana_fin"
+                    )
     
     # Tramo tarde
     if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
         with col2:
-            st.markdown("**🌇 Tramo Tarde (15:00 - 23:00)**")
+            st.markdown("**Tramo Tarde (15:00 - 23:00)**")
             
             sub_col1, sub_col2 = st.columns(2)
             with sub_col1:
                 tarde_inicio = st.selectbox(
                     "Hora inicio:",
-                    [t for t in INTERVALOS_TIEMPO if "15:00" <= t <= "22:45"],
+                    intervalos_tarde[:-1],  # Hasta 22:45
                     index=0,  # 15:00
                     key=f"{prefix}_tarde_inicio"
                 )
             with sub_col2:
-                horas_fin_tarde = [t for t in INTERVALOS_TIEMPO if "15:15" <= t <= "23:00"]
                 if tarde_inicio:
-                    horas_fin_tarde = [t for t in horas_fin_tarde if t > tarde_inicio]
-                
-                tarde_fin = st.selectbox(
-                    "Hora fin:",
-                    horas_fin_tarde,
-                    index=min(15, len(horas_fin_tarde)-1) if horas_fin_tarde else 0,  # 19:00
-                    key=f"{prefix}_tarde_fin"
-                )
+                    # Filtrar horas fin que sean posteriores al inicio
+                    idx_inicio = intervalos_tarde.index(tarde_inicio)
+                    horas_fin_validas = intervalos_tarde[idx_inicio + 1:]
+                    
+                    tarde_fin = st.selectbox(
+                        "Hora fin:",
+                        horas_fin_validas,
+                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
+                        key=f"{prefix}_tarde_fin"
+                    )
     
     # Días de la semana
-    st.markdown("**📅 Días de Impartición**")
+    st.markdown("**Días de Impartición**")
     cols = st.columns(7)
     dias_seleccionados = []
     
@@ -348,14 +365,14 @@ def crear_selector_horario_fundae(prefix=""):
     )
     
     if horario_final:
-        st.success(f"✅ **Horario FUNDAE**: {horario_final}")
+        st.success(f"Horario FUNDAE: {horario_final}")
         
         # Validar formato
         es_valido, error = validar_horario_fundae(horario_final)
         if not es_valido:
-            st.error(f"❌ {error}")
+            st.error(f"Error: {error}")
     else:
-        st.warning("⚠️ Configure al menos un tramo horario y días")
+        st.warning("Configure al menos un tramo horario y días")
     
     return horario_final
 
@@ -769,7 +786,7 @@ def validar_datos_finalizacion(datos):
     try:
         finalizados = int(datos.get("n_participantes_finalizados", 0))
         aptos = int(datos.get("n_aptos", 0))
-        no_aptos = int(datos.get("n_no_aptos", 0))  # CORRECCIÓN: era n_no_apaptos
+        no_aptos = int(datos.get("n_no_aptos", 0))  # CORREGIDO: era n_no_apaptos
         
         if finalizados <= 0:
             errores.append("Debe haber al menos 1 participante finalizado")
@@ -809,269 +826,402 @@ def mostrar_secciones_adicionales(grupos_service, grupo_id):
         mostrar_seccion_costes(grupos_service, grupo_id)
 
 def mostrar_seccion_tutores(grupos_service, grupo_id):
-    """Gestión de tutores del grupo."""
+    """Gestión de tutores del grupo - CON MANEJO DE ERRORES."""
     st.markdown("**Gestión de Tutores**")
     
-    # Tutores actuales
-    df_tutores = grupos_service.get_tutores_grupo(grupo_id)
-    
-    if not df_tutores.empty:
-        st.markdown("##### Tutores Asignados")
-        for _, row in df_tutores.iterrows():
-            tutor = row.get("tutor", {})
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"**{tutor.get('nombre', '')} {tutor.get('apellidos', '')}**")
-                st.caption(f"Email: {tutor.get('email', '')} | Especialidad: {tutor.get('especialidad', 'N/A')}")
-            with col2:
-                if st.button("Quitar", key=f"quitar_tutor_{row.get('id')}", type="secondary"):
-                    if grupos_service.delete_tutor_grupo(row.get("id")):
-                        st.success("Tutor eliminado")
-                        st.rerun()
-    else:
-        st.info("No hay tutores asignados")
-    
-    # Añadir tutores
-    st.markdown("##### Añadir Tutores")
-    df_tutores_disponibles = grupos_service.get_tutores_completos()
-    
-    if not df_tutores_disponibles.empty:
-        # Filtrar tutores ya asignados
-        tutores_asignados = {(row.get("tutor") or {}).get("id") for _, row in df_tutores.iterrows()}
-        df_disponibles = df_tutores_disponibles[~df_tutores_disponibles["id"].isin(tutores_asignados)]
+    try:
+        # Tutores actuales
+        df_tutores = grupos_service.get_tutores_grupo(grupo_id)
         
-        if not df_disponibles.empty:
-            opciones_tutores = {
-                f"{row['nombre_completo']} - {row.get('especialidad', 'Sin especialidad')}": row["id"]
-                for _, row in df_disponibles.iterrows()
-            }
-            
-            tutores_seleccionados = st.multiselect(
-                "Seleccionar tutores:",
-                opciones_tutores.keys(),
-                key=f"tutores_add_{grupo_id}"
-            )
-            
-            if tutores_seleccionados and st.button("Asignar Tutores", type="primary"):
-                for tutor_nombre in tutores_seleccionados:
-                    tutor_id = opciones_tutores[tutor_nombre]
-                    grupos_service.create_tutor_grupo(grupo_id, tutor_id)
-                st.success(f"Se asignaron {len(tutores_seleccionados)} tutores")
-                st.rerun()
+        if not df_tutores.empty:
+            st.markdown("##### Tutores Asignados")
+            for _, row in df_tutores.iterrows():
+                tutor = row.get("tutor", {})
+                if not tutor:  # Verificar que tutor no sea None
+                    continue
+                    
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    nombre_completo = f"{tutor.get('nombre', '')} {tutor.get('apellidos', '')}"
+                    st.write(f"**{nombre_completo.strip()}**")
+                    st.caption(f"Email: {tutor.get('email', 'N/A')} | Especialidad: {tutor.get('especialidad', 'N/A')}")
+                with col2:
+                    if st.button("Quitar", key=f"quitar_tutor_{row.get('id')}", type="secondary"):
+                        try:
+                            if grupos_service.delete_tutor_grupo(row.get("id")):
+                                st.success("Tutor eliminado")
+                                st.rerun()
+                            else:
+                                st.error("Error al eliminar tutor")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
         else:
-            st.info("Todos los tutores disponibles ya están asignados")
-    else:
-        st.warning("No hay tutores disponibles")
+            st.info("No hay tutores asignados")
+        
+        # Añadir tutores
+        st.markdown("##### Añadir Tutores")
+        try:
+            df_tutores_disponibles = grupos_service.get_tutores_completos()
+            
+            if not df_tutores_disponibles.empty:
+                # Filtrar tutores ya asignados
+                tutores_asignados = set()
+                for _, row in df_tutores.iterrows():
+                    tutor = row.get("tutor", {})
+                    if tutor and tutor.get("id"):
+                        tutores_asignados.add(tutor.get("id"))
+                
+                df_disponibles = df_tutores_disponibles[
+                    ~df_tutores_disponibles["id"].isin(tutores_asignados)
+                ]
+                
+                if not df_disponibles.empty:
+                    opciones_tutores = {}
+                    for _, row in df_disponibles.iterrows():
+                        nombre = row.get('nombre_completo', f"{row.get('nombre', '')} {row.get('apellidos', '')}")
+                        especialidad = row.get('especialidad', 'Sin especialidad')
+                        opciones_tutores[f"{nombre} - {especialidad}"] = row["id"]
+                    
+                    tutores_seleccionados = st.multiselect(
+                        "Seleccionar tutores:",
+                        opciones_tutores.keys(),
+                        key=f"tutores_add_{grupo_id}"
+                    )
+                    
+                    if tutores_seleccionados and st.button("Asignar Tutores", type="primary"):
+                        exitos = 0
+                        for tutor_nombre in tutores_seleccionados:
+                            tutor_id = opciones_tutores[tutor_nombre]
+                            try:
+                                if grupos_service.create_tutor_grupo(grupo_id, tutor_id):
+                                    exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al asignar {tutor_nombre}: {e}")
+                        
+                        if exitos > 0:
+                            st.success(f"Se asignaron {exitos} tutores")
+                            st.rerun()
+                else:
+                    st.info("Todos los tutores disponibles ya están asignados")
+            else:
+                st.warning("No hay tutores disponibles en el sistema")
+        except Exception as e:
+            st.error(f"Error al cargar tutores disponibles: {e}")
+            
+    except Exception as e:
+        st.error(f"Error al cargar sección de tutores: {e}")
 
 def mostrar_seccion_empresas(grupos_service, grupo_id):
-    """Gestión de empresas participantes."""
+    """Gestión de empresas participantes - CON MANEJO DE ERRORES."""
     st.markdown("**Empresas Participantes**")
     
     if grupos_service.rol == "gestor":
         st.info("Como gestor, tu empresa está vinculada automáticamente al grupo")
     
-    # Empresas actuales
-    df_empresas = grupos_service.get_empresas_grupo(grupo_id)
-    
-    if not df_empresas.empty:
-        st.markdown("##### Empresas Asignadas")
-        for _, row in df_empresas.iterrows():
-            empresa = row.get("empresa", {})
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"**{empresa.get('nombre', '')}**")
-                st.caption(f"CIF: {empresa.get('cif', '')} | Fecha: {row.get('fecha_asignacion', '')}")
-            with col2:
-                if grupos_service.rol == "admin" and st.button("Quitar", key=f"quitar_empresa_{row.get('id')}", type="secondary"):
-                    if grupos_service.delete_empresa_grupo(row.get("id")):
-                        st.success("Empresa eliminada")
-                        st.rerun()
-    else:
-        st.info("No hay empresas asignadas")
-    
-    # Añadir empresas (solo admin)
-    if grupos_service.rol == "admin":
-        st.markdown("##### Añadir Empresas")
-        empresas_dict = grupos_service.get_empresas_dict()
+    try:
+        # Empresas actuales
+        df_empresas = grupos_service.get_empresas_grupo(grupo_id)
         
-        if empresas_dict:
-            # Filtrar empresas ya asignadas
-            empresas_asignadas = {(row.get("empresa") or {}).get("nombre") for _, row in df_empresas.iterrows()}
-            empresas_disponibles = {
-                nombre: id_emp for nombre, id_emp in empresas_dict.items()
-                if nombre not in empresas_asignadas
-            }
-            
-            if empresas_disponibles:
-                empresas_seleccionadas = st.multiselect(
-                    "Seleccionar empresas:",
-                    empresas_disponibles.keys(),
-                    key=f"empresas_add_{grupo_id}"
-                )
+        if not df_empresas.empty:
+            st.markdown("##### Empresas Asignadas")
+            for _, row in df_empresas.iterrows():
+                empresa = row.get("empresa", {})
+                if not empresa:  # Verificar que empresa no sea None
+                    continue
+                    
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{empresa.get('nombre', 'Sin nombre')}**")
+                    cif = empresa.get('cif', 'Sin CIF')
+                    fecha = row.get('fecha_asignacion', 'Sin fecha')
+                    if isinstance(fecha, str) and len(fecha) > 10:
+                        fecha = fecha[:10]  # Solo la fecha, sin hora
+                    st.caption(f"CIF: {cif} | Fecha: {fecha}")
+                with col2:
+                    if grupos_service.rol == "admin" and st.button(
+                        "Quitar", 
+                        key=f"quitar_empresa_{row.get('id')}", 
+                        type="secondary"
+                    ):
+                        try:
+                            if grupos_service.delete_empresa_grupo(row.get("id")):
+                                st.success("Empresa eliminada")
+                                st.rerun()
+                            else:
+                                st.error("Error al eliminar empresa")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+        else:
+            st.info("No hay empresas asignadas")
+        
+        # Añadir empresas (solo admin)
+        if grupos_service.rol == "admin":
+            st.markdown("##### Añadir Empresas")
+            try:
+                empresas_dict = grupos_service.get_empresas_dict()
                 
-                if empresas_seleccionadas and st.button("Asignar Empresas", type="primary"):
-                    for empresa_nombre in empresas_seleccionadas:
-                        empresa_id = empresas_disponibles[empresa_nombre]
-                        grupos_service.create_empresa_grupo(grupo_id, empresa_id)
-                    st.success(f"Se asignaron {len(empresas_seleccionadas)} empresas")
-                    st.rerun()
-            else:
-                st.info("Todas las empresas disponibles ya están asignadas")
+                if empresas_dict:
+                    # Filtrar empresas ya asignadas
+                    empresas_asignadas = set()
+                    for _, row in df_empresas.iterrows():
+                        empresa = row.get("empresa", {})
+                        if empresa and empresa.get("nombre"):
+                            empresas_asignadas.add(empresa.get("nombre"))
+                    
+                    empresas_disponibles = {
+                        nombre: id_emp for nombre, id_emp in empresas_dict.items()
+                        if nombre not in empresas_asignadas
+                    }
+                    
+                    if empresas_disponibles:
+                        empresas_seleccionadas = st.multiselect(
+                            "Seleccionar empresas:",
+                            empresas_disponibles.keys(),
+                            key=f"empresas_add_{grupo_id}"
+                        )
+                        
+                        if empresas_seleccionadas and st.button("Asignar Empresas", type="primary"):
+                            exitos = 0
+                            for empresa_nombre in empresas_seleccionadas:
+                                empresa_id = empresas_disponibles[empresa_nombre]
+                                try:
+                                    if grupos_service.create_empresa_grupo(grupo_id, empresa_id):
+                                        exitos += 1
+                                except Exception as e:
+                                    st.error(f"Error al asignar {empresa_nombre}: {e}")
+                            
+                            if exitos > 0:
+                                st.success(f"Se asignaron {exitos} empresas")
+                                st.rerun()
+                    else:
+                        st.info("Todas las empresas disponibles ya están asignadas")
+                else:
+                    st.warning("No hay empresas disponibles en el sistema")
+            except Exception as e:
+                st.error(f"Error al cargar empresas disponibles: {e}")
+                
+    except Exception as e:
+        st.error(f"Error al cargar sección de empresas: {e}")
 
 def mostrar_seccion_participantes(grupos_service, grupo_id):
-    """Gestión de participantes del grupo."""
+    """Gestión de participantes del grupo - CON MANEJO DE ERRORES ROBUSTO."""
     st.markdown("**Participantes del Grupo**")
     
-    # Participantes actuales
-    df_participantes = grupos_service.get_participantes_grupo(grupo_id)
-    
-    if not df_participantes.empty:
-        st.markdown("##### Participantes Asignados")
-        st.dataframe(
-            df_participantes[["nif", "nombre", "apellidos", "email", "telefono"]],
-            use_container_width=True,
-            hide_index=True
-        )
+    try:
+        # Participantes actuales
+        df_participantes = grupos_service.get_participantes_grupo(grupo_id)
         
-        # Desasignar participantes
-        with st.expander("Desasignar Participantes"):
-            participantes_opciones = [
-                f"{row['nif']} - {row['nombre']} {row['apellidos']}"
-                for _, row in df_participantes.iterrows()
-            ]
+        if not df_participantes.empty:
+            st.markdown("##### Participantes Asignados")
             
-            participantes_quitar = st.multiselect(
-                "Seleccionar participantes a desasignar:",
-                participantes_opciones,
-                key=f"participantes_quitar_{grupo_id}"
-            )
+            # Verificar que las columnas existen
+            columnas_mostrar = []
+            columnas_disponibles = ["nif", "nombre", "apellidos", "email", "telefono"]
+            for col in columnas_disponibles:
+                if col in df_participantes.columns:
+                    columnas_mostrar.append(col)
             
-            if participantes_quitar and st.button("Desasignar Seleccionados", type="secondary"):
-                for participante_str in participantes_quitar:
-                    nif = participante_str.split(" - ")[0]
-                    participante_row = df_participantes[df_participantes["nif"] == nif]
-                    if not participante_row.empty:
-                        grupos_service.desasignar_participante_de_grupo(participante_row.iloc[0]["id"])
-                st.success(f"Se desasignaron {len(participantes_quitar)} participantes")
-                st.rerun()
-    else:
-        st.info("No hay participantes asignados")
-    
-    # Asignar participantes
-    st.markdown("##### Asignar Participantes")
-    
-    tab1, tab2 = st.tabs(["Individual", "Masivo (Excel)"])
-    
-    with tab1:
-        df_disponibles = grupos_service.get_participantes_disponibles(grupo_id)
-        
-        if not df_disponibles.empty:
-            participantes_opciones = {
-                f"{row['nif']} - {row['nombre']} {row['apellidos']}": row["id"]
-                for _, row in df_disponibles.iterrows()
-            }
+            if columnas_mostrar:
+                st.dataframe(
+                    df_participantes[columnas_mostrar],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.warning("No se pueden mostrar los datos de participantes (columnas faltantes)")
             
-            participantes_seleccionados = st.multiselect(
-                "Seleccionar participantes:",
-                participantes_opciones.keys(),
-                key=f"participantes_add_{grupo_id}"
-            )
-            
-            if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
-                for participante_str in participantes_seleccionados:
-                    participante_id = participantes_opciones[participante_str]
-                    grupos_service.asignar_participante_a_grupo(participante_id, grupo_id)
-                st.success(f"Se asignaron {len(participantes_seleccionados)} participantes")
-                st.rerun()
-        else:
-            st.info("No hay participantes disponibles")
-    
-    with tab2:
-        st.markdown("**Importación masiva desde Excel**")
-        st.markdown("1. Sube un archivo Excel con una columna 'dni' o 'nif'")
-        st.markdown("2. Se buscarán automáticamente en el sistema")
-        
-        archivo_excel = st.file_uploader(
-            "Subir archivo Excel",
-            type=["xlsx"],
-            key=f"excel_participantes_{grupo_id}"
-        )
-        
-        if archivo_excel:
-            try:
-                df_import = pd.read_excel(archivo_excel)
+            # Desasignar participantes
+            with st.expander("Desasignar Participantes"):
+                participantes_opciones = []
+                for _, row in df_participantes.iterrows():
+                    nif = row.get('nif', 'Sin NIF')
+                    nombre = row.get('nombre', '')
+                    apellidos = row.get('apellidos', '')
+                    participantes_opciones.append(f"{nif} - {nombre} {apellidos}")
                 
-                # Detectar columna de NIF
-                col_nif = None
-                for col in ["dni", "nif", "DNI", "NIF"]:
-                    if col in df_import.columns:
-                        col_nif = col
-                        break
-                
-                if not col_nif:
-                    st.error("El archivo debe contener una columna 'dni' o 'nif'")
-                else:
-                    st.dataframe(df_import.head(), use_container_width=True)
+                if participantes_opciones:
+                    participantes_quitar = st.multiselect(
+                        "Seleccionar participantes a desasignar:",
+                        participantes_opciones,
+                        key=f"participantes_quitar_{grupo_id}"
+                    )
                     
-                    if st.button("Procesar Archivo", type="primary"):
-                        nifs = [str(d).strip() for d in df_import[col_nif] if pd.notna(d)]
-                        nifs_validos = [d for d in nifs if validar_dni_cif(d)]
+                    if participantes_quitar and st.button("Desasignar Seleccionados", type="secondary"):
+                        exitos = 0
+                        for participante_str in participantes_quitar:
+                            try:
+                                nif = participante_str.split(" - ")[0]
+                                participante_row = df_participantes[df_participantes["nif"] == nif]
+                                if not participante_row.empty:
+                                    participante_id = participante_row.iloc[0]["id"]
+                                    if grupos_service.desasignar_participante_de_grupo(participante_id):
+                                        exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al desasignar {participante_str}: {e}")
                         
-                        df_disp_masivo = grupos_service.get_participantes_disponibles(grupo_id)
-                        disponibles = {p["nif"]: p["id"] for _, p in df_disp_masivo.iterrows()}
-                        
-                        asignados = 0
-                        errores = []
-                        
-                        for nif in nifs_validos:
-                            participante_id = disponibles.get(nif)
-                            if participante_id:
-                                try:
-                                    grupos_service.asignar_participante_a_grupo(participante_id, grupo_id)
-                                    asignados += 1
-                                except Exception as e:
-                                    errores.append(f"NIF {nif}: {str(e)}")
-                            else:
-                                errores.append(f"NIF {nif} no encontrado o ya asignado")
-                        
-                        if asignados > 0:
-                            st.success(f"Se asignaron {asignados} participantes")
-                        if errores:
-                            st.warning("Errores encontrados:")
-                            for error in errores[:10]:
-                                st.warning(f"• {error}")
-                        
-                        if asignados > 0:
+                        if exitos > 0:
+                            st.success(f"Se desasignaron {exitos} participantes")
                             st.rerun()
-            
+        else:
+            st.info("No hay participantes asignados")
+        
+        # Asignar participantes
+        st.markdown("##### Asignar Participantes")
+        
+        tab1, tab2 = st.tabs(["Individual", "Masivo (Excel)"])
+        
+        with tab1:
+            try:
+                df_disponibles = grupos_service.get_participantes_disponibles(grupo_id)
+                
+                if not df_disponibles.empty:
+                    participantes_opciones = {}
+                    for _, row in df_disponibles.iterrows():
+                        nif = row.get('nif', 'Sin NIF')
+                        nombre = row.get('nombre', '')
+                        apellidos = row.get('apellidos', '')
+                        participantes_opciones[f"{nif} - {nombre} {apellidos}"] = row["id"]
+                    
+                    participantes_seleccionados = st.multiselect(
+                        "Seleccionar participantes:",
+                        participantes_opciones.keys(),
+                        key=f"participantes_add_{grupo_id}"
+                    )
+                    
+                    if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
+                        exitos = 0
+                        for participante_str in participantes_seleccionados:
+                            participante_id = participantes_opciones[participante_str]
+                            try:
+                                if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
+                                    exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al asignar {participante_str}: {e}")
+                        
+                        if exitos > 0:
+                            st.success(f"Se asignaron {exitos} participantes")
+                            st.rerun()
+                else:
+                    st.info("No hay participantes disponibles")
             except Exception as e:
-                st.error(f"Error al procesar archivo: {e}")
+                st.error(f"Error al cargar participantes disponibles: {e}")
+        
+        with tab2:
+            st.markdown("**Importación masiva desde Excel**")
+            st.markdown("1. Sube un archivo Excel con una columna 'dni' o 'nif'")
+            st.markdown("2. Se buscarán automáticamente en el sistema")
+            
+            archivo_excel = st.file_uploader(
+                "Subir archivo Excel",
+                type=["xlsx"],
+                key=f"excel_participantes_{grupo_id}"
+            )
+            
+            if archivo_excel:
+                try:
+                    df_import = pd.read_excel(archivo_excel)
+                    
+                    # Detectar columna de NIF
+                    col_nif = None
+                    for col in ["dni", "nif", "DNI", "NIF"]:
+                        if col in df_import.columns:
+                            col_nif = col
+                            break
+                    
+                    if not col_nif:
+                        st.error("El archivo debe contener una columna 'dni' o 'nif'")
+                    else:
+                        st.dataframe(df_import.head(), use_container_width=True)
+                        
+                        if st.button("Procesar Archivo", type="primary"):
+                            try:
+                                nifs = [str(d).strip() for d in df_import[col_nif] if pd.notna(d)]
+                                nifs_validos = [d for d in nifs if validar_dni_cif(d)]
+                                
+                                df_disp_masivo = grupos_service.get_participantes_disponibles(grupo_id)
+                                disponibles = {p["nif"]: p["id"] for _, p in df_disp_masivo.iterrows()}
+                                
+                                asignados = 0
+                                errores = []
+                                
+                                for nif in nifs_validos:
+                                    participante_id = disponibles.get(nif)
+                                    if participante_id:
+                                        try:
+                                            if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
+                                                asignados += 1
+                                        except Exception as e:
+                                            errores.append(f"NIF {nif}: {str(e)}")
+                                    else:
+                                        errores.append(f"NIF {nif} no encontrado o ya asignado")
+                                
+                                if asignados > 0:
+                                    st.success(f"Se asignaron {asignados} participantes")
+                                if errores:
+                                    st.warning("Errores encontrados:")
+                                    for error in errores[:10]:  # Mostrar máximo 10 errores
+                                        st.warning(f"• {error}")
+                                
+                                if asignados > 0:
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al procesar datos: {e}")
+                
+                except Exception as e:
+                    st.error(f"Error al leer archivo Excel: {e}")
+                    
+    except Exception as e:
+        st.error(f"Error al cargar sección de participantes: {e}")
 
 def mostrar_seccion_costes(grupos_service, grupo_id):
-    """Gestión de costes y bonificaciones FUNDAE."""
+    """Gestión de costes y bonificaciones FUNDAE - CON VALIDACIONES ROBUSTAS."""
     st.markdown("**Costes y Bonificaciones FUNDAE**")
     
     # Obtener datos del grupo para cálculos
     try:
+        # Consulta más robusta con manejo de errores
         grupo_info = grupos_service.supabase.table("grupos").select("""
             modalidad, n_participantes_previstos,
             accion_formativa:acciones_formativas(num_horas)
         """).eq("id", grupo_id).execute()
         
-        if grupo_info.data:
-            datos_grupo = grupo_info.data[0]
-            modalidad = datos_grupo.get("modalidad", "PRESENCIAL")
-            participantes = int(datos_grupo.get("n_participantes_previstos", 0))
-            horas = int((datos_grupo.get("accion_formativa") or {}).get("num_horas", 0))
-        else:
+        if not grupo_info.data:
             st.error("No se pudo cargar información del grupo")
             return
+            
+        datos_grupo = grupo_info.data[0]
+        modalidad = datos_grupo.get("modalidad", "PRESENCIAL")
+        
+        # Validar participantes
+        participantes_raw = datos_grupo.get("n_participantes_previstos")
+        if participantes_raw is None or participantes_raw == 0:
+            participantes = 1  # Valor mínimo por defecto
+            st.warning("Número de participantes no definido, usando valor por defecto: 1")
+        else:
+            participantes = int(participantes_raw)
+        
+        # Validar horas de la acción formativa
+        accion_formativa = datos_grupo.get("accion_formativa")
+        if accion_formativa and accion_formativa.get("num_horas"):
+            horas = int(accion_formativa.get("num_horas", 0))
+        else:
+            horas = 0
+            st.warning("Horas de la acción formativa no definidas")
+            
     except Exception as e:
-        st.error(f"Error al cargar datos: {e}")
+        st.error(f"Error al cargar datos del grupo: {e}")
         return
     
-    # Calcular límite FUNDAE
-    limite_boni, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
+    # Calcular límite FUNDAE solo si tenemos datos válidos
+    if horas > 0 and participantes > 0:
+        try:
+            limite_boni, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
+        except Exception as e:
+            st.error(f"Error al calcular límites FUNDAE: {e}")
+            limite_boni, tarifa_max = 0, 13.0  # Valores por defecto
+    else:
+        limite_boni, tarifa_max = 0, 13.0
+        st.warning("No se pueden calcular límites FUNDAE sin horas y participantes válidos")
     
     # Mostrar información base
     col1, col2, col3, col4 = st.columns(4)
@@ -1085,7 +1235,11 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         st.metric("Límite Bonificación", f"{limite_boni:,.2f} €")
     
     # Formulario de costes
-    costes_actuales = grupos_service.get_grupo_costes(grupo_id)
+    try:
+        costes_actuales = grupos_service.get_grupo_costes(grupo_id)
+    except Exception as e:
+        st.error(f"Error al cargar costes actuales: {e}")
+        costes_actuales = {}
     
     with st.form(f"costes_{grupo_id}"):
         st.markdown("##### Costes de Formación")
