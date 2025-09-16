@@ -360,16 +360,23 @@ class GruposService:
             return _self._handle_query_error("cargar tutores", e)
 
     @st.cache_data(ttl=300)
+    @st.cache_data(ttl=300)
     def get_tutores_grupo(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene tutores asignados a un grupo - CORREGIDO."""
+        """Obtiene tutores asignados a un grupo con datos aplanados."""
         try:
-            # SOLUCIÓN: Especificar la relación exacta para evitar ambigüedad
             res = _self.supabase.table("tutores_grupos").select("""
                 id, grupo_id, tutor_id, created_at,
                 tutor:tutores!tutores_grupos_tutor_id_fkey(id, nombre, apellidos, email, especialidad)
             """).eq("grupo_id", grupo_id).execute()
-
-            return pd.DataFrame(res.data or [])
+    
+            df = pd.DataFrame(res.data or [])
+            if not df.empty and "tutor" in df.columns:
+                df["tutor_nombre"] = df["tutor"].apply(
+                    lambda x: f"{x.get('nombre','')} {x.get('apellidos','')}" if isinstance(x, dict) else ""
+                )
+                df["tutor_email"] = df["tutor"].apply(lambda x: x.get("email") if isinstance(x, dict) else "")
+                df["tutor_especialidad"] = df["tutor"].apply(lambda x: x.get("especialidad") if isinstance(x, dict) else "")
+            return df
         except Exception as e:
             return _self._handle_query_error("cargar tutores de grupo", e)
 
@@ -489,17 +496,20 @@ class GruposService:
     # =========================
     # EMPRESAS
     # =========================
-
     @st.cache_data(ttl=300)
     def get_empresas_grupo(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene empresas asignadas a un grupo."""
+        """Obtiene empresas asignadas a un grupo con datos aplanados."""
         try:
             res = _self.supabase.table("empresas_grupos").select("""
                 id, grupo_id, empresa_id, fecha_asignacion,
                 empresa:empresas(id, nombre, cif)
             """).eq("grupo_id", grupo_id).execute()
     
-            return pd.DataFrame(res.data or [])
+            df = pd.DataFrame(res.data or [])
+            if not df.empty and "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(lambda x: x.get("nombre") if isinstance(x, dict) else "")
+                df["empresa_cif"] = df["empresa"].apply(lambda x: x.get("cif") if isinstance(x, dict) else "")
+            return df
         except Exception as e:
             return _self._handle_query_error("cargar empresas de grupo", e)
 
