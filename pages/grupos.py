@@ -505,16 +505,18 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             )
             
             # Fechas
+            fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
             fecha_inicio = st.date_input(
                 "Fecha de Inicio *",
-                value=datetime.fromisoformat(datos_grupo["fecha_inicio"]).date() if datos_grupo.get("fecha_inicio") else date.today(),
+                value=fecha_inicio_value,
                 help="Fecha de inicio de la formación",
                 key="form_fecha_inicio"
             )
-            
+
+            fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
             fecha_fin_prevista = st.date_input(
                 "Fecha Fin Prevista *",
-                value=datetime.fromisoformat(datos_grupo["fecha_fin_prevista"]).date() if datos_grupo.get("fecha_fin_prevista") else None,
+                value=fecha_fin_prevista_value,
                 help="Fecha prevista de finalización",
                 key="form_fecha_fin_prevista"
             )
