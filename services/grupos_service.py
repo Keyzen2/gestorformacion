@@ -293,7 +293,7 @@ class GruposService:
         """Elimina un grupo y todas sus relaciones."""
         try:
             # Verificar dependencias
-            participantes = self.supabase.table("participantes").select("id").eq("grupo_id", grupo_id).execute()
+            participantes = self.supabase.table("participantes_grupos").select("id").eq("grupo_id", grupo_id).execute()
             if participantes.data:
                 st.error("No se puede eliminar. El grupo tiene participantes asignados.")
                 return False
@@ -517,13 +517,16 @@ class GruposService:
     # =========================
     # PARTICIPANTES (1:N)
     # =========================
-
     @st.cache_data(ttl=300)
     def get_participantes_grupo(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene participantes asignados a un grupo específico."""
+        """Obtiene los participantes asignados a un grupo específico (N:N)."""
         try:
-            query = _self.supabase.table("participantes").select("*").eq("grupo_id", grupo_id)
-            res = query.order("nombre").execute()
+            query = (
+                _self.supabase.table("participantes_grupos")
+                .select("id, fecha_asignacion, participante:participantes(id, nif, nombre, apellidos, email, telefono)")
+                .eq("grupo_id", grupo_id)
+            )
+            res = query.order("fecha_asignacion", desc=True).execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
             return _self._handle_query_error("cargar participantes de grupo", e)
@@ -555,11 +558,16 @@ class GruposService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes disponibles", e)
-
+            
     def asignar_participante_a_grupo(self, participante_id: str, grupo_id: str) -> bool:
-        """Asigna un participante a un grupo (método 1:N)."""
+        """Crea relación participante-grupo en la tabla intermedia (N:N)."""
         try:
-            self.supabase.table("participantes").update({"grupo_id": grupo_id}).eq("id", participante_id).execute()
+            data = {
+                "participante_id": participante_id,
+                "grupo_id": grupo_id,
+                "fecha_asignacion": datetime.now().isoformat()
+            }
+            self.supabase.table("participantes_grupos").insert(data).execute()
             self.get_participantes_grupo.clear()
             self.get_participantes_disponibles.clear()
             return True
@@ -567,10 +575,10 @@ class GruposService:
             st.error(f"Error al asignar participante: {e}")
             return False
 
-    def desasignar_participante_de_grupo(self, participante_id: str) -> bool:
-        """Desasigna un participante de su grupo."""
+    def desasignar_participante_de_grupo(self, relacion_id: str) -> bool:
+        """Elimina la relación participante-grupo (tabla intermedia)."""
         try:
-            self.supabase.table("participantes").update({"grupo_id": None}).eq("id", participante_id).execute()
+            self.supabase.table("participantes_grupos").delete().eq("id", relacion_id).execute()
             self.get_participantes_grupo.clear()
             self.get_participantes_disponibles.clear()
             return True
