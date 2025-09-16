@@ -227,6 +227,22 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar grupos dict: {e}")
             return {}
+            
+    @st.cache_data(ttl=600)
+    def get_grupos_dict_por_empresa(_self, empresa_id: str) -> Dict[str, str]:
+        """Devuelve grupos de una empresa específica: código -> id."""
+        try:
+            df = _self.get_grupos_completos()
+            if df.empty:
+                return {}
+        
+            # Filtrar por empresa_id
+            df_empresa = df[df["empresa_id"] == empresa_id]
+            return {row["codigo_grupo"]: row["id"] for _, row in df_empresa.iterrows()}
+        
+        except Exception as e:
+            st.error(f"Error al cargar grupos de empresa {empresa_id}: {e}")
+            return {}
         
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
