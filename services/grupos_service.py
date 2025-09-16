@@ -214,7 +214,6 @@ class GruposService:
         except Exception as e:
             return _self._handle_query_error("cargar grupos", e)
 
-    @st.cache_data(ttl=600)
     def get_acciones_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de acciones formativas: nombre -> id."""
         try:
