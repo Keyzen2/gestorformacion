@@ -1419,8 +1419,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 "tarifa_hora": tarifa_hora,
                 "modalidad": modalidad,
                 "total_costes_formacion": total_costes,
-                "limite_maximo_bonificacion": limite_calculado,
-                "observaciones": observaciones_costes
+                "limite_maximo_bonificacion": limite_calculado
             }
             
             # Validar antes de guardar
