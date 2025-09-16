@@ -430,140 +430,152 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
         st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
     
-    # =====================
-    # SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
-    # =====================
-    with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
-        st.markdown("**Información obligatoria para XML FUNDAE**")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Código del grupo
-            if es_creacion:
-                codigo_grupo = st.text_input(
-                    "Código del Grupo *",
-                    value=datos_grupo.get("codigo_grupo", ""),
-                    max_chars=50,
-                    help="Código único identificativo del grupo (máximo 50 caracteres)",
-                    key="form_codigo_grupo"
-                )
-            else:
-                codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                st.text_input(
-                    "Código del Grupo",
-                    value=codigo_grupo,
-                    disabled=True,
-                    help="No se puede modificar después de la creación"
-                )
-            
-            # Acción formativa
-            acciones_nombres = list(acciones_dict.keys())
-            if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
-                # Buscar el nombre de la acción actual
-                accion_actual = None
-                for nombre, id_accion in acciones_dict.items():
-                    if id_accion == datos_grupo.get("accion_formativa_id"):
-                        accion_actual = nombre
-                        break
-                indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
-            else:
-                indice_actual = 0
-            
-            accion_formativa = st.selectbox(
-                "Acción Formativa *",
-                acciones_nombres,
-                index=indice_actual,
-                help="Selecciona la acción formativa asociada",
-                key="form_accion_formativa"
+ # =====================
+# SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
+# =====================
+with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
+    st.markdown("**Información obligatoria para XML FUNDAE**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Código del grupo
+        if es_creacion:
+            codigo_grupo = st.text_input(
+                "Código del Grupo *",
+                value=datos_grupo.get("codigo_grupo", ""),
+                max_chars=50,
+                help="Código único identificativo del grupo (máximo 50 caracteres)",
+                key="form_codigo_grupo"
             )
-            
-            # Modalidad FUNDAE
-            modalidad_actual = datos_grupo.get("modalidad", "PRESENCIAL")
-            if modalidad_actual not in MODALIDADES_FUNDAE:
-                modalidad_actual = "PRESENCIAL"
-            
-            modalidad = st.selectbox(
-                "Modalidad *",
-                list(MODALIDADES_FUNDAE.values()),
-                index=list(MODALIDADES_FUNDAE.values()).index(modalidad_actual),
-                help="Modalidad según estándares FUNDAE",
-                key="form_modalidad"
-            )
-            
-            # Fechas
-            fecha_inicio = st.date_input(
-                "Fecha de Inicio *",
-                value=datetime.fromisoformat(datos_grupo["fecha_inicio"]).date() if datos_grupo.get("fecha_inicio") else date.today(),
-                help="Fecha de inicio de la formación",
-                key="form_fecha_inicio"
-            )
-            
-            fecha_fin_prevista = st.date_input(
-                "Fecha Fin Prevista *",
-                value=datetime.fromisoformat(datos_grupo["fecha_fin_prevista"]).date() if datos_grupo.get("fecha_fin_prevista") else None,
-                help="Fecha prevista de finalización",
-                key="form_fecha_fin_prevista"
+        else:
+            codigo_grupo = datos_grupo.get("codigo_grupo", "")
+            st.text_input(
+                "Código del Grupo",
+                value=codigo_grupo,
+                disabled=True,
+                help="No se puede modificar después de la creación"
             )
         
-        with col2:
-            # Localidad (obligatorio FUNDAE)
-            localidad = st.text_input(
-                "Localidad *",
-                value=datos_grupo.get("localidad", ""),
-                help="Localidad de impartición (obligatorio FUNDAE)",
-                key="form_localidad"
-            )
-            
-            # Provincia y CP (opcionales)
-            provincia = st.text_input(
-                "Provincia",
-                value=datos_grupo.get("provincia", ""),
-                help="Provincia de impartición (opcional)",
-                key="form_provincia"
-            )
-            
-            cp = st.text_input(
-                "Código Postal",
-                value=datos_grupo.get("cp", ""),
-                help="Código postal de impartición",
-                key="form_cp"
-            )
-            
-            # CORRECCIÓN: Manejar valores None y 0 correctamente
-            n_participantes_actual = datos_grupo.get("n_participantes_previstos")
-            if n_participantes_actual is None or n_participantes_actual == 0:
-                n_participantes_actual = 8  # Valor por defecto válido
-            
-            n_participantes_previstos = st.number_input(
-                "Participantes Previstos *",
-                min_value=1,
-                max_value=30,
-                value=int(n_participantes_actual),
-                help="Número de participantes previstos (1-30)",
-                key="form_n_participantes"
-            )
-            
-            # CORRECCIÓN: NO mostrar empresa en datos básicos
-            # La empresa se gestionará en la sección de empresas participantes
+        # Acción formativa
+        acciones_nombres = list(acciones_dict.keys())
+        if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
+            # Buscar el nombre de la acción actual
+            accion_actual = None
+            for nombre, id_accion in acciones_dict.items():
+                if id_accion == datos_grupo.get("accion_formativa_id"):
+                    accion_actual = nombre
+                    break
+            indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
+        else:
+            indice_actual = 0
         
-        # Lugar de impartición
-        lugar_imparticion = st.text_area(
-            "Lugar de Impartición",
-            value=datos_grupo.get("lugar_imparticion", ""),
-            height=60,
-            help="Descripción detallada del lugar donde se impartirá la formación",
-            key="form_lugar_imparticion"
+        accion_formativa = st.selectbox(
+            "Acción Formativa *",
+            acciones_nombres,
+            index=indice_actual,
+            help="Selecciona la acción formativa asociada",
+            key="form_accion_formativa"
         )
         
-        # Observaciones
-        observaciones = st.text_area(
-            "Observaciones",
-            value=datos_grupo.get("observaciones", ""),
-            height=80,
-            help="Información adicional sobre el grupo (opcional)",
-            key="form_observaciones"
+        # Modalidad FUNDAE
+        modalidad_actual = datos_grupo.get("modalidad", "PRESENCIAL")
+        if modalidad_actual not in MODALIDADES_FUNDAE:
+            modalidad_actual = "PRESENCIAL"
+        
+        modalidad = st.selectbox(
+            "Modalidad *",
+            list(MODALIDADES_FUNDAE.values()),
+            index=list(MODALIDADES_FUNDAE.values()).index(modalidad_actual),
+            help="Modalidad según estándares FUNDAE",
+            key="form_modalidad"
         )
+        
+        # Fechas
+        fecha_inicio = st.date_input(
+            "Fecha de Inicio *",
+            value=datetime.fromisoformat(datos_grupo["fecha_inicio"]).date() if datos_grupo.get("fecha_inicio") else date.today(),
+            help="Fecha de inicio de la formación",
+            key="form_fecha_inicio"
+        )
+        
+        fecha_fin_prevista = st.date_input(
+            "Fecha Fin Prevista *",
+            value=datetime.fromisoformat(datos_grupo["fecha_fin_prevista"]).date() if datos_grupo.get("fecha_fin_prevista") else None,
+            help="Fecha prevista de finalización",
+            key="form_fecha_fin_prevista"
+        )
+    
+    with col2:
+        # Localidad y Provincia (obligatorios FUNDAE con selectores)
+        provincias = grupos_service.get_provincias()
+        prov_opciones = {p["nombre"]: p["id"] for p in provincias}
+        
+        provincia_actual = datos_grupo.get("provincia") if datos_grupo else None
+        
+        provincia_sel = st.selectbox(
+            "Provincia *",
+            options=list(prov_opciones.keys()),
+            index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
+            help="Provincia de impartición (obligatorio FUNDAE)",
+            key="form_provincia"
+        )
+        
+        localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
+        loc_nombres = [l["nombre"] for l in localidades]
+        
+        localidad_actual = datos_grupo.get("localidad") if datos_grupo else None
+        
+        localidad_sel = st.selectbox(
+            "Localidad *",
+            options=loc_nombres,
+            index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
+            help="Localidad de impartición (obligatorio FUNDAE)",
+            key="form_localidad"
+        )
+        
+        provincia = provincia_sel
+        localidad = localidad_sel
+        
+        cp = st.text_input(
+            "Código Postal",
+            value=datos_grupo.get("cp", ""),
+            help="Código postal de impartición",
+            key="form_cp"
+        )
+        
+        # CORRECCIÓN: Manejar valores None y 0 correctamente
+        n_participantes_actual = datos_grupo.get("n_participantes_previstos")
+        if n_participantes_actual is None or n_participantes_actual == 0:
+            n_participantes_actual = 8  # Valor por defecto válido
+        
+        n_participantes_previstos = st.number_input(
+            "Participantes Previstos *",
+            min_value=1,
+            max_value=30,
+            value=int(n_participantes_actual),
+            help="Número de participantes previstos (1-30)",
+            key="form_n_participantes"
+        )
+    
+    # Lugar de impartición
+    lugar_imparticion = st.text_area(
+        "Lugar de Impartición",
+        value=datos_grupo.get("lugar_imparticion", ""),
+        height=60,
+        help="Descripción detallada del lugar donde se impartirá la formación",
+        key="form_lugar_imparticion"
+    )
+    
+    # Observaciones
+    observaciones = st.text_area(
+        "Observaciones",
+        value=datos_grupo.get("observaciones", ""),
+        height=80,
+        help="Información adicional sobre el grupo (opcional)",
+        key="form_observaciones"
+    )
+
     
     # =====================
     # SECCIÓN 2: HORARIOS FUNDAE (Expandida por defecto)
