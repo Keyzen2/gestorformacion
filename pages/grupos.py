@@ -202,7 +202,7 @@ def validar_campos_obligatorios_fundae(datos):
             errores.append(f"Horario: {error_horario}")
     
     return errores
-
+    
 def validar_datos_finalizacion(datos):
     """Valida datos de finalización de grupo."""
     errores = []
@@ -210,7 +210,7 @@ def validar_datos_finalizacion(datos):
     try:
         finalizados = int(datos.get("n_participantes_finalizados", 0))
         aptos = int(datos.get("n_aptos", 0))
-        no_aptos = int(datos.get("n_no_apaptos", 0))
+        no_aptos = int(datos.get("n_no_aptos", 0))  # CORREGIDO: era n_no_apaptos
         
         if finalizados <= 0:
             errores.append("Debe haber al menos 1 participante finalizado")
