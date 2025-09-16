@@ -528,22 +528,31 @@ class GruposService:
         except Exception as e:
             return _self._handle_query_error("cargar participantes de grupo", e)
 
-    @st.cache_data(ttl=300)
-    def get_participantes_disponibles(_self, grupo_id: str = None) -> pd.DataFrame:
-        """Obtiene participantes disponibles (sin grupo o del grupo especificado)."""
+        @st.cache_data(ttl=300)
+    def get_participantes_disponibles(_self, grupo_id: str) -> pd.DataFrame:
+        """Obtiene participantes disponibles para asignar a un grupo (usa tabla intermedia)."""
         try:
+            # Participantes ya asignados al grupo
+            asignados_res = (
+                _self.supabase.table("participantes_grupos")
+                .select("participante_id")
+                .eq("grupo_id", grupo_id)
+                .execute()
+            )
+            asignados_ids = [row["participante_id"] for row in (asignados_res.data or [])]
+    
+            # Traer todos los participantes filtrados por empresa (si gestor)
             query = _self.supabase.table("participantes").select("*")
             query = _self._apply_empresa_filter(query, "participantes")
-            
-            if grupo_id:
-                # Incluir participantes del grupo especificado o sin grupo
-                query = query.or_(f"grupo_id.is.null,grupo_id.eq.{grupo_id}")
-            else:
-                # Solo participantes sin grupo
-                query = query.is_("grupo_id", "null")
-            
+    
             res = query.order("nombre").execute()
-            return pd.DataFrame(res.data or [])
+            df = pd.DataFrame(res.data or [])
+    
+            # Excluir los ya asignados
+            if not df.empty and asignados_ids:
+                df = df[~df["id"].isin(asignados_ids)]
+    
+            return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes disponibles", e)
 
