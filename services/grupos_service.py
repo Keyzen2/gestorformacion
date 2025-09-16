@@ -256,6 +256,18 @@ class GruposService:
         df = _self.get_acciones_formativas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
+    @st.cache_data(ttl=600)
+    def get_areas_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario de áreas profesionales: etiqueta -> código."""
+        try:
+            res = _self.supabase.table("areas_profesionales").select("codigo, nombre").order("nombre").execute()
+            if res.data:
+                return {f"{row['codigo']} - {row['nombre']}": row["codigo"] for row in res.data}
+            return {}
+        except Exception as e:
+            st.error(f"Error al cargar áreas profesionales: {e}")
+            return {}
+
     def create_accion_formativa(_self, data: Dict[str, Any]) -> bool:
         """Crea una nueva acción formativa."""
         try:
