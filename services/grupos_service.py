@@ -212,7 +212,7 @@ class GruposService:
                     
                 return df 
             except Exception as e:
-                return _self._handle_query_error("cargar grupos completos", e
+                return _self._handle_query_error("cargar grupos completos", e)
     
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
