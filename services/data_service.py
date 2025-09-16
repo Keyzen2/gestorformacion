@@ -121,6 +121,17 @@ class DataService:
         df = _self.get_empresas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
+    def get_empresa_nombre(self, empresa_id: str) -> str:
+        """Obtiene el nombre de una empresa por su ID."""
+        try:
+            result = self.supabase.table("empresas").select("nombre").eq("id", empresa_id).execute()
+            if result.data:
+                return result.data[0]["nombre"]
+            return "Empresa no encontrada"
+        except Exception as e:
+            st.error(f"Error al obtener nombre de empresa: {e}")
+            return "Error al cargar empresa"
+            
     @st.cache_data(ttl=300)
     def get_empresas_con_modulos(_self) -> pd.DataFrame:
         """Obtiene empresas con información completa de módulos."""
