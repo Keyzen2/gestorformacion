@@ -2,8 +2,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils import export_csv
-from services.data_service import get_data_service
+from services.grupos.service import get_grupos.service
 from components.listado_con_ficha import listado_con_ficha
+from services.grupos_service import get_grupos_service
 
 def main(supabase, session_state):
     st.subheader("📚 Acciones Formativas")
@@ -13,15 +14,15 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
-    data_service = get_data_service(supabase, session_state)
+    grupos_service = get_grupos_service(supabase, session_state)
 
     # =========================
     # Cargar datos
     # =========================
     with st.spinner("Cargando datos..."):
-        df_acciones = data_service.get_acciones_formativas()
-        areas_dict = data_service.get_areas_dict()
-        grupos_acciones_df = data_service.get_grupos_acciones()
+        df_acciones = grupos.service.get_acciones_formativas()
+        areas_dict = grupos.service.get_areas_dict()
+        grupos_acciones_df = grupos.service.get_grupos_acciones()
 
     # =========================
     # Filtrar acciones por rol
@@ -80,7 +81,7 @@ def main(supabase, session_state):
     if modalidad_filter != "Todas" and "modalidad" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["modalidad"] == modalidad_filter]
 
-    allow_creation = data_service.can_modify_data() or session_state.role == "gestor"
+    allow_creation = grupos_service.can_modify_data() or session_state.role == "gestor"
 
     # =========================
     # Funciones CRUD
@@ -107,7 +108,7 @@ def main(supabase, session_state):
                 st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
 
-            success = data_service.update_accion_formativa(accion_id, datos_editados)
+            success = grupos_service.update_accion_formativa(accion_id, datos_editados)
             if success:
                 st.success("✅ Acción formativa actualizada correctamente.")
                 st.rerun()
@@ -143,7 +144,7 @@ def main(supabase, session_state):
                 st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
 
-            success = data_service.create_accion_formativa(datos_nuevos)
+            success = grupos.service.create_accion_formativa(datos_nuevos)
             if success:
                 st.success("✅ Acción formativa creada correctamente.")
                 st.rerun()
