@@ -443,7 +443,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
         st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
     
-     # =====================
+    # =====================
     # SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
     # =====================
     with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
@@ -490,18 +490,18 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 help="Selecciona la acción formativa asociada",
                 key="form_accion_formativa"
             )
-            
-            # Modalidad FUNDAE
-            modalidad_actual = datos_grupo.get("modalidad", "PRESENCIAL")
-            if modalidad_actual not in MODALIDADES_FUNDAE:
-                modalidad_actual = "PRESENCIAL"
-            
-            modalidad = st.selectbox(
-                "Modalidad *",
-                list(MODALIDADES_FUNDAE.values()),
-                index=list(MODALIDADES_FUNDAE.values()).index(modalidad_actual),
-                help="Modalidad según estándares FUNDAE",
-                key="form_modalidad"
+    
+            # 🔹 Calcular modalidad automáticamente desde la acción formativa
+            accion_id = acciones_dict[accion_formativa]
+            accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)  # 'Presencial' | 'Online' | 'Mixta'
+            modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
+    
+            # Mostrar modalidad en solo lectura
+            st.text_input(
+                "Modalidad",
+                value=modalidad_grupo,
+                disabled=True,
+                help="Modalidad tomada automáticamente de la acción formativa"
             )
             
             # Fechas
@@ -512,7 +512,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 help="Fecha de inicio de la formación",
                 key="form_fecha_inicio"
             )
-
+    
             fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
             fecha_fin_prevista = st.date_input(
                 "Fecha Fin Prevista *",
@@ -590,7 +590,6 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             help="Información adicional sobre el grupo (opcional)",
             key="form_observaciones"
         )
-    
         
         # =====================
         # SECCIÓN 2: HORARIOS FUNDAE (Expandida por defecto)
