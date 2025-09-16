@@ -700,8 +700,8 @@ with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
                         "modalidad": modalidad,
                         "fecha_inicio": fecha_inicio.isoformat(),
                         "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "localidad": localidad,
-                        "provincia": provincia,
+                        "provincia": provincia,        # texto de selectbox
+                        "localidad": localidad,        # texto de selectbox
                         "cp": cp,
                         "n_participantes_previstos": n_participantes_previstos,
                         "lugar_imparticion": lugar_imparticion,
@@ -753,8 +753,8 @@ with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
                         "modalidad": modalidad,
                         "fecha_inicio": fecha_inicio.isoformat(),
                         "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "localidad": localidad,
-                        "provincia": provincia,
+                        "provincia": provincia,        # texto de selectbox
+                        "localidad": localidad,        # texto de selectbox
                         "cp": cp,
                         "n_participantes_previstos": n_participantes_previstos,
                         "lugar_imparticion": lugar_imparticion,
