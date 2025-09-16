@@ -80,7 +80,7 @@ def main(supabase, session_state):
     if modalidad_filter != "Todas" and "modalidad" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["modalidad"] == modalidad_filter]
 
-    allow_creation = grupos_service.can_modify_data() or session_state.role == "gestor"
+    allow_creation = grupos_service.can_modify_data()
 
     # =========================
     # Funciones CRUD
