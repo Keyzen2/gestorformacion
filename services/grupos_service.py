@@ -34,10 +34,8 @@ class GruposService:
         
         # Campos obligatorios para XML de inicio
         campos_obligatorios = {
-            "codigo_grupo": "Código de grupo",
             "fecha_inicio": "Fecha de inicio", 
             "fecha_fin_prevista": "Fecha fin prevista",
-            "modalidad": "Modalidad",
             "horario": "Horario",
             "localidad": "Localidad",
             "n_participantes_previstos": "Participantes previstos"
