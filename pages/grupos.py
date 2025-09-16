@@ -662,129 +662,129 @@ if mostrar_finalizacion:
             "n_no_aptos": n_no_aptos
         }
 
-    # =====================
-    # BOTONES DE ACCIÓN
-    # =====================
-    st.divider()
-    
-    if es_creacion:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
-                # Preparar datos para crear
-                datos_crear = {
-                    "codigo_grupo": codigo_grupo,
-                    "accion_formativa_id": acciones_dict[accion_formativa],
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "localidad": localidad,
-                    "provincia": provincia,
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-                
-                # CORRECCIÓN: Asignar empresa según rol automáticamente
-                if grupos_service.rol == "gestor":
-                    datos_crear["empresa_id"] = grupos_service.empresa_id
-                # Para admin, se asignará la empresa en la sección empresas participantes
-                
-                # Validar datos obligatorios
-                errores = validar_campos_obligatorios_fundae(datos_crear)
-                
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Crear grupo
-                    try:
-                        exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
-                        if exito:
-                            st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                            # CORRECCIÓN: Cargar el grupo recién creado para edición
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                st.rerun()
-                        else:
-                            st.error("❌ Error al crear el grupo")
-                    except Exception as e:
-                        st.error(f"❌ Error al crear grupo: {e}")
-        
-        with col2:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
-    
-    else:
-        # Botones para edición
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                # Preparar datos para actualizar
-                datos_actualizar = {
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "localidad": localidad,
-                    "provincia": provincia,
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-                
-                # Agregar datos de finalización si están disponibles
-                if datos_finalizacion:
-                    datos_actualizar.update(datos_finalizacion)
-                
-                # Validar datos
-                errores = validar_campos_obligatorios_fundae(datos_actualizar)
-                if datos_finalizacion:
-                    errores.extend(validar_datos_finalizacion(datos_actualizar))
-                
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Actualizar grupo
-                    try:
-                        if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
-                            st.success("✅ Cambios guardados correctamente")
-                            # CORRECCIÓN: Recargar datos del grupo actualizado
-                            grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                            if grupo_actualizado.data:
-                                st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar cambios")
-                    except Exception as e:
-                        st.error(f"❌ Error al actualizar: {e}")
-        
-        with col2:
-            if st.button("🔄 Recargar", use_container_width=True):
-                # CORRECCIÓN: Recargar datos del grupo desde BD
+# =====================
+# BOTONES DE ACCIÓN
+# =====================
+st.divider()
+
+if es_creacion:
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
+            # Preparar datos para crear
+            datos_crear = {
+                "codigo_grupo": codigo_grupo,
+                "accion_formativa_id": acciones_dict[accion_formativa],
+                "modalidad": modalidad,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                "localidad": localidad,
+                "provincia": provincia,
+                "cp": cp,
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_nuevo if horario_nuevo else None
+            }
+            
+            # CORRECCIÓN: Asignar empresa según rol automáticamente
+            if grupos_service.rol == "gestor":
+                datos_crear["empresa_id"] = grupos_service.empresa_id
+            # Para admin, se asignará la empresa en la sección empresas participantes
+            
+            # Validar datos obligatorios
+            errores = validar_campos_obligatorios_fundae(datos_crear)
+            
+            if errores:
+                st.error("❌ Errores de validación:")
+                for error in errores:
+                    st.error(f"• {error}")
+            else:
+                # Crear grupo
                 try:
-                    grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                    if grupo_recargado.data:
-                        st.session_state.grupo_seleccionado = grupo_recargado.data[0]
-                    st.rerun()
+                    exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
+                    if exito:
+                        st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+                        # CORRECCIÓN: Cargar el grupo recién creado para edición
+                        grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                        if grupo_creado.data:
+                            st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                            st.rerun()
+                    else:
+                        st.error("❌ Error al crear el grupo")
                 except Exception as e:
-                    st.error(f"Error al recargar: {e}")
-        
-        with col3:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
+                    st.error(f"❌ Error al crear grupo: {e}")
     
-     return datos_grupo.get("id") if datos_grupo else None
+    with col2:
+        if st.button("❌ Cancelar", use_container_width=True):
+            st.session_state.grupo_seleccionado = None
+            st.rerun()
+
+else:
+    # Botones para edición
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+            # Preparar datos para actualizar
+            datos_actualizar = {
+                "modalidad": modalidad,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                "localidad": localidad,
+                "provincia": provincia,
+                "cp": cp,
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_nuevo if horario_nuevo else None
+            }
+            
+            # Agregar datos de finalización si están disponibles
+            if datos_finalizacion:
+                datos_actualizar.update(datos_finalizacion)
+            
+            # Validar datos
+            errores = validar_campos_obligatorios_fundae(datos_actualizar)
+            if datos_finalizacion:
+                errores.extend(validar_datos_finalizacion(datos_actualizar))
+            
+            if errores:
+                st.error("❌ Errores de validación:")
+                for error in errores:
+                    st.error(f"• {error}")
+            else:
+                # Actualizar grupo
+                try:
+                    if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
+                        st.success("✅ Cambios guardados correctamente")
+                        # CORRECCIÓN: Recargar datos del grupo actualizado
+                        grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                        if grupo_actualizado.data:
+                            st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al guardar cambios")
+                except Exception as e:
+                    st.error(f"❌ Error al actualizar: {e}")
+    
+    with col2:
+        if st.button("🔄 Recargar", use_container_width=True):
+            # CORRECCIÓN: Recargar datos del grupo desde BD
+            try:
+                grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                if grupo_recargado.data:
+                    st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al recargar: {e}")
+    
+    with col3:
+        if st.button("❌ Cancelar", use_container_width=True):
+            st.session_state.grupo_seleccionado = None
+            st.rerun()
+
+return datos_grupo.get("id") if datos_grupo else None
 
 # CORRECCIÓN adicional para validar_datos_finalizacion
 def validar_datos_finalizacion(datos):
