@@ -1017,6 +1017,51 @@ def generar_xml_accion_formativa(accion):
     """
     Genera XML de acción formativa según estándares FUNDAE 2020+ (SIN namespace).
     
+# =========================
+# GENERACIÓN DE XML FUNDAE
+# =========================
+
+def generar_pdf(buffer, lines):
+    """
+    Genera un PDF con las líneas proporcionadas.
+    
+    Args:
+        buffer: BytesIO buffer para escribir el PDF
+        lines: Lista de líneas de texto para incluir en el PDF
+        
+    Returns:
+        BytesIO: Buffer con el PDF generado
+    """
+    try:
+        # Crear el PDF usando reportlab
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        # Configurar el documento
+        c.setTitle("Documento FUNDAE")
+        
+        # Añadir líneas de texto
+        y_position = height - 2*cm
+        for line in lines:
+            if y_position < 2*cm:  # Nueva página si es necesario
+                c.showPage()
+                y_position = height - 2*cm
+            
+            c.drawString(2*cm, y_position, str(line))
+            y_position -= 0.5*cm
+        
+        c.save()
+        buffer.seek(0)
+        return buffer
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar PDF: {e}")
+        return None
+
+def generar_xml_accion_formativa(accion):
+    """
+    Genera XML de acción formativa según estándares FUNDAE 2020+ (SIN namespace).
+    
     Args:
         accion: Diccionario con datos de la acción formativa
         
@@ -1089,6 +1134,205 @@ def generar_xml_accion_formativa(accion):
         
     except Exception as e:
         st.error(f"❌ Error al generar XML de acción formativa: {e}")
+        return None
+
+def generar_xml_inicio_grupo(grupo, participantes):
+    """
+    Genera XML de inicio de grupo según estándares FUNDAE 2020+ (SIN namespace).
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de participantes del grupo
+        
+    Returns:
+        str: XML generado o None si hay error
+    """
+    try:
+        # Crear elemento raíz SIN namespace (cambio clave FUNDAE 2020+)
+        root = ET.Element("InicioGrupo")
+        
+        # Información del grupo
+        info_grupo = ET.SubElement(root, "InformacionGrupo")
+        
+        codigo = ET.SubElement(info_grupo, "CodigoGrupo")
+        codigo.text = str(grupo.get('codigo_grupo', ''))
+        
+        fecha_inicio = ET.SubElement(info_grupo, "FechaInicio")
+        fecha_inicio.text = str(grupo.get('fecha_inicio', ''))
+        
+        fecha_fin = ET.SubElement(info_grupo, "FechaFinPrevista")
+        fecha_fin.text = str(grupo.get('fecha_fin_prevista', ''))
+        
+        if grupo.get('localidad'):
+            localidad = ET.SubElement(info_grupo, "Localidad")
+            localidad.text = str(grupo.get('localidad'))
+        
+        if grupo.get('provincia'):
+            provincia = ET.SubElement(info_grupo, "Provincia")
+            provincia.text = str(grupo.get('provincia'))
+        
+        # Modalidad
+        modalidad = ET.SubElement(info_grupo, "Modalidad")
+        modalidad_valor = grupo.get('modalidad') or grupo.get('accion_modalidad', 'PRESENCIAL')
+        # Asegurar formato FUNDAE correcto
+        if modalidad_valor.upper() in ['PRESENCIAL', 'TELEFORMACION', 'MIXTA']:
+            modalidad.text = modalidad_valor.upper()
+        else:
+            modalidad.text = 'PRESENCIAL'
+        
+        # Número de participantes previstos
+        n_participantes = ET.SubElement(info_grupo, "NumeroParticipantesPrevistos")
+        n_participantes.text = str(grupo.get('n_participantes_previstos', len(participantes)))
+        
+        # Horario (si existe)
+        if grupo.get('horario'):
+            horario = ET.SubElement(info_grupo, "Horario")
+            horario.text = str(grupo.get('horario'))
+        
+        # Participantes
+        if participantes:
+            lista_participantes = ET.SubElement(root, "ListaParticipantes")
+            
+            for participante in participantes:
+                part_elem = ET.SubElement(lista_participantes, "Participante")
+                
+                # NIF/DNI (obligatorio)
+                nif_value = participante.get('nif') or participante.get('dni', '')
+                if nif_value:
+                    nif = ET.SubElement(part_elem, "NIF")
+                    nif.text = str(nif_value)
+                
+                # Nombre (obligatorio)
+                if participante.get('nombre'):
+                    nombre = ET.SubElement(part_elem, "Nombre")
+                    nombre.text = str(participante.get('nombre'))
+                
+                # Apellidos (obligatorio)
+                if participante.get('apellidos'):
+                    apellidos = ET.SubElement(part_elem, "Apellidos")
+                    apellidos.text = str(participante.get('apellidos'))
+                
+                # Email (obligatorio FUNDAE)
+                if participante.get('email'):
+                    email = ET.SubElement(part_elem, "Email")
+                    email.text = str(participante.get('email'))
+                
+                # Teléfono (opcional)
+                if participante.get('telefono'):
+                    telefono = ET.SubElement(part_elem, "Telefono")
+                    telefono.text = str(participante.get('telefono'))
+        
+        # Convertir a string XML
+        xml_str = ET.tostring(root, encoding='unicode', method='xml')
+        
+        # Formatear con declaración XML
+        formatted_xml = f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+        
+        return formatted_xml
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML de inicio de grupo: {e}")
+        return None
+
+def generar_xml_finalizacion_grupo(grupo, participantes):
+    """
+    Genera XML de finalización de grupo según estándares FUNDAE 2020+ (SIN namespace).
+    
+    Args:
+        grupo: Diccionario con datos del grupo
+        participantes: Lista de participantes del grupo
+        
+    Returns:
+        str: XML generado o None si hay error
+    """
+    try:
+        # Crear elemento raíz SIN namespace
+        root = ET.Element("FinalizacionGrupo")
+        
+        # Información del grupo
+        info_grupo = ET.SubElement(root, "InformacionGrupo")
+        
+        codigo = ET.SubElement(info_grupo, "CodigoGrupo")
+        codigo.text = str(grupo.get('codigo_grupo', ''))
+        
+        fecha_inicio = ET.SubElement(info_grupo, "FechaInicio")
+        fecha_inicio.text = str(grupo.get('fecha_inicio', ''))
+        
+        fecha_fin = ET.SubElement(info_grupo, "FechaFinReal")
+        fecha_fin.text = str(grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista', ''))
+        
+        # Resultados del grupo
+        resultados = ET.SubElement(root, "Resultados")
+        
+        n_previstos = ET.SubElement(resultados, "ParticipantesPrevistos")
+        n_previstos.text = str(grupo.get('n_participantes_previstos', len(participantes)))
+        
+        n_finalizados = ET.SubElement(resultados, "ParticipantesFinalizados")
+        n_finalizados.text = str(grupo.get('n_participantes_finalizados', len(participantes)))
+        
+        n_aptos = ET.SubElement(resultados, "ParticipantesAptos")
+        n_aptos.text = str(grupo.get('n_aptos', 0))
+        
+        n_no_aptos = ET.SubElement(resultados, "ParticipantesNoAptos")
+        n_no_aptos.text = str(grupo.get('n_no_aptos', 0))
+        
+        # Participantes finalizados
+        if participantes:
+            lista_participantes = ET.SubElement(root, "ParticipantesFinalizados")
+            
+            for participante in participantes:
+                part_elem = ET.SubElement(lista_participantes, "Participante")
+                
+                # NIF/DNI (obligatorio)
+                nif_value = participante.get('nif') or participante.get('dni', '')
+                if nif_value:
+                    nif = ET.SubElement(part_elem, "NIF")
+                    nif.text = str(nif_value)
+                
+                # Nombre (obligatorio)
+                if participante.get('nombre'):
+                    nombre = ET.SubElement(part_elem, "Nombre")
+                    nombre.text = str(participante.get('nombre'))
+                
+                # Apellidos (obligatorio)
+                if participante.get('apellidos'):
+                    apellidos = ET.SubElement(part_elem, "Apellidos")
+                    apellidos.text = str(participante.get('apellidos'))
+                
+                # Resultado del participante (APTO/NO_APTO)
+                resultado = ET.SubElement(part_elem, "Resultado")
+                resultado.text = participante.get('resultado', 'APTO')  # Por defecto APTO
+                
+                # Calificación si existe
+                if participante.get('calificacion'):
+                    calificacion = ET.SubElement(part_elem, "Calificacion")
+                    calificacion.text = str(participante.get('calificacion'))
+                
+                # Categoría profesional (campo FUNDAE 2024)
+                if participante.get('categoria_profesional'):
+                    categoria = ET.SubElement(part_elem, "CategoriaProfesional")
+                    categoria.text = str(participante.get('categoria_profesional'))
+                
+                # Grupo de cotización (campo FUNDAE 2024)
+                if participante.get('grupo_cotizacion'):
+                    cotizacion = ET.SubElement(part_elem, "GrupoCotizacion")
+                    cotizacion.text = str(participante.get('grupo_cotizacion'))
+        
+        # Observaciones
+        if grupo.get('observaciones'):
+            observaciones = ET.SubElement(root, "Observaciones")
+            observaciones.text = str(grupo.get('observaciones'))
+        
+        # Convertir a string XML
+        xml_str = ET.tostring(root, encoding='unicode', method='xml')
+        
+        # Formatear con declaración XML
+        formatted_xml = f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+        
+        return formatted_xml
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML de finalización de grupo: {e}")
         return None
 
 def validar_xml(xml_content, xsd_url):
