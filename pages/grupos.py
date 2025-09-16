@@ -592,6 +592,16 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     # SECCIÓN 3: FINALIZACIÓN (Condicional)
     # =====================
     # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
+    mostrar_finalizacion = (
+        not es_creacion
+        and (
+            estado_actual in ["FINALIZAR", "FINALIZADO"]
+            or (fecha_fin_prevista and fecha_fin_prevista <= date.today())
+            or datos_grupo.get("_mostrar_finalizacion", False)
+        )
+    )
+
+    datos_finalizacion = {}
     if mostrar_finalizacion:
         with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
             st.markdown("**Complete los datos de finalización para FUNDAE**")
