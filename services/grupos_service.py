@@ -209,6 +209,10 @@ class GruposService:
                     df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
+                    
+                return df 
+       except Exception as e:
+                return _self._handle_query_error("cargar grupos completos", e
     
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
