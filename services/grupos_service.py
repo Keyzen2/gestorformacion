@@ -187,10 +187,10 @@ class GruposService:
                 empresa:empresas(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "grupos")
-    
+
             res = query.order("fecha_inicio", desc=True).execute()
             df = pd.DataFrame(res.data or [])
-    
+
             if not df.empty:
                 # Procesar acción formativa
                 if "accion_formativa" in df.columns:
@@ -203,16 +203,16 @@ class GruposService:
                     df["accion_horas"] = df["accion_formativa"].apply(
                         lambda x: x.get("num_horas") if isinstance(x, dict) else 0
                     )
-                
+            
                 # Procesar empresa
                 if "empresa" in df.columns:
                     df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
-                    
-                return df 
-            except Exception as e:
-                return _self._handle_query_error("cargar grupos completos", e)
+
+            return df   # ✅ Siempre devuelve df, aunque esté vacío
+        except Exception as e:
+            return _self._handle_query_error("cargar grupos completos", e)
     
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
