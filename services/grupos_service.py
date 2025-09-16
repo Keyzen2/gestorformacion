@@ -692,6 +692,28 @@ class GruposService:
             return " | ".join(partes)
         except Exception:
             return ""
+    # =========================
+    # PROVINCIAS Y LOCALIDADES
+    # =========================
+    @st.cache_data(ttl=3600)
+    def get_provincias(_self) -> list:
+        """Devuelve listado de provincias ordenadas alfabéticamente."""
+        try:
+            res = _self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"❌ Error al cargar provincias: {e}")
+            return []
+    
+    @st.cache_data(ttl=3600)
+    def get_localidades_por_provincia(_self, provincia_id: int) -> list:
+        """Devuelve listado de localidades de una provincia."""
+        try:
+            res = _self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"❌ Error al cargar localidades: {e}")
+            return []
 
     # =========================
     # CACHE MANAGEMENT
