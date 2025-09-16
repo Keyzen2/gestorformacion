@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from utils import export_csv
-from services.grupos.service import get_grupos.service
 from components.listado_con_ficha import listado_con_ficha
 from services.grupos_service import get_grupos_service
 
