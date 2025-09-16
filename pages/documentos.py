@@ -70,6 +70,7 @@ def main(supabase, session_state):
     
     # Inicializar data service
     data_service = get_data_service(supabase, session_state)
+    data_service = get_grupos_service(supabase, session_state)
     
     # URLs de los esquemas XSD desde secrets
     xsd_urls = {
