@@ -39,7 +39,20 @@ def safe_int_conversion(value, default=0):
         return int(float(value))
     except (ValueError, TypeError):
         return default
-        
+def safe_date_conversion(date_value):
+    """Convierte valores de fecha de forma segura."""
+    if not date_value:
+        return None
+    
+    if isinstance(date_value, str):
+        try:
+            return datetime.fromisoformat(date_value.replace('Z', '+00:00')).date()
+        except:
+            return None
+    elif hasattr(date_value, 'date'):
+        return date_value.date() if callable(getattr(date_value, 'date', None)) else date_value
+    
+    return date_value   
 # =========================
 # FUNCIONES DE ESTADO
 # =========================
