@@ -588,11 +588,11 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             # Crear nuevo horario
             horario_nuevo = crear_selector_horario_fundae("new")
     
-    # =====================
-    # SECCIÓN 3: FINALIZACIÓN (Condicional)
-    # =====================
-    # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
-    if mostrar_finalizacion:
+# =====================
+# SECCIÓN 3: FINALIZACIÓN (Condicional)
+# =====================
+# CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
+if mostrar_finalizacion:
     with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
         st.markdown("**Complete los datos de finalización para FUNDAE**")
         
@@ -661,7 +661,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             "n_aptos": n_aptos,
             "n_no_aptos": n_no_aptos
         }
-    
+
     # =====================
     # BOTONES DE ACCIÓN
     # =====================
