@@ -19,9 +19,9 @@ def main(supabase, session_state):
     # Cargar datos
     # =========================
     with st.spinner("Cargando datos..."):
-        df_acciones = grupos.service.get_acciones_formativas()
-        areas_dict = grupos.service.get_areas_dict()
-        grupos_acciones_df = grupos.service.get_grupos_acciones()
+        df_acciones = grupos_service.get_acciones_formativas()
+        areas_dict = grupos_service.get_areas_dict()
+        grupos_acciones_df = grupos_service.get_grupos_acciones()
 
     # =========================
     # Filtrar acciones por rol
@@ -143,7 +143,7 @@ def main(supabase, session_state):
                 st.error("⚠️ La fecha de inicio no puede ser posterior a la fecha de fin.")
                 return
 
-            success = grupos.service.create_accion_formativa(datos_nuevos)
+            success = grupos_service.create_accion_formativa(datos_nuevos)
             if success:
                 st.success("✅ Acción formativa creada correctamente.")
                 st.rerun()
