@@ -213,7 +213,7 @@ class GruposService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar grupos", e)
-
+    @st.cache_data(ttl=600)
     def get_acciones_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de acciones formativas: nombre -> id."""
         try:
@@ -229,7 +229,6 @@ class GruposService:
             st.error(f"Error al cargar acciones: {e}")
             return {}
             
-    @st.cache_data(ttl=600)
     def get_areas_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de áreas profesionales: nombre -> código."""
         try:
