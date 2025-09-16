@@ -229,7 +229,19 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar acciones: {e}")
             return {}
-
+            
+    @st.cache_data(ttl=600)
+    def get_areas_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario de áreas profesionales: nombre -> código."""
+        try:
+            res = _self.supabase.table("areas_profesionales").select("codigo, nombre").order("nombre").execute()
+            if res.data:
+                return {item["nombre"]: item["codigo"] for item in res.data}
+            return {}
+        except Exception as e:
+            st.error(f"Error al cargar áreas profesionales: {e}")
+            return {}
+        
     @st.cache_data(ttl=600)
     def get_empresas_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de empresas: nombre -> id."""
