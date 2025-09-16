@@ -241,7 +241,37 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar áreas profesionales: {e}")
             return {}
-        
+
+    @st.cache_data(ttl=600)
+    def get_grupos_acciones(_self) -> pd.DataFrame:
+        """Obtiene listado de grupos de acciones (catálogo auxiliar)."""
+        try:
+            res = _self.supabase.table("grupos_acciones").select("id, nombre, codigo, cod_area_profesional").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar grupos de acciones", e)
+            
+    def create_accion_formativa(self, datos: Dict[str, Any]) -> bool:
+        """Crea una nueva acción formativa."""
+        try:
+            datos["created_at"] = datetime.utcnow().isoformat()
+            self.supabase.table("acciones_formativas").insert(datos).execute()
+            self.get_acciones_formativas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear acción formativa: {e}")
+            return False
+
+    def update_accion_formativa(self, accion_id: str, datos: Dict[str, Any]) -> bool:
+        """Actualiza una acción formativa existente."""
+        try:
+            self.supabase.table("acciones_formativas").update(datos).eq("id", accion_id).execute()
+            self.get_acciones_formativas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar acción formativa: {e}")
+            return False
+    
     @st.cache_data(ttl=600)
     def get_empresas_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de empresas: nombre -> id."""
