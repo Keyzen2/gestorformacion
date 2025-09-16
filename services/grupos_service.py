@@ -211,7 +211,7 @@ class GruposService:
                     )
                     
                 return df 
-       except Exception as e:
+            except Exception as e:
                 return _self._handle_query_error("cargar grupos completos", e
     
     @st.cache_data(ttl=600)
