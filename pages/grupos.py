@@ -932,6 +932,75 @@ def mostrar_seccion_tutores(grupos_service, grupo_id):
             
     except Exception as e:
         st.error(f"Error al cargar sección de tutores: {e}")
+# =========================
+# 4.b CENTRO GESTOR (solo Teleformación o Mixta)
+# =========================
+try:
+    # Traer modalidad de la acción formativa del grupo (derivada y normalizada)
+    info_mod = grupos_service.supabase.table("grupos").select(
+        "accion_formativa:acciones_formativas(modalidad)"
+    ).eq("id", grupo_id).limit(1).execute()
+
+    modalidad_accion_raw = ""
+    if info_mod.data and info_mod.data[0].get("accion_formativa"):
+        modalidad_accion_raw = info_mod.data[0]["accion_formativa"].get("modalidad", "")
+
+    modalidad_norm = grupos_service.normalizar_modalidad_fundae(modalidad_accion_raw)
+
+    if modalidad_norm in ["TELEFORMACION", "MIXTA"]:
+        st.markdown("### 🏢 Centro Gestor")
+
+        # Actual asignado (si lo hay)
+        centro_actual = grupos_service.get_centro_gestor_grupo(grupo_id)
+        if centro_actual and centro_actual.get("centro"):
+            c = centro_actual["centro"]
+            st.info(f"Centro gestor actual: **{c.get('razon_social','(sin nombre)')}** — CIF: {c.get('cif','N/A')} — CP: {c.get('codigo_postal','N/A')}")
+
+        # Candidatos disponibles según reglas de rol/empresas-vinculadas
+        df_centros = grupos_service.get_centros_para_grupo(grupo_id)
+
+        if df_centros.empty:
+            st.warning("No hay centros gestores disponibles para este grupo.")
+        else:
+            # Construir diccionario etiqueta->id
+            opciones = {}
+            for _, row in df_centros.iterrows():
+                etiqueta = row.get("razon_social") or row.get("nombre_comercial") or row.get("cif") or row.get("id")
+                opciones[str(etiqueta)] = row["id"]
+
+            # Preselección si ya hay asignado
+            preindex = 0
+            if centro_actual and centro_actual.get("centro"):
+                rz_act = centro_actual["centro"].get("razon_social")
+                if rz_act and rz_act in opciones:
+                    preindex = list(opciones.keys()).index(rz_act)
+
+            sel = st.selectbox("Seleccionar centro gestor", list(opciones.keys()), index=preindex if preindex < len(opciones) else 0)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Asignar centro gestor"):
+                    ok = grupos_service.assign_centro_gestor_a_grupo(grupo_id, opciones[sel])
+                    if ok:
+                        st.success("Centro gestor asignado correctamente.")
+                        st.rerun()
+                    else:
+                        st.error("No se pudo asignar el centro gestor.")
+
+            with col2:
+                if centro_actual and st.button("❌ Desasignar centro gestor"):
+                    ok = grupos_service.unassign_centro_gestor_de_grupo(grupo_id)
+                    if ok:
+                        st.success("Centro gestor desasignado.")
+                        st.rerun()
+                    else:
+                        st.error("No se pudo desasignar el centro gestor.")
+    else:
+        # No mostrar nada si Presencial
+        pass
+
+except Exception as e:
+    st.error(f"Error en sección Centro Gestor: {e}")
 
 def mostrar_seccion_empresas(grupos_service, grupo_id):
     """Gestión de empresas participantes - CON MANEJO DE ERRORES."""
