@@ -707,20 +707,22 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             with col1:
                 if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
                     # Preparar datos para crear
+                    # En CREAR
                     datos_crear = {
                         "codigo_grupo": codigo_grupo,
                         "accion_formativa_id": acciones_dict[accion_formativa],
-                        "modalidad": modalidad,
+                        "modalidad": modalidad_grupo,   # ← derivada de la acción
                         "fecha_inicio": fecha_inicio.isoformat(),
                         "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "provincia": provincia,        # texto de selectbox
-                        "localidad": localidad,        # texto de selectbox
+                        "provincia": provincia,
+                        "localidad": localidad,
                         "cp": cp,
                         "n_participantes_previstos": n_participantes_previstos,
                         "lugar_imparticion": lugar_imparticion,
                         "observaciones": observaciones,
                         "horario": horario_nuevo if horario_nuevo else None
                     }
+
     
                     # CORRECCIÓN: Asignar empresa según rol automáticamente
                     if grupos_service.rol == "gestor":
@@ -762,12 +764,13 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             with col1:
                 if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
                     # Preparar datos para actualizar
+                    # En ACTUALIZAR
                     datos_actualizar = {
-                        "modalidad": modalidad,
+                        "modalidad": modalidad_grupo,   # ← derivada de la acción
                         "fecha_inicio": fecha_inicio.isoformat(),
                         "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "provincia": provincia,        # texto de selectbox
-                        "localidad": localidad,        # texto de selectbox
+                        "provincia": provincia,
+                        "localidad": localidad,
                         "cp": cp,
                         "n_participantes_previstos": n_participantes_previstos,
                         "lugar_imparticion": lugar_imparticion,
