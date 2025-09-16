@@ -574,85 +574,75 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     # SECCIÓN 3: FINALIZACIÓN (Condicional)
     # =====================
     # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
-    mostrar_finalizacion = (
-        not es_creacion and 
-        (estado_actual in ["FINALIZAR", "FINALIZADO"] or 
-         (fecha_fin_prevista and fecha_fin_prevista <= date.today()) or
-         datos_grupo.get('_mostrar_finalizacion', False))  # Forzar mostrar desde botón
-    )
-    
-    datos_finalizacion = {}
     if mostrar_finalizacion:
-        with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
-            st.markdown("**Complete los datos de finalización para FUNDAE**")
+    with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
+        st.markdown("**Complete los datos de finalización para FUNDAE**")
+        
+        if estado_actual == "FINALIZAR":
+            st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fecha_fin_real = st.date_input(
+                "Fecha Fin Real *",
+                value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
+                help="Fecha real de finalización del grupo",
+                key="form_fecha_fin_real"
+            )
             
-            if estado_actual == "FINALIZAR":
-                st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
+            # CORRECCIÓN: Manejo seguro de valores NaN
+            n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
+            n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
             
-            col1, col2 = st.columns(2)
+            n_finalizados = st.number_input(
+                "Participantes Finalizados *",
+                min_value=0,
+                max_value=n_participantes_previstos,
+                value=n_finalizados_actual,
+                help="Número de participantes que finalizaron la formación",
+                key="form_n_finalizados"
+            )
+        
+        with col2:
+            # CORRECCIÓN: Manejo seguro de valores NaN para aptos
+            n_aptos_raw = datos_grupo.get("n_aptos")
+            n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
             
-            with col1:
-                fecha_fin_real = st.date_input(
-                    "Fecha Fin Real *",
-                    value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
-                    help="Fecha real de finalización del grupo",
-                    key="form_fecha_fin_real"
-                )
-                
-                # CORRECCIÓN: Manejar valores None en finalización
-                n_finalizados_actual = datos_grupo.get("n_participantes_finalizados")
-                if n_finalizados_actual is None:
-                    n_finalizados_actual = 0
-                
-                n_finalizados = st.number_input(
-                    "Participantes Finalizados *",
-                    min_value=0,
-                    max_value=n_participantes_previstos,
-                    value=int(n_finalizados_actual),
-                    help="Número de participantes que finalizaron la formación",
-                    key="form_n_finalizados"
-                )
+            # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
+            n_no_aptos_raw = datos_grupo.get("n_no_aptos")
+            n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
             
-            with col2:
-                # CORRECCIÓN: Manejar valores None en aptos/no aptos
-                n_aptos_actual = datos_grupo.get("n_aptos")
-                if n_aptos_actual is None:
-                    n_aptos_actual = 0
-                
-                n_no_aptos_actual = datos_grupo.get("n_no_aptos")  
-                if n_no_aptos_actual is None:
-                    n_no_aptos_actual = 0
-                
-                n_aptos = st.number_input(
-                    "Participantes Aptos *",
-                    min_value=0,
-                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=int(n_aptos_actual),
-                    help="Número de participantes aptos",
-                    key="form_n_aptos"
-                )
-                
-                n_no_aptos = st.number_input(
-                    "Participantes No Aptos *",
-                    min_value=0,
-                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=int(n_no_aptos_actual),
-                    help="Número de participantes no aptos",
-                    key="form_n_no_aptos"
-                )
+            n_aptos = st.number_input(
+                "Participantes Aptos *",
+                min_value=0,
+                max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                value=n_aptos_actual,
+                help="Número de participantes aptos",
+                key="form_n_aptos"
+            )
             
-            # Validación en tiempo real
-            if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
-                st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
-            elif n_finalizados > 0:
-                st.success("✅ Números de finalización coherentes")
-            
-            datos_finalizacion = {
-                "fecha_fin": fecha_fin_real.isoformat(),
-                "n_participantes_finalizados": n_finalizados,
-                "n_aptos": n_aptos,
-                "n_no_aptos": n_no_aptos
-            }
+            n_no_aptos = st.number_input(
+                "Participantes No Aptos *",
+                min_value=0,
+                max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                value=n_no_aptos_actual,
+                help="Número de participantes no aptos",
+                key="form_n_no_aptos"
+            )
+        
+        # Validación en tiempo real
+        if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
+            st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
+        elif n_finalizados > 0:
+            st.success("✅ Números de finalización coherentes")
+        
+        datos_finalizacion = {
+            "fecha_fin": fecha_fin_real.isoformat(),
+            "n_participantes_finalizados": n_finalizados,
+            "n_aptos": n_aptos,
+            "n_no_aptos": n_no_aptos
+        }
     
     # =====================
     # BOTONES DE ACCIÓN
