@@ -213,6 +213,7 @@ class GruposService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar grupos", e)
+            
     @st.cache_data(ttl=600)
     def get_acciones_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de acciones formativas: nombre -> id."""
@@ -384,7 +385,6 @@ class GruposService:
         except Exception as e:
             return _self._handle_query_error("cargar tutores", e)
 
-    @st.cache_data(ttl=300)
     @st.cache_data(ttl=300)
     def get_tutores_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene tutores asignados a un grupo con datos aplanados."""
@@ -794,7 +794,6 @@ class GruposService:
             st.error(f"❌ Error al cargar localidades: {e}")
             return []
             
-    @st.cache_data(ttl=600)
     def get_accion_modalidad(self, accion_id: str) -> str:
         """Devuelve la modalidad de una acción formativa concreta."""
         try:
