@@ -531,7 +531,7 @@ class GruposService:
         except Exception as e:
             return _self._handle_query_error("cargar participantes de grupo", e)
 
-        @st.cache_data(ttl=300)
+    @st.cache_data(ttl=300)
     def get_participantes_disponibles(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes disponibles para asignar a un grupo (usa tabla intermedia)."""
         try:
