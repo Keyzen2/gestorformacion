@@ -350,13 +350,14 @@ class GruposService:
 
     @st.cache_data(ttl=300)
     def get_tutores_grupo(_self, grupo_id: str) -> pd.DataFrame:
-        """Obtiene tutores asignados a un grupo."""
+        """Obtiene tutores asignados a un grupo - CORREGIDO."""
         try:
+            # SOLUCIÓN: Especificar la relación exacta para evitar ambigüedad
             res = _self.supabase.table("tutores_grupos").select("""
-                id, grupo_id, tutor_id, fecha_asignacion,
-                tutor:tutores(id, nombre, apellidos, email, especialidad)
+                id, grupo_id, tutor_id, created_at,
+                tutor:tutores!tutores_grupos_tutor_id_fkey(id, nombre, apellidos, email, especialidad)
             """).eq("grupo_id", grupo_id).execute()
-    
+
             return pd.DataFrame(res.data or [])
         except Exception as e:
             return _self._handle_query_error("cargar tutores de grupo", e)
