@@ -288,19 +288,20 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al actualizar grupo: {e}")
             return False
-
+            
     def delete_grupo(self, grupo_id: str) -> bool:
-        """Elimina un grupo y todas sus relaciones."""
+    """Elimina un grupo y todas sus relaciones."""
         try:
-            # Verificar dependencias
+            # CORRECCIÓN: Verificar dependencias en tabla correcta
             participantes = self.supabase.table("participantes_grupos").select("id").eq("grupo_id", grupo_id).execute()
             if participantes.data:
                 st.error("No se puede eliminar. El grupo tiene participantes asignados.")
                 return False
-
+    
             # Eliminar relaciones
             self.supabase.table("tutores_grupos").delete().eq("grupo_id", grupo_id).execute()
             self.supabase.table("empresas_grupos").delete().eq("grupo_id", grupo_id).execute()
+            self.supabase.table("participantes_grupos").delete().eq("grupo_id", grupo_id).execute()  # AÑADIDO
             self.supabase.table("centros_gestores_grupos").delete().eq("grupo_id", grupo_id).execute()
             self.supabase.table("grupo_costes").delete().eq("grupo_id", grupo_id).execute()
             self.supabase.table("grupo_bonificaciones").delete().eq("grupo_id", grupo_id).execute()
@@ -313,7 +314,7 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al eliminar grupo: {e}")
             return False
-
+    
     # =========================
     # TUTORES
     # =========================
@@ -518,16 +519,33 @@ class GruposService:
     # PARTICIPANTES (1:N)
     # =========================
     @st.cache_data(ttl=300)
+    @st.cache_data(ttl=300)
     def get_participantes_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene los participantes asignados a un grupo específico (N:N)."""
         try:
             query = (
                 _self.supabase.table("participantes_grupos")
-                .select("id, fecha_asignacion, participante:participantes(id, nif, nombre, apellidos, email, telefono)")
+                .select("""
+                    id, fecha_asignacion, 
+                    participante:participantes(id, nif, nombre, apellidos, email, telefono)
+                """)
                 .eq("grupo_id", grupo_id)
             )
             res = query.order("fecha_asignacion", desc=True).execute()
-            return pd.DataFrame(res.data or [])
+        
+            # Aplanar los datos de participante
+            data = []
+            for row in (res.data or []):
+                participante = row.get("participante", {})
+                if participante:
+                    flat_row = {
+                        "relacion_id": row.get("id"),
+                        "fecha_asignacion": row.get("fecha_asignacion"),
+                        **participante
+                    }
+                    data.append(flat_row)
+        
+            return pd.DataFrame(data)
         except Exception as e:
             return _self._handle_query_error("cargar participantes de grupo", e)
 
@@ -574,7 +592,6 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al asignar participante: {e}")
             return False
-
     def desasignar_participante_de_grupo(self, relacion_id: str) -> bool:
         """Elimina la relación participante-grupo (tabla intermedia)."""
         try:
@@ -585,7 +602,7 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al desasignar participante: {e}")
             return False
-
+    
     # =========================
     # COSTES FUNDAE
     # =========================
