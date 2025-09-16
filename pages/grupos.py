@@ -238,7 +238,7 @@ def mostrar_kpis_grupos(df_grupos):
         st.metric("✅ Finalizados", finalizados)
 
 def mostrar_avisos_grupos(grupos_pendientes):
-    """Muestra avisos de grupos pendientes de finalización."""
+    """Muestra avisos de grupos pendientes de finalización - CORREGIDO."""
     if not grupos_pendientes:
         return
     
@@ -250,9 +250,14 @@ def mostrar_avisos_grupos(grupos_pendientes):
             with col1:
                 st.write(f"**{grupo.get('codigo_grupo')}** - Fin previsto: {grupo.get('fecha_fin_prevista')}")
             with col2:
+                # CORRECCIÓN: Implementar funcionalidad del botón finalizar
                 if st.button("Finalizar", key=f"finalizar_{grupo.get('id')}", type="secondary"):
-                    # Establecer el grupo para edición
-                    st.session_state.grupo_seleccionado = grupo
+                    # Establecer el grupo para edición y forzar estado FINALIZAR
+                    grupo_copy = grupo.copy()
+                    # Asegurarse de que aparezca la sección de finalización
+                    if not grupo_copy.get('fecha_fin'):
+                        grupo_copy['_mostrar_finalizacion'] = True
+                    st.session_state.grupo_seleccionado = grupo_copy
                     st.rerun()
 
 def crear_selector_horario_fundae(prefix=""):
@@ -359,11 +364,11 @@ def crear_selector_horario_fundae(prefix=""):
 # =========================
 
 def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacion=False):
-    """Formulario unificado para crear/editar grupos con secciones colapsables."""
+    """Formulario unificado para crear/editar grupos - CORREGIDO."""
     
     # Obtener datos necesarios
     acciones_dict = grupos_service.get_acciones_dict()
-    empresas_dict = grupos_service.get_empresas_dict() if grupos_service.rol == "admin" else {}
+    # CORRECCIÓN: Empresa solo para admin y solo en sección empresas, no en datos básicos
     
     if not acciones_dict:
         st.error("❌ No hay acciones formativas disponibles. Crea una acción formativa primero.")
@@ -490,38 +495,22 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 key="form_cp"
             )
             
-            # Participantes previstos
+            # CORRECCIÓN: Manejar valores None y 0 correctamente
+            n_participantes_actual = datos_grupo.get("n_participantes_previstos")
+            if n_participantes_actual is None or n_participantes_actual == 0:
+                n_participantes_actual = 8  # Valor por defecto válido
+            
             n_participantes_previstos = st.number_input(
                 "Participantes Previstos *",
                 min_value=1,
                 max_value=30,
-                value=int(datos_grupo.get("n_participantes_previstos", 8)),
+                value=int(n_participantes_actual),
                 help="Número de participantes previstos (1-30)",
                 key="form_n_participantes"
             )
             
-            # Empresa (solo para admin)
-            if grupos_service.rol == "admin" and empresas_dict:
-                empresa_actual = datos_grupo.get("empresa_id", "")
-                empresas_nombres = list(empresas_dict.keys())
-                
-                if empresa_actual:
-                    empresa_nombre_actual = None
-                    for nombre, id_emp in empresas_dict.items():
-                        if id_emp == empresa_actual:
-                            empresa_nombre_actual = nombre
-                            break
-                    indice_empresa = empresas_nombres.index(empresa_nombre_actual) if empresa_nombre_actual else 0
-                else:
-                    indice_empresa = 0
-                
-                empresa_seleccionada = st.selectbox(
-                    "Empresa Propietaria",
-                    empresas_nombres,
-                    index=indice_empresa,
-                    help="Empresa propietaria del grupo",
-                    key="form_empresa"
-                )
+            # CORRECCIÓN: NO mostrar empresa en datos básicos
+            # La empresa se gestionará en la sección de empresas participantes
         
         # Lugar de impartición
         lugar_imparticion = st.text_area(
@@ -567,10 +556,12 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     # =====================
     # SECCIÓN 3: FINALIZACIÓN (Condicional)
     # =====================
+    # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
     mostrar_finalizacion = (
         not es_creacion and 
         (estado_actual in ["FINALIZAR", "FINALIZADO"] or 
-         (fecha_fin_prevista and fecha_fin_prevista <= date.today()))
+         (fecha_fin_prevista and fecha_fin_prevista <= date.today()) or
+         datos_grupo.get('_mostrar_finalizacion', False))  # Forzar mostrar desde botón
     )
     
     datos_finalizacion = {}
@@ -591,21 +582,35 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     key="form_fecha_fin_real"
                 )
                 
+                # CORRECCIÓN: Manejar valores None en finalización
+                n_finalizados_actual = datos_grupo.get("n_participantes_finalizados")
+                if n_finalizados_actual is None:
+                    n_finalizados_actual = 0
+                
                 n_finalizados = st.number_input(
                     "Participantes Finalizados *",
                     min_value=0,
                     max_value=n_participantes_previstos,
-                    value=int(datos_grupo.get("n_participantes_finalizados", 0)),
+                    value=int(n_finalizados_actual),
                     help="Número de participantes que finalizaron la formación",
                     key="form_n_finalizados"
                 )
             
             with col2:
+                # CORRECCIÓN: Manejar valores None en aptos/no aptos
+                n_aptos_actual = datos_grupo.get("n_aptos")
+                if n_aptos_actual is None:
+                    n_aptos_actual = 0
+                
+                n_no_aptos_actual = datos_grupo.get("n_no_aptos")  
+                if n_no_aptos_actual is None:
+                    n_no_aptos_actual = 0
+                
                 n_aptos = st.number_input(
                     "Participantes Aptos *",
                     min_value=0,
                     max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=int(datos_grupo.get("n_aptos", 0)),
+                    value=int(n_aptos_actual),
                     help="Número de participantes aptos",
                     key="form_n_aptos"
                 )
@@ -614,7 +619,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     "Participantes No Aptos *",
                     min_value=0,
                     max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=int(datos_grupo.get("n_no_aptos", 0)),
+                    value=int(n_no_aptos_actual),
                     help="Número de participantes no aptos",
                     key="form_n_no_aptos"
                 )
@@ -657,11 +662,10 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     "horario": horario_nuevo if horario_nuevo else None
                 }
                 
-                # Asignar empresa según rol
+                # CORRECCIÓN: Asignar empresa según rol automáticamente
                 if grupos_service.rol == "gestor":
                     datos_crear["empresa_id"] = grupos_service.empresa_id
-                elif grupos_service.rol == "admin" and empresas_dict:
-                    datos_crear["empresa_id"] = empresas_dict[empresa_seleccionada]
+                # Para admin, se asignará la empresa en la sección empresas participantes
                 
                 # Validar datos obligatorios
                 errores = validar_campos_obligatorios_fundae(datos_crear)
@@ -676,8 +680,11 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                         exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
                         if exito:
                             st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                            st.session_state.grupo_seleccionado = None  # Limpiar selección
-                            st.rerun()
+                            # CORRECCIÓN: Cargar el grupo recién creado para edición
+                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                            if grupo_creado.data:
+                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                                st.rerun()
                         else:
                             st.error("❌ Error al crear el grupo")
                     except Exception as e:
@@ -712,10 +719,6 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 if datos_finalizacion:
                     datos_actualizar.update(datos_finalizacion)
                 
-                # Asignar empresa para admin
-                if grupos_service.rol == "admin" and empresas_dict:
-                    datos_actualizar["empresa_id"] = empresas_dict[empresa_seleccionada]
-                
                 # Validar datos
                 errores = validar_campos_obligatorios_fundae(datos_actualizar)
                 if datos_finalizacion:
@@ -730,6 +733,10 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     try:
                         if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
                             st.success("✅ Cambios guardados correctamente")
+                            # CORRECCIÓN: Recargar datos del grupo actualizado
+                            grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                            if grupo_actualizado.data:
+                                st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
                             st.rerun()
                         else:
                             st.error("❌ Error al guardar cambios")
@@ -738,7 +745,14 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         
         with col2:
             if st.button("🔄 Recargar", use_container_width=True):
-                st.rerun()
+                # CORRECCIÓN: Recargar datos del grupo desde BD
+                try:
+                    grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                    if grupo_recargado.data:
+                        st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error al recargar: {e}")
         
         with col3:
             if st.button("❌ Cancelar", use_container_width=True):
@@ -746,6 +760,30 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 st.rerun()
     
     return datos_grupo.get("id") if datos_grupo else None
+
+# CORRECCIÓN adicional para validar_datos_finalizacion
+def validar_datos_finalizacion(datos):
+    """Valida datos de finalización de grupo - CORREGIDO."""
+    errores = []
+    
+    try:
+        finalizados = int(datos.get("n_participantes_finalizados", 0))
+        aptos = int(datos.get("n_aptos", 0))
+        no_aptos = int(datos.get("n_no_aptos", 0))  # CORRECCIÓN: era n_no_apaptos
+        
+        if finalizados <= 0:
+            errores.append("Debe haber al menos 1 participante finalizado")
+        
+        if aptos + no_aptos != finalizados:
+            errores.append("La suma de aptos + no aptos debe igual participantes finalizados")
+        
+        if aptos < 0 or no_aptos < 0:
+            errores.append("Los números no pueden ser negativos")
+            
+    except ValueError:
+        errores.append("Los campos numéricos deben ser números enteros")
+    
+    return errores
 
 # =========================
 # SECCIONES ADICIONALES (Solo para grupos existentes)
