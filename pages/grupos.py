@@ -430,382 +430,382 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
         st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
     
- # =====================
-# SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
-# =====================
-with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
-    st.markdown("**Información obligatoria para XML FUNDAE**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Código del grupo
-        if es_creacion:
-            codigo_grupo = st.text_input(
-                "Código del Grupo *",
-                value=datos_grupo.get("codigo_grupo", ""),
-                max_chars=50,
-                help="Código único identificativo del grupo (máximo 50 caracteres)",
-                key="form_codigo_grupo"
-            )
-        else:
-            codigo_grupo = datos_grupo.get("codigo_grupo", "")
-            st.text_input(
-                "Código del Grupo",
-                value=codigo_grupo,
-                disabled=True,
-                help="No se puede modificar después de la creación"
-            )
-        
-        # Acción formativa
-        acciones_nombres = list(acciones_dict.keys())
-        if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
-            # Buscar el nombre de la acción actual
-            accion_actual = None
-            for nombre, id_accion in acciones_dict.items():
-                if id_accion == datos_grupo.get("accion_formativa_id"):
-                    accion_actual = nombre
-                    break
-            indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
-        else:
-            indice_actual = 0
-        
-        accion_formativa = st.selectbox(
-            "Acción Formativa *",
-            acciones_nombres,
-            index=indice_actual,
-            help="Selecciona la acción formativa asociada",
-            key="form_accion_formativa"
-        )
-        
-        # Modalidad FUNDAE
-        modalidad_actual = datos_grupo.get("modalidad", "PRESENCIAL")
-        if modalidad_actual not in MODALIDADES_FUNDAE:
-            modalidad_actual = "PRESENCIAL"
-        
-        modalidad = st.selectbox(
-            "Modalidad *",
-            list(MODALIDADES_FUNDAE.values()),
-            index=list(MODALIDADES_FUNDAE.values()).index(modalidad_actual),
-            help="Modalidad según estándares FUNDAE",
-            key="form_modalidad"
-        )
-        
-        # Fechas
-        fecha_inicio = st.date_input(
-            "Fecha de Inicio *",
-            value=datetime.fromisoformat(datos_grupo["fecha_inicio"]).date() if datos_grupo.get("fecha_inicio") else date.today(),
-            help="Fecha de inicio de la formación",
-            key="form_fecha_inicio"
-        )
-        
-        fecha_fin_prevista = st.date_input(
-            "Fecha Fin Prevista *",
-            value=datetime.fromisoformat(datos_grupo["fecha_fin_prevista"]).date() if datos_grupo.get("fecha_fin_prevista") else None,
-            help="Fecha prevista de finalización",
-            key="form_fecha_fin_prevista"
-        )
-    
-    with col2:
-        # Localidad y Provincia (obligatorios FUNDAE con selectores)
-        provincias = grupos_service.get_provincias()
-        prov_opciones = {p["nombre"]: p["id"] for p in provincias}
-        
-        provincia_actual = datos_grupo.get("provincia") if datos_grupo else None
-        
-        provincia_sel = st.selectbox(
-            "Provincia *",
-            options=list(prov_opciones.keys()),
-            index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
-            help="Provincia de impartición (obligatorio FUNDAE)",
-            key="form_provincia"
-        )
-        
-        localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
-        loc_nombres = [l["nombre"] for l in localidades]
-        
-        localidad_actual = datos_grupo.get("localidad") if datos_grupo else None
-        
-        localidad_sel = st.selectbox(
-            "Localidad *",
-            options=loc_nombres,
-            index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
-            help="Localidad de impartición (obligatorio FUNDAE)",
-            key="form_localidad"
-        )
-        
-        provincia = provincia_sel
-        localidad = localidad_sel
-        
-        cp = st.text_input(
-            "Código Postal",
-            value=datos_grupo.get("cp", ""),
-            help="Código postal de impartición",
-            key="form_cp"
-        )
-        
-        # CORRECCIÓN: Manejar valores None y 0 correctamente
-        n_participantes_actual = datos_grupo.get("n_participantes_previstos")
-        if n_participantes_actual is None or n_participantes_actual == 0:
-            n_participantes_actual = 8  # Valor por defecto válido
-        
-        n_participantes_previstos = st.number_input(
-            "Participantes Previstos *",
-            min_value=1,
-            max_value=30,
-            value=int(n_participantes_actual),
-            help="Número de participantes previstos (1-30)",
-            key="form_n_participantes"
-        )
-    
-    # Lugar de impartición
-    lugar_imparticion = st.text_area(
-        "Lugar de Impartición",
-        value=datos_grupo.get("lugar_imparticion", ""),
-        height=60,
-        help="Descripción detallada del lugar donde se impartirá la formación",
-        key="form_lugar_imparticion"
-    )
-    
-    # Observaciones
-    observaciones = st.text_area(
-        "Observaciones",
-        value=datos_grupo.get("observaciones", ""),
-        height=80,
-        help="Información adicional sobre el grupo (opcional)",
-        key="form_observaciones"
-    )
-
-    
+     # =====================
+    # SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
     # =====================
-    # SECCIÓN 2: HORARIOS FUNDAE (Expandida por defecto)
-    # =====================
-    with st.expander("⏰ 2. Horarios de Impartición", expanded=True):
-        # Cargar horario actual si existe
-        horario_actual = datos_grupo.get("horario", "")
+    with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
+        st.markdown("**Información obligatoria para XML FUNDAE**")
         
-        if horario_actual and not es_creacion:
-            st.info(f"**Horario actual**: {horario_actual}")
-            
-            # Opción para mantener o cambiar
-            cambiar_horario = st.checkbox("Modificar horario", key="cambiar_horario")
-            
-            if cambiar_horario:
-                # Parsear horario actual para prellenar campos
-                m_ini, m_fin, t_ini, t_fin, dias = parsear_horario_fundae(horario_actual)
-                horario_nuevo = crear_selector_horario_fundae("edit")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Código del grupo
+            if es_creacion:
+                codigo_grupo = st.text_input(
+                    "Código del Grupo *",
+                    value=datos_grupo.get("codigo_grupo", ""),
+                    max_chars=50,
+                    help="Código único identificativo del grupo (máximo 50 caracteres)",
+                    key="form_codigo_grupo"
+                )
             else:
-                horario_nuevo = horario_actual
-        else:
-            # Crear nuevo horario
-            horario_nuevo = crear_selector_horario_fundae("new")
-    
-    # =====================
-    # SECCIÓN 3: FINALIZACIÓN (Condicional)
-    # =====================
-    # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
-    mostrar_finalizacion = (
-        not es_creacion
-        and (
-            estado_actual in ["FINALIZAR", "FINALIZADO"]
-            or (fecha_fin_prevista and fecha_fin_prevista <= date.today())
-            or datos_grupo.get("_mostrar_finalizacion", False)
+                codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                st.text_input(
+                    "Código del Grupo",
+                    value=codigo_grupo,
+                    disabled=True,
+                    help="No se puede modificar después de la creación"
+                )
+            
+            # Acción formativa
+            acciones_nombres = list(acciones_dict.keys())
+            if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
+                # Buscar el nombre de la acción actual
+                accion_actual = None
+                for nombre, id_accion in acciones_dict.items():
+                    if id_accion == datos_grupo.get("accion_formativa_id"):
+                        accion_actual = nombre
+                        break
+                indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
+            else:
+                indice_actual = 0
+            
+            accion_formativa = st.selectbox(
+                "Acción Formativa *",
+                acciones_nombres,
+                index=indice_actual,
+                help="Selecciona la acción formativa asociada",
+                key="form_accion_formativa"
+            )
+            
+            # Modalidad FUNDAE
+            modalidad_actual = datos_grupo.get("modalidad", "PRESENCIAL")
+            if modalidad_actual not in MODALIDADES_FUNDAE:
+                modalidad_actual = "PRESENCIAL"
+            
+            modalidad = st.selectbox(
+                "Modalidad *",
+                list(MODALIDADES_FUNDAE.values()),
+                index=list(MODALIDADES_FUNDAE.values()).index(modalidad_actual),
+                help="Modalidad según estándares FUNDAE",
+                key="form_modalidad"
+            )
+            
+            # Fechas
+            fecha_inicio = st.date_input(
+                "Fecha de Inicio *",
+                value=datetime.fromisoformat(datos_grupo["fecha_inicio"]).date() if datos_grupo.get("fecha_inicio") else date.today(),
+                help="Fecha de inicio de la formación",
+                key="form_fecha_inicio"
+            )
+            
+            fecha_fin_prevista = st.date_input(
+                "Fecha Fin Prevista *",
+                value=datetime.fromisoformat(datos_grupo["fecha_fin_prevista"]).date() if datos_grupo.get("fecha_fin_prevista") else None,
+                help="Fecha prevista de finalización",
+                key="form_fecha_fin_prevista"
+            )
+        
+        with col2:
+            # Localidad y Provincia (obligatorios FUNDAE con selectores)
+            provincias = grupos_service.get_provincias()
+            prov_opciones = {p["nombre"]: p["id"] for p in provincias}
+            
+            provincia_actual = datos_grupo.get("provincia") if datos_grupo else None
+            
+            provincia_sel = st.selectbox(
+                "Provincia *",
+                options=list(prov_opciones.keys()),
+                index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
+                help="Provincia de impartición (obligatorio FUNDAE)",
+                key="form_provincia"
+            )
+            
+            localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
+            loc_nombres = [l["nombre"] for l in localidades]
+            
+            localidad_actual = datos_grupo.get("localidad") if datos_grupo else None
+            
+            localidad_sel = st.selectbox(
+                "Localidad *",
+                options=loc_nombres,
+                index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
+                help="Localidad de impartición (obligatorio FUNDAE)",
+                key="form_localidad"
+            )
+            
+            provincia = provincia_sel
+            localidad = localidad_sel
+            
+            cp = st.text_input(
+                "Código Postal",
+                value=datos_grupo.get("cp", ""),
+                help="Código postal de impartición",
+                key="form_cp"
+            )
+            
+            # CORRECCIÓN: Manejar valores None y 0 correctamente
+            n_participantes_actual = datos_grupo.get("n_participantes_previstos")
+            if n_participantes_actual is None or n_participantes_actual == 0:
+                n_participantes_actual = 8  # Valor por defecto válido
+            
+            n_participantes_previstos = st.number_input(
+                "Participantes Previstos *",
+                min_value=1,
+                max_value=30,
+                value=int(n_participantes_actual),
+                help="Número de participantes previstos (1-30)",
+                key="form_n_participantes"
+            )
+        
+        # Lugar de impartición
+        lugar_imparticion = st.text_area(
+            "Lugar de Impartición",
+            value=datos_grupo.get("lugar_imparticion", ""),
+            height=60,
+            help="Descripción detallada del lugar donde se impartirá la formación",
+            key="form_lugar_imparticion"
         )
-    )
-
-    datos_finalizacion = {}
-    if mostrar_finalizacion:
-        with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
-            st.markdown("**Complete los datos de finalización para FUNDAE**")
-            
-            if estado_actual == "FINALIZAR":
-                st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fecha_fin_real = st.date_input(
-                    "Fecha Fin Real *",
-                    value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
-                    help="Fecha real de finalización del grupo",
-                    key="form_fecha_fin_real"
-                )
-                
-                # CORRECCIÓN: Manejo seguro de valores NaN
-                n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
-                n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
-                
-                n_finalizados = st.number_input(
-                    "Participantes Finalizados *",
-                    min_value=0,
-                    max_value=n_participantes_previstos,
-                    value=n_finalizados_actual,
-                    help="Número de participantes que finalizaron la formación",
-                    key="form_n_finalizados"
-                )
-            
-            with col2:
-                # CORRECCIÓN: Manejo seguro de valores NaN para aptos
-                n_aptos_raw = datos_grupo.get("n_aptos")
-                n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
-                
-                # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
-                n_no_aptos_raw = datos_grupo.get("n_no_aptos")
-                n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
-                
-                n_aptos = st.number_input(
-                    "Participantes Aptos *",
-                    min_value=0,
-                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=n_aptos_actual,
-                    help="Número de participantes aptos",
-                    key="form_n_aptos"
-                )
-                
-                n_no_aptos = st.number_input(
-                    "Participantes No Aptos *",
-                    min_value=0,
-                    max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                    value=n_no_aptos_actual,
-                    help="Número de participantes no aptos",
-                    key="form_n_no_aptos"
-                )
-            
-            # Validación en tiempo real
-            if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
-                st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
-            elif n_finalizados > 0:
-                st.success("✅ Números de finalización coherentes")
-            
-            datos_finalizacion = {
-                "fecha_fin": fecha_fin_real.isoformat(),
-                "n_participantes_finalizados": n_finalizados,
-                "n_aptos": n_aptos,
-                "n_no_aptos": n_no_aptos
-            }
+        
+        # Observaciones
+        observaciones = st.text_area(
+            "Observaciones",
+            value=datos_grupo.get("observaciones", ""),
+            height=80,
+            help="Información adicional sobre el grupo (opcional)",
+            key="form_observaciones"
+        )
+    
+        
         # =====================
-    # BOTONES DE ACCIÓN
-    # =====================
-    st.divider()
-
-    if es_creacion:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
-                # Preparar datos para crear
-                datos_crear = {
-                    "codigo_grupo": codigo_grupo,
-                    "accion_formativa_id": acciones_dict[accion_formativa],
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "provincia": provincia,        # texto de selectbox
-                    "localidad": localidad,        # texto de selectbox
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-
-                # CORRECCIÓN: Asignar empresa según rol automáticamente
-                if grupos_service.rol == "gestor":
-                    datos_crear["empresa_id"] = grupos_service.empresa_id
-                # Para admin, se asignará la empresa en la sección empresas participantes
-
-                # Validar datos obligatorios
-                errores = validar_campos_obligatorios_fundae(datos_crear)
-
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
+        # SECCIÓN 2: HORARIOS FUNDAE (Expandida por defecto)
+        # =====================
+        with st.expander("⏰ 2. Horarios de Impartición", expanded=True):
+            # Cargar horario actual si existe
+            horario_actual = datos_grupo.get("horario", "")
+            
+            if horario_actual and not es_creacion:
+                st.info(f"**Horario actual**: {horario_actual}")
+                
+                # Opción para mantener o cambiar
+                cambiar_horario = st.checkbox("Modificar horario", key="cambiar_horario")
+                
+                if cambiar_horario:
+                    # Parsear horario actual para prellenar campos
+                    m_ini, m_fin, t_ini, t_fin, dias = parsear_horario_fundae(horario_actual)
+                    horario_nuevo = crear_selector_horario_fundae("edit")
                 else:
-                    # Crear grupo
-                    try:
-                        exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
-                        if exito:
-                            st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                            # CORRECCIÓN: Cargar el grupo recién creado para edición
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                st.rerun()
-                        else:
-                            st.error("❌ Error al crear el grupo")
-                    except Exception as e:
-                        st.error(f"❌ Error al crear grupo: {e}")
-
-        with col2:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
-
-    else:
-        # Botones para edición
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                # Preparar datos para actualizar
-                datos_actualizar = {
-                    "modalidad": modalidad,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "provincia": provincia,        # texto de selectbox
-                    "localidad": localidad,        # texto de selectbox
-                    "cp": cp,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
+                    horario_nuevo = horario_actual
+            else:
+                # Crear nuevo horario
+                horario_nuevo = crear_selector_horario_fundae("new")
+        
+        # =====================
+        # SECCIÓN 3: FINALIZACIÓN (Condicional)
+        # =====================
+        # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
+        mostrar_finalizacion = (
+            not es_creacion
+            and (
+                estado_actual in ["FINALIZAR", "FINALIZADO"]
+                or (fecha_fin_prevista and fecha_fin_prevista <= date.today())
+                or datos_grupo.get("_mostrar_finalizacion", False)
+            )
+        )
+    
+        datos_finalizacion = {}
+        if mostrar_finalizacion:
+            with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
+                st.markdown("**Complete los datos de finalización para FUNDAE**")
+                
+                if estado_actual == "FINALIZAR":
+                    st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fecha_fin_real = st.date_input(
+                        "Fecha Fin Real *",
+                        value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
+                        help="Fecha real de finalización del grupo",
+                        key="form_fecha_fin_real"
+                    )
+                    
+                    # CORRECCIÓN: Manejo seguro de valores NaN
+                    n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
+                    n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
+                    
+                    n_finalizados = st.number_input(
+                        "Participantes Finalizados *",
+                        min_value=0,
+                        max_value=n_participantes_previstos,
+                        value=n_finalizados_actual,
+                        help="Número de participantes que finalizaron la formación",
+                        key="form_n_finalizados"
+                    )
+                
+                with col2:
+                    # CORRECCIÓN: Manejo seguro de valores NaN para aptos
+                    n_aptos_raw = datos_grupo.get("n_aptos")
+                    n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
+                    
+                    # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
+                    n_no_aptos_raw = datos_grupo.get("n_no_aptos")
+                    n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
+                    
+                    n_aptos = st.number_input(
+                        "Participantes Aptos *",
+                        min_value=0,
+                        max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                        value=n_aptos_actual,
+                        help="Número de participantes aptos",
+                        key="form_n_aptos"
+                    )
+                    
+                    n_no_aptos = st.number_input(
+                        "Participantes No Aptos *",
+                        min_value=0,
+                        max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
+                        value=n_no_aptos_actual,
+                        help="Número de participantes no aptos",
+                        key="form_n_no_aptos"
+                    )
+                
+                # Validación en tiempo real
+                if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
+                    st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
+                elif n_finalizados > 0:
+                    st.success("✅ Números de finalización coherentes")
+                
+                datos_finalizacion = {
+                    "fecha_fin": fecha_fin_real.isoformat(),
+                    "n_participantes_finalizados": n_finalizados,
+                    "n_aptos": n_aptos,
+                    "n_no_aptos": n_no_aptos
                 }
-
-                # Agregar datos de finalización si están disponibles
-                if datos_finalizacion:
-                    datos_actualizar.update(datos_finalizacion)
-
-                # Validar datos
-                errores = validar_campos_obligatorios_fundae(datos_actualizar)
-                if datos_finalizacion:
-                    errores.extend(validar_datos_finalizacion(datos_actualizar))
-
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Actualizar grupo
-                    try:
-                        if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
-                            st.success("✅ Cambios guardados correctamente")
-                            # CORRECCIÓN: Recargar datos del grupo actualizado
-                            grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                            if grupo_actualizado.data:
-                                st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar cambios")
-                    except Exception as e:
-                        st.error(f"❌ Error al actualizar: {e}")
-
-        with col2:
-            if st.button("🔄 Recargar", use_container_width=True):
-                # CORRECCIÓN: Recargar datos del grupo desde BD
-                try:
-                    grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                    if grupo_recargado.data:
-                        st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+            # =====================
+        # BOTONES DE ACCIÓN
+        # =====================
+        st.divider()
+    
+        if es_creacion:
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
+                    # Preparar datos para crear
+                    datos_crear = {
+                        "codigo_grupo": codigo_grupo,
+                        "accion_formativa_id": acciones_dict[accion_formativa],
+                        "modalidad": modalidad,
+                        "fecha_inicio": fecha_inicio.isoformat(),
+                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                        "provincia": provincia,        # texto de selectbox
+                        "localidad": localidad,        # texto de selectbox
+                        "cp": cp,
+                        "n_participantes_previstos": n_participantes_previstos,
+                        "lugar_imparticion": lugar_imparticion,
+                        "observaciones": observaciones,
+                        "horario": horario_nuevo if horario_nuevo else None
+                    }
+    
+                    # CORRECCIÓN: Asignar empresa según rol automáticamente
+                    if grupos_service.rol == "gestor":
+                        datos_crear["empresa_id"] = grupos_service.empresa_id
+                    # Para admin, se asignará la empresa en la sección empresas participantes
+    
+                    # Validar datos obligatorios
+                    errores = validar_campos_obligatorios_fundae(datos_crear)
+    
+                    if errores:
+                        st.error("❌ Errores de validación:")
+                        for error in errores:
+                            st.error(f"• {error}")
+                    else:
+                        # Crear grupo
+                        try:
+                            exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
+                            if exito:
+                                st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+                                # CORRECCIÓN: Cargar el grupo recién creado para edición
+                                grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                                if grupo_creado.data:
+                                    st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                                    st.rerun()
+                            else:
+                                st.error("❌ Error al crear el grupo")
+                        except Exception as e:
+                            st.error(f"❌ Error al crear grupo: {e}")
+    
+            with col2:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    st.session_state.grupo_seleccionado = None
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Error al recargar: {e}")
-
-        with col3:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
-                st.rerun()
-
-    return datos_grupo.get("id") if datos_grupo else None
+    
+        else:
+            # Botones para edición
+            col1, col2, col3 = st.columns(3)
+    
+            with col1:
+                if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+                    # Preparar datos para actualizar
+                    datos_actualizar = {
+                        "modalidad": modalidad,
+                        "fecha_inicio": fecha_inicio.isoformat(),
+                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                        "provincia": provincia,        # texto de selectbox
+                        "localidad": localidad,        # texto de selectbox
+                        "cp": cp,
+                        "n_participantes_previstos": n_participantes_previstos,
+                        "lugar_imparticion": lugar_imparticion,
+                        "observaciones": observaciones,
+                        "horario": horario_nuevo if horario_nuevo else None
+                    }
+    
+                    # Agregar datos de finalización si están disponibles
+                    if datos_finalizacion:
+                        datos_actualizar.update(datos_finalizacion)
+    
+                    # Validar datos
+                    errores = validar_campos_obligatorios_fundae(datos_actualizar)
+                    if datos_finalizacion:
+                        errores.extend(validar_datos_finalizacion(datos_actualizar))
+    
+                    if errores:
+                        st.error("❌ Errores de validación:")
+                        for error in errores:
+                            st.error(f"• {error}")
+                    else:
+                        # Actualizar grupo
+                        try:
+                            if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
+                                st.success("✅ Cambios guardados correctamente")
+                                # CORRECCIÓN: Recargar datos del grupo actualizado
+                                grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                                if grupo_actualizado.data:
+                                    st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al guardar cambios")
+                        except Exception as e:
+                            st.error(f"❌ Error al actualizar: {e}")
+    
+            with col2:
+                if st.button("🔄 Recargar", use_container_width=True):
+                    # CORRECCIÓN: Recargar datos del grupo desde BD
+                    try:
+                        grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                        if grupo_recargado.data:
+                            st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error al recargar: {e}")
+    
+            with col3:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    st.session_state.grupo_seleccionado = None
+                    st.rerun()
+    
+        return datos_grupo.get("id") if datos_grupo else None
 
 # =========================
 # SECCIONES ADICIONALES (Solo para grupos existentes)
