@@ -806,7 +806,7 @@ with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
                     st.session_state.grupo_seleccionado = None
                     st.rerun()
         
-        return datos_grupo.get("id") if datos_grupo else None
+    return datos_grupo.get("id") if datos_grupo else None
 
 # CORRECCIÓN adicional para validar_datos_finalizacion
 def validar_datos_finalizacion(datos):
