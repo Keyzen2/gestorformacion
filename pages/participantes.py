@@ -29,6 +29,7 @@ def main(supabase, session_state):
 
     # Inicializar servicio de datos
     data_service = get_data_service(supabase, session_state)
+    grupos_service = get_grupos_service(supabase, session_state)
     empresa_id = session_state.user.get("empresa_id")
 
     # =========================
@@ -41,7 +42,7 @@ def main(supabase, session_state):
             
             # Obtener diccionarios de empresas y grupos
             empresas_dict = data_service.get_empresas_dict()
-            grupos_dict = data_service.get_grupos_dict()
+            grupos_dict = grupos_service.get_grupos_dict()
             
             # Opciones para selects
             empresas_opciones = [""] + sorted(empresas_dict.keys())
