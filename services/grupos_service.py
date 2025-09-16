@@ -242,7 +242,23 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar empresas: {e}")
             return {}
-
+    @st.cache_data(ttl=600)
+    def get_acciones_formativas(_self) -> pd.DataFrame:
+        """Obtiene listado completo de acciones formativas."""
+        try:
+            query = _self.supabase.table("acciones_formativas").select("""
+                id, nombre, descripcion, objetivos, contenidos, requisitos,
+                horas, modalidad, fecha_inicio, fecha_fin, empresa_id,
+                created_at, num_horas, observaciones, codigo_accion, 
+                area_profesional, nivel, certificado_profesionalidad,
+                cod_area_profesional, sector, duracion_horas, certificado
+            """)
+            query = _self._apply_empresa_filter(query, "acciones_formativas")
+            res = query.order("created_at", desc=True).execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar acciones formativas", e)
+            
     # =========================
     # GRUPOS - OPERACIONES CRUD
     # =========================
