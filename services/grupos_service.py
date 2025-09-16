@@ -24,6 +24,10 @@ class GruposService:
         st.error(f"Error en {operation}: {error}")
         return pd.DataFrame()
 
+    def can_modify_data(self) -> bool:
+        """Determina si el rol puede modificar datos (crear/editar/eliminar)."""
+        return self.rol in ["admin", "gestor"]
+
     # =========================
     # VALIDACIONES FUNDAE
     # =========================
