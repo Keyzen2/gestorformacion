@@ -4,6 +4,7 @@ from datetime import datetime, date, time
 from services.grupos_service import get_grupos_service
 from utils import validar_dni_cif, export_csv
 import re
+import math
 
 # =========================
 # CONFIGURACIÓN Y CONSTANTES
@@ -22,6 +23,23 @@ INTERVALOS_TIEMPO = [
 DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
 NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
+# =========================
+# FUNCIONES AUXILIARES 
+# =========================
+
+def safe_int_conversion(value, default=0):
+    """Convierte un valor a entero de forma segura, manejando NaN y None."""
+    if value is None:
+        return default
+    if pd.isna(value):  # Maneja NaN de pandas
+        return default
+    if math.isnan(float(value)) if isinstance(value, (int, float)) else False:
+        return default
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+        
 # =========================
 # FUNCIONES DE ESTADO
 # =========================
