@@ -210,38 +210,6 @@ class GruposService:
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
     
-            return df
-        except Exception as e:
-            return _self._handle_query_error("cargar grupos", e)
-            
-    @st.cache_data(ttl=600)
-    def get_acciones_dict(_self) -> Dict[str, str]:
-        """Obtiene diccionario de acciones formativas: nombre -> id."""
-        try:
-            query = _self.supabase.table("acciones_formativas").select("id, nombre")
-            query = _self._apply_empresa_filter(query, "acciones_formativas")
-            
-            result = query.execute()
-            
-            if result.data:
-                return {item["nombre"]: item["id"] for item in result.data}
-            return {}
-        except Exception as e:
-            st.error(f"Error al cargar acciones: {e}")
-            return {}
-            
-    @st.cache_data(ttl=600)
-    def get_areas_dict(_self) -> Dict[str, str]:
-        """Obtiene diccionario de áreas profesionales: nombre -> código."""
-        try:
-            res = _self.supabase.table("areas_profesionales").select("codigo, nombre").order("nombre").execute()
-            if res.data:
-                return {item["nombre"]: item["codigo"] for item in res.data}
-            return {}
-        except Exception as e:
-            st.error(f"Error al cargar áreas profesionales: {e}")
-            return {}
-
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
         """Obtiene listado de grupos de acciones (catálogo auxiliar)."""
@@ -251,27 +219,6 @@ class GruposService:
         except Exception as e:
             return _self._handle_query_error("cargar grupos de acciones", e)
             
-    def create_accion_formativa(self, datos: Dict[str, Any]) -> bool:
-        """Crea una nueva acción formativa."""
-        try:
-            datos["created_at"] = datetime.utcnow().isoformat()
-            self.supabase.table("acciones_formativas").insert(datos).execute()
-            self.get_acciones_formativas.clear()
-            return True
-        except Exception as e:
-            st.error(f"Error al crear acción formativa: {e}")
-            return False
-
-    def update_accion_formativa(self, accion_id: str, datos: Dict[str, Any]) -> bool:
-        """Actualiza una acción formativa existente."""
-        try:
-            self.supabase.table("acciones_formativas").update(datos).eq("id", accion_id).execute()
-            self.get_acciones_formativas.clear()
-            return True
-        except Exception as e:
-            st.error(f"Error al actualizar acción formativa: {e}")
-            return False
-    
     @st.cache_data(ttl=600)
     def get_empresas_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de empresas: nombre -> id."""
@@ -284,23 +231,60 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar empresas: {e}")
             return {}
-    @st.cache_data(ttl=600)
+
+    # =========================
+    # ACCIONES FORMATIVAS
+    # =========================
+    @st.cache_data(ttl=300)
     def get_acciones_formativas(_self) -> pd.DataFrame:
-        """Obtiene listado completo de acciones formativas."""
+        """Obtiene acciones formativas según el rol."""
         try:
-            query = _self.supabase.table("acciones_formativas").select("""
-                id, nombre, descripcion, objetivos, contenidos, requisitos,
-                horas, modalidad, fecha_inicio, fecha_fin, empresa_id,
-                created_at, num_horas, observaciones, codigo_accion, 
-                area_profesional, nivel, certificado_profesionalidad,
-                cod_area_profesional, sector, duracion_horas, certificado
-            """)
+            query = _self.supabase.table("acciones_formativas").select("*")
             query = _self._apply_empresa_filter(query, "acciones_formativas")
-            res = query.order("created_at", desc=True).execute()
+            
+            res = query.order("nombre").execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
             return _self._handle_query_error("cargar acciones formativas", e)
+
+    def get_acciones_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario nombre -> id de acciones."""
+        df = _self.get_acciones_formativas()
+        return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+
+    def create_accion_formativa(_self, data: Dict[str, Any]) -> bool:
+        """Crea una nueva acción formativa."""
+        try:
+            if _self.rol == "gestor":
+                data["empresa_id"] = _self.empresa_id
             
+            _self.supabase.table("acciones_formativas").insert(data).execute()
+            _self.get_acciones_formativas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear acción formativa: {e}")
+            return False
+
+    def update_accion_formativa(_self, accion_id: str, data: Dict[str, Any]) -> bool:
+        """Actualiza una acción formativa."""
+        try:
+            _self.supabase.table("acciones_formativas").update(data).eq("id", accion_id).execute()
+            _self.get_acciones_formativas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar acción formativa: {e}")
+            return False
+
+    def delete_accion_formativa(_self, accion_id: str) -> bool:
+        """Elimina una acción formativa."""
+        try:
+            _self.supabase.table("acciones_formativas").delete().eq("id", accion_id).execute()
+            _self.get_acciones_formativas.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar acción formativa: {e}")
+            return False
+    
     # =========================
     # GRUPOS - OPERACIONES CRUD
     # =========================
