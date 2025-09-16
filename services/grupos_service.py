@@ -217,7 +217,17 @@ class GruposService:
             return df   # ✅ Siempre devuelve df, aunque esté vacío
         except Exception as e:
             return _self._handle_query_error("cargar grupos completos", e)
-    
+            
+    @st.cache_data(ttl=600)
+    def get_grupos_dict(_self) -> Dict[str, str]:
+        """Devuelve diccionario de grupos: código -> id."""
+        try:
+            df = _self.get_grupos_completos()
+            return {row["codigo_grupo"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+        except Exception as e:
+            st.error(f"Error al cargar grupos dict: {e}")
+            return {}
+        
     @st.cache_data(ttl=600)
     def get_grupos_acciones(_self) -> pd.DataFrame:
         """Obtiene listado de grupos de acciones (catálogo auxiliar)."""
