@@ -766,7 +766,18 @@ class GruposService:
         except Exception as e:
             st.error(f"❌ Error al cargar localidades: {e}")
             return []
-
+            
+    @st.cache_data(ttl=600)
+    def get_accion_modalidad(self, accion_id: str) -> str:
+        """Devuelve la modalidad de una acción formativa concreta."""
+        try:
+            res = self.supabase.table("acciones_formativas").select("modalidad").eq("id", accion_id).execute()
+            if res.data:
+                return res.data[0].get("modalidad", "")
+            return ""
+        except Exception as e:
+            st.error(f"Error al obtener modalidad de acción formativa: {e}")
+            return ""
     # =========================
     # CACHE MANAGEMENT
     # =========================
