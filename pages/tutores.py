@@ -729,25 +729,25 @@ def eliminar_cv_tutor(supabase, data_service, tutor_id):
     try:
         confirmar_key = f"confirm_delete_cv_{tutor_id}"
         if st.session_state.get(confirmar_key, False):
-                # Eliminar archivo del storage también
-                try:
-                    # Obtener la URL actual para extraer el path del archivo
-                    tutor_actual = supabase.table("tutores").select("cv_url").eq("id", tutor_id).execute()
-                    if tutor_actual.data and tutor_actual.data[0].get("cv_url"):
-                        cv_url = tutor_actual.data[0]["cv_url"]
-                        # Extraer el path del archivo de la URL
-                        if "curriculums/" in cv_url:
-                            file_path = cv_url.split("curriculums/")[-1].split("?")[0]
-                            # Intentar eliminar del storage
-                            try:
-                                supabase.storage.from_("curriculums").remove([file_path])
-                            except Exception:
-                                pass  # Si no se puede eliminar del storage, continuar
-                
-                except Exception:
-                    pass  # Si hay error obteniendo la URL, continuar
-                
-                # Eliminar referencia de la base de datos
+            # Eliminar archivo del storage también
+            try:
+                # Obtener la URL actual para extraer el path del archivo
+                tutor_actual = supabase.table("tutores").select("cv_url").eq("id", tutor_id).execute()
+                if tutor_actual.data and tutor_actual.data[0].get("cv_url"):
+                    cv_url = tutor_actual.data[0]["cv_url"]
+                    # Extraer el path del archivo de la URL
+                    if "curriculums/" in cv_url:
+                        file_path = cv_url.split("curriculums/")[-1].split("?")[0]
+                        # Intentar eliminar del storage
+                        try:
+                            supabase.storage.from_("curriculums").remove([file_path])
+                        except Exception:
+                            pass  # Si no se puede eliminar del storage, continuar
+            
+            except Exception:
+                pass  # Si hay error obteniendo la URL, continuar
+            
+            # Eliminar referencia de la base de datos
             supabase.table("tutores").update({
                 "cv_url": None
             }).eq("id", tutor_id).execute()
