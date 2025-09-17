@@ -215,14 +215,14 @@ def main(supabase, session_state):
                 ), axis=1
             )
 
-        # Configurar listado_con_ficha SIN métricas duplicadas
+        # Configurar listado_con_ficha
         listado_con_ficha(
             df_display,
             columnas_visibles=[
                 "codigo_accion", "nombre", "modalidad", "nivel", 
                 "num_horas", "certificado_profesionalidad", "area_profesional"
             ],
-            titulo="Acciones Formativas",  # CORREGIDO: plural correcto
+            titulo="Acciones Formativas",  # Plural correcto
             on_save=guardar_accion,
             on_create=None,  # Creación manejada abajo
             id_col="id",
@@ -233,8 +233,7 @@ def main(supabase, session_state):
             search_columns=["nombre", "codigo_accion", "area_profesional", "modalidad"],
             campos_readonly=["id", "created_at"],
             allow_creation=False,  # Deshabilitado para evitar duplicación
-            campos_help=campos_help,
-            show_metrics=False  # DESACTIVAR métricas del componente
+            campos_help=campos_help
         )
     else:
         st.info("ℹ️ No hay acciones formativas disponibles.")
