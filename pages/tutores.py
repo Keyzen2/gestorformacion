@@ -42,10 +42,10 @@ def main(supabase, session_state):
             return
 
     # =========================
-    # MÉTRICAS UNIFICADAS
+    # MÉTRICAS UNIFICADAS (UNA SOLA VEZ)
     # =========================
     if not df_tutores.empty:
-        # Calcular métricas
+        # Calcular métricas principales
         total_tutores = len(df_tutores)
         internos = len(df_tutores[df_tutores["tipo_tutor"] == "interno"])
         externos = len(df_tutores[df_tutores["tipo_tutor"] == "externo"])
@@ -59,12 +59,75 @@ def main(supabase, session_state):
         with col3:
             st.metric("🌐 Externos", externos)
         with col4:
-            st.metric("📄 Con CV", con_cv)
+            st.metric("📄 Con CV", con_cv, f"{(con_cv/total_tutores*100):.1f}%" if total_tutores > 0 else "0%")
+
+        # Barra de progreso general
+        if total_tutores > 0:
+            progreso = (con_cv / total_tutores) * 100
+            st.progress(con_cv / total_tutores, f"Progreso currículums: {progreso:.1f}%")
 
     st.divider()
 
     # =========================
-    # Definir permisos de creación/edición
+    # FILTROS DE BÚSQUEDA UNIFICADOS
+    # =========================
+    st.markdown("### 🔍 Filtros de Búsqueda")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        buscar_texto = st.text_input(
+            "Buscar tutor",
+            placeholder="Nombre, email, NIF...",
+            key="buscar_tutor_unificado"
+        )
+    
+    with col2:
+        if session_state.role == "admin" and empresas_dict:
+            empresas_opciones = ["Todas"] + sorted(empresas_dict.keys())
+            empresa_filtro = st.selectbox("Filtrar por empresa", empresas_opciones)
+        else:
+            empresa_filtro = "Todas"
+    
+    with col3:
+        tipo_filtro = st.selectbox("Tipo de tutor", ["Todos", "interno", "externo"])
+    
+    with col4:
+        estado_cv = st.selectbox("Estado CV", ["Todos", "Con CV", "Sin CV"])
+
+    # Aplicar filtros
+    df_filtrado = df_tutores.copy()
+    
+    if buscar_texto:
+        buscar_lower = buscar_texto.lower()
+        mascara = (
+            df_filtrado["nombre"].str.lower().str.contains(buscar_lower, na=False) |
+            df_filtrado["apellidos"].str.lower().str.contains(buscar_lower, na=False) |
+            df_filtrado["email"].str.lower().str.contains(buscar_lower, na=False) |
+            df_filtrado["nif"].str.lower().str.contains(buscar_lower, na=False)
+        )
+        df_filtrado = df_filtrado[mascara]
+    
+    if session_state.role == "admin" and empresa_filtro != "Todas":
+        if empresa_filtro in empresas_dict:
+            empresa_id = empresas_dict[empresa_filtro]
+            df_filtrado = df_filtrado[df_filtrado["empresa_id"] == empresa_id]
+    
+    if tipo_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["tipo_tutor"] == tipo_filtro]
+    
+    if estado_cv == "Con CV":
+        df_filtrado = df_filtrado[df_filtrado["cv_url"].notna() & (df_filtrado["cv_url"] != "")]
+    elif estado_cv == "Sin CV":
+        df_filtrado = df_filtrado[~(df_filtrado["cv_url"].notna() & (df_filtrado["cv_url"] != ""))]
+
+    # Mostrar resultados de filtros
+    if len(df_filtrado) != len(df_tutores):
+        st.info(f"🎯 {len(df_filtrado)} de {len(df_tutores)} tutores mostrados")
+
+    st.divider()
+
+    # =========================
+    # DEFINIR PERMISOS
     # =========================
     puede_modificar = data_service.can_modify_data()
 
@@ -210,7 +273,6 @@ def main(supabase, session_state):
         if session_state.role == "admin":
             campos_base.insert(-1, "empresa_sel")
             
-        # Ya no incluimos cv_file aquí - se gestiona por separado
         return campos_base
 
     # Especialidades FUNDAE
@@ -233,9 +295,9 @@ def main(supabase, session_state):
         "especialidad": especialidades_opciones,
         "tipo_documento": [
             ("", "Seleccionar tipo"),
-            (10, "NIF"),
-            (20, "Pasaporte"), 
-            (60, "NIE")
+            ("NIF", "NIF"),
+            ("Pasaporte", "Pasaporte"), 
+            ("NIE", "NIE")
         ]
     }
     
@@ -244,10 +306,6 @@ def main(supabase, session_state):
         campos_select["empresa_sel"] = empresas_opciones
 
     campos_readonly = ["id", "created_at", "cv_url"]
-    
-    # Configuración de archivos
-    campos_file = ["cv_file"]
-    
     campos_obligatorios = ["nombre", "apellidos", "tipo_tutor"]
     
     campos_help = {
@@ -260,7 +318,6 @@ def main(supabase, session_state):
         "tipo_tutor": "Tipo: interno (empleado) o externo (colaborador) - obligatorio",
         "especialidad": "Área de especialización del tutor",
         "empresa_sel": "Empresa a la que pertenece (solo admin)",
-        "cv_file": "Subir CV del tutor (PDF, DOC o DOCX, máximo 10MB)",
         "direccion": "Dirección completa",
         "ciudad": "Ciudad de residencia",
         "provincia": "Provincia",
@@ -271,15 +328,20 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # LISTADO PRINCIPAL CON LISTADO_CON_FICHA
+    # LISTADO PRINCIPAL CON GESTIÓN DE CV INTEGRADA
     # =========================
     st.markdown("### 📊 Listado de Tutores")
     
-    if df_tutores.empty:
-        st.info("ℹ️ No hay tutores registrados.")
+    if df_filtrado.empty:
+        if df_tutores.empty:
+            st.info("ℹ️ No hay tutores registrados.")
+        else:
+            st.warning("🔍 No se encontraron tutores con los filtros aplicados.")
+            if st.button("🔄 Limpiar filtros"):
+                st.rerun()
     else:
         # Preparar datos para display
-        df_display = df_tutores.copy()
+        df_display = df_filtrado.copy()
         
         # Convertir relaciones a campos de selección
         if session_state.role == "admin" and empresas_dict:
@@ -288,13 +350,19 @@ def main(supabase, session_state):
                 {v: k for k, v in empresas_dict.items()}
             ).fillna("")
 
-        # Columnas visibles en la tabla
+        # Columnas visibles en la tabla + gestión CV
         columnas_visibles = [
             "nombre", "apellidos", "email", "telefono",
-            "tipo_tutor", "especialidad"
+            "tipo_tutor", "especialidad", "cv_status"
         ]
+        
+        # Añadir columna de estado del CV
+        df_display["cv_status"] = df_display["cv_url"].apply(
+            lambda x: "✅ Con CV" if pd.notna(x) and x != "" else "⏳ Sin CV"
+        )
+        
         if "empresa_nombre" in df_display.columns:
-            columnas_visibles.append("empresa_nombre")
+            columnas_visibles.insert(-1, "empresa_nombre")
 
         # Función para convertir selects a IDs antes de guardar
         def preparar_datos_para_guardar(datos):
@@ -324,51 +392,137 @@ def main(supabase, session_state):
         else:
             st.info("💡 **Información:** Los tutores deben tener CV y especialización para cumplir requisitos FUNDAE.")
 
-        # Usar listado_con_ficha con toda la funcionalidad integrada
+        # =========================
+        # EXPANSOR PARA CREAR TUTOR (NO DESPLEGADO POR DEFECTO)
+        # =========================
+        if puede_modificar:
+            with st.expander("➕ Crear Nuevo Tutor", expanded=False):
+                st.markdown("**Formulario de creación de tutor**")
+                
+                # Usar listado_con_ficha solo para creación
+                df_vacio = pd.DataFrame()
+                
+                listado_con_ficha(
+                    df=df_vacio,
+                    columnas_visibles=[],
+                    titulo="Tutor",
+                    on_save=None,
+                    on_create=crear_wrapper,
+                    id_col="id",
+                    campos_select=campos_select,
+                    campos_readonly=campos_readonly,
+                    campos_dinamicos=get_campos_dinamicos,
+                    campos_obligatorios=campos_obligatorios,
+                    allow_creation=True,
+                    campos_help=campos_help,
+                    search_columns=[]
+                )
+
+        # =========================
+        # TABLA PRINCIPAL CON EDICIÓN
+        # =========================
+        st.markdown("#### 📋 Lista de Tutores")
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
             titulo="Tutor",
             on_save=guardar_wrapper,
-            on_create=crear_wrapper if puede_modificar else None,
+            on_create=None,  # Creación ya está arriba
             id_col="id",
             campos_select=campos_select,
             campos_readonly=campos_readonly,
             campos_dinamicos=get_campos_dinamicos,
             campos_obligatorios=campos_obligatorios,
-            allow_creation=puede_modificar,
+            allow_creation=False,
             campos_help=campos_help,
             search_columns=["nombre", "apellidos", "email", "especialidad"]
         )
 
-    st.divider()
+        st.divider()
 
-    # =========================
-    # GESTIÓN DE CURRÍCULUMS
-    # =========================
-    if session_state.role in ["admin", "gestor"]:
-        mostrar_seccion_curriculums(supabase, session_state, data_service, puede_modificar)
+        # =========================
+        # GESTIÓN DE CURRÍCULUMS INTEGRADA EN LA TABLA
+        # =========================
+        st.markdown("### 📄 Gestión de Currículums")
+        st.caption("Subir y gestionar currículums de tutores seleccionados")
+        
+        # Seleccionar tutores sin CV para facilitar la gestión
+        tutores_sin_cv = df_display[~(df_display["cv_url"].notna() & (df_display["cv_url"] != ""))].copy()
+        
+        if not tutores_sin_cv.empty:
+            st.warning(f"⚠️ {len(tutores_sin_cv)} tutores sin CV:")
+            
+            for idx, tutor in tutores_sin_cv.head(5).iterrows():  # Mostrar los primeros 5
+                nombre_completo = f"{tutor['nombre']} {tutor.get('apellidos', '')}".strip()
+                empresa_nombre = tutor.get("empresa_nombre", "Sin empresa")
+                
+                with st.expander(f"📤 Subir CV - {nombre_completo} ({empresa_nombre})", expanded=False):
+                    mostrar_gestion_cv_individual(supabase, session_state, data_service, tutor, puede_modificar)
+            
+            if len(tutores_sin_cv) > 5:
+                st.caption(f"... y {len(tutores_sin_cv) - 5} tutores más sin CV")
+        else:
+            st.success("✅ Todos los tutores tienen CV subido")
+
+        # Tutores con CV - gestión de actualización
+        tutores_con_cv = df_display[df_display["cv_url"].notna() & (df_display["cv_url"] != "")].copy()
+        
+        if not tutores_con_cv.empty:
+            with st.expander(f"📄 Tutores con CV ({len(tutores_con_cv)})", expanded=False):
+                for idx, tutor in tutores_con_cv.iterrows():
+                    nombre_completo = f"{tutor['nombre']} {tutor.get('apellidos', '')}".strip()
+                    empresa_nombre = tutor.get("empresa_nombre", "Sin empresa")
+                    
+                    col_info, col_actions = st.columns([3, 1])
+                    
+                    with col_info:
+                        st.markdown(f"**👤 {nombre_completo}** - {empresa_nombre}")
+                    
+                    with col_actions:
+                        if st.button("👁️ Ver", key=f"ver_cv_{tutor['id']}"):
+                            st.markdown(f"🔗 [Abrir CV]({tutor['cv_url']})")
+                        
+                        if st.button("🔄 Actualizar", key=f"update_cv_{tutor['id']}"):
+                            with st.form(f"update_form_{tutor['id']}"):
+                                cv_file = st.file_uploader(
+                                    "Nuevo CV",
+                                    type=["pdf", "doc", "docx"],
+                                    key=f"new_cv_{tutor['id']}",
+                                    help="PDF, DOC o DOCX, máximo 10MB"
+                                )
+                                
+                                if st.form_submit_button("📤 Actualizar CV"):
+                                    if cv_file is not None:
+                                        success = subir_cv_tutor(supabase, data_service, tutor, cv_file)
+                                        if success:
+                                            st.rerun()
+                        
+                        if st.button("🗑️ Eliminar", key=f"delete_cv_{tutor['id']}"):
+                            if eliminar_cv_tutor(supabase, data_service, tutor["id"]):
+                                st.rerun()
 
     # =========================
     # EXPORTACIÓN Y RESUMEN
     # =========================
-    if not df_tutores.empty:
+    if not df_filtrado.empty:
         with st.expander("📊 Exportar y Resumen", expanded=False):
             col1, col2 = st.columns(2)
             
             with col1:
                 if st.button("📥 Exportar Tutores CSV", use_container_width=True):
-                    export_csv(df_tutores, "tutores_export")
+                    export_csv(df_filtrado, "tutores_export")
                     
             with col2:
-                st.markdown("**Resumen de tutores:**")
-                st.write(f"- Total tutores: {len(df_tutores)}")
+                st.markdown("**Resumen de tutores filtrados:**")
+                total_filtrados = len(df_filtrado)
+                st.write(f"- Total tutores: {total_filtrados}")
                 
-                if len(df_tutores) > 0:
-                    internos_pct = (len(df_tutores[df_tutores["tipo_tutor"] == "interno"]) / len(df_tutores)) * 100
+                if total_filtrados > 0:
+                    internos_pct = (len(df_filtrado[df_filtrado["tipo_tutor"] == "interno"]) / total_filtrados) * 100
                     st.write(f"- Tutores internos: {internos_pct:.1f}%")
                     
-                    con_cv_pct = (len(df_tutores[df_tutores["cv_url"].notna() & (df_tutores["cv_url"] != "")]) / len(df_tutores)) * 100
+                    cv_filtrados = len(df_filtrado[df_filtrado["cv_url"].notna() & (df_filtrado["cv_url"] != "")])
+                    con_cv_pct = (cv_filtrados / total_filtrados) * 100
                     st.write(f"- Con CV subido: {con_cv_pct:.1f}%")
 
     # =========================
@@ -402,330 +556,139 @@ def main(supabase, session_state):
     st.caption("💡 Los tutores cualificados son esenciales para la aprobación de grupos formativos en FUNDAE.")
 
 
-def mostrar_seccion_curriculums(supabase, session_state, data_service, puede_modificar):
-    """Gestión completa de currículums con filtros y subida de archivos."""
-    st.markdown("### 📄 Gestión de Currículums")
-    st.caption("Subir y gestionar currículums de tutores.")
+def mostrar_gestion_cv_individual(supabase, session_state, data_service, tutor, puede_modificar):
+    """Gestión de CV para un tutor individual."""
+    if not puede_modificar:
+        st.info("ℹ️ No tienes permisos para subir CVs")
+        return
     
-    try:
-        # Obtener todos los tutores según rol
-        if session_state.role == "admin":
-            tutores_query = supabase.table("tutores").select("""
-                id, nombre, apellidos, email, nif, especialidad, cv_url, empresa_id,
-                empresa:empresas(nombre)
-            """).execute()
+    st.info("📱 **Para móviles:** Asegúrate de que el archivo esté guardado en tu dispositivo")
+    
+    cv_file = st.file_uploader(
+        "Seleccionar CV",
+        type=["pdf", "doc", "docx"],
+        key=f"upload_cv_individual_{tutor['id']}",
+        help="PDF, DOC o DOCX, máximo 10MB"
+    )
+    
+    if cv_file is not None:
+        file_size_mb = cv_file.size / (1024 * 1024)
+        
+        col_info_file, col_size_file = st.columns(2)
+        with col_info_file:
+            st.success(f"✅ **Archivo:** {cv_file.name}")
+        with col_size_file:
+            color = "🔴" if file_size_mb > 10 else "🟢"
+            st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
+        
+        if file_size_mb > 10:
+            st.error("❌ Archivo muy grande. Máximo 10MB.")
         else:
-            # Gestor: solo tutores de su empresa
-            empresa_id = session_state.user.get("empresa_id")
-            if not empresa_id:
-                st.warning("No tienes empresa asignada.")
-                return
-            
-            tutores_query = supabase.table("tutores").select("""
-                id, nombre, apellidos, email, nif, especialidad, cv_url, empresa_id,
-                empresa:empresas(nombre)
-            """).eq("empresa_id", empresa_id).execute()
-        
-        tutores_data = tutores_query.data or []
-        
-        if not tutores_data:
-            st.info("ℹ️ No hay tutores disponibles.")
-            return
-
-        # Métricas
-        total_tutores = len(tutores_data)
-        con_cv = len([t for t in tutores_data if t.get("cv_url")])
-        sin_cv = total_tutores - con_cv
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("👨‍🏫 Total Tutores", total_tutores)
-        with col2:
-            st.metric("📄 Con CV", con_cv)
-        with col3:
-            st.metric("⏳ Sin CV", sin_cv)
-
-        # FILTROS DE BÚSQUEDA
-        st.markdown("#### 🔍 Filtros de Búsqueda")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            buscar_tutor = st.text_input(
-                "🔍 Buscar tutor",
-                placeholder="Nombre, email o NIF...",
-                key="buscar_cv_tutor"
-            )
-        
-        with col2:
-            # Filtro por empresa (solo admin)
-            if session_state.role == "admin":
-                empresas_unicas = list(set([t.get("empresa", {}).get("nombre", "Sin empresa") for t in tutores_data]))
-                empresa_filtro = st.selectbox(
-                    "Filtrar por empresa",
-                    ["Todas"] + sorted(empresas_unicas),
-                    key="filtro_empresa_cv"
-                )
-            else:
-                empresa_filtro = "Todas"
-        
-        with col3:
-            estado_cv = st.selectbox(
-                "Estado CV",
-                ["Todos", "Con CV", "Sin CV"],
-                key="filtro_estado_cv"
-            )
-
-        # Aplicar filtros
-        tutores_filtrados = tutores_data.copy()
-        
-        # Filtro de búsqueda
-        if buscar_tutor:
-            buscar_lower = buscar_tutor.lower()
-            tutores_filtrados = [
-                t for t in tutores_filtrados 
-                if (buscar_lower in t.get("nombre", "").lower() or 
-                    buscar_lower in t.get("apellidos", "").lower() or 
-                    buscar_lower in t.get("email", "").lower() or
-                    buscar_lower in t.get("nif", "").lower())
-            ]
-        
-        # Filtro por empresa
-        if session_state.role == "admin" and empresa_filtro != "Todas":
-            tutores_filtrados = [
-                t for t in tutores_filtrados 
-                if t.get("empresa", {}).get("nombre") == empresa_filtro
-            ]
-        
-        # Filtro por estado de CV
-        if estado_cv == "Con CV":
-            tutores_filtrados = [t for t in tutores_filtrados if t.get("cv_url")]
-        elif estado_cv == "Sin CV":
-            tutores_filtrados = [t for t in tutores_filtrados if not t.get("cv_url")]
-
-        st.markdown(f"#### 🎯 Tutores encontrados: {len(tutores_filtrados)}")
-
-        if not tutores_filtrados:
-            st.warning("🔍 No se encontraron tutores con los filtros aplicados.")
-            return
-
-        # Lista de tutores con paginación
-        items_por_pagina = 10
-        total_paginas = (len(tutores_filtrados) + items_por_pagina - 1) // items_por_pagina
-        
-        if total_paginas > 1:
-            pagina_actual = st.selectbox(
-                "Página",
-                range(1, total_paginas + 1),
-                key="pagina_curriculums"
-            )
-            inicio = (pagina_actual - 1) * items_por_pagina
-            fin = inicio + items_por_pagina
-            tutores_pagina = tutores_filtrados[inicio:fin]
-        else:
-            tutores_pagina = tutores_filtrados
-
-        # Mostrar tutores
-        for i, tutor in enumerate(tutores_pagina):
-            tiene_cv = bool(tutor.get("cv_url"))
-            
-            # Crear expander con información del tutor
-            nombre_completo = f"{tutor['nombre']} {tutor.get('apellidos', '')}".strip()
-            empresa_nombre = tutor.get("empresa", {}).get("nombre", "Sin empresa") if tutor.get("empresa") else "Sin empresa"
-            
-            status_emoji = "✅" if tiene_cv else "⏳"
-            status_text = "Con CV" if tiene_cv else "Pendiente"
-            
-            with st.expander(
-                f"{status_emoji} {nombre_completo} - {empresa_nombre} ({status_text})",
-                expanded=False
+            if st.button(
+                f"📤 Subir CV de {tutor['nombre']}", 
+                key=f"btn_upload_individual_{tutor['id']}", 
+                type="primary",
+                use_container_width=True
             ):
-                col_info, col_actions = st.columns([2, 1])
-                
-                with col_info:
-                    st.markdown(f"**📧 Email:** {tutor['email']}")
-                    st.markdown(f"**🆔 NIF:** {tutor.get('nif', 'No disponible')}")
-                    st.markdown(f"**🎯 Especialidad:** {tutor.get('especialidad', 'No especificada')}")
-                    st.markdown(f"**🏢 Empresa:** {empresa_nombre}")
-                
-                with col_actions:
-                    if tiene_cv:
-                        # Mostrar CV existente
-                        st.markdown("**📄 CV:**")
-                        if st.button("👁️ Ver CV", key=f"ver_cv_{tutor['id']}"):
-                            st.markdown(f"[🔗 Abrir CV]({tutor['cv_url']})")
-                        
-                        if st.button("🗑️ Eliminar", key=f"delete_cv_{tutor['id']}"):
-                            confirmar_key = f"confirm_delete_cv_{tutor['id']}"
-                            if st.session_state.get(confirmar_key, False):
-                                try:
-                                    # Eliminar referencia de la base de datos
-                                    supabase.table("tutores").update({
-                                        "cv_url": None
-                                    }).eq("id", tutor["id"]).execute()
-                                    
-                                    # Limpiar cache
-                                    data_service.get_tutores_completos.clear()
-                                    
-                                    st.success("✅ CV eliminado.")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error al eliminar CV: {e}")
-                            else:
-                                st.session_state[confirmar_key] = True
-                                st.warning("⚠️ Confirmar eliminación")
-                    else:
-                        if puede_modificar:
-                            # Subir CV
-                            st.markdown("**📤 Subir CV**")
-                            
-                            st.info("📱 **Para móviles:** Asegúrate de que el archivo esté guardado en tu dispositivo")
-                            
-                            cv_file = st.file_uploader(
-                                "Seleccionar CV",
-                                type=["pdf", "doc", "docx"],
-                                key=f"upload_cv_{tutor['id']}",
-                                help="PDF, DOC o DOCX, máximo 10MB"
-                            )
-                            
-                            if cv_file is not None:
-                                file_size_mb = cv_file.size / (1024 * 1024)
-                                
-                                col_info_file, col_size_file = st.columns(2)
-                                with col_info_file:
-                                    st.success(f"✅ **Archivo:** {cv_file.name}")
-                                with col_size_file:
-                                    color = "🔴" if file_size_mb > 10 else "🟢"
-                                    st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
-                                
-                                if file_size_mb > 10:
-                                    st.error("❌ Archivo muy grande. Máximo 10MB.")
-                                else:
-                                    if st.button(
-                                        f"📤 Subir CV de {tutor['nombre']}", 
-                                        key=f"btn_upload_cv_{tutor['id']}", 
-                                        type="primary",
-                                        use_container_width=True
-                                    ):
-                                        try:
-                                            with st.spinner("📤 Subiendo CV..."):
-                                                # Validar que el archivo se puede leer
-                                                try:
-                                                    file_bytes = cv_file.getvalue()
-                                                    if len(file_bytes) == 0:
-                                                        raise ValueError("El archivo está vacío")
-                                                except Exception as e:
-                                                    st.error(f"❌ Error al leer el archivo: {e}")
-                                                    continue
-                                                
-                                                # Generar path estructurado
-                                                empresa_id_tutor = tutor.get("empresa_id")
-                                                file_extension = cv_file.name.split(".")[-1] if "." in cv_file.name else "pdf"
-                                                timestamp = int(datetime.now().timestamp())
-                                                filename = f"empresa_{empresa_id_tutor}/tutores/cv_{tutor['id']}_{timestamp}.{file_extension}"
-                                                
-                                                # Subir a bucket de Supabase
-                                                try:
-                                                    upload_res = supabase.storage.from_("curriculums").upload(
-                                                        filename, 
-                                                        file_bytes, 
-                                                        file_options={
-                                                            "content-type": cv_file.type,
-                                                            "cache-control": "3600",
-                                                            "upsert": "true"
-                                                        }
-                                                    )
-                                                    
-                                                    # Verificar si la subida fue exitosa
-                                                    if hasattr(upload_res, 'error') and upload_res.error:
-                                                        raise Exception(f"Error de subida: {upload_res.error}")
-                                                    
-                                                    # Obtener URL pública
-                                                    public_url = supabase.storage.from_("curriculums").get_public_url(filename)
-                                                    if not public_url:
-                                                        raise Exception("No se pudo generar URL pública")
-                                                    
-                                                    # Actualizar base de datos
-                                                    supabase.table("tutores").update({
-                                                        "cv_url": public_url
-                                                    }).eq("id", tutor["id"]).execute()
-                                                    
-                                                    # Limpiar cache
-                                                    data_service.get_tutores_completos.clear()
-                                                    
-                                                    st.success("✅ CV subido correctamente!")
-                                                    st.balloons()
-                                                    
-                                                    # Mostrar link directo
-                                                    st.markdown(f"🔗 [Ver CV subido]({public_url})")
-                                                    
-                                                    # Recargar página
-                                                    import time
-                                                    time.sleep(2)
-                                                    st.rerun()
-                                                    
-                                                except Exception as upload_error:
-                                                    st.error(f"❌ Error al subir archivo: {upload_error}")
-                                                    
-                                                    st.info("""
-                                                    🔧 **Soluciones:**
-                                                    - Verifica que el bucket 'curriculums' existe en Supabase
-                                                    - Asegúrate de que tienes permisos de subida
-                                                    - Intenta con un archivo más pequeño
-                                                    - Contacta al administrador si persiste el error
-                                                    """)
-                                        
-                                        except Exception as e:
-                                            st.error(f"❌ Error general: {e}")
-                            else:
-                                st.info("📂 Selecciona un archivo para continuar")
-                        else:
-                            st.info("ℹ️ No tienes permisos para subir CVs")
-
-        # Estadísticas finales
-        if tutores_filtrados:
-            st.markdown("#### 📊 Estadísticas")
-            total_mostrados = len(tutores_filtrados)
-            con_cv_filtrados = sum(1 for t in tutores_filtrados if t.get("cv_url"))
-            sin_cv_filtrados = total_mostrados - con_cv_filtrados
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("👥 Mostrados", total_mostrados)
-            with col2:
-                st.metric("✅ Con CV", con_cv_filtrados)
-            with col3:
-                st.metric("⏳ Sin CV", sin_cv_filtrados)
-            
-            if total_mostrados > 0:
-                progreso = (con_cv_filtrados / total_mostrados) * 100
-                st.progress(con_cv_filtrados / total_mostrados, f"Progreso: {progreso:.1f}%")
-        
-    except Exception as e:
-        st.error(f"❌ Error al cargar gestión de currículums: {e}")
+                success = subir_cv_tutor(supabase, data_service, tutor, cv_file)
+                if success:
+                    st.rerun()
+    else:
+        st.info("📂 Selecciona un archivo para continuar")
 
 
-    # =========================
-    # VERIFICACIONES DE CONFIGURACIÓN (Solo para admin)
-    # =========================
-    if session_state.role == "admin":
-        with st.expander("🔧 Configuración del Sistema (Admin)", expanded=False):
-            st.markdown("**Verificar configuración de buckets de Supabase:**")
-            
-            # Verificar bucket curriculums
+def subir_cv_tutor(supabase, data_service, tutor, cv_file):
+    """Función helper para subir CV de tutor."""
+    try:
+        with st.spinner("📤 Subiendo CV..."):
+            # Validar que el archivo se puede leer
             try:
-                bucket_list = supabase.storage.list_buckets()
-                bucket_names = [b.name for b in bucket_list if hasattr(b, 'name')]
-                
-                if "curriculums" in bucket_names:
-                    st.success("✅ Bucket 'curriculums' configurado correctamente")
-                else:
-                    st.error("❌ Bucket 'curriculums' no encontrado")
-                    st.info("💡 Crear bucket 'curriculums' en Supabase Storage")
-                    
+                file_bytes = cv_file.getvalue()
+                if len(file_bytes) == 0:
+                    raise ValueError("El archivo está vacío")
             except Exception as e:
-                st.warning(f"⚠️ No se pudo verificar buckets: {e}")
+                st.error(f"❌ Error al leer el archivo: {e}")
+                return False
+            
+            # Generar path estructurado
+            empresa_id_tutor = tutor.get("empresa_id")
+            file_extension = cv_file.name.split(".")[-1] if "." in cv_file.name else "pdf"
+            timestamp = int(datetime.now().timestamp())
+            filename = f"empresa_{empresa_id_tutor}/tutores/cv_{tutor['id']}_{timestamp}.{file_extension}"
+            
+            # Subir a bucket de Supabase
+            try:
+                upload_res = supabase.storage.from_("curriculums").upload(
+                    filename, 
+                    file_bytes, 
+                    file_options={
+                        "content-type": cv_file.type,
+                        "cache-control": "3600",
+                        "upsert": "true"
+                    }
+                )
                 
-            # Mostrar estadísticas de archivos
-            if not df_tutores.empty:
-                tutores_con_cv = df_tutores[df_tutores["cv_url"].notna() & (df_tutores["cv_url"] != "")]
-                st.info(f"📄 {len(tutores_con_cv)} de {len(df_tutores)} tutores tienen CV subido ({len(tutores_con_cv)/len(df_tutores)*100:.1f}%)")
+                # Verificar si la subida fue exitosa
+                if hasattr(upload_res, 'error') and upload_res.error:
+                    raise Exception(f"Error de subida: {upload_res.error}")
+                
+                # Obtener URL pública
+                public_url = supabase.storage.from_("curriculums").get_public_url(filename)
+                if not public_url:
+                    raise Exception("No se pudo generar URL pública")
+                
+                # Actualizar base de datos
+                supabase.table("tutores").update({
+                    "cv_url": public_url
+                }).eq("id", tutor["id"]).execute()
+                
+                # Limpiar cache
+                data_service.get_tutores_completos.clear()
+                
+                st.success("✅ CV subido correctamente!")
+                st.balloons()
+                
+                # Mostrar link directo
+                st.markdown(f"🔗 [Ver CV subido]({public_url})")
+                
+                return True
+                
+            except Exception as upload_error:
+                st.error(f"❌ Error al subir archivo: {upload_error}")
+                
+                st.info("""
+                🔧 **Soluciones:**
+                - Verifica que el bucket 'curriculums' existe en Supabase
+                - Asegúrate de que tienes permisos de subida
+                - Intenta con un archivo más pequeño
+                - Contacta al administrador si persiste el error
+                """)
+                return False
+    
+    except Exception as e:
+        st.error(f"❌ Error general: {e}")
+        return False
+
+
+def eliminar_cv_tutor(supabase, data_service, tutor_id):
+    """Función helper para eliminar CV de tutor."""
+    try:
+        confirmar_key = f"confirm_delete_cv_{tutor_id}"
+        if st.session_state.get(confirmar_key, False):
+            # Eliminar referencia de la base de datos
+            supabase.table("tutores").update({
+                "cv_url": None
+            }).eq("id", tutor_id).execute()
+            
+            # Limpiar cache
+            data_service.get_tutores_completos.clear()
+            
+            st.success("✅ CV eliminado.")
+            return True
+        else:
+            st.session_state[confirmar_key] = True
+            st.warning("⚠️ Confirmar eliminación - Presiona de nuevo para confirmar")
+            return False
+    except Exception as e:
+        st.error(f"❌ Error al eliminar CV: {e}")
+        return False
