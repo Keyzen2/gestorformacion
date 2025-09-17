@@ -266,29 +266,23 @@ def main(supabase, session_state):
     try:
         data_service = get_data_service(supabase, session_state)
         
-        # Obtener métricas básicas
-        empresas_response = supabase.table("empresas").select("id").execute()
-        usuarios_response = supabase.table("users").select("id").execute()
-        grupos_response = supabase.table("grupos").select("id").execute()
-        acciones_response = supabase.table("acciones_formativas").select("id").execute()
+        # Usar el método optimizado de data_service con cache
+        metricas = data_service.get_metricas_admin()
         
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            total_empresas = len(empresas_response.data) if empresas_response.data else 0
-            st.metric("🏢 Empresas", total_empresas)
+            st.metric("🏢 Empresas", metricas.get("total_empresas", 0))
         
         with col2:
-            total_usuarios = len(usuarios_response.data) if usuarios_response.data else 0
-            st.metric("👥 Usuarios", total_usuarios)
+            st.metric("👥 Usuarios", metricas.get("total_usuarios", 0))
         
         with col3:
-            total_grupos = len(grupos_response.data) if grupos_response.data else 0
-            st.metric("👨‍🎓 Grupos", total_grupos)
+            st.metric("👨‍🎓 Grupos", metricas.get("total_grupos", 0))
         
         with col4:
-            total_acciones = len(acciones_response.data) if acciones_response.data else 0
-            st.metric("📚 Acciones Formativas", total_acciones)
+            # CORRIGIDO: usar el nombre correcto del data_service
+            st.metric("📚 Acciones Formativas", metricas.get("total_cursos", 0))
 
     except Exception as e:
         st.warning(f"No se pudieron cargar las métricas del sistema: {e}")
