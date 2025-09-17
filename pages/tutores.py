@@ -522,7 +522,7 @@ if session_state.role == "admin" and empresas_dict:
                             "nif": nif,
                             "tipo_tutor": tipo_tutor,
                             "especialidad": especialidad,
-                            "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None
+                            "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None,
                             "direccion": direccion,
                             "ciudad": ciudad,
                             "provincia": provincia,
