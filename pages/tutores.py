@@ -417,6 +417,82 @@ if session_state.role == "admin" and empresas_dict:
                             # Crear selectbox para tipo_documento con códigos
                             opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
                             # Encontrar índice del valor actual
+    # =========================
+    # MOSTRAR TABLA Y FORMULARIOS
+    # =========================
+    if df_filtrado.empty:
+        if df_tutores.empty:
+            st.info("ℹ️ No hay tutores registrados.")
+        else:
+            st.warning("🔍 No se encontraron tutores con los filtros aplicados.")
+            if st.button("🔄 Limpiar filtros"):
+                st.rerun()
+    else:
+        # Preparar datos para display con valores compatibles
+        df_display = preparar_datos_display(df_filtrado)
+        
+        # Columnas visibles en la tabla + gestión CV
+        columnas_visibles = [
+            "nombre", "apellidos", "email", "telefono",
+            "tipo_tutor", "especialidad", "cv_status"
+        ]
+        
+        if "empresa_nombre" in df_display.columns:
+            columnas_visibles.insert(-1, "empresa_nombre")
+
+        # =========================
+        # TABLA PRINCIPAL - ESTILO GRUPOS.PY
+        # =========================
+        
+        # Mostrar tabla simple como en grupos.py
+        st.markdown("### Selecciona un tutor para editarlo:")
+        
+        try:
+            event = st.dataframe(
+                df_display[columnas_visibles],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="tabla_tutores_principal"
+            )
+        except Exception as e:
+            st.error(f"❌ Error al mostrar tabla: {e}")
+            return
+
+        # Manejar selección para edición
+        if event and hasattr(event, 'selection') and event.selection.get("rows"):
+            try:
+                selected_idx = event.selection["rows"][0]
+                if selected_idx < len(df_display):
+                    tutor_seleccionado = df_display.iloc[selected_idx]
+                    
+                    # Mostrar formulario de edición manual
+                    st.markdown("---")
+                    st.markdown("### ✏️ Editar Tutor Seleccionado")
+                    st.caption(f"Editando: {tutor_seleccionado['nombre']} {tutor_seleccionado.get('apellidos', '')}")
+                    
+                    with st.form(f"form_editar_tutor_{tutor_seleccionado['id']}", clear_on_submit=False):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            nombre = st.text_input("Nombre *", value=tutor_seleccionado.get('nombre', ''), key="edit_nombre")
+                            email = st.text_input("Email", value=tutor_seleccionado.get('email', ''), key="edit_email")
+                            tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], 
+                                                    index=["", "interno", "externo"].index(tutor_seleccionado.get('tipo_tutor', '')) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
+                                                    key="edit_tipo")
+                            nif = st.text_input("NIF/DNI", value=tutor_seleccionado.get('nif', ''), key="edit_nif")
+                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key="edit_direccion")
+                        
+                        with col2:
+                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key="edit_apellidos")
+                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key="edit_telefono")
+                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
+                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
+                                                      key="edit_especialidad")
+                            # Crear selectbox para tipo_documento con códigos
+                            opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
+                            # Encontrar índice del valor actual
                             valor_actual = tutor_seleccionado.get('tipo_documento')
                             if pd.isna(valor_actual) or valor_actual == "":
                                 indice_tipo_doc = 0
@@ -435,6 +511,7 @@ if session_state.role == "admin" and empresas_dict:
                                 format_func=lambda x: x[1],  # Mostrar solo el texto
                                 key="edit_tipo_doc"
                             )
+                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key="edit_ciudad")
                         
                         col3, col4 = st.columns(2)
                         with col3:
