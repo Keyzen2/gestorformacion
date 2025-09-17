@@ -66,6 +66,26 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
+    # DEFINIR PERMISOS Y OPCIONES
+    # =========================
+    puede_modificar = data_service.can_modify_data()
+
+    # Especialidades FUNDAE (definir antes de usar en filtros)
+    especialidades_opciones = [
+        "", "Administración y Gestión", "Comercio y Marketing", 
+        "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
+        "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
+        "Química", "Imagen Personal", "Industrias Extractivas",
+        "Fabricación Mecánica", "Instalación y Mantenimiento", 
+        "Electricidad y Electrónica", "Energía y Agua", 
+        "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
+        "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
+        "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
+        "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
+        "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
+    ]
+
+    # =========================
     # FILTROS DE BÚSQUEDA UNIFICADOS
     # =========================
     st.markdown("### 🔍 Filtros de Búsqueda")
@@ -281,21 +301,7 @@ def main(supabase, session_state):
             
         return campos_base
 
-    # Especialidades FUNDAE
-    especialidades_opciones = [
-        "", "Administración y Gestión", "Comercio y Marketing", 
-        "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
-        "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
-        "Química", "Imagen Personal", "Industrias Extractivas",
-        "Fabricación Mecánica", "Instalación y Mantenimiento", 
-        "Electricidad y Electrónica", "Energía y Agua", 
-        "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
-        "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
-        "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
-        "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
-        "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
-    ]
-
+    # Especialidades ya definidas arriba
     campos_select = {
         "tipo_tutor": ["", "interno", "externo"],
         "especialidad": especialidades_opciones,
