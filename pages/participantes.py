@@ -446,7 +446,6 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
                 del st.session_state.participante_editando
                 st.rerun()
 
-
 def crear_participante(supabase, session_state, data_service, nombre, apellidos, email, nif, 
                       telefono, fecha_nacimiento, sexo, empresa_id, grupo_id):
     """Crea un nuevo participante con validaciones."""
@@ -496,7 +495,7 @@ def crear_participante(supabase, session_state, data_service, nombre, apellidos,
             data_service.get_participantes_completos.clear()
             
             st.success("✅ Participante creado correctamente.")
-            del st.session_state.participante_editando
+            st.session_state.participante_editando = None  # en lugar de del
             st.rerun()
         else:
             st.error("❌ Error al crear el participante.")
@@ -528,30 +527,11 @@ def actualizar_participante(supabase, session_state, data_service, participante_
         }
 
         # Campos opcionales
-        if nif:
-            datos_actualizacion["nif"] = nif
-        else:
-            datos_actualizacion["nif"] = None
-            
-        if telefono:
-            datos_actualizacion["telefono"] = telefono
-        else:
-            datos_actualizacion["telefono"] = None
-            
-        if fecha_nacimiento:
-            datos_actualizacion["fecha_nacimiento"] = fecha_nacimiento.isoformat()
-        else:
-            datos_actualizacion["fecha_nacimiento"] = None
-            
-        if sexo:
-            datos_actualizacion["sexo"] = sexo
-        else:
-            datos_actualizacion["sexo"] = None
-            
-        if grupo_id:
-            datos_actualizacion["grupo_id"] = grupo_id
-        else:
-            datos_actualizacion["grupo_id"] = None
+        datos_actualizacion["nif"] = nif if nif else None
+        datos_actualizacion["telefono"] = telefono if telefono else None
+        datos_actualizacion["fecha_nacimiento"] = fecha_nacimiento.isoformat() if fecha_nacimiento else None
+        datos_actualizacion["sexo"] = sexo if sexo else None
+        datos_actualizacion["grupo_id"] = grupo_id if grupo_id else None
 
         # Actualizar participante
         supabase.table("participantes").update(datos_actualizacion).eq("id", participante_id).execute()
@@ -560,12 +540,11 @@ def actualizar_participante(supabase, session_state, data_service, participante_
         data_service.get_participantes_completos.clear()
         
         st.success("✅ Participante actualizado correctamente.")
-        del st.session_state.participante_editando
+        st.session_state.participante_editando = None  # en lugar de del
         st.rerun()
         
     except Exception as e:
         st.error(f"❌ Error al actualizar participante: {e}")
-
 
 def mostrar_seccion_diplomas(supabase, session_state, empresa_id):
     """Sección de gestión de diplomas - FUNCIONAL COMPLETA."""
