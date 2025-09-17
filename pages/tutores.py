@@ -325,9 +325,9 @@ def main(supabase, session_state):
         "especialidad": especialidades_opciones,
         "tipo_documento": [
              "", "Seleccionar tipo",
-             10, "NIF",
-             20, "Pasaporte", 
-             60, "NIE"
+             "NIF",
+             "Pasaporte", 
+             "NIE"
         ]
     }
     
