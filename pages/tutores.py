@@ -69,19 +69,34 @@ def main(supabase, session_state):
 
     # Especialidades FUNDAE (definir antes de usar en filtros)
     especialidades_opciones = [
-        "", "Administración y Gestión", "Comercio y Marketing", 
-        "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
-        "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
-        "Química", "Imagen Personal", "Industrias Extractivas",
-        "Fabricación Mecánica", "Instalación y Mantenimiento", 
-        "Electricidad y Electrónica", "Energía y Agua", 
-        "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
-        "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
-        "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
-        "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
-        "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
-    ]
+    "", "Administración y Gestión", "Comercio y Marketing", 
+    "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
+    "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
+    "Química", "Imagen Personal", "Industrias Extractivas",
+    "Fabricación Mecánica", "Instalación y Mantenimiento", 
+    "Electricidad y Electrónica", "Energía y Agua", 
+    "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
+    "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
+    "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
+    "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
+    "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
+]
 
+# AQUÍ - al mismo nivel que especialidades_opciones
+campos_select = {
+    "tipo_tutor": ["", "interno", "externo"],
+    "especialidad": especialidades_opciones,
+    "tipo_documento": [
+        ("", "Seleccionar tipo"),
+        (10, "NIF"),           # Código 10 para NIF
+        (20, "Pasaporte"),     # Código 20 para Pasaporte  
+        (60, "NIE")            # Código 60 para NIE
+    ]
+}
+
+if session_state.role == "admin" and empresas_dict:
+    empresas_opciones = [""] + sorted(empresas_dict.keys())
+    campos_select["empresa_sel"] = empresas_opciones
     # =========================
     # FILTROS DE BÚSQUEDA UNIFICADOS
     # =========================
