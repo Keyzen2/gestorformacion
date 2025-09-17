@@ -26,6 +26,10 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
         
+    # ✅ Inicializar estado seguro
+    if "participante_editando" not in st.session_state:
+        st.session_state.participante_editando = None
+        
     # Inicializar servicios
     data_service = get_data_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
