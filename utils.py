@@ -1079,7 +1079,19 @@ def actualizar_tipo_documento_tutores(supabase):
     except Exception as e:
         print(f"Error en migración de tipos de documento: {e}")
         return False
-
+        
+def detectar_tipo_documento_fundae(nif):
+    """Detecta automáticamente el tipo de documento para XML FUNDAE."""
+    if not nif:
+        return 20  # Pasaporte por defecto
+    
+    nif = nif.upper().strip()
+    if re.match(r'^[0-9]{8}[A-Z]$', nif):
+        return 10  # NIF
+    elif re.match(r'^[XYZ][0-9]{7}[A-Z]$', nif):
+        return 60  # NIE
+    else:
+        return 20  # Pasaporte
 
 def migrar_horarios_existentes(supabase):
     """
