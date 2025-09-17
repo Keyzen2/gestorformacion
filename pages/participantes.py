@@ -223,12 +223,12 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
             if not participante_data:
                 st.error("Participante no encontrado")
                 if "participante_seleccionado" in st.session_state:
-                    del st.session_state.participante_seleccionado
+                    st.session_state.participante_editando = None
                 return
         except Exception as e:
             st.error(f"Error al cargar participante: {e}")
             if "participante_seleccionado" in st.session_state:
-                del st.session_state.participante_seleccionado
+                st.session_state.participante_editando = None
             return
 
     # =========================
@@ -427,7 +427,7 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
         
         with col2:
             if st.button("❌ Cancelar", use_container_width=True):
-                del st.session_state.participante_editando
+                st.session_state.participante_editando = None
                 st.rerun()
     
     else:
@@ -447,7 +447,7 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
         
         with col3:
             if st.button("❌ Cancelar", use_container_width=True):
-                del st.session_state.participante_editando
+                st.session_state.participante_editando = None
                 st.rerun()
 
 def crear_participante(supabase, session_state, data_service, nombre, apellidos, email, nif, 
