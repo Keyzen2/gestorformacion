@@ -142,29 +142,10 @@ def main(supabase, session_state):
         if event.selection.rows:
             selected_idx = event.selection.rows[0]
             participante_seleccionado = df_filtered.iloc[selected_idx]
-            
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                if st.button("✏️ Editar Participante", type="primary", use_container_width=True):
-                    st.session_state.participante_editando = participante_seleccionado["id"]
-                    st.rerun()
+            st.session_state.participante_editando = participante_seleccionado["id"]
+            st.rerun()
 
     st.divider()
-
-    # =========================
-    # BOTÓN CREAR NUEVO PARTICIPANTE
-    # =========================
-    puede_crear = (
-        session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id)
-    )
-    
-    if puede_crear:
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            if st.button("➕ Crear Nuevo Participante", type="primary", use_container_width=True):
-                st.session_state.participante_editando = "nuevo"
-                st.rerun()
 
     # =========================
     # FORMULARIO DE EDICIÓN/CREACIÓN
