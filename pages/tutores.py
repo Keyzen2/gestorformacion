@@ -69,7 +69,7 @@ def main(supabase, session_state):
     # FILTROS DE BÚSQUEDA UNIFICADOS
     # =========================
     st.markdown("### 🔍 Filtros de Búsqueda")
-    col1, col2, col3,     col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         buscar_texto = st.text_input(
