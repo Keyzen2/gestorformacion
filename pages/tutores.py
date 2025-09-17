@@ -392,74 +392,29 @@ if session_state.role == "admin" and empresas_dict:
                     # Mostrar formulario de edición manual
                     st.markdown("---")
                     st.markdown("### ✏️ Editar Tutor Seleccionado")
-                    st.caption(
-                        f"Editando: {tutor_seleccionado['nombre']} "
-                        f"{tutor_seleccionado.get('apellidos', '')}"
-                    )
+                    st.caption(f"Editando: {tutor_seleccionado['nombre']} {tutor_seleccionado.get('apellidos', '')}")
                     
-                    with st.form(
-                        f"form_editar_tutor_{tutor_seleccionado['id']}", 
-                        clear_on_submit=False
-                    ):
+                    with st.form(f"form_editar_tutor_{tutor_seleccionado['id']}", clear_on_submit=False):
                         col1, col2 = st.columns(2)
                         
                         with col1:
-                            nombre = st.text_input(
-                                "Nombre *", 
-                                value=tutor_seleccionado.get('nombre', ''), 
-                                key="edit_nombre"
-                            )
-                            email = st.text_input(
-                                "Email", 
-                                value=tutor_seleccionado.get('email', ''), 
-                                key="edit_email"
-                            )
-                            tipo_tutor = st.selectbox(
-                                "Tipo de tutor *", 
-                                ["", "interno", "externo"], 
-                                index=["", "interno", "externo"].index(
-                                    tutor_seleccionado.get('tipo_tutor', '')
-                                ) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
-                                key="edit_tipo"
-                            )
-                            nif = st.text_input(
-                                "NIF/DNI", 
-                                value=tutor_seleccionado.get('nif', ''), 
-                                key="edit_nif"
-                            )
-                            direccion = st.text_input(
-                                "Dirección", 
-                                value=tutor_seleccionado.get('direccion', ''), 
-                                key="edit_direccion"
-                            )
+                            nombre = st.text_input("Nombre *", value=tutor_seleccionado.get('nombre', ''), key="edit_nombre")
+                            email = st.text_input("Email", value=tutor_seleccionado.get('email', ''), key="edit_email")
+                            tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], 
+                                                    index=["", "interno", "externo"].index(tutor_seleccionado.get('tipo_tutor', '')) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
+                                                    key="edit_tipo")
+                            nif = st.text_input("NIF/DNI", value=tutor_seleccionado.get('nif', ''), key="edit_nif")
+                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key="edit_direccion")
                         
                         with col2:
-                            apellidos = st.text_input(
-                                "Apellidos *", 
-                                value=tutor_seleccionado.get('apellidos', ''), 
-                                key="edit_apellidos"
-                            )
-                            telefono = st.text_input(
-                                "Teléfono", 
-                                value=tutor_seleccionado.get('telefono', ''), 
-                                key="edit_telefono"
-                            )
-                            especialidad = st.selectbox(
-                                "Especialidad", 
-                                especialidades_opciones, 
-                                index=especialidades_opciones.index(
-                                    tutor_seleccionado.get('especialidad', '')
-                                ) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
-                                key="edit_especialidad"
-                            )
-
+                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key="edit_apellidos")
+                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key="edit_telefono")
+                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
+                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
+                                                      key="edit_especialidad")
+                            
                             # Crear selectbox para tipo_documento con códigos
-                            opciones_tipo_doc = [
-                                ("", "Seleccionar tipo"), 
-                                (10, "NIF"), 
-                                (20, "Pasaporte"), 
-                                (60, "NIE")
-                            ]
+                            opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
                             valor_actual = tutor_seleccionado.get('tipo_documento')
                             if pd.isna(valor_actual) or valor_actual == "":
                                 indice_tipo_doc = 0
@@ -474,42 +429,22 @@ if session_state.role == "admin" and empresas_dict:
                                 "Tipo documento", 
                                 opciones_tipo_doc,
                                 index=indice_tipo_doc,
-                                format_func=lambda x: x[1],
+                                format_func=lambda x: x[1],  # Mostrar solo el texto
                                 key="edit_tipo_doc"
                             )
-                            ciudad = st.text_input(
-                                "Ciudad", 
-                                value=tutor_seleccionado.get('ciudad', ''), 
-                                key="edit_ciudad"
-                            )
+                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key="edit_ciudad")
                         
                         col3, col4 = st.columns(2)
                         with col3:
-                            provincia = st.text_input(
-                                "Provincia", 
-                                value=tutor_seleccionado.get('provincia', ''), 
-                                key="edit_provincia"
-                            )
-                            titulacion = st.text_area(
-                                "Titulación", 
-                                value=tutor_seleccionado.get('titulacion', ''), 
-                                key="edit_titulacion"
-                            )
+                            provincia = st.text_input("Provincia", value=tutor_seleccionado.get('provincia', ''), key="edit_provincia")
+                            if "titulacion" in df_tutores.columns:  # Solo mostrar si existe en BD
+                                titulacion = st.text_area("Titulación", value=tutor_seleccionado.get('titulacion', ''), key="edit_titulacion")
                         with col4:
-                            codigo_postal = st.text_input(
-                                "Código postal", 
-                                value=tutor_seleccionado.get('codigo_postal', ''), 
-                                key="edit_cp"
-                            )
+                            codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key="edit_cp")
                             if session_state.role == "admin" and empresas_dict:
-                                empresa_sel = st.selectbox(
-                                    "Empresa", 
-                                    [""] + sorted(empresas_dict.keys()), 
-                                    index=([""] + sorted(empresas_dict.keys())).index(
-                                        tutor_seleccionado.get('empresa_sel', '')
-                                    ) if tutor_seleccionado.get('empresa_sel') in ([""] + sorted(empresas_dict.keys())) else 0,
-                                    key="edit_empresa"
-                                )
+                                empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), 
+                                                         index=([""] + sorted(empresas_dict.keys())).index(tutor_seleccionado.get('empresa_sel', '')) if tutor_seleccionado.get('empresa_sel') in ([""] + sorted(empresas_dict.keys())) else 0,
+                                                         key="edit_empresa")
                         
                         if st.form_submit_button("💾 Guardar Cambios", type="primary"):
                             datos_editados = {
@@ -520,15 +455,16 @@ if session_state.role == "admin" and empresas_dict:
                                 "nif": nif,
                                 "tipo_tutor": tipo_tutor,
                                 "especialidad": especialidad,
-                                "tipo_documento": (
-                                    tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None
-                                ),
+                                "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None,
                                 "direccion": direccion,
                                 "ciudad": ciudad,
                                 "provincia": provincia,
-                                "codigo_postal": codigo_postal,
-                                "titulacion": titulacion
+                                "codigo_postal": codigo_postal
                             }
+                            
+                            # Solo añadir titulacion si existe en BD
+                            if "titulacion" in df_tutores.columns:
+                                datos_editados["titulacion"] = titulacion
                             
                             if session_state.role == "admin" and empresas_dict:
                                 datos_editados["empresa_sel"] = empresa_sel
