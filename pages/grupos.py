@@ -181,9 +181,6 @@ def validar_campos_obligatorios_fundae(datos):
     
     # Campos básicos obligatorios
     campos_requeridos = {
-        "codigo_grupo": "Código de grupo",
-        "accion_formativa_id": "Acción formativa", 
-        "modalidad": "Modalidad",
         "fecha_inicio": "Fecha de inicio",
         "fecha_fin_prevista": "Fecha fin prevista",
         "localidad": "Localidad",
