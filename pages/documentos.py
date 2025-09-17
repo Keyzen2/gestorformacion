@@ -9,6 +9,8 @@ from utils import (
     generar_xml_finalizacion_grupo,
     validar_xml,
     export_csv,
+    preparar_datos_xml_inicio_simple,
+    validar_grupo_fundae_completo,
     get_ajustes_app
 )
 from services.data_service import get_data_service
@@ -220,7 +222,7 @@ def main(supabase, session_state):
                                     st.caption(f"... y {len(errores) - 5} errores más")
     
     # =========================
-    # XML INICIO DE GRUPO
+    # XML INICIO DE GRUPO (MEJORADO)
     # =========================
     elif tipo_documento == "XML Inicio de Grupo":
         st.markdown("### 👥 Generar XML de Inicio de Grupo")
@@ -232,13 +234,8 @@ def main(supabase, session_state):
         # Crear diccionario de grupos para el selectbox
         grupos_dict = {}
         for _, grupo in df_grupos.iterrows():
-            # ✅ CORRECCIÓN: Verificar que las columnas existan antes de usarlas
             codigo = grupo.get('codigo_grupo', 'Sin código')
-            accion_nombre = grupo.get('accion_nombre', 'Sin acción')
-            if not accion_nombre or accion_nombre == 'Sin acción':
-                # Intentar obtener de otras columnas posibles
-                accion_nombre = grupo.get('accion_formativa_nombre', 'Acción no disponible')
-            
+            accion_nombre = grupo.get('accion_nombre', grupo.get('accion_formativa_nombre', 'Acción no disponible'))
             nombre_mostrar = f"{codigo} - {accion_nombre}"
             grupos_dict[nombre_mostrar] = grupo.to_dict()
         
@@ -252,69 +249,106 @@ def main(supabase, session_state):
             grupo_data = grupos_dict[grupo_seleccionado]
             grupo_id = grupo_data.get('id')
             
-            # ✅ CORRECCIÓN: Usar función corregida para obtener participantes
-            with st.spinner("Cargando participantes del grupo..."):
-                try:
-                    # Obtener participantes del grupo de forma segura
-                    participantes_res = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute()
-                    participantes_data = participantes_res.data or []
+            # ✅ VALIDACIÓN FUNDAE AUTOMÁTICA
+            with st.spinner("Validando datos FUNDAE..."):
+                datos_xml, errores = preparar_datos_xml_inicio_simple(grupo_id, supabase)
+                
+                if errores:
+                    st.error("❌ El grupo no cumple los requisitos FUNDAE:")
+                    for error in errores:
+                        st.error(f"• {error}")
+                    st.info("💡 Ve a la página de Grupos para completar los datos faltantes")
                     
-                    if not participantes_data:
-                        st.warning(f"⚠️ No hay participantes en el grupo {grupo_data.get('codigo_grupo', 'seleccionado')}")
-                    else:
-                        st.info(f"📊 Encontrados {len(participantes_data)} participantes en el grupo")
+                    # Mostrar qué datos faltan
+                    with st.expander("🔍 Ver datos actuales del grupo"):
+                        st.json(grupo_data)
                         
-                        # Mostrar vista previa
-                        with st.expander("👀 Vista previa de datos", expanded=False):
-                            st.subheader("Datos del Grupo:")
-                            st.json(grupo_data)
-                            st.subheader("Participantes:")
-                            st.json(participantes_data[:3])  # Mostrar solo los primeros 3
-                            if len(participantes_data) > 3:
-                                st.caption(f"... y {len(participantes_data) - 3} participantes más")
+                else:
+                    # ✅ GRUPO VÁLIDO PARA FUNDAE
+                    st.success(f"✅ Grupo válido para XML FUNDAE")
+                    
+                    # Información del grupo
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("👥 Tutores", len(datos_xml["tutores"]))
+                    with col2:
+                        st.metric("🏢 Empresas", len(datos_xml["empresas"]))
+                    with col3:
+                        participantes_count = grupo_data.get('n_participantes_previstos', 0)
+                        st.metric("🎓 Participantes", participantes_count)
+                    
+                    # Vista previa de datos
+                    with st.expander("👀 Vista previa de datos FUNDAE", expanded=False):
+                        tab1, tab2, tab3 = st.tabs(["Grupo", "Tutores", "Empresas"])
                         
-                        col1, col2 = st.columns(2)
+                        with tab1:
+                            st.json({
+                                "codigo_grupo": datos_xml["grupo"]["codigo_grupo"],
+                                "responsable": datos_xml["grupo"]["responsable"],
+                                "telefono_contacto": datos_xml["grupo"]["telefono_contacto"],
+                                "modalidad": datos_xml["grupo"]["modalidad"],
+                                "fecha_inicio": datos_xml["grupo"]["fecha_inicio"]
+                            })
                         
-                        with col1:
-                            if st.button("📄 Generar XML", type="primary", key="generar_xml_inicio"):
-                                with st.spinner("Generando XML..."):
-                                    xml_content = generar_xml_inicio_grupo(grupo_data, participantes_data)
+                        with tab2:
+                            for i, tutor in enumerate(datos_xml["tutores"]):
+                                st.write(f"**Tutor {i+1}:**")
+                                st.json({
+                                    "nombre": tutor["nombre"],
+                                    "apellidos": tutor["apellidos"],
+                                    "tipo_documento": tutor["tipo_documento_fundae"],
+                                    "nif": tutor["nif"]
+                                })
+                        
+                        with tab3:
+                            for i, empresa in enumerate(datos_xml["empresas"]):
+                                st.write(f"**Empresa {i+1}:**")
+                                st.json({
+                                    "nombre": empresa["nombre"],
+                                    "cif": empresa["cif"]
+                                })
+                    
+                    # Botones de acción
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        if st.button("📄 Generar XML", type="primary", key="generar_xml_inicio"):
+                            with st.spinner("Generando XML..."):
+                                # Usar datos validados para generar XML
+                                xml_content = generar_xml_inicio_grupo_mejorado(datos_xml)
+                                
+                                if xml_content:
+                                    st.success("✅ XML generado correctamente")
                                     
-                                    if xml_content:
-                                        st.success("✅ XML generado correctamente")
-                                        
-                                        # Mostrar XML generado
-                                        st.text_area("XML Generado:", xml_content, height=200)
-                                        
-                                        # Botón de descarga
-                                        st.download_button(
-                                            label="💾 Descargar XML",
-                                            data=xml_content,
-                                            file_name=f"inicio_grupo_{grupo_data.get('codigo_grupo', 'sin_codigo')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xml",
-                                            mime="application/xml"
-                                        )
+                                    # Mostrar XML generado
+                                    st.text_area("XML Generado:", xml_content[:1000] + "...", height=150, key="xml_preview")
+                                    
+                                    # Botón de descarga
+                                    st.download_button(
+                                        label="💾 Descargar XML",
+                                        data=xml_content,
+                                        file_name=f"inicio_grupo_{grupo_data['codigo_grupo']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xml",
+                                        mime="application/xml"
+                                    )
+                                else:
+                                    st.error("❌ Error al generar el XML")
+                    
+                    with col2:
+                        if st.button("✅ Validar XML", key="validar_xml_inicio") and xsd_urls.get('inicio_grupo'):
+                            with st.spinner("Validando XML..."):
+                                xml_content = generar_xml_inicio_grupo_mejorado(datos_xml)
+                                
+                                if xml_content:
+                                    es_valido, errores_xsd = validar_xml(xml_content, xsd_urls['inicio_grupo'])
+                                    
+                                    if es_valido:
+                                        st.success("✅ El XML es válido según el esquema FUNDAE")
                                     else:
-                                        st.error("❌ Error al generar el XML")
-                        
-                        with col2:
-                            if st.button("✅ Validar XML", key="validar_xml_inicio") and xsd_urls['inicio_grupo']:
-                                with st.spinner("Validando XML..."):
-                                    xml_content = generar_xml_inicio_grupo(grupo_data, participantes_data)
-                                    
-                                    if xml_content:
-                                        es_valido, errores = validar_xml(xml_content, xsd_urls['inicio_grupo'])
-                                        
-                                        if es_valido:
-                                            st.success("✅ El XML es válido según el esquema FUNDAE")
-                                        else:
-                                            st.error("❌ El XML no es válido según el esquema XSD")
-                                            for error in errores[:5]:
-                                                st.caption(f"• {error}")
-                                            if len(errores) > 5:
-                                                st.caption(f"... y {len(errores) - 5} errores más")
-                                    
-                except Exception as e:
-                    st.error(f"❌ Error al cargar participantes: {e}")
+                                        st.error("❌ El XML no es válido según el esquema XSD")
+                                        for error in errores_xsd[:5]:
+                                            st.error(f"• {error}")
+                                        if len(errores_xsd) > 5:
+                                            st.info(f"... y {len(errores_xsd) - 5} errores más")
     
     # =========================
     # XML FINALIZACIÓN DE GRUPO
