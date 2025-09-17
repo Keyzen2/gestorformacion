@@ -391,7 +391,6 @@ def main(supabase, session_state):
             campos_textarea=campos_textarea,
             campos_dinamicos=get_campos_dinamicos,
             campos_obligatorios=["codigo_accion", "nombre"],
-            search_columns=["nombre", "codigo_accion", "area_profesional"],
             campos_readonly=["id", "created_at"],
             allow_creation=False,  # Deshabilitado porque lo manejamos arriba
             campos_help=campos_help
