@@ -201,9 +201,11 @@ def main(supabase, session_state):
                 st.error("⚠️ Los tutores deben tener una empresa asignada.")
                 return False
 
-            # Limpiar campos auxiliares y añadir timestamp de actualización
-            datos_limpios = {k: v for k, v in datos_editados.items() 
-                           if not k.endswith("_sel") and v is not None and str(v).strip() != ""}
+            # Limpiar solo campos auxiliares, mantener todos los valores editados
+            datos_limpios = {}
+            for k, v in datos_editados.items():
+                if not k.endswith("_sel"):  # Solo remover campos auxiliares
+                    datos_limpios[k] = v  # Mantener todos los valores, incluso vacíos
             
             datos_limpios["updated_at"] = datetime.utcnow().isoformat()
 
@@ -418,13 +420,8 @@ def main(supabase, session_state):
                 # Para gestor, usar su empresa automáticamente
                 datos["empresa_id"] = session_state.user.get("empresa_id")
             
-            # Limpiar valores vacíos
-            datos_limpios = {}
-            for k, v in datos.items():
-                if v is not None and str(v).strip() != "":
-                    datos_limpios[k] = v
-            
-            return datos_limpios
+            # NO filtrar valores vacíos aquí - dejar que el usuario pueda limpiar campos
+            return datos
 
         def guardar_wrapper(tutor_id, datos):
             datos = preparar_datos_para_guardar(datos)
