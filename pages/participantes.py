@@ -3,8 +3,12 @@ import pandas as pd
 from datetime import datetime, date
 from io import BytesIO
 from utils import validar_dni_cif, export_csv, get_ajustes_app
+from components.listado_con_ficha import listado_con_ficha
 from services.data_service import get_data_service
 from services.grupos_service import get_grupos_service
+import re
+
+EMAIL_REGEX = r"^[^@]+@[^@]+\.[^@]+$"
 
 def generar_plantilla_excel(rol):
     """Genera plantilla Excel para importación masiva de participantes."""
@@ -19,16 +23,12 @@ def generar_plantilla_excel(rol):
     return buffer
 
 def main(supabase, session_state):
-    st.markdown("## 🧑‍🎓 Participantes")
+    st.markdown("## 👨‍🎓 Participantes")
     st.caption("Gestión de participantes y vinculación con empresas y grupos.")
 
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
-        
-    # ✅ Inicializar estado seguro
-    if "participante_editando" not in st.session_state:
-        st.session_state.participante_editando = None
         
     # Inicializar servicios
     data_service = get_data_service(supabase, session_state)
@@ -55,7 +55,7 @@ def main(supabase, session_state):
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric("🧑‍🎓 Total Participantes", len(df_participantes))
+            st.metric("👨‍🎓 Total Participantes", len(df_participantes))
         
         with col2:
             con_grupo = len(df_participantes[df_participantes["grupo_id"].notna()])
@@ -77,16 +77,6 @@ def main(supabase, session_state):
 
     st.divider()
 
-    # =========================
-    # FORMULARIO DE EDICIÓN/CREACIÓN
-    # =========================
-    if "participante_editando" in st.session_state and st.session_state.participante_editando:
-        participante_id = st.session_state.participante_editando
-        mostrar_formulario_participante(
-            supabase, session_state, data_service, grupos_service,
-            participante_id, empresas_dict, grupos_dict, empresa_id
-        )
-        
     # =========================
     # Filtros de búsqueda
     # =========================
@@ -120,69 +110,313 @@ def main(supabase, session_state):
     if session_state.role == "admin" and 'empresa_filter' in locals() and empresa_filter != "Todas" and not df_filtered.empty:
         empresa_id_filter = empresas_dict.get(empresa_filter)
         df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id_filter]
-        
-    # =========================
-    # Botón crear participante
-    # =========================
-    puede_crear = (
-        session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id)
-    )
-    
-    if puede_crear:
-        if st.button("➕ Crear Nuevo Participante", type="primary"):
-            st.session_state.participante_editando = "nuevo"
-            st.rerun()
 
     # =========================
-    # TABLA EDITABLE ESTILO GRUPOS
+    # Funciones CRUD para participantes/usuarios
+    # =========================
+    def crear_participante(datos_nuevos):
+        """Crea un participante como usuario con rol 'alumno'."""
+        try:
+            # Validaciones básicas
+            if not datos_nuevos.get("email") or not datos_nuevos.get("nombre"):
+                st.error("⚠️ Email y nombre son obligatorios.")
+                return False
+            
+            if not re.match(EMAIL_REGEX, datos_nuevos["email"]):
+                st.error("⚠️ Email no válido.")
+                return False
+            
+            if datos_nuevos.get("nif") and not validar_dni_cif(datos_nuevos["nif"]):
+                st.error("⚠️ NIF no válido.")
+                return False
+
+            # Validar empresa obligatoria para participantes
+            empresa_id = datos_nuevos.get("empresa_id")
+            if not empresa_id:
+                st.error("⚠️ Los participantes deben tener una empresa asignada.")
+                return False
+
+            # Verificar email único en usuarios
+            email_existe_usuarios = supabase.table("usuarios").select("id").eq("email", datos_nuevos["email"]).execute()
+            if email_existe_usuarios.data:
+                st.error("⚠️ Ya existe un usuario con ese email.")
+                return False
+            
+            # Verificar email único en participantes
+            email_existe_part = supabase.table("participantes").select("id").eq("email", datos_nuevos["email"]).execute()
+            if email_existe_part.data:
+                st.error("⚠️ Ya existe un participante con ese email.")
+                return False
+
+            # Generar contraseña temporal
+            import random, string
+            password = "".join(random.choices(string.ascii_letters + string.digits, k=8)) + "!"
+            
+            # 1. Crear usuario en Auth
+            auth_res = supabase.auth.admin.create_user({
+                "email": datos_nuevos["email"],
+                "password": password,
+                "email_confirm": True
+            })
+            
+            if not getattr(auth_res, "user", None):
+                st.error("❌ Error al crear usuario en Auth.")
+                return False
+                
+            auth_id = auth_res.user.id
+
+            try:
+                # 2. Crear usuario en tabla usuarios
+                usuario_datos = {
+                    "auth_id": auth_id,
+                    "email": datos_nuevos["email"],
+                    "nombre_completo": f"{datos_nuevos.get('nombre', '')} {datos_nuevos.get('apellidos', '')}".strip(),
+                    "nombre": datos_nuevos.get("nombre", ""),
+                    "telefono": datos_nuevos.get("telefono"),
+                    "nif": datos_nuevos.get("nif"),
+                    "rol": "alumno",
+                    "empresa_id": empresa_id,
+                    "grupo_id": datos_nuevos.get("grupo_id"),
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                usuario_res = supabase.table("usuarios").insert(usuario_datos).execute()
+                if not usuario_res.data:
+                    raise Exception("Error al crear usuario en BD")
+
+                # 3. Crear participante en tabla participantes
+                participante_datos = {
+                    "email": datos_nuevos["email"],
+                    "nombre": datos_nuevos.get("nombre", ""),
+                    "apellidos": datos_nuevos.get("apellidos", ""),
+                    "nif": datos_nuevos.get("nif"),
+                    "telefono": datos_nuevos.get("telefono"),
+                    "fecha_nacimiento": datos_nuevos.get("fecha_nacimiento"),
+                    "sexo": datos_nuevos.get("sexo"),
+                    "empresa_id": empresa_id,
+                    "grupo_id": datos_nuevos.get("grupo_id"),
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                part_res = supabase.table("participantes").insert(participante_datos).execute()
+                if not part_res.data:
+                    raise Exception("Error al crear participante en BD")
+                
+                # Limpiar cache
+                data_service.get_participantes_completos.clear()
+                
+                st.success(f"✅ Participante creado correctamente. Contraseña temporal: {password}")
+                return True
+                
+            except Exception as e:
+                # Rollback: eliminar usuario de Auth si falla la BD
+                try:
+                    supabase.auth.admin.delete_user(auth_id)
+                except:
+                    pass
+                st.error(f"❌ Error al crear participante: {e}")
+                return False
+                
+        except Exception as e:
+            st.error(f"❌ Error al crear participante: {e}")
+            return False
+
+    def actualizar_participante(participante_id, datos_editados):
+        """Actualiza un participante existente."""
+        try:
+            # Validaciones
+            if not datos_editados.get("email") or not datos_editados.get("nombre"):
+                st.error("⚠️ Email y nombre son obligatorios.")
+                return False
+            
+            if not re.match(EMAIL_REGEX, datos_editados["email"]):
+                st.error("⚠️ Email no válido.")
+                return False
+            
+            if datos_editados.get("nif") and not validar_dni_cif(datos_editados["nif"]):
+                st.error("⚠️ NIF no válido.")
+                return False
+
+            empresa_id = datos_editados.get("empresa_id")
+            if not empresa_id:
+                st.error("⚠️ Los participantes deben tener una empresa asignada.")
+                return False
+
+            # Preparar datos de actualización
+            participante_update = {
+                "nombre": datos_editados.get("nombre", ""),
+                "apellidos": datos_editados.get("apellidos", ""),
+                "email": datos_editados["email"],
+                "nif": datos_editados.get("nif"),
+                "telefono": datos_editados.get("telefono"),
+                "fecha_nacimiento": datos_editados.get("fecha_nacimiento"),
+                "sexo": datos_editados.get("sexo"),
+                "empresa_id": empresa_id,
+                "grupo_id": datos_editados.get("grupo_id"),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+
+            # Actualizar participante
+            supabase.table("participantes").update(participante_update).eq("id", participante_id).execute()
+            
+            # También actualizar en tabla usuarios si existe
+            try:
+                usuario_update = {
+                    "email": datos_editados["email"],
+                    "nombre_completo": f"{datos_editados.get('nombre', '')} {datos_editados.get('apellidos', '')}".strip(),
+                    "nombre": datos_editados.get("nombre", ""),
+                    "telefono": datos_editados.get("telefono"),
+                    "nif": datos_editados.get("nif"),
+                    "empresa_id": empresa_id,
+                    "grupo_id": datos_editados.get("grupo_id")
+                }
+                supabase.table("usuarios").update(usuario_update).eq("email", datos_editados["email"]).execute()
+            except:
+                pass  # No todos los participantes tienen usuario asociado
+            
+            # Limpiar cache
+            data_service.get_participantes_completos.clear()
+            
+            st.success("✅ Participante actualizado correctamente.")
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ Error al actualizar participante: {e}")
+            return False
+
+    def get_campos_dinamicos(datos):
+        """Define campos del formulario."""
+        campos = ["email", "nombre", "apellidos", "nif", "telefono", "fecha_nacimiento", "sexo"]
+        
+        if session_state.role == "admin":
+            campos.extend(["empresa_sel", "grupo_sel"])
+        else:
+            # Gestor: solo puede asignar grupos de su empresa
+            campos.append("grupo_sel")
+            
+        return campos
+
+    # Configuración de campos para listado_con_ficha
+    campos_select = {
+        "sexo": ["", "M", "F"],
+        "grupo_sel": [""] + sorted(grupos_dict.keys())
+    }
+    
+    if session_state.role == "admin":
+        campos_select["empresa_sel"] = [""] + sorted(empresas_dict.keys())
+
+    campos_obligatorios = ["email", "nombre"]
+    campos_readonly = ["created_at", "updated_at"]
+    
+    campos_help = {
+        "email": "Email único del participante (obligatorio)",
+        "nombre": "Nombre del participante (obligatorio)", 
+        "apellidos": "Apellidos del participante",
+        "nif": "NIF/DNI válido (opcional)",
+        "telefono": "Teléfono de contacto",
+        "fecha_nacimiento": "Fecha de nacimiento",
+        "sexo": "Sexo del participante (M/F)",
+        "empresa_sel": "Empresa del participante (obligatorio)",
+        "grupo_sel": "Grupo formativo asignado"
+    }
+
+    # =========================
+    # Tabla principal con listado_con_ficha
     # =========================
     st.markdown("### 📊 Listado de Participantes")
     
     if df_filtered.empty:
         st.info("📋 No hay participantes registrados o que coincidan con los filtros.")
     else:
-        # Preparar datos para mostrar
+        # Preparar datos para display
         df_display = df_filtered.copy()
         
-        # Columnas visibles según rol
-        columnas_base = ["nif", "nombre", "apellidos", "email", "telefono"]
-        
-        if not df_display.empty:
-            if "grupo_codigo" in df_display.columns:
-                columnas_base.append("grupo_codigo")
-            if session_state.role == "admin" and "empresa_nombre" in df_display.columns:
-                columnas_base.append("empresa_nombre")
-        
-        columnas_visibles = [col for col in columnas_base if col in df_display.columns]
+        # Convertir relaciones a campos de selección
+        if "empresa_nombre" in df_display.columns:
+            df_display["empresa_sel"] = df_display["empresa_nombre"]
+        else:
+            df_display["empresa_sel"] = ""
+            
+        if "grupo_codigo" in df_display.columns:
+            df_display["grupo_sel"] = df_display["grupo_codigo"]
+        else:
+            df_display["grupo_sel"] = ""
 
-        # Tabla con selección
-        event = st.dataframe(
-            df_display[columnas_visibles],
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row"
+        # Columnas visibles
+        columnas_visibles = ["nombre", "apellidos", "email", "nif", "telefono"]
+        if session_state.role == "admin" and "empresa_nombre" in df_display.columns:
+            columnas_visibles.append("empresa_nombre")
+        if "grupo_codigo" in df_display.columns:
+            columnas_visibles.append("grupo_codigo")
+
+        # Mensaje informativo
+        if session_state.role == "gestor":
+            st.info("💡 **Información:** Como gestor, solo puedes crear participantes para tu empresa.")
+        else:
+            st.info("💡 **Información:** Los participantes se crean como usuarios con rol 'alumno' y credenciales de acceso.")
+
+        # Función para convertir selects a IDs
+        def preparar_datos_para_guardar(datos):
+            # Convertir empresa_sel a empresa_id
+            if "empresa_sel" in datos:
+                empresa_sel = datos.pop("empresa_sel", "")
+                if empresa_sel and empresa_sel in empresas_dict:
+                    datos["empresa_id"] = empresas_dict[empresa_sel]
+                elif session_state.role == "gestor":
+                    datos["empresa_id"] = empresa_id
+                else:
+                    datos["empresa_id"] = None
+            
+            # Convertir grupo_sel a grupo_id
+            if "grupo_sel" in datos:
+                grupo_sel = datos.pop("grupo_sel", "")
+                if grupo_sel and grupo_sel in grupos_dict:
+                    datos["grupo_id"] = grupos_dict[grupo_sel]
+                else:
+                    datos["grupo_id"] = None
+                    
+            return datos
+
+        def guardar_wrapper(participante_id, datos):
+            datos = preparar_datos_para_guardar(datos)
+            return actualizar_participante(participante_id, datos)
+            
+        def crear_wrapper(datos):
+            datos = preparar_datos_para_guardar(datos)
+            return crear_participante(datos)
+
+        # Usar listado_con_ficha
+        puede_crear = (
+            session_state.role == "admin" or
+            (session_state.role == "gestor" and empresa_id)
         )
-        
-        # Procesar selección
-        if event.selection.rows:
-            selected_idx = event.selection.rows[0]
-            participante_editando = df_filtered.iloc[selected_idx]
-            st.session_state.participante_editando = participante_editando["id"]
-            st.rerun()
+
+        listado_con_ficha(
+            df=df_display,
+            columnas_visibles=columnas_visibles,
+            titulo="Participante",
+            on_save=guardar_wrapper,
+            on_create=crear_wrapper if puede_crear else None,
+            id_col="id",
+            campos_select=campos_select,
+            campos_readonly=campos_readonly,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=campos_obligatorios,
+            allow_creation=puede_crear,
+            campos_help=campos_help,
+            search_columns=["nombre", "apellidos", "email", "nif"]
+        )
 
     st.divider()
 
     # =========================
-    # GESTIÓN DE DIPLOMAS (mantener sección existente)
+    # GESTIÓN DE DIPLOMAS mejorada
     # =========================
     if session_state.role in ["admin", "gestor"]:
-        st.divider()
-        mostrar_seccion_diplomas(supabase, session_state, empresa_id)
+        mostrar_seccion_diplomas_mejorada(supabase, session_state, empresa_id)
 
     # =========================
-    # IMPORTACIÓN MASIVA (mantener sección existente)
+    # IMPORTACIÓN MASIVA
     # =========================
     if puede_crear:
         st.divider()
@@ -203,369 +437,18 @@ def main(supabase, session_state):
             st.metric("📋 Registros mostrados", len(df_filtered))
 
     st.divider()
-    st.caption("💡 Los participantes son usuarios que pertenecen a grupos formativos y pueden obtener diplomas al completar los cursos.")
+    st.caption("💡 Los participantes son usuarios con rol 'alumno' que pueden acceder a sus cursos y obtener diplomas.")
 
 
-def mostrar_formulario_participante(supabase, session_state, data_service, grupos_service, 
-                                   participante_id, empresas_dict, grupos_dict, empresa_id):
-    """Formulario unificado para crear/editar participantes estilo grupos.py"""
-
-    es_creacion = participante_id == "nuevo"
-
-    if es_creacion:
-        st.markdown("### ➕ Crear Nuevo Participante")
-        participante_data = {}
-    else:
-        st.markdown("### ✏️ Editar Participante")
-
-        if not participante_id or str(participante_id).lower() == "none":
-            st.error("❌ ID de participante inválido.")
-            st.session_state.participante_editando = None
-            return
-        
-        try:
-            result = supabase.table("participantes").select("*").eq("id", participante_id).limit(1).execute()
-            participante_data = result.data[0] if result.data else {}
-            if not participante_data:
-                st.error("Participante no encontrado")
-                if "participante_editando" in st.session_state:
-                    st.session_state.participante_editando = None
-                return
-        except Exception as e:
-            st.error(f"Error al cargar participante: {e}")
-            if "participante_editando" in st.session_state:
-                st.session_state.participante_editando = None
-            return
-
-    # =========================
-    # SECCIÓN 1: DATOS BÁSICOS
-    # =========================
-    with st.expander("📋 1. Datos Básicos", expanded=True):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            nombre = st.text_input(
-                "Nombre *",
-                value=participante_data.get("nombre", ""),
-                key="part_nombre"
-            )
-            
-            apellidos = st.text_input(
-                "Apellidos *",
-                value=participante_data.get("apellidos", ""),
-                key="part_apellidos"
-            )
-            
-            email = st.text_input(
-                "Email *",
-                value=participante_data.get("email", ""),
-                key="part_email"
-            )
-        
-        with col2:
-            nif = st.text_input(
-                "NIF/DNI",
-                value=participante_data.get("nif", ""),
-                help="NIF/DNI del participante (opcional)",
-                key="part_nif"
-            )
-            
-            telefono = st.text_input(
-                "Teléfono",
-                value=participante_data.get("telefono", ""),
-                key="part_telefono"
-            )
-            
-            # Fecha de nacimiento
-            fecha_nac_actual = participante_data.get("fecha_nacimiento")
-            if fecha_nac_actual:
-                try:
-                    if isinstance(fecha_nac_actual, str):
-                        fecha_nac_value = datetime.fromisoformat(fecha_nac_actual.replace('Z', '+00:00')).date()
-                    else:
-                        fecha_nac_value = fecha_nac_actual
-                except:
-                    fecha_nac_value = None
-            else:
-                fecha_nac_value = None
-                
-            fecha_nacimiento = st.date_input(
-                "Fecha de Nacimiento",
-                value=fecha_nac_value,
-                key="part_fecha_nac"
-            )
-            
-            sexo = st.selectbox(
-                "Sexo",
-                ["", "M", "F"],
-                index=["", "M", "F"].index(participante_data.get("sexo", "")) if participante_data.get("sexo") in ["", "M", "F"] else 0,
-                key="part_sexo"
-            )
-
-    # =========================
-    # SECCIÓN 2: EMPRESA Y GRUPO (LÓGICA MEJORADA)
-    # =========================
-    with st.expander("🏢 2. Empresa y Grupo", expanded=True):
-        
-        if session_state.role == "gestor":
-            # GESTOR: Solo su empresa y sus grupos
-            try:
-                empresa_nombre = None
-                for nombre, id_emp in empresas_dict.items():
-                    if id_emp == empresa_id:
-                        empresa_nombre = nombre
-                        break
-                
-                if empresa_nombre:
-                    st.text_input("Empresa", empresa_nombre, disabled=True)
-                    empresa_seleccionada_id = empresa_id
-                else:
-                    st.error("No se encontró información de tu empresa")
-                    return
-                
-                # Grupos solo de su empresa
-                grupos_empresa = grupos_service.get_grupos_dict_por_empresa(empresa_id)
-                
-                if grupos_empresa:
-                    grupo_actual = participante_data.get("grupo_id")
-                    grupo_nombre_actual = None
-                    for nombre, id_grupo in grupos_empresa.items():
-                        if id_grupo == grupo_actual:
-                            grupo_nombre_actual = nombre
-                            break
-                    
-                    grupo_opciones = [""] + list(grupos_empresa.keys())
-                    grupo_index = 0
-                    if grupo_nombre_actual and grupo_nombre_actual in grupo_opciones:
-                        grupo_index = grupo_opciones.index(grupo_nombre_actual)
-                    
-                    grupo_seleccionado = st.selectbox(
-                        "Grupo",
-                        grupo_opciones,
-                        index=grupo_index,
-                        key="part_grupo"
-                    )
-                    
-                    grupo_seleccionado_id = grupos_empresa.get(grupo_seleccionado) if grupo_seleccionado else None
-                else:
-                    st.info("No hay grupos disponibles para tu empresa")
-                    grupo_seleccionado_id = None
-                    
-            except Exception as e:
-                st.error(f"Error al cargar datos del gestor: {e}")
-                return
-        
-        else:
-            # ADMIN: Puede elegir cualquier empresa, grupos se filtran por empresa
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Selector de empresa
-                empresa_actual = participante_data.get("empresa_id")
-                empresa_nombre_actual = None
-                for nombre, id_emp in empresas_dict.items():
-                    if id_emp == empresa_actual:
-                        empresa_nombre_actual = nombre
-                        break
-                
-                empresa_opciones = list(empresas_dict.keys())
-                empresa_index = 0
-                if empresa_nombre_actual and empresa_nombre_actual in empresa_opciones:
-                    empresa_index = empresa_opciones.index(empresa_nombre_actual)
-                
-                empresa_seleccionada = st.selectbox(
-                    "Empresa *",
-                    empresa_opciones,
-                    index=empresa_index,
-                    key="part_empresa"
-                )
-                
-                empresa_seleccionada_id = empresas_dict[empresa_seleccionada]
-            
-            with col2:
-                # Grupos filtrados por empresa seleccionada
-                try:
-                    grupos_empresa = grupos_service.get_grupos_dict_por_empresa(empresa_seleccionada_id)
-                    
-                    if grupos_empresa:
-                        grupo_actual = participante_data.get("grupo_id")
-                        grupo_nombre_actual = None
-                        for nombre, id_grupo in grupos_empresa.items():
-                            if id_grupo == grupo_actual:
-                                grupo_nombre_actual = nombre
-                                break
-                        
-                        grupo_opciones = [""] + list(grupos_empresa.keys())
-                        grupo_index = 0
-                        if grupo_nombre_actual and grupo_nombre_actual in grupo_opciones:
-                            grupo_index = grupo_opciones.index(grupo_nombre_actual)
-                        
-                        grupo_seleccionado = st.selectbox(
-                            "Grupo",
-                            grupo_opciones,
-                            index=grupo_index,
-                            key="part_grupo"
-                        )
-                        
-                        grupo_seleccionado_id = grupos_empresa.get(grupo_seleccionado) if grupo_seleccionado else None
-                    else:
-                        st.info(f"No hay grupos disponibles para {empresa_seleccionada}")
-                        grupo_seleccionado_id = None
-                        
-                except Exception as e:
-                    st.error(f"Error al cargar grupos: {e}")
-                    grupo_seleccionado_id = None
-
-    # =========================
-    # BOTONES DE ACCIÓN
-    # =========================
-    st.divider()
-    
-    if es_creacion:
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            if st.button("➕ Crear Participante", type="primary", use_container_width=True):
-                crear_participante(
-                    supabase, session_state, data_service,
-                    nombre, apellidos, email, nif, telefono, fecha_nacimiento, sexo,
-                    empresa_seleccionada_id, grupo_seleccionado_id
-                )
-        
-        with col2:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.participante_editando = None
-                st.rerun()
-    
-    else:
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                actualizar_participante(
-                    supabase, session_state, data_service, participante_id,
-                    nombre, apellidos, email, nif, telefono, fecha_nacimiento, sexo,
-                    empresa_seleccionada_id, grupo_seleccionado_id
-                )
-        
-        with col2:
-            if st.button("🔄 Recargar", use_container_width=True):
-                st.rerun()
-        
-        with col3:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.participante_editando = None
-                st.rerun()
-
-def crear_participante(supabase, session_state, data_service, nombre, apellidos, email, nif, 
-                      telefono, fecha_nacimiento, sexo, empresa_id, grupo_id):
-    """Crea un nuevo participante con validaciones."""
-    try:
-        # Validaciones básicas
-        if not nombre or not apellidos or not email:
-            st.error("⚠️ Nombre, apellidos y email son obligatorios.")
-            return
-            
-        if nif and not validar_dni_cif(nif):
-            st.error("⚠️ NIF no válido.")
-            return
-
-        # Verificar email único
-        email_existe = supabase.table("participantes").select("id").eq("email", email).execute()
-        if email_existe.data:
-            st.error("⚠️ Ya existe un participante con ese email.")
-            return
-
-        # Preparar datos
-        datos_participante = {
-            "nombre": nombre,
-            "apellidos": apellidos,
-            "email": email,
-            "empresa_id": empresa_id,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }
-
-        # Campos opcionales
-        if nif:
-            datos_participante["nif"] = nif
-        if telefono:
-            datos_participante["telefono"] = telefono
-        if fecha_nacimiento:
-            datos_participante["fecha_nacimiento"] = fecha_nacimiento.isoformat()
-        if sexo:
-            datos_participante["sexo"] = sexo
-        if grupo_id:
-            datos_participante["grupo_id"] = grupo_id
-
-        # Crear participante
-        result = supabase.table("participantes").insert(datos_participante).execute()
-        
-        if result.data:
-            # Limpiar cache
-            data_service.get_participantes_completos.clear()
-            
-            st.success("✅ Participante creado correctamente.")
-            st.session_state.participante_editando = None  # en lugar de del
-            st.rerun()
-        else:
-            st.error("❌ Error al crear el participante.")
-            
-    except Exception as e:
-        st.error(f"❌ Error al crear participante: {e}")
-
-
-def actualizar_participante(supabase, session_state, data_service, participante_id, nombre, apellidos, 
-                           email, nif, telefono, fecha_nacimiento, sexo, empresa_id, grupo_id):
-    """Actualiza un participante existente."""
-    try:
-        # Validaciones básicas
-        if not nombre or not apellidos or not email:
-            st.error("⚠️ Nombre, apellidos y email son obligatorios.")
-            return
-            
-        if nif and not validar_dni_cif(nif):
-            st.error("⚠️ NIF no válido.")
-            return
-
-        # Preparar datos de actualización
-        datos_actualizacion = {
-            "nombre": nombre,
-            "apellidos": apellidos,
-            "email": email,
-            "empresa_id": empresa_id,
-            "updated_at": datetime.utcnow().isoformat()
-        }
-
-        # Campos opcionales
-        datos_actualizacion["nif"] = nif if nif else None
-        datos_actualizacion["telefono"] = telefono if telefono else None
-        datos_actualizacion["fecha_nacimiento"] = fecha_nacimiento.isoformat() if fecha_nacimiento else None
-        datos_actualizacion["sexo"] = sexo if sexo else None
-        datos_actualizacion["grupo_id"] = grupo_id if grupo_id else None
-
-        # Actualizar participante
-        supabase.table("participantes").update(datos_actualizacion).eq("id", participante_id).execute()
-        
-        # Limpiar cache
-        data_service.get_participantes_completos.clear()
-        
-        st.success("✅ Participante actualizado correctamente.")
-        st.session_state.participante_editando = None  # en lugar de del
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"❌ Error al actualizar participante: {e}")
-
-def mostrar_seccion_diplomas(supabase, session_state, empresa_id):
-    """Sección de gestión de diplomas - FUNCIONAL COMPLETA."""
+def mostrar_seccion_diplomas_mejorada(supabase, session_state, empresa_id):
+    """Gestión de diplomas con filtros mejorados - SOLUCIONADO."""
     st.markdown("### 🏅 Gestión de Diplomas")
     st.caption("Subir y gestionar diplomas para participantes de grupos finalizados.")
     
     try:
-        # Obtener grupos finalizados
+        # Obtener grupos finalizados con filtro de empresa
         hoy = datetime.now().date()
         
-        # Consulta para obtener grupos con sus participantes
         query_grupos = supabase.table("grupos").select("""
             id, codigo_grupo, fecha_fin, fecha_fin_prevista, empresa_id,
             accion_formativa:acciones_formativas(nombre)
@@ -591,267 +474,275 @@ def mostrar_seccion_diplomas(supabase, session_state, empresa_id):
         
         if not grupos_finalizados:
             st.info("ℹ️ No hay grupos finalizados disponibles para gestionar diplomas.")
-        else:
-            # Obtener participantes de grupos finalizados
-            grupos_finalizados_ids = [g["id"] for g in grupos_finalizados]
-            
-            query_participantes = supabase.table("participantes").select("""
-                id, nombre, apellidos, email, grupo_id
-            """).in_("grupo_id", grupos_finalizados_ids)
-            
-            if session_state.role == "gestor" and empresa_id:
-                query_participantes = query_participantes.eq("empresa_id", empresa_id)
-            
-            participantes_res = query_participantes.execute()
-            participantes_finalizados = participantes_res.data or []
-            
-            if not participantes_finalizados:
-                st.info("ℹ️ No hay participantes en grupos finalizados.")
-            else:
-                # Crear diccionario de grupos para mapeo
-                grupos_dict_completo = {g["id"]: g for g in grupos_finalizados}
-                
-                # Mostrar métricas
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("👥 Participantes", len(participantes_finalizados))
-                with col2:
-                    st.metric("📚 Grupos Finalizados", len(grupos_finalizados))
-                with col3:
-                    # Calcular diplomas existentes
-                    diplomas_res = supabase.table("diplomas").select("participante_id").in_(
-                        "participante_id", [p["id"] for p in participantes_finalizados]
-                    ).execute()
-                    diplomas_count = len(diplomas_res.data or [])
-                    st.metric("🏅 Diplomas Subidos", diplomas_count)
-                
-                st.markdown("#### 🎯 Seleccionar Participante")
-                
-                # Crear opciones mejoradas para el selector
-                opciones_participantes = []
-                for p in participantes_finalizados:
-                    grupo_info = grupos_dict_completo.get(p["grupo_id"], {})
-                    grupo_codigo = grupo_info.get("codigo_grupo", "Sin código")
-                    accion_nombre = grupo_info.get("accion_formativa", {}).get("nombre", "Sin acción") if grupo_info.get("accion_formativa") else "Sin acción"
-                    
-                    nombre_completo = f"{p['nombre']} {p.get('apellidos', '')}".strip()
-                    opcion = f"{nombre_completo} - {grupo_codigo} ({accion_nombre})"
-                    opciones_participantes.append((opcion, p))
-                
-                if opciones_participantes:
-                    participante_editando = st.selectbox(
-                        "Seleccionar participante para gestionar diploma:",
-                        options=[None] + [op[0] for op in opciones_participantes],
-                        format_func=lambda x: "Seleccionar..." if x is None else x,
-                        key="diploma_participante_selector"
-                    )
-                    
-                    if participante_editando:
-                        # Encontrar datos del participante seleccionado
-                        participante_data = None
-                        for opcion, data in opciones_participantes:
-                            if opcion == participante_editando:
-                                participante_data = data
-                                break
-                        
-                        if participante_data:
-                            grupo_info = grupos_dict_completo.get(participante_data["grupo_id"], {})
-                            
-                            with st.container():
-                                st.markdown("#### 📋 Información del Participante")
-                                
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.markdown(f"**👤 Nombre:** {participante_data['nombre']} {participante_data.get('apellidos', '')}")
-                                    st.markdown(f"**📧 Email:** {participante_data['email']}")
-                                
-                                with col2:
-                                    st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
-                                    fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
-                                    if fecha_fin:
-                                        fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
-                                        st.markdown(f"**📅 Finalizado:** {fecha_str}")
-                                
-                                # Gestión de diplomas existentes
-                                st.markdown("#### 🏅 Diplomas Registrados")
-                                
-                                try:
-                                    diplomas_existentes = supabase.table("diplomas").select("*").eq(
-                                        "participante_id", participante_data["id"]
-                                    ).execute()
-                                    diplomas = diplomas_existentes.data or []
-                                    
-                                    if diplomas:
-                                        for i, diploma in enumerate(diplomas):
-                                            with st.expander(f"📄 Diploma {i+1} - {diploma.get('archivo_nombre', 'Sin nombre')}"):
-                                                col_info, col_actions = st.columns([3, 1])
-                                                
-                                                with col_info:
-                                                    fecha_subida = diploma.get('fecha_subida')
-                                                    if fecha_subida:
-                                                        fecha_str = pd.to_datetime(fecha_subida).strftime('%d/%m/%Y %H:%M')
-                                                        st.markdown(f"**📅 Subido:** {fecha_str}")
-                                                    st.markdown(f"**🔗 URL:** [Ver diploma]({diploma['url']})")
-                                                
-                                                with col_actions:
-                                                    if st.button("🗑️ Eliminar", key=f"delete_diploma_{diploma['id']}"):
-                                                        confirm_key = f"confirm_delete_diploma_{diploma['id']}"
-                                                        if st.session_state.get(confirm_key, False):
-                                                            supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
-                                                            st.success("✅ Diploma eliminado.")
-                                                            st.rerun()
-                                                        else:
-                                                            st.session_state[confirm_key] = True
-                                                            st.warning("⚠️ Haz clic de nuevo para confirmar")
-                                    else:
-                                        st.info("ℹ️ Este participante no tiene diplomas registrados.")
-                                
-                                except Exception as e:
-                                    st.error(f"❌ Error al cargar diplomas: {e}")
-                                
-                                # Subir nuevo diploma
-                                st.markdown("#### 📤 Subir Nuevo Diploma")
-                                
-                                if diplomas:
-                                    st.warning("⚠️ **Atención:** Ya existe un diploma para este participante. El nuevo archivo lo reemplazará.")
-                                
-                                diploma_file = st.file_uploader(
-                                    "📄 Seleccionar archivo de diploma (PDF)",
-                                    type=["pdf"],
-                                    key=f"diploma_uploader_{participante_data['id']}",
-                                    help="Solo se permiten archivos PDF. Máximo 10MB."
-                                )
-                                
-                                if diploma_file:
-                                    # Validar tamaño
-                                    file_size_mb = diploma_file.size / (1024 * 1024)
-                                    st.info(f"📁 **Archivo:** {diploma_file.name} ({file_size_mb:.2f} MB)")
-                                    
-                                    if file_size_mb > 10:
-                                        st.error("❌ El archivo es demasiado grande. Máximo 10MB.")
-                                    else:
-                                        col_upload, col_cancel = st.columns([2, 1])
-                                        
-                                        with col_upload:
-                                            if st.button("📤 Subir Diploma", type="primary", key=f"upload_btn_{participante_data['id']}"):
-                                                try:
-                                                    with st.spinner("📤 Subiendo diploma..."):
-                                                        # Usar función de utils.py
-                                                        from utils import subir_archivo_supabase
-                                                        
-                                                        url = subir_archivo_supabase(
-                                                            supabase,
-                                                            diploma_file,
-                                                            empresa_id=session_state.user.get("empresa_id"),
-                                                            bucket="diplomas"
-                                                        )
-                                                        
-                                                        if url:
-                                                            # Eliminar diplomas existentes si los hay
-                                                            if diplomas:
-                                                                for d in diplomas:
-                                                                    supabase.table("diplomas").delete().eq("id", d["id"]).execute()
-                                                            
-                                                            # Insertar nuevo diploma (usando estructura exacta de tu tabla)
-                                                            supabase.table("diplomas").insert({
-                                                                "participante_id": participante_data["id"],
-                                                                "grupo_id": participante_data["grupo_id"],
-                                                                "url": url,
-                                                                "archivo_nombre": diploma_file.name
-                                                                # fecha_subida se añade automáticamente con DEFAULT NOW()
-                                                            }).execute()
-                                                            
-                                                            st.success("✅ Diploma subido correctamente.")
-                                                            st.balloons()
-                                                            st.rerun()
-                                                        else:
-                                                            st.error("❌ Error al obtener la URL del diploma.")
-                                                
-                                                except ImportError:
-                                                    st.error("❌ Error: No se pudo importar la función de subida de archivos.")
-                                                except Exception as e:
-                                                    st.error(f"❌ Error al subir diploma: {e}")
-                                        
-                                        with col_cancel:
-                                            if st.button("❌ Cancelar", key=f"cancel_btn_{participante_data['id']}"):
-                                                st.rerun()
-    
-    except Exception as e:
-        st.error(f"❌ Error al cargar datos para gestión de diplomas: {e}")
+            return
 
-    # =========================
-    # ESTADÍSTICAS DE DIPLOMAS
-    # =========================
-    with st.expander("📊 Estadísticas de Diplomas"):
-        try:
-            # Obtener estadísticas generales
-            if session_state.role == "admin":
-                # Estadísticas globales para admin
-                total_grupos_query = supabase.table("grupos").select("id, fecha_fin, fecha_fin_prevista")
-                total_diplomas_query = supabase.table("diplomas").select("id")
-            else:
-                # Estadísticas por empresa para gestor
-                total_grupos_query = supabase.table("grupos").select("id, fecha_fin, fecha_fin_prevista").eq("empresa_id", empresa_id)
-                # Para diplomas, necesitamos un join o filtrar por participantes de la empresa
-                participantes_empresa = supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute()
-                participantes_ids = [p["id"] for p in participantes_empresa.data or []]
+        # Obtener participantes de grupos finalizados con más datos
+        grupos_finalizados_ids = [g["id"] for g in grupos_finalizados]
+        
+        query_participantes = supabase.table("participantes").select("""
+            id, nombre, apellidos, email, grupo_id, nif
+        """).in_("grupo_id", grupos_finalizados_ids)
+        
+        if session_state.role == "gestor" and empresa_id:
+            query_participantes = query_participantes.eq("empresa_id", empresa_id)
+        
+        participantes_res = query_participantes.execute()
+        participantes_finalizados = participantes_res.data or []
+        
+        if not participantes_finalizados:
+            st.info("ℹ️ No hay participantes en grupos finalizados.")
+            return
+
+        # Crear diccionario de grupos para mapeo
+        grupos_dict_completo = {g["id"]: g for g in grupos_finalizados}
+        
+        # Obtener diplomas existentes
+        participantes_ids = [p["id"] for p in participantes_finalizados]
+        diplomas_res = supabase.table("diplomas").select("participante_id, id").in_(
+            "participante_id", participantes_ids
+        ).execute()
+        participantes_con_diploma = {d["participante_id"] for d in diplomas_res.data or []}
+        
+        # Métricas mejoradas
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("👥 Participantes", len(participantes_finalizados))
+        with col2:
+            st.metric("📚 Grupos Finalizados", len(grupos_finalizados))
+        with col3:
+            diplomas_count = len(participantes_con_diploma)
+            st.metric("🏅 Diplomas Subidos", diplomas_count)
+        with col4:
+            pendientes = len(participantes_finalizados) - diplomas_count
+            st.metric("⏳ Pendientes", pendientes)
+
+        # FILTROS MEJORADOS para buscar participantes
+        st.markdown("#### 🔍 Filtros de Búsqueda")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            buscar_participante = st.text_input(
+                "🔍 Buscar participante",
+                placeholder="Nombre, email o NIF...",
+                key="buscar_diploma_participante"
+            )
+        
+        with col2:
+            # Filtro por grupo
+            grupos_opciones = ["Todos"] + [g["codigo_grupo"] for g in grupos_finalizados]
+            grupo_filtro = st.selectbox(
+                "Filtrar por grupo",
+                grupos_opciones,
+                key="filtro_grupo_diplomas"
+            )
+        
+        with col3:
+            # Filtro por estado de diploma
+            estado_diploma = st.selectbox(
+                "Estado diploma",
+                ["Todos", "Con diploma", "Sin diploma"],
+                key="filtro_estado_diploma"
+            )
+
+        # Aplicar filtros
+        participantes_filtrados = participantes_finalizados.copy()
+        
+        # Filtro de búsqueda
+        if buscar_participante:
+            buscar_lower = buscar_participante.lower()
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if (buscar_lower in p.get("nombre", "").lower() or 
+                    buscar_lower in p.get("apellidos", "").lower() or 
+                    buscar_lower in p.get("email", "").lower() or
+                    buscar_lower in p.get("nif", "").lower())
+            ]
+        
+        # Filtro por grupo
+        if grupo_filtro != "Todos":
+            grupo_id_filtro = None
+            for g in grupos_finalizados:
+                if g["codigo_grupo"] == grupo_filtro:
+                    grupo_id_filtro = g["id"]
+                    break
+            if grupo_id_filtro:
+                participantes_filtrados = [
+                    p for p in participantes_filtrados 
+                    if p["grupo_id"] == grupo_id_filtro
+                ]
+        
+        # Filtro por estado de diploma
+        if estado_diploma == "Con diploma":
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if p["id"] in participantes_con_diploma
+            ]
+        elif estado_diploma == "Sin diploma":
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if p["id"] not in participantes_con_diploma
+            ]
+
+        st.markdown(f"#### 🎯 Participantes encontrados: {len(participantes_filtrados)}")
+
+        if not participantes_filtrados:
+            st.warning("🔍 No se encontraron participantes con los filtros aplicados.")
+            return
+
+        # Lista de participantes con paginación
+        items_por_pagina = 10
+        total_paginas = (len(participantes_filtrados) + items_por_pagina - 1) // items_por_pagina
+        
+        if total_paginas > 1:
+            pagina_actual = st.selectbox(
+                "Página",
+                range(1, total_paginas + 1),
+                key="pagina_diplomas"
+            )
+            inicio = (pagina_actual - 1) * items_por_pagina
+            fin = inicio + items_por_pagina
+            participantes_pagina = participantes_filtrados[inicio:fin]
+        else:
+            participantes_pagina = participantes_filtrados
+
+        # Mostrar participantes
+        for i, participante in enumerate(participantes_pagina):
+            grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
+            tiene_diploma = participante["id"] in participantes_con_diploma
+            
+            # Crear expander con información del participante
+            accion_nombre = grupo_info.get("accion_formativa", {}).get("nombre", "Sin acción") if grupo_info.get("accion_formativa") else "Sin acción"
+            nombre_completo = f"{participante['nombre']} {participante.get('apellidos', '')}".strip()
+            
+            status_emoji = "✅" if tiene_diploma else "⏳"
+            status_text = "Con diploma" if tiene_diploma else "Pendiente"
+            
+            with st.expander(
+                f"{status_emoji} {nombre_completo} - {grupo_info.get('codigo_grupo', 'Sin código')} ({status_text})",
+                expanded=False
+            ):
+                col_info, col_actions = st.columns([2, 1])
                 
-                if participantes_ids:
-                    total_diplomas_query = supabase.table("diplomas").select("id").in_("participante_id", participantes_ids)
-                else:
-                    total_diplomas_query = None
+                with col_info:
+                    st.markdown(f"**📧 Email:** {participante['email']}")
+                    st.markdown(f"**🆔 NIF:** {participante.get('nif', 'No disponible')}")
+                    st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
+                    st.markdown(f"**📖 Acción:** {accion_nombre}")
+                    
+                    fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
+                    if fecha_fin:
+                        fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                        st.markdown(f"**📅 Finalizado:** {fecha_str}")
+                
+                with col_actions:
+                    if tiene_diploma:
+                        # Mostrar diploma existente
+                        diplomas_part = supabase.table("diplomas").select("*").eq(
+                            "participante_id", participante["id"]
+                        ).execute()
+                        
+                        if diplomas_part.data:
+                            diploma = diplomas_part.data[0]
+                            st.markdown("**🏅 Diploma:**")
+                            if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}"):
+                                st.markdown(f"[🔗 Abrir diploma]({diploma['url']})")
+                            
+                            if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}"):
+                                confirmar_key = f"confirm_delete_{participante['id']}"
+                                if st.session_state.get(confirmar_key, False):
+                                    supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
+                                    st.success("✅ Diploma eliminado.")
+                                    st.rerun()
+                                else:
+                                    st.session_state[confirmar_key] = True
+                                    st.warning("⚠️ Confirmar eliminación")
+                    else:
+                        # Subir diploma
+                        diploma_file = st.file_uploader(
+                            "📄 Subir diploma (PDF)",
+                            type=["pdf"],
+                            key=f"upload_diploma_{participante['id']}",
+                            help="Solo archivos PDF, máximo 10MB"
+                        )
+                        
+                        if diploma_file:
+                            file_size_mb = diploma_file.size / (1024 * 1024)
+                            if file_size_mb > 10:
+                                st.error("❌ Archivo muy grande. Máximo 10MB.")
+                            else:
+                                if st.button("📤 Subir", key=f"btn_upload_{participante['id']}", type="primary"):
+                                    try:
+                                        # Convertir UploadedFile a bytes
+                                        file_bytes = diploma_file.read()
+                                        diploma_file.seek(0)  # Reset para futuras lecturas
+                                        
+                                        # Generar nombre único
+                                        timestamp = int(datetime.now().timestamp())
+                                        filename = f"diploma_{participante['id']}_{timestamp}.pdf"
+                                        
+                                        with st.spinner("📤 Subiendo diploma..."):
+                                            # Subir a bucket de Supabase
+                                            upload_res = supabase.storage.from_("diplomas").upload(
+                                                filename, file_bytes, file_options={"content-type": "application/pdf"}
+                                            )
+                                            
+                                            if upload_res.error:
+                                                st.error(f"Error al subir archivo: {upload_res.error}")
+                                            else:
+                                                # Obtener URL pública
+                                                public_url = supabase.storage.from_("diplomas").get_public_url(filename)
+                                                
+                                                # Guardar en tabla diplomas
+                                                supabase.table("diplomas").insert({
+                                                    "participante_id": participante["id"],
+                                                    "grupo_id": participante["grupo_id"],
+                                                    "url": public_url,
+                                                    "archivo_nombre": diploma_file.name
+                                                }).execute()
+                                                
+                                                st.success("✅ Diploma subido correctamente.")
+                                                st.balloons()
+                                                st.rerun()
+                                    
+                                    except Exception as e:
+                                        st.error(f"❌ Error al subir diploma: {e}")
+        
+        # Estadísticas finales
+        if participantes_filtrados:
+            st.markdown("#### 📊 Estadísticas")
+            total_mostrados = len(participantes_filtrados)
+            con_diploma_filtrados = sum(1 for p in participantes_filtrados if p["id"] in participantes_con_diploma)
+            sin_diploma_filtrados = total_mostrados - con_diploma_filtrados
             
-            total_grupos_res = total_grupos_query.execute()
-            if total_diplomas_query:
-                total_diplomas_res = total_diplomas_query.execute()
-                total_diplomas = len(total_diplomas_res.data or [])
-            else:
-                total_diplomas = 0
-            
-            # Calcular grupos finalizados
-            total_finalizados = 0
-            hoy = datetime.now().date()
-            for grupo in total_grupos_res.data or []:
-                fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
-                if fecha_fin:
-                    try:
-                        if pd.to_datetime(fecha_fin, errors='coerce').date() < hoy:
-                            total_finalizados += 1
-                    except:
-                        continue
-            
-            col1, col2, col3, col4 = st.columns(4)
-            
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("📚 Grupos Finalizados", total_finalizados)
-            
+                st.metric("👥 Mostrados", total_mostrados)
             with col2:
-                st.metric("🏅 Total Diplomas", total_diplomas)
-            
+                st.metric("✅ Con diploma", con_diploma_filtrados)
             with col3:
-                pendientes = max(0, total_finalizados - total_diplomas)
-                st.metric("⏳ Pendientes", pendientes)
+                st.metric("⏳ Sin diploma", sin_diploma_filtrados)
             
-            with col4:
-                if total_finalizados > 0:
-                    progreso = (total_diplomas / total_finalizados) * 100
-                    st.metric("📈 Progreso", f"{progreso:.1f}%")
-                else:
-                    st.metric("📈 Progreso", "0%")
-            
-            # Barra de progreso
-            if total_finalizados > 0:
-                progreso_decimal = total_diplomas / total_finalizados
-                st.progress(progreso_decimal, text=f"Diplomas completados: {progreso_decimal:.1%}")
-            
-        except Exception as e:
-            st.error(f"❌ Error al cargar estadísticas: {e}")
+            if total_mostrados > 0:
+                progreso = (con_diploma_filtrados / total_mostrados) * 100
+                st.progress(con_diploma_filtrados / total_mostrados, f"Progreso: {progreso:.1f}%")
+        
+    except Exception as e:
+        st.error(f"❌ Error al cargar gestión de diplomas: {e}")
 
 
 def mostrar_importacion_masiva(supabase, session_state, data_service, empresas_dict, grupos_dict, empresa_id):
-    """Sección de importación masiva (mantener código existente mejorado)."""
+    """Sección de importación masiva mejorada."""
     with st.expander("📂 Importación masiva de participantes"):
         st.markdown("Sube un archivo Excel con participantes para crear múltiples registros de una vez.")
+        
+        # Explicación del proceso
+        st.info("""
+        💡 **Proceso de importación:**
+        1. Los participantes se crean como **usuarios con rol 'alumno'**
+        2. Se generan **contraseñas temporales** automáticamente
+        3. Se crean registros en **Auth de Supabase** y en las tablas usuarios y participantes
+        4. Cada participante puede acceder al panel de alumno
+        """)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -870,6 +761,212 @@ def mostrar_importacion_masiva(supabase, session_state, data_service, empresas_d
                 help="El archivo debe seguir el formato de la plantilla"
             )
         
-        if archivo_subido and st.button("🚀 Procesar importación"):
-            # TODO: Mantener la lógica de importación masiva del archivo original
-            st.info("Procesamiento de importación masiva - mantener lógica existente")
+        if archivo_subido:
+            try:
+                # Leer archivo
+                df_import = pd.read_excel(archivo_subido)
+                
+                st.markdown("##### 📋 Preview de datos a importar:")
+                st.dataframe(df_import.head(), use_container_width=True)
+                
+                # Validar columnas requeridas
+                columnas_requeridas = ["nombre", "apellidos", "email"]
+                columnas_faltantes = [col for col in columnas_requeridas if col not in df_import.columns]
+                
+                if columnas_faltantes:
+                    st.error(f"❌ Columnas faltantes: {', '.join(columnas_faltantes)}")
+                    return
+                
+                # Mostrar estadísticas
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("📊 Total filas", len(df_import))
+                with col2:
+                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+, na=False).sum()
+                    st.metric("📧 Emails válidos", emails_validos)
+                with col3:
+                    emails_duplicados = df_import["email"].duplicated().sum()
+                    if emails_duplicados > 0:
+                        st.metric("⚠️ Emails duplicados", emails_duplicados)
+                    else:
+                        st.metric("✅ Sin duplicados", 0)
+                
+                if st.button("🚀 Procesar importación", type="primary"):
+                    with st.spinner("Procesando importación..."):
+                        resultados = procesar_importacion_masiva(
+                            supabase, session_state, df_import, 
+                            empresas_dict, grupos_dict, empresa_id
+                        )
+                        
+                        # Mostrar resultados
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            if resultados["exitosos"] > 0:
+                                st.success(f"✅ Creados: {resultados['exitosos']}")
+                        with col2:
+                            if resultados["errores"] > 0:
+                                st.error(f"❌ Errores: {resultados['errores']}")
+                        with col3:
+                            if resultados["omitidos"] > 0:
+                                st.warning(f"⚠️ Omitidos: {resultados['omitidos']}")
+                        
+                        # Mostrar detalles de errores
+                        if resultados["detalles_errores"]:
+                            with st.expander("Ver detalles de errores"):
+                                for error in resultados["detalles_errores"]:
+                                    st.error(f"• {error}")
+                        
+                        # Mostrar contraseñas generadas
+                        if resultados["contraseñas"]:
+                            with st.expander("📋 Contraseñas generadas", expanded=True):
+                                st.warning("⚠️ **IMPORTANTE:** Guarda estas contraseñas y compártelas con los participantes")
+                                
+                                # Crear DataFrame con credenciales
+                                df_credenciales = pd.DataFrame(resultados["contraseñas"])
+                                st.dataframe(df_credenciales, use_container_width=True)
+                                
+                                # Botón para descargar credenciales
+                                csv_credenciales = df_credenciales.to_csv(index=False)
+                                st.download_button(
+                                    "📥 Descargar credenciales CSV",
+                                    data=csv_credenciales,
+                                    file_name=f"credenciales_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv"
+                                )
+                        
+                        # Limpiar cache
+                        data_service.get_participantes_completos.clear()
+                        
+            except Exception as e:
+                st.error(f"❌ Error al procesar archivo: {e}")
+
+
+def procesar_importacion_masiva(supabase, session_state, df_import, empresas_dict, grupos_dict, empresa_id):
+    """Procesa la importación masiva de participantes."""
+    import random, string
+    
+    resultados = {
+        "exitosos": 0,
+        "errores": 0, 
+        "omitidos": 0,
+        "detalles_errores": [],
+        "contraseñas": []
+    }
+    
+    for index, row in df_import.iterrows():
+        try:
+            # Validaciones básicas
+            if pd.isna(row.get("email")) or pd.isna(row.get("nombre")):
+                resultados["omitidos"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email o nombre faltante")
+                continue
+            
+            email = str(row["email"]).strip().lower()
+            nombre = str(row["nombre"]).strip()
+            apellidos = str(row.get("apellidos", "")).strip()
+            
+            # Validar email
+            if not re.match(r'^[^@]+@[^@]+\.[^@]+, email):
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email inválido - {email}")
+                continue
+            
+            # Verificar si ya existe
+            existe_usuario = supabase.table("usuarios").select("id").eq("email", email).execute()
+            existe_participante = supabase.table("participantes").select("id").eq("email", email).execute()
+            
+            if existe_usuario.data or existe_participante.data:
+                resultados["omitidos"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email ya existe - {email}")
+                continue
+            
+            # Determinar empresa
+            if session_state.role == "gestor":
+                participante_empresa_id = empresa_id
+            else:
+                # Admin: buscar empresa en archivo
+                empresa_nombre = str(row.get("empresa", "")).strip()
+                if empresa_nombre and empresa_nombre in empresas_dict:
+                    participante_empresa_id = empresas_dict[empresa_nombre]
+                else:
+                    resultados["errores"] += 1
+                    resultados["detalles_errores"].append(f"Fila {index + 2}: Empresa no encontrada - {empresa_nombre}")
+                    continue
+            
+            # Determinar grupo (opcional)
+            grupo_id = None
+            grupo_nombre = str(row.get("grupo", "")).strip()
+            if grupo_nombre and grupo_nombre in grupos_dict:
+                grupo_id = grupos_dict[grupo_nombre]
+            
+            # Generar contraseña
+            password = "".join(random.choices(string.ascii_letters + string.digits, k=8)) + "!"
+            
+            # Crear usuario en Auth
+            auth_res = supabase.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True
+            })
+            
+            if not getattr(auth_res, "user", None):
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Error en Auth - {email}")
+                continue
+                
+            auth_id = auth_res.user.id
+
+            try:
+                # Crear usuario en BD
+                usuario_datos = {
+                    "auth_id": auth_id,
+                    "email": email,
+                    "nombre_completo": f"{nombre} {apellidos}".strip(),
+                    "nombre": nombre,
+                    "telefono": str(row.get("telefono", "")).strip() or None,
+                    "nif": str(row.get("nif", "")).strip() or None,
+                    "rol": "alumno",
+                    "empresa_id": participante_empresa_id,
+                    "grupo_id": grupo_id,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                supabase.table("usuarios").insert(usuario_datos).execute()
+                
+                # Crear participante en BD
+                participante_datos = {
+                    "email": email,
+                    "nombre": nombre,
+                    "apellidos": apellidos,
+                    "nif": str(row.get("nif", "")).strip() or None,
+                    "telefono": str(row.get("telefono", "")).strip() or None,
+                    "empresa_id": participante_empresa_id,
+                    "grupo_id": grupo_id,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                supabase.table("participantes").insert(participante_datos).execute()
+                
+                # Registrar éxito
+                resultados["exitosos"] += 1
+                resultados["contraseñas"].append({
+                    "email": email,
+                    "nombre": f"{nombre} {apellidos}".strip(),
+                    "contraseña": password
+                })
+                
+            except Exception as e:
+                # Rollback Auth si falla BD
+                try:
+                    supabase.auth.admin.delete_user(auth_id)
+                except:
+                    pass
+                    
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Error BD - {email}: {e}")
+                
+        except Exception as e:
+            resultados["errores"] += 1
+            resultados["detalles_errores"].append(f"Fila {index + 2}: Error general - {e}")
+    
+    return resultados
