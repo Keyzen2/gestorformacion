@@ -725,6 +725,12 @@ class GruposService:
     def create_grupo_coste(self, datos_coste: Dict[str, Any]) -> bool:
         """Crea registro de costes para un grupo."""
         try:
+            # Añadir ID único y timestamps
+            import uuid
+            datos_coste['id'] = str(uuid.uuid4())
+            datos_coste['created_at'] = datetime.utcnow().isoformat()
+            datos_coste['updated_at'] = datetime.utcnow().isoformat()
+            
             self.supabase.table("grupo_costes").insert(datos_coste).execute()
             self.get_grupo_costes.clear()
             return True
@@ -735,6 +741,9 @@ class GruposService:
     def update_grupo_coste(self, grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
         """Actualiza costes de un grupo."""
         try:
+            # Añadir timestamp de actualización
+            datos_coste['updated_at'] = datetime.utcnow().isoformat()
+            
             self.supabase.table("grupo_costes").update(datos_coste).eq("grupo_id", grupo_id).execute()
             self.get_grupo_costes.clear()
             return True
