@@ -504,6 +504,45 @@ class DataService:
         except Exception as e:
             return _self._handle_query_error("cargar tutores por empresa", e)
 
+    def create_tutor(self, datos_tutor: Dict[str, Any]) -> bool:
+        """Crea un nuevo tutor."""
+        try:
+            if self.rol == "gestor":
+                datos_tutor["empresa_id"] = self.empresa_id
+            
+            self.supabase.table("tutores").insert(datos_tutor).execute()
+            self.get_tutores_completos.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear tutor: {e}")
+            return False
+    
+    def update_tutor(self, tutor_id: str, datos_tutor: Dict[str, Any]) -> bool:
+        """Actualiza un tutor existente."""
+        try:
+            self.supabase.table("tutores").update(datos_tutor).eq("id", tutor_id).execute()
+            self.get_tutores_completos.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar tutor: {e}")
+            return False
+    
+    def delete_tutor(self, tutor_id: str) -> bool:
+        """Elimina un tutor."""
+        try:
+            # Verificar si tiene grupos asignados
+            grupos = self.supabase.table("tutores_grupos").select("id").eq("tutor_id", tutor_id).execute()
+            if grupos.data:
+                st.error("No se puede eliminar. El tutor tiene grupos asignados.")
+                return False
+            
+            self.supabase.table("tutores").delete().eq("id", tutor_id).execute()
+            self.get_tutores_completos.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar tutor: {e}")
+            return False
+        
     # =========================
     # USUARIOS
     # =========================
