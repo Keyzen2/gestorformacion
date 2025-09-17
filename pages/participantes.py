@@ -202,18 +202,20 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
         st.markdown("### ➕ Crear Nuevo Participante")
         participante_data = {}
     else:
-        st.markdown("### ✏️ Editar Participante")
-        # Cargar datos del participante
-        try:
-            result = supabase.table("participantes").select("*").eq("id", participante_id).execute()
-            if result.data:
-                participante_data = result.data[0]
-            else:
-                st.error("Participante no encontrado")
-                return
-        except Exception as e:
-            st.error(f"Error al cargar participante: {e}")
+    st.markdown("### ✏️ Editar Participante")
+    try:
+        result = supabase.table("participantes").select("*").eq("id", participante_id).limit(1).execute()
+        participante_data = result.data[0] if result.data else {}
+        if not participante_data:
+            st.error("Participante no encontrado")
+            if "participante_editando" in st.session_state:
+                del st.session_state.participante_editando
             return
+    except Exception as e:
+        st.error(f"Error al cargar participante: {e}")
+        if "participante_editando" in st.session_state:
+            del st.session_state.participante_editando
+        return
 
     # =========================
     # SECCIÓN 1: DATOS BÁSICOS
