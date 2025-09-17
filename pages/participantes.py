@@ -25,10 +25,6 @@ def main(supabase, session_state):
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
-
-    # Inicializar estado seguro
-    if "participante_editando" not in st.session_state:
-        st.session_state.participante_editando = None
         
     # Inicializar servicios
     data_service = get_data_service(supabase, session_state)
@@ -78,25 +74,13 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # Botón crear participante
+    # FORMULARIO DE EDICIÓN/CREACIÓN
     # =========================
-    puede_crear = (
-        session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id)
-    )
-
-    if puede_crear:
-        if st.button("➕ Crear Nuevo Participante", type="primary"):
-            st.session_state.participante_editando = "nuevo"
-            st.rerun()
-
-    # =========================
-    # Formulario edición/creación
-    # =========================
-    if st.session_state.participante_editando:
+    if "participante_seleccionado" in st.session_state:
+        participante_id = st.session_state.participante_seleccionado
         mostrar_formulario_participante(
             supabase, session_state, data_service, grupos_service,
-            st.session_state.participante_editando, empresas_dict, grupos_dict, empresa_id
+            participante_id, empresas_dict, grupos_dict, empresa_id
         )
         
     # =========================
@@ -132,6 +116,19 @@ def main(supabase, session_state):
     if session_state.role == "admin" and 'empresa_filter' in locals() and empresa_filter != "Todas" and not df_filtered.empty:
         empresa_id_filter = empresas_dict.get(empresa_filter)
         df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id_filter]
+        
+    # =========================
+    # Botón crear participante
+    # =========================
+    puede_crear = (
+        session_state.role == "admin" or
+        (session_state.role == "gestor" and empresa_id)
+    )
+    
+    if puede_crear:
+        if st.button("➕ Crear Nuevo Participante", type="primary"):
+            st.session_state.participante_seleccionado = "nuevo"
+            st.rerun()
 
     # =========================
     # TABLA EDITABLE ESTILO GRUPOS
@@ -168,8 +165,8 @@ def main(supabase, session_state):
         if event.selection.rows:
             selected_idx = event.selection.rows[0]
             participante_seleccionado = df_filtered.iloc[selected_idx]
-            st.session_state.participante_editando = participante_seleccionado["id"]
-            st.rerun()
+            st.session_state.participante_seleccionado = participante_seleccionado["id"]
+            st.rerun())
 
     st.divider()
 
@@ -205,9 +202,9 @@ def main(supabase, session_state):
     st.caption("💡 Los participantes son usuarios que pertenecen a grupos formativos y pueden obtener diplomas al completar los cursos.")
 
 
-def mostrar_formulario_participante(supabase, session_state, data_service, grupos_service,
+def mostrar_formulario_participante(supabase, session_state, data_service, grupos_service, 
                                    participante_id, empresas_dict, grupos_dict, empresa_id):
-    """Formulario unificado para crear/editar participantes con lógica mejorada."""
+    """Formulario unificado para crear/editar participantes estilo grupos.py"""
 
     es_creacion = participante_id == "nuevo"
 
@@ -220,13 +217,15 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
             result = supabase.table("participantes").select("*").eq("id", participante_id).limit(1).execute()
             participante_data = result.data[0] if result.data else {}
             if not participante_data:
-                st.error("❌ Participante no encontrado")
-                st.session_state.participante_editando = None
-                st.stop()
+                st.error("Participante no encontrado")
+                if "participante_seleccionado" in st.session_state:
+                    del st.session_state.participante_seleccionado
+                return
         except Exception as e:
-            st.error(f"❌ Error al cargar participante: {e}")
-            st.session_state.participante_editando = None
-            st.stop()
+            st.error(f"Error al cargar participante: {e}")
+            if "participante_seleccionado" in st.session_state:
+                del st.session_state.participante_seleccionado
+            return
 
     # =========================
     # SECCIÓN 1: DATOS BÁSICOS
