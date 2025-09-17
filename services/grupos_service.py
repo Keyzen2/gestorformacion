@@ -624,7 +624,6 @@ class GruposService:
     # PARTICIPANTES (1:N)
     # =========================
     @st.cache_data(ttl=300)
-    @st.cache_data(ttl=300)
     def get_participantes_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene los participantes asignados a un grupo específico (N:N)."""
         try:
