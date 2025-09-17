@@ -166,7 +166,7 @@ def main(supabase, session_state):
             selected_idx = event.selection.rows[0]
             participante_seleccionado = df_filtered.iloc[selected_idx]
             st.session_state.participante_seleccionado = participante_seleccionado["id"]
-            st.rerun())
+            st.rerun()
 
     st.divider()
 
