@@ -724,22 +724,71 @@ def mostrar_seccion_diplomas_mejorada(supabase, session_state, empresa_id):
                                                     }
                                                 )
                                                 
-                                                if upload_res.error:
-                                                    raise Exception(f"Error de subida: {upload_res.error.message}")
+                                                # Verificar si la subida fue exitosa
+                                                if hasattr(upload_res, 'error') and upload_res.error:
+                                                    raise Exception(f"Error de subida: {upload_res.error}")
+                                                elif not upload_res or (hasattr(upload_res, 'data') and not upload_res.data):
+                                                    raise Exception("La subida no devolvió datos válidos")
                                                 
                                                 # Obtener URL pública
-                                                public_url = supabase.storage.from_("diplomas").get_public_url(filename)
+                                                try:
+                                                    public_url = supabase.storage.from_("diplomas").get_public_url(filename)
+                                                    if not public_url:
+                                                        raise Exception("No se pudo generar URL pública")
+                                                except Exception as url_error:
+                                                    raise Exception(f"Error al obtener URL: {url_error}")
                                                 
                                                 # Guardar en tabla diplomas
-                                                diploma_insert = supabase.table("diplomas").insert({
-                                                    "participante_id": participante["id"],
-                                                    "grupo_id": participante["grupo_id"],
-                                                    "url": public_url,
-                                                    "archivo_nombre": diploma_file.name
-                                                }).execute()
-                                                
-                                                if diploma_insert.error:
-                                                    raise Exception(f"Error al guardar en BD: {diploma_insert.error.message}")
+                                                try:
+                                                    # Debug: Verificar datos antes de insertar
+                                                    st.write("🔧 Debug - Datos a insertar:", {
+                                                        "participante_id": participante["id"],
+                                                        "grupo_id": participante["grupo_id"], 
+                                                        "url": public_url,
+                                                        "archivo_nombre": diploma_file.name
+                                                    })
+                                                    
+                                                    diploma_insert = supabase.table("diplomas").insert({
+                                                        "participante_id": participante["id"],
+                                                        "grupo_id": participante["grupo_id"],
+                                                        "url": public_url,
+                                                        "archivo_nombre": diploma_file.name
+                                                    }).execute()
+                                                    
+                                                    # Debug: Mostrar respuesta completa
+                                                    st.write("🔧 Debug - Respuesta inserción:", diploma_insert)
+                                                    
+                                                    # Verificar múltiples formas de error
+                                                    if hasattr(diploma_insert, 'error') and diploma_insert.error:
+                                                        raise Exception(f"Error al guardar en BD: {diploma_insert.error}")
+                                                    elif hasattr(diploma_insert, 'data') and not diploma_insert.data:
+                                                        raise Exception("No se pudieron guardar los datos del diploma - data vacía")
+                                                    elif not hasattr(diploma_insert, 'data'):
+                                                        raise Exception("Respuesta de BD no contiene campo 'data'")
+                                                        
+                                                    # Verificar que efectivamente se guardó
+                                                    verificar = supabase.table("diplomas").select("*").eq("participante_id", participante["id"]).execute()
+                                                    if not verificar.data:
+                                                        raise Exception("El diploma no aparece en la base de datos después de la inserción")
+                                                        
+                                                except Exception as db_error:
+                                                    # Si falla la BD, intentar eliminar el archivo subido
+                                                    st.error(f"❌ Error de base de datos: {db_error}")
+                                                    st.info("🧹 Limpiando archivo del bucket...")
+                                                    try:
+                                                        remove_res = supabase.storage.from_("diplomas").remove([filename])
+                                                        st.info(f"✅ Archivo {filename} eliminado del bucket")
+                                                    except Exception as clean_error:
+                                                        st.warning(f"⚠️ No se pudo limpiar el archivo: {clean_error}")
+                                                    
+                                                    # Mostrar información para debugging
+                                                    st.error("🔍 **Posibles causas:**")
+                                                    st.error("• Tabla 'diplomas' no existe o tiene estructura incorrecta")
+                                                    st.error("• Falta permisos de inserción en la tabla")
+                                                    st.error("• Referencias foráneas inválidas (participante_id o grupo_id)")
+                                                    st.error("• Campo requerido faltante en la tabla")
+                                                    
+                                                    raise Exception(f"Error de base de datos: {db_error}")
                                                 
                                                 st.success("✅ Diploma subido correctamente!")
                                                 st.balloons()
@@ -757,11 +806,12 @@ def mostrar_seccion_diplomas_mejorada(supabase, session_state, empresa_id):
                                                 
                                                 # Sugerencias específicas para móviles
                                                 st.info("""
-                                                🔧 **Soluciones para móviles:**
-                                                - Cierra otras apps para liberar memoria
+                                                🔧 **Soluciones:**
+                                                - Verifica que el bucket 'diplomas' existe en Supabase
+                                                - Asegúrate de que tienes permisos de subida
+                                                - Intenta con un archivo más pequeño
                                                 - Usa WiFi en lugar de datos móviles
-                                                - Intenta desde un navegador diferente
-                                                - Reduce el tamaño del PDF si es muy grande
+                                                - Contacta al administrador si persiste el error
                                                 """)
                                     
                                     except Exception as e:
@@ -858,7 +908,193 @@ def mostrar_importacion_masiva(supabase, session_state, data_service, empresas_d
                 with col1:
                     st.metric("📊 Total filas", len(df_import))
                 with col2:
-                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+$', na=False).sum()
+                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+
+                with col3:
+                    emails_duplicados = df_import["email"].duplicated().sum()
+                    if emails_duplicados > 0:
+                        st.metric("⚠️ Emails duplicados", emails_duplicados)
+                    else:
+                        st.metric("✅ Sin duplicados", 0)
+                
+                if st.button("🚀 Procesar importación", type="primary"):
+                    with st.spinner("Procesando importación..."):
+                        resultados = procesar_importacion_masiva(
+                            supabase, session_state, df_import, 
+                            empresas_dict, grupos_dict, empresa_id
+                        )
+                        
+                        # Mostrar resultados
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            if resultados["exitosos"] > 0:
+                                st.success(f"✅ Creados: {resultados['exitosos']}")
+                        with col2:
+                            if resultados["errores"] > 0:
+                                st.error(f"❌ Errores: {resultados['errores']}")
+                        with col3:
+                            if resultados["omitidos"] > 0:
+                                st.warning(f"⚠️ Omitidos: {resultados['omitidos']}")
+                        
+                        # Mostrar detalles de errores
+                        if resultados["detalles_errores"]:
+                            with st.expander("Ver detalles de errores"):
+                                for error in resultados["detalles_errores"]:
+                                    st.error(f"• {error}")
+                        
+                        # Mostrar contraseñas generadas
+                        if resultados["contraseñas"]:
+                            with st.expander("📋 Contraseñas generadas", expanded=True):
+                                st.warning("⚠️ **IMPORTANTE:** Guarda estas contraseñas y compártelas con los participantes")
+                                
+                                # Crear DataFrame con credenciales
+                                df_credenciales = pd.DataFrame(resultados["contraseñas"])
+                                st.dataframe(df_credenciales, use_container_width=True)
+                                
+                                # Botón para descargar credenciales
+                                csv_credenciales = df_credenciales.to_csv(index=False)
+                                st.download_button(
+                                    "📥 Descargar credenciales CSV",
+                                    data=csv_credenciales,
+                                    file_name=f"credenciales_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv"
+                                )
+                        
+                        # Limpiar cache
+                        data_service.get_participantes_completos.clear()
+                        
+            except Exception as e:
+                st.error(f"❌ Error al procesar archivo: {e}")
+
+
+def procesar_importacion_masiva(supabase, session_state, df_import, empresas_dict, grupos_dict, empresa_id):
+    """Procesa la importación masiva de participantes."""
+    import random, string
+    
+    resultados = {
+        "exitosos": 0,
+        "errores": 0, 
+        "omitidos": 0,
+        "detalles_errores": [],
+        "contraseñas": []
+    }
+    
+    for index, row in df_import.iterrows():
+        try:
+            # Validaciones básicas
+            if pd.isna(row.get("email")) or pd.isna(row.get("nombre")):
+                resultados["omitidos"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email o nombre faltante")
+                continue
+            
+            email = str(row["email"]).strip().lower()
+            nombre = str(row["nombre"]).strip()
+            apellidos = str(row.get("apellidos", "")).strip()
+            
+            # Validar email
+            if not re.match(r'^[^@]+@[^@]+\.[^@]+, email):
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email inválido - {email}")
+                continue
+            
+            # Verificar si ya existe
+            existe_usuario = supabase.table("usuarios").select("id").eq("email", email).execute()
+            existe_participante = supabase.table("participantes").select("id").eq("email", email).execute()
+            
+            if existe_usuario.data or existe_participante.data:
+                resultados["omitidos"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Email ya existe - {email}")
+                continue
+            
+            # Determinar empresa
+            if session_state.role == "gestor":
+                participante_empresa_id = empresa_id
+            else:
+                # Admin: buscar empresa en archivo
+                empresa_nombre = str(row.get("empresa", "")).strip()
+                if empresa_nombre and empresa_nombre in empresas_dict:
+                    participante_empresa_id = empresas_dict[empresa_nombre]
+                else:
+                    resultados["errores"] += 1
+                    resultados["detalles_errores"].append(f"Fila {index + 2}: Empresa no encontrada - {empresa_nombre}")
+                    continue
+            
+            # Determinar grupo (opcional)
+            grupo_id = None
+            grupo_nombre = str(row.get("grupo", "")).strip()
+            if grupo_nombre and grupo_nombre in grupos_dict:
+                grupo_id = grupos_dict[grupo_nombre]
+            
+            # Generar contraseña
+            password = "".join(random.choices(string.ascii_letters + string.digits, k=8)) + "!"
+            
+            # Crear usuario en Auth
+            auth_res = supabase.auth.admin.create_user({
+                "email": email,
+                "password": password,
+                "email_confirm": True
+            })
+            
+            if not getattr(auth_res, "user", None):
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Error en Auth - {email}")
+                continue
+                
+            auth_id = auth_res.user.id
+
+            try:
+                # Crear usuario en BD
+                usuario_datos = {
+                    "auth_id": auth_id,
+                    "email": email,
+                    "nombre_completo": f"{nombre} {apellidos}".strip(),
+                    "nombre": nombre,
+                    "telefono": str(row.get("telefono", "")).strip() or None,
+                    "nif": str(row.get("nif", "")).strip() or None,
+                    "rol": "alumno",
+                    "empresa_id": participante_empresa_id,
+                    "grupo_id": grupo_id,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                supabase.table("usuarios").insert(usuario_datos).execute()
+                
+                # Crear participante en BD
+                participante_datos = {
+                    "email": email,
+                    "nombre": nombre,
+                    "apellidos": apellidos,
+                    "nif": str(row.get("nif", "")).strip() or None,
+                    "telefono": str(row.get("telefono", "")).strip() or None,
+                    "empresa_id": participante_empresa_id,
+                    "grupo_id": grupo_id,
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                supabase.table("participantes").insert(participante_datos).execute()
+                
+                # Registrar éxito
+                resultados["exitosos"] += 1
+                resultados["contraseñas"].append({
+                    "email": email,
+                    "nombre": f"{nombre} {apellidos}".strip(),
+                    "contraseña": password
+                })
+                
+            except Exception as e:
+                # Rollback Auth si falla BD
+                try:
+                    supabase.auth.admin.delete_user(auth_id)
+                except:
+                    pass
+                    
+                resultados["errores"] += 1
+                resultados["detalles_errores"].append(f"Fila {index + 2}: Error BD - {email}: {e}")
+                
+        except Exception as e:
+            resultados["errores"] += 1
+            resultados["detalles_errores"].append(f"Fila {index + 2}: Error general - {e}")
+    
+    return resultados, na=False).sum()
                     st.metric("📧 Emails válidos", emails_validos)
                 with col3:
                     emails_duplicados = df_import["email"].duplicated().sum()
@@ -942,7 +1178,7 @@ def procesar_importacion_masiva(supabase, session_state, df_import, empresas_dic
             apellidos = str(row.get("apellidos", "")).strip()
             
             # Validar email
-            if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+            if not re.match(r'^[^@]+@[^@]+\.[^@]+, email):
                 resultados["errores"] += 1
                 resultados["detalles_errores"].append(f"Fila {index + 2}: Email inválido - {email}")
                 continue
