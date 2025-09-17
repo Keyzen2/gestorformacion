@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from utils import export_csv, validar_dni_cif
-from components import listado_con_ficha
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
@@ -60,8 +59,6 @@ def main(supabase, session_state):
             st.metric("🌐 Externos", externos)
         with col4:
             st.metric("📄 Con CV", con_cv, f"{(con_cv/total_tutores*100):.1f}%" if total_tutores > 0 else "0%")
-
-        # Sin barra de progreso - ya está en las métricas
 
     st.divider()
 
@@ -151,11 +148,6 @@ def main(supabase, session_state):
         st.info(f"🎯 {len(df_filtrado)} de {len(df_tutores)} tutores mostrados")
 
     st.divider()
-
-    # =========================
-    # DEFINIR PERMISOS
-    # =========================
-    puede_modificar = data_service.can_modify_data()
 
     # =========================
     # FUNCIONES CRUD OPTIMIZADAS
@@ -268,7 +260,7 @@ def main(supabase, session_state):
             tutor_id = str(uuid.uuid4())
             datos_nuevos["id"] = tutor_id
 
-            # Limpiar campos auxiliares
+            # NO filtrar valores vacíos aquí - dejar que el usuario pueda limpiar campos
             datos_limpios = {k: v for k, v in datos_nuevos.items() 
                            if not k.endswith("_sel")}
             
@@ -292,24 +284,8 @@ def main(supabase, session_state):
             return False
 
     # =========================
-    # CONFIGURACIÓN DE CAMPOS PARA LISTADO_CON_FICHA
+    # PREPARAR DATOS PARA DISPLAY
     # =========================
-    def get_campos_dinamicos(datos):
-        """Campos a mostrar dinámicamente - SOLO campos que existen en BD."""
-        # Solo incluir campos que realmente existen en la tabla tutores
-        campos_base = [
-            "nombre", "apellidos", "nif", "email", "telefono",
-            "tipo_tutor", "especialidad", "tipo_documento", "titulacion", 
-            "direccion", "ciudad", "provincia", "codigo_postal"
-        ]
-        
-        # Solo admin puede seleccionar empresa
-        if session_state.role == "admin":
-            campos_base.insert(-1, "empresa_sel")
-            
-        return campos_base
-
-    # Preparar datos display con valores compatibles para selects
     def preparar_datos_display(df_orig):
         """Prepara datos para mostrar en formularios con valores compatibles."""
         df_display = df_orig.copy()
@@ -350,44 +326,9 @@ def main(supabase, session_state):
         
         return df_display
 
-    # Especialidades ya definidas arriba
-    campos_select = {
-        "tipo_tutor": ["", "interno", "externo"],
-        "especialidad": especialidades_opciones,
-        "tipo_documento": ["", "NIF", "Pasaporte", "NIE"]
-    }
-    
-    if session_state.role == "admin" and empresas_dict:
-        empresas_opciones = [""] + sorted(empresas_dict.keys())
-        campos_select["empresa_sel"] = empresas_opciones
-
-    campos_readonly = ["id", "created_at", "cv_url"]
-    campos_obligatorios = ["nombre", "apellidos", "tipo_tutor"]
-    
-    campos_help = {
-        "nombre": "Nombre del tutor (obligatorio)",
-        "apellidos": "Apellidos del tutor (obligatorio)", 
-        "email": "Email de contacto del tutor",
-        "telefono": "Teléfono de contacto",
-        "nif": "NIF/DNI del tutor (obligatorio para FUNDAE)",
-        "tipo_documento": "Tipo de documento de identidad (obligatorio FUNDAE)",
-        "tipo_tutor": "Tipo: interno (empleado) o externo (colaborador) - obligatorio",
-        "especialidad": "Área de especialización del tutor",
-        "empresa_sel": "Empresa a la que pertenece (solo admin)",
-        "direccion": "Dirección completa",
-        "ciudad": "Ciudad de residencia",
-        "provincia": "Provincia",
-        "codigo_postal": "Código postal",
-        "titulacion": "Titulación académica del tutor",
-        "experiencia_profesional": "Años de experiencia profesional",
-        "experiencia_docente": "Años de experiencia en docencia/formación"
-    }
-
     # =========================
-    # LISTADO PRINCIPAL CON GESTIÓN DE CV INTEGRADA
+    # MOSTRAR TABLA Y FORMULARIOS
     # =========================
-    st.markdown("### 📊 Listado de Tutores")
-    
     if df_filtrado.empty:
         if df_tutores.empty:
             st.info("ℹ️ No hay tutores registrados.")
@@ -408,60 +349,106 @@ def main(supabase, session_state):
         if "empresa_nombre" in df_display.columns:
             columnas_visibles.insert(-1, "empresa_nombre")
 
-        # Función para convertir selects a IDs antes de guardar
-        def preparar_datos_para_guardar(datos):
-            # Convertir empresa_sel a empresa_id si es admin
-            if session_state.role == "admin" and "empresa_sel" in datos:
-                empresa_sel = datos.get("empresa_sel", "")
-                if empresa_sel and empresa_sel in empresas_dict:
-                    datos["empresa_id"] = empresas_dict[empresa_sel]
-                datos.pop("empresa_sel", None)
-            elif session_state.role == "gestor":
-                # Para gestor, usar su empresa automáticamente
-                datos["empresa_id"] = session_state.user.get("empresa_id")
-            
-            # NO filtrar valores vacíos aquí - dejar que el usuario pueda limpiar campos
-            return datos
-
-        def guardar_wrapper(tutor_id, datos):
-            datos = preparar_datos_para_guardar(datos)
-            return guardar_tutor(tutor_id, datos)
-            
-        def crear_wrapper(datos):
-            datos = preparar_datos_para_guardar(datos)
-            return crear_tutor(datos)
-
-        # Mensaje informativo según rol
-        if session_state.role == "gestor":
-            st.info("💡 **Información:** Como gestor, solo puedes gestionar tutores de tu empresa.")
-        else:
-            st.info("💡 **Información:** Los tutores deben tener CV y especialización para cumplir requisitos FUNDAE.")
+        # =========================
+        # TABLA PRINCIPAL - ESTILO GRUPOS.PY
+        # =========================
         
-        # =========================
-        # TABLA PRINCIPAL CON GESTIÓN CV INTEGRADA
-        # =========================
-        listado_con_ficha(
-            df=df_display,
-            columnas_visibles=columnas_visibles,
-            titulo="Tutor",
-            on_save=guardar_wrapper,
-            on_create=None,  # Creación abajo
-            id_col="id",
-            campos_select=campos_select,
-            campos_readonly=campos_readonly,
-            campos_dinamicos=get_campos_dinamicos,
-            campos_obligatorios=campos_obligatorios,
-            allow_creation=False,
-            campos_help=campos_help,
-            search_columns=[]  # Sin búsqueda - ya filtrado arriba
-        )
+        # Mostrar tabla simple como en grupos.py
+        st.markdown("### Selecciona un tutor para editarlo:")
+        
+        try:
+            event = st.dataframe(
+                df_display[columnas_visibles],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="tabla_tutores_principal"
+            )
+        except Exception as e:
+            st.error(f"❌ Error al mostrar tabla: {e}")
+            return
+
+        # Manejar selección para edición
+        if event and hasattr(event, 'selection') and event.selection.get("rows"):
+            try:
+                selected_idx = event.selection["rows"][0]
+                if selected_idx < len(df_display):
+                    tutor_seleccionado = df_display.iloc[selected_idx]
+                    
+                    # Mostrar formulario de edición manual
+                    st.markdown("---")
+                    st.markdown("### ✏️ Editar Tutor Seleccionado")
+                    st.caption(f"Editando: {tutor_seleccionado['nombre']} {tutor_seleccionado.get('apellidos', '')}")
+                    
+                    with st.form(f"form_editar_tutor_{tutor_seleccionado['id']}", clear_on_submit=False):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            nombre = st.text_input("Nombre *", value=tutor_seleccionado.get('nombre', ''), key="edit_nombre")
+                            email = st.text_input("Email", value=tutor_seleccionado.get('email', ''), key="edit_email")
+                            tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], 
+                                                    index=["", "interno", "externo"].index(tutor_seleccionado.get('tipo_tutor', '')) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
+                                                    key="edit_tipo")
+                            nif = st.text_input("NIF/DNI", value=tutor_seleccionado.get('nif', ''), key="edit_nif")
+                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key="edit_direccion")
+                        
+                        with col2:
+                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key="edit_apellidos")
+                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key="edit_telefono")
+                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
+                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
+                                                      key="edit_especialidad")
+                            tipo_documento = st.selectbox("Tipo documento", ["", "NIF", "Pasaporte", "NIE"], 
+                                                        index=["", "NIF", "Pasaporte", "NIE"].index(tutor_seleccionado.get('tipo_documento', '')) if tutor_seleccionado.get('tipo_documento') in ["", "NIF", "Pasaporte", "NIE"] else 0,
+                                                        key="edit_tipo_doc")
+                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key="edit_ciudad")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            provincia = st.text_input("Provincia", value=tutor_seleccionado.get('provincia', ''), key="edit_provincia")
+                            titulacion = st.text_area("Titulación", value=tutor_seleccionado.get('titulacion', ''), key="edit_titulacion")
+                        with col4:
+                            codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key="edit_cp")
+                            if session_state.role == "admin" and empresas_dict:
+                                empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), 
+                                                         index=([""] + sorted(empresas_dict.keys())).index(tutor_seleccionado.get('empresa_sel', '')) if tutor_seleccionado.get('empresa_sel') in ([""] + sorted(empresas_dict.keys())) else 0,
+                                                         key="edit_empresa")
+                        
+                        if st.form_submit_button("💾 Guardar Cambios", type="primary"):
+                            datos_editados = {
+                                "nombre": nombre,
+                                "apellidos": apellidos,
+                                "email": email,
+                                "telefono": telefono,
+                                "nif": nif,
+                                "tipo_tutor": tipo_tutor,
+                                "especialidad": especialidad,
+                                "tipo_documento": tipo_documento,
+                                "direccion": direccion,
+                                "ciudad": ciudad,
+                                "provincia": provincia,
+                                "codigo_postal": codigo_postal,
+                                "titulacion": titulacion
+                            }
+                            
+                            if session_state.role == "admin" and empresas_dict:
+                                datos_editados["empresa_sel"] = empresa_sel
+                            
+                            if guardar_tutor(tutor_seleccionado['id'], datos_editados):
+                                st.rerun()
+                                
+            except Exception as e:
+                st.error(f"❌ Error al procesar selección: {e}")
+
+        st.divider()
 
         # =========================
         # CREAR NUEVO TUTOR (DEBAJO DE LA TABLA)
         # =========================
         if puede_modificar:
             with st.expander("➕ Crear Nuevo Tutor", expanded=False):
-                # Formulario manual sin listado_con_ficha para evitar elementos extraños
+                # Formulario manual completamente sin componentes externos
                 with st.form("crear_tutor_form", clear_on_submit=True):
                     st.markdown("**Datos del nuevo tutor**")
                     
@@ -472,7 +459,6 @@ def main(supabase, session_state):
                         tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], key="nuevo_tipo")
                         nif = st.text_input("NIF/DNI", key="nuevo_nif")
                         direccion = st.text_input("Dirección", key="nuevo_direccion")
-                        experiencia_profesional = st.text_input("Experiencia profesional (años)", key="nuevo_exp_prof")
                     
                     with col2:
                         apellidos = st.text_input("Apellidos *", key="nuevo_apellidos")
@@ -480,7 +466,6 @@ def main(supabase, session_state):
                         especialidad = st.selectbox("Especialidad", especialidades_opciones, key="nuevo_especialidad")
                         tipo_documento = st.selectbox("Tipo documento", ["", "NIF", "Pasaporte", "NIE"], key="nuevo_tipo_doc")
                         ciudad = st.text_input("Ciudad", key="nuevo_ciudad")
-                        experiencia_docente = st.text_input("Experiencia docente (años)", key="nuevo_exp_doc")
                     
                     col3, col4 = st.columns(2)
                     with col3:
@@ -505,15 +490,13 @@ def main(supabase, session_state):
                             "ciudad": ciudad,
                             "provincia": provincia,
                             "codigo_postal": codigo_postal,
-                            "titulacion": titulacion,
-                            "experiencia_profesional": experiencia_profesional,
-                            "experiencia_docente": experiencia_docente
+                            "titulacion": titulacion
                         }
                         
                         if session_state.role == "admin" and empresas_dict:
                             datos_nuevos["empresa_sel"] = empresa_sel
                         
-                        if crear_wrapper(datos_nuevos):
+                        if crear_tutor(datos_nuevos):
                             st.rerun()
 
         st.divider()
@@ -594,11 +577,6 @@ def main(supabase, session_state):
                                             if success:
                                                 st.rerun()
                         
-                        with col_btn3:
-                            if st.button("🗑️", key=f"delete_cv_{tutor['id']}", help="Eliminar CV"):
-                                if eliminar_cv_tutor(supabase, data_service, tutor["id"]):
-                                    st.rerun()
-
     # =========================
     # EXPORTACIÓN Y RESUMEN
     # =========================
