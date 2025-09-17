@@ -321,14 +321,9 @@ def main(supabase, session_state):
     ]
 
     campos_select = {
-        "tipo_tutor": ["", "interno", "externo"],
-        "especialidad": especialidades_opciones,
-        "tipo_documento": [
-             "", "Seleccionar tipo",
-             "NIF",
-             "Pasaporte", 
-             "NIE"
-        ]
+    "tipo_tutor": ["", "interno", "externo"],
+    "especialidad": especialidades_opciones,
+    "tipo_documento": ["", "NIF", "NIE", "Pasaporte"]
     }
     
     if session_state.role == "admin" and empresas_dict:
