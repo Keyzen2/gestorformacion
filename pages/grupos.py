@@ -555,7 +555,20 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 help="Código postal de impartición",
                 key="form_cp"
             )
+
+            responsable = st.text_input(
+                "Responsable del Grupo *",
+                value=datos_grupo.get("responsable", ""),
+                help="Persona responsable del grupo (obligatorio FUNDAE)",
+                key="form_responsable"
+            )
             
+            telefono_contacto = st.text_input(
+                "Teléfono de Contacto *",
+                value=datos_grupo.get("telefono_contacto", ""),
+                help="Teléfono de contacto del responsable (obligatorio FUNDAE)",
+                key="form_telefono_contacto"
+            )
             # CORRECCIÓN: Manejar valores None y 0 correctamente
             n_participantes_actual = datos_grupo.get("n_participantes_previstos")
             if n_participantes_actual is None or n_participantes_actual == 0:
