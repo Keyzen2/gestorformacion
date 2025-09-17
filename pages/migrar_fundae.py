@@ -1,5 +1,5 @@
 import streamlit as st
-from utils.fundae_helpers import actualizar_tipo_documento_tutores, migrar_horarios_existentes
+from utils import actualizar_tipo_documento_tutores, migrar_horarios_existentes
 
 def main(supabase, session_state):
     st.title("🔧 Migración FUNDAE")
