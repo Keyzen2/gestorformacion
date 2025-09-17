@@ -112,6 +112,14 @@ def main(supabase, session_state):
         df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id_filter]
 
     # =========================
+    # Definir permisos de creación
+    # =========================
+    puede_crear = (
+        session_state.role == "admin" or
+        (session_state.role == "gestor" and empresa_id)
+    )
+
+    # =========================
     # Funciones CRUD para participantes/usuarios
     # =========================
     def crear_participante(datos_nuevos):
@@ -386,11 +394,6 @@ def main(supabase, session_state):
             return crear_participante(datos)
 
         # Usar listado_con_ficha
-        puede_crear = (
-            session_state.role == "admin" or
-            (session_state.role == "gestor" and empresa_id)
-        )
-
         listado_con_ficha(
             df=df_display,
             columnas_visibles=columnas_visibles,
@@ -657,55 +660,128 @@ def mostrar_seccion_diplomas_mejorada(supabase, session_state, empresa_id):
                                     st.session_state[confirmar_key] = True
                                     st.warning("⚠️ Confirmar eliminación")
                     else:
-                        # Subir diploma
+                        # Subir diploma con mejoras para móvil
+                        st.markdown("**📤 Subir Diploma**")
+                        
+                        # Información para móviles
+                        st.info("📱 **Para móviles:** Asegúrate de que el archivo PDF esté guardado en tu dispositivo y sea menor a 10MB")
+                        
                         diploma_file = st.file_uploader(
-                            "📄 Subir diploma (PDF)",
+                            "Seleccionar diploma (PDF)",
                             type=["pdf"],
                             key=f"upload_diploma_{participante['id']}",
                             help="Solo archivos PDF, máximo 10MB"
                         )
                         
-                        if diploma_file:
+                        # Mostrar información del archivo seleccionado
+                        if diploma_file is not None:
                             file_size_mb = diploma_file.size / (1024 * 1024)
+                            
+                            # Información detallada del archivo
+                            col_info, col_size = st.columns(2)
+                            with col_info:
+                                st.success(f"✅ **Archivo:** {diploma_file.name}")
+                            with col_size:
+                                color = "🔴" if file_size_mb > 10 else "🟢"
+                                st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
+                            
                             if file_size_mb > 10:
                                 st.error("❌ Archivo muy grande. Máximo 10MB.")
+                                st.info("💡 **Sugerencia:** Usa una app para comprimir PDF o reduce la calidad de las imágenes")
                             else:
-                                if st.button("📤 Subir", key=f"btn_upload_{participante['id']}", type="primary"):
+                                # Botón de subida mejorado
+                                if st.button(
+                                    f"📤 Subir diploma de {participante['nombre']}", 
+                                    key=f"btn_upload_{participante['id']}", 
+                                    type="primary",
+                                    use_container_width=True
+                                ):
                                     try:
-                                        # Convertir UploadedFile a bytes
-                                        file_bytes = diploma_file.read()
-                                        diploma_file.seek(0)  # Reset para futuras lecturas
-                                        
-                                        # Generar nombre único
-                                        timestamp = int(datetime.now().timestamp())
-                                        filename = f"diploma_{participante['id']}_{timestamp}.pdf"
-                                        
                                         with st.spinner("📤 Subiendo diploma..."):
-                                            # Subir a bucket de Supabase
-                                            upload_res = supabase.storage.from_("diplomas").upload(
-                                                filename, file_bytes, file_options={"content-type": "application/pdf"}
-                                            )
+                                            # Validar que el archivo se puede leer
+                                            try:
+                                                file_bytes = diploma_file.getvalue()  # Usar getvalue() en lugar de read()
+                                                if len(file_bytes) == 0:
+                                                    raise ValueError("El archivo está vacío")
+                                            except Exception as e:
+                                                st.error(f"❌ Error al leer el archivo: {e}")
+                                                st.info("🔄 Intenta seleccionar el archivo nuevamente")
+                                                continue
                                             
-                                            if upload_res.error:
-                                                st.error(f"Error al subir archivo: {upload_res.error}")
-                                            else:
+                                            # Generar nombre único
+                                            timestamp = int(datetime.now().timestamp())
+                                            filename = f"diploma_{participante['id']}_{timestamp}.pdf"
+                                            
+                                            # Subir a bucket de Supabase
+                                            try:
+                                                upload_res = supabase.storage.from_("diplomas").upload(
+                                                    filename, 
+                                                    file_bytes, 
+                                                    file_options={
+                                                        "content-type": "application/pdf",
+                                                        "cache-control": "3600",
+                                                        "upsert": "true"  # Permitir sobrescribir
+                                                    }
+                                                )
+                                                
+                                                if upload_res.error:
+                                                    raise Exception(f"Error de subida: {upload_res.error.message}")
+                                                
                                                 # Obtener URL pública
                                                 public_url = supabase.storage.from_("diplomas").get_public_url(filename)
                                                 
                                                 # Guardar en tabla diplomas
-                                                supabase.table("diplomas").insert({
+                                                diploma_insert = supabase.table("diplomas").insert({
                                                     "participante_id": participante["id"],
                                                     "grupo_id": participante["grupo_id"],
                                                     "url": public_url,
                                                     "archivo_nombre": diploma_file.name
                                                 }).execute()
                                                 
-                                                st.success("✅ Diploma subido correctamente.")
+                                                if diploma_insert.error:
+                                                    raise Exception(f"Error al guardar en BD: {diploma_insert.error.message}")
+                                                
+                                                st.success("✅ Diploma subido correctamente!")
                                                 st.balloons()
+                                                
+                                                # Mostrar link directo
+                                                st.markdown(f"🔗 [Ver diploma subido]({public_url})")
+                                                
+                                                # Recargar página después de 2 segundos
+                                                import time
+                                                time.sleep(2)
                                                 st.rerun()
+                                                
+                                            except Exception as upload_error:
+                                                st.error(f"❌ Error al subir archivo: {upload_error}")
+                                                
+                                                # Sugerencias específicas para móviles
+                                                st.info("""
+                                                🔧 **Soluciones para móviles:**
+                                                - Cierra otras apps para liberar memoria
+                                                - Usa WiFi en lugar de datos móviles
+                                                - Intenta desde un navegador diferente
+                                                - Reduce el tamaño del PDF si es muy grande
+                                                """)
                                     
                                     except Exception as e:
-                                        st.error(f"❌ Error al subir diploma: {e}")
+                                        st.error(f"❌ Error general: {e}")
+                                        st.info("🔄 Recarga la página e intenta nuevamente")
+                        else:
+                            st.info("📂 Selecciona un archivo PDF para continuar")
+                            
+                            # Instrucciones específicas para móviles
+                            with st.expander("📱 Ayuda para dispositivos móviles"):
+                                st.markdown("""
+                                **Si tienes problemas desde móvil:**
+                                1. **Asegúrate** de que el PDF está guardado en tu dispositivo
+                                2. **Usa Chrome o Safari** (navegadores recomendados)
+                                3. **Libera memoria** cerrando otras apps
+                                4. **Conecta a WiFi** para mejor velocidad
+                                5. **Tamaño máximo:** 10MB por archivo
+                                
+                                **Alternativa:** Usa un ordenador si continúan los problemas
+                                """)
         
         # Estadísticas finales
         if participantes_filtrados:
