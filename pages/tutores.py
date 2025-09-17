@@ -295,7 +295,7 @@ if session_state.role == "admin" and empresas_dict:
                 return False
                 
         except Exception as e:
-           st.error(f"❌ Error al crear tutor: {e}")
+            st.error(f"❌ Error al crear tutor: {e}")
             return False
 
     =========================
