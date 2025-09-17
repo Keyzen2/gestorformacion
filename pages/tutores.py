@@ -376,10 +376,9 @@ if session_state.role == "admin" and empresas_dict:
                 selection_mode="single-row",
                 key="tabla_tutores_principal"
             )
-            
-            except Exception as e:
-                st.error(f"❌ Error al mostrar tabla: {e}")
-                return
+        except Exception as e:
+            st.error(f"❌ Error al mostrar tabla: {e}")
+            return
 
         # Manejar selección para edición
         if event and hasattr(event, 'selection') and event.selection.get("rows"):
