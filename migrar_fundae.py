@@ -3,9 +3,12 @@ from supabase import create_client
 from utils.fundae_helpers import actualizar_tipo_documento_tutores, migrar_horarios_existentes
 
 # Configurar Supabase
-SUPABASE_URL = "tu_url_de_supabase"
-SUPABASE_KEY = "tu_key_de_supabase" 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+SUPABASE_URL = st.secrets["SUPABASE_URL"]
+SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
+SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+
+supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 print("Iniciando migración FUNDAE...")
 
