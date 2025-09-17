@@ -80,7 +80,7 @@ def main(supabase, session_state):
     # =========================
     # FORMULARIO DE EDICIÓN/CREACIÓN
     # =========================
-    if "participante_editando" in st.session_state:
+    if "participante_editando" in st.session_state and st.session_state.participante_editando:
         participante_id = st.session_state.participante_editando
         mostrar_formulario_participante(
             supabase, session_state, data_service, grupos_service,
@@ -217,6 +217,12 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
         participante_data = {}
     else:
         st.markdown("### ✏️ Editar Participante")
+
+        if not participante_id or str(participante_id).lower() == "none":
+            st.error("❌ ID de participante inválido.")
+            st.session_state.participante_editando = None
+            return
+        
         try:
             result = supabase.table("participantes").select("*").eq("id", participante_id).limit(1).execute()
             participante_data = result.data[0] if result.data else {}
