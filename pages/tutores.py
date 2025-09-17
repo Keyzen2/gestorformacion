@@ -295,11 +295,11 @@ def main(supabase, session_state):
     # CONFIGURACIÓN DE CAMPOS PARA LISTADO_CON_FICHA
     # =========================
     def get_campos_dinamicos(datos):
-        """Campos a mostrar dinámicamente con preparación de datos."""
+        """Campos a mostrar dinámicamente - SOLO campos que existen en BD."""
+        # Solo incluir campos que realmente existen en la tabla tutores
         campos_base = [
             "nombre", "apellidos", "nif", "email", "telefono",
             "tipo_tutor", "especialidad", "tipo_documento", "titulacion", 
-            "experiencia_profesional", "experiencia_docente",
             "direccion", "ciudad", "provincia", "codigo_postal"
         ]
         
