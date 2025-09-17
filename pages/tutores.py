@@ -291,7 +291,7 @@ def main(supabase, session_state):
         """Campos a mostrar dinámicamente."""
         campos_base = [
             "nombre", "apellidos", "nif", "email", "telefono",
-            "tipo_tutor", "especialidad", "titulacion", 
+            "tipo_tutor", "especialidad", "tipo_documento", "titulacion", 
             "experiencia_profesional", "experiencia_docente",
             "direccion", "ciudad", "provincia", "codigo_postal"
         ]
@@ -322,7 +322,13 @@ def main(supabase, session_state):
 
     campos_select = {
         "tipo_tutor": ["", "interno", "externo"],
-        "especialidad": especialidades_opciones
+        "especialidad": especialidades_opciones,
+        "tipo_documento": [
+            ("", "Seleccionar tipo"),
+            (10, "NIF"),
+            (20, "Pasaporte"), 
+            (60, "NIE")
+        ]
     }
     
     if session_state.role == "admin" and empresas_dict:
@@ -341,7 +347,8 @@ def main(supabase, session_state):
         "apellidos": "Apellidos del tutor (obligatorio)", 
         "email": "Email de contacto del tutor",
         "telefono": "Teléfono de contacto",
-        "nif": "NIF/DNI del tutor (opcional)",
+        "nif": "NIF/DNI del tutor (obligatorio para FUNDAE)",
+        "tipo_documento": "Tipo de documento de identidad (obligatorio FUNDAE)",
         "tipo_tutor": "Tipo: interno (empleado) o externo (colaborador) - obligatorio",
         "especialidad": "Área de especialización del tutor",
         "empresa_sel": "Empresa a la que pertenece (solo admin)",
