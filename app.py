@@ -5,13 +5,6 @@ from utils import get_ajustes_app
 from supabase import create_client
 from datetime import datetime
 import pandas as pd
-from scriptwarning import run_fix
-
-# Ejecutar solo la primera vez
-if not os.path.exists(".script_fixed"):
-    run_fix()
-    with open(".script_fixed", "w") as f:
-        f.write("done")
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
