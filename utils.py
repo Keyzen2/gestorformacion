@@ -1103,10 +1103,34 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
         for tg in tutores.data or []:
             tutor = tg.get("tutor")
             if tutor:
-                # Detectar tipo automáticamente
-                tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
+                # Detectar tipo automáticamente si no está definido
+                tipo_doc = tutor.get("tipo_documento")
+                if not tipo_doc or tipo_doc == "":
+                    tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
+                else:
+                    # Convertir texto a código si es necesario
+                    tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
+                    tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(tutor.get("nif", "")))
+                
                 tutor_fundae = {**tutor, "tipo_documento_fundae": tipo_doc}
                 tutores_fundae.append(tutor_fundae)
+        
+        # Participantes con tipos de documento automáticos
+        participantes = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute()
+        
+        participantes_fundae = []
+        for part in participantes.data or []:
+            # Detectar tipo automáticamente si no está definido
+            tipo_doc = part.get("tipo_documento")
+            if not tipo_doc or tipo_doc == "":
+                tipo_doc = detectar_tipo_documento_fundae(part.get("nif", ""))
+            else:
+                # Convertir texto a código si es necesario
+                tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
+                tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(part.get("nif", "")))
+            
+            part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
+            participantes_fundae.append(part_fundae)
         
         # Empresas participantes
         empresas = supabase.table("empresas_grupos").select("""
@@ -1115,10 +1139,32 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
         
         empresas_fundae = [eg["empresa"] for eg in empresas.data or [] if eg.get("empresa")]
         
+        # Validar que hay datos mínimos requeridos
+        errores_adicionales = []
+        if not tutores_fundae:
+            errores_adicionales.append("El grupo debe tener al menos un tutor asignado")
+        if not empresas_fundae:
+            errores_adicionales.append("El grupo debe tener al menos una empresa participante")
+        if not participantes_fundae:
+            errores_adicionales.append("El grupo debe tener participantes inscritos")
+        
+        # Verificar datos faltantes en participantes
+        for i, part in enumerate(participantes_fundae):
+            if not part.get("nif"):
+                errores_adicionales.append(f"Participante {i+1}: falta NIF/documento")
+            if not part.get("sexo"):
+                errores_adicionales.append(f"Participante {i+1}: falta sexo")
+            if not part.get("fecha_nacimiento"):
+                errores_adicionales.append(f"Participante {i+1}: falta fecha de nacimiento")
+        
+        if errores_adicionales:
+            return None, errores_adicionales
+        
         return {
             "grupo": grupo_data,
             "tutores": tutores_fundae,
-            "empresas": empresas_fundae
+            "empresas": empresas_fundae,
+            "participantes": participantes_fundae
         }, []
         
     except Exception as e:
