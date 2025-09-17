@@ -83,30 +83,6 @@ def main(supabase, session_state):
 
     st.divider()
 
-    # =========================
-    # FILTROS DE BÚSQUEDA ÚNICOS
-    # =========================
-    st.markdown("### 🔍 Filtros")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        query = st.text_input("🔍 Buscar por nombre o código", key="busqueda_acciones")
-    with col2:
-        modalidades = ["Todas", "Presencial", "Online", "Mixta"]
-        modalidad_filter = st.selectbox("Modalidad", modalidades, key="filtro_modalidad")
-
-    # Aplicar filtros
-    if query and not df_filtered.empty:
-        q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered.get("nombre", pd.Series(dtype=str)).str.lower().str.contains(q_lower, na=False) |
-            df_filtered.get("codigo_accion", pd.Series(dtype=str)).str.lower().str.contains(q_lower, na=False) |
-            df_filtered.get("area_profesional", pd.Series(dtype=str)).str.lower().str.contains(q_lower, na=False)
-        ]
-
-    if modalidad_filter != "Todas" and not df_filtered.empty and "modalidad" in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered["modalidad"] == modalidad_filter]
-
     allow_creation = grupos_service.can_modify_data()
 
     # =========================
@@ -374,14 +350,14 @@ def main(supabase, session_state):
                 ), axis=1
             )
 
-        # MOSTRAR SIN FECHAS
+        # MOSTRAR SIN FECHAS - Delegar búsqueda al componente
         columnas_visibles = [
             "codigo_accion", "nombre", "modalidad", "nivel", 
             "num_horas", "certificado_profesionalidad", "area_profesional"
         ]
 
         listado_con_ficha(
-            df_display,
+            df_filtered,  # Usar datos ya filtrados por rol
             columnas_visibles=columnas_visibles,
             titulo="Acción Formativa",
             on_save=guardar_accion,
@@ -391,6 +367,7 @@ def main(supabase, session_state):
             campos_textarea=campos_textarea,
             campos_dinamicos=get_campos_dinamicos,
             campos_obligatorios=["codigo_accion", "nombre"],
+            search_columns=["nombre", "codigo_accion", "area_profesional", "modalidad"],
             campos_readonly=["id", "created_at"],
             allow_creation=False,  # Deshabilitado porque lo manejamos arriba
             campos_help=campos_help
