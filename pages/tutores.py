@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from utils import export_csv, validar_dni_cif
-from components.listado_con_ficha import listado_con_ficha
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
