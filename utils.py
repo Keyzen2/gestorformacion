@@ -1162,6 +1162,35 @@ def actualizar_tipo_documento_tutores(supabase):
         print(f"Error en migración de tipos de documento: {e}")
         return False
         
+def generar_xml_inicio_grupo_mejorado(datos_xml):
+    """
+    Genera XML de inicio de grupo usando datos validados.
+    
+    Args:
+        datos_xml: Datos estructurados del grupo, tutores y empresas
+    
+    Returns:
+        str: XML formateado para FUNDAE
+    """
+    try:
+        grupo = datos_xml["grupo"]
+        tutores = datos_xml["tutores"]
+        empresas = datos_xml["empresas"]
+        
+        # Aquí iría la generación del XML usando los datos estructurados
+        # Por ahora, usar la función existente como base y mejorarla gradualmente
+        
+        # Obtener participantes del grupo
+        participantes_res = supabase.table("participantes").select("*").eq("grupo_id", grupo["id"]).execute()
+        participantes = participantes_res.data or []
+        
+        # Llamar a la función existente (temporal, mientras la mejoramos)
+        return generar_xml_inicio_grupo(grupo, participantes)
+        
+    except Exception as e:
+        print(f"Error al generar XML mejorado: {e}")
+        return None
+        
 def detectar_tipo_documento_fundae(nif):
     """Detecta automáticamente el tipo de documento para XML FUNDAE."""
     if not nif:
