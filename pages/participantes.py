@@ -782,7 +782,7 @@ def mostrar_importacion_masiva(supabase, session_state, data_service, empresas_d
                 with col1:
                     st.metric("📊 Total filas", len(df_import))
                 with col2:
-                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+, na=False).sum()
+                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+$', na=False).sum()
                     st.metric("📧 Emails válidos", emails_validos)
                 with col3:
                     emails_duplicados = df_import["email"].duplicated().sum()
@@ -866,7 +866,7 @@ def procesar_importacion_masiva(supabase, session_state, df_import, empresas_dic
             apellidos = str(row.get("apellidos", "")).strip()
             
             # Validar email
-            if not re.match(r'^[^@]+@[^@]+\.[^@]+, email):
+            if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
                 resultados["errores"] += 1
                 resultados["detalles_errores"].append(f"Fila {index + 2}: Email inválido - {email}")
                 continue
