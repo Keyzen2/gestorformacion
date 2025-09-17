@@ -49,24 +49,18 @@ def main(supabase, session_state):
                 height=80,
                 help="Aparece en la parte inferior de todas las páginas"
             )
-            
-            email_soporte = st.text_input(
-                "Email de soporte técnico",
-                value=ajustes.get("email_soporte", ""),
-                help="Email de contacto para incidencias (opcional)"
-            )
 
         guardar_basico = st.form_submit_button("💾 Guardar configuración básica", use_container_width=True)
         
         if guardar_basico:
             try:
+                # Solo usar campos que existen en la tabla
                 update_ajustes_app(supabase, {
                     "nombre_app": nombre_app,
                     "mensaje_login": mensaje_login,
-                    "mensaje_footer": mensaje_footer,
-                    "email_soporte": email_soporte
+                    "mensaje_footer": mensaje_footer
+                    # Quitar email_soporte si no existe en la tabla
                 })
-                # Limpiar cache antes de mostrar éxito
                 st.cache_data.clear()
                 st.success("✅ Configuración básica actualizada")
                 st.rerun()
