@@ -1,510 +1,246 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import uuid
-from utils import export_csv, validar_dni_cif
-from components.listado_con_ficha import listado_con_ficha
+from io import BytesIO
+from utils import export_csv
 from services.data_service import get_data_service
+from services.grupos_service import get_grupos_service
+
 
 def main(supabase, session_state):
-    st.title("👨‍🏫 Gestión de Tutores")
-    st.caption("Gestión de tutores internos y externos vinculados a grupos formativos")
+    st.markdown("## 👨‍🏫 Tutores")
+    st.caption("Gestión de tutores y sus currículums.")
 
-    if session_state.role not in {"admin", "gestor"}:
+    if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
+    # Inicializar servicios
+    data_service = get_data_service(supabase, session_state)
+    grupos_service = get_grupos_service(supabase, session_state)
+    empresa_id = session_state.user.get("empresa_id")
+
     # =========================
-    # INICIALIZAR DATA SERVICE
+    # Cargar tutores
     # =========================
     try:
-        data_service = get_data_service(supabase, session_state)
+        df_tutores = data_service.get_tutores_completos()
     except Exception as e:
-        st.error(f"❌ Error al inicializar servicio de datos: {e}")
+        st.error(f"❌ Error al cargar tutores: {e}")
         return
 
     # =========================
-    # CARGAR DATOS
-    # =========================
-    with st.spinner("Cargando datos..."):
-        try:
-            df_tutores = data_service.get_tutores_completos()
-            
-            # Empresas para admin
-            empresas_dict = {}
-            if session_state.role == "admin":
-                try:
-                    empresas_dict = data_service.get_empresas_dict()
-                except Exception as e:
-                    st.warning(f"⚠️ Error al cargar empresas: {e}")
-        except Exception as e:
-            st.error(f"❌ Error al cargar tutores: {e}")
-            return
-
-    # =========================
-    # MÉTRICAS UNIFICADAS
+    # Métricas básicas
     # =========================
     if not df_tutores.empty:
-        # Calcular métricas
-        total_tutores = len(df_tutores)
-        internos = len(df_tutores[df_tutores["tipo_tutor"] == "interno"])
-        externos = len(df_tutores[df_tutores["tipo_tutor"] == "externo"])
-        con_cv = len(df_tutores[df_tutores["cv_url"].notna() & (df_tutores["cv_url"] != "")])
-        
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("👥 Total Tutores", total_tutores)
+            st.metric("👨‍🏫 Total Tutores", len(df_tutores))
         with col2:
-            st.metric("🏢 Internos", internos)
+            con_cv = len(df_tutores[df_tutores["cv_url"].notna()])
+            st.metric("📂 Con Currículum", con_cv)
         with col3:
-            st.metric("🌐 Externos", externos)
-        with col4:
-            st.metric("📄 Con CV", con_cv)
+            este_mes = len(df_tutores[
+                pd.to_datetime(df_tutores["created_at"], errors="coerce").dt.month == datetime.now().month
+            ])
+            st.metric("🆕 Nuevos este mes", este_mes)
 
     st.divider()
 
     # =========================
-    # Definir permisos de creación/edición
-    # =========================
-    puede_modificar = data_service.can_modify_data()
-
-    # =========================
-    # FUNCIONES CRUD OPTIMIZADAS
-    # =========================
-    def guardar_tutor(tutor_id, datos_editados):
-        """Actualiza un tutor existente."""
-        try:
-            # Validaciones básicas
-            if not datos_editados.get("nombre") or not datos_editados.get("apellidos"):
-                st.error("⚠️ Nombre y apellidos son obligatorios.")
-                return False
-                
-            if not datos_editados.get("tipo_tutor"):
-                st.error("⚠️ El tipo de tutor es obligatorio.")
-                return False
-                
-            # Validar email
-            email = datos_editados.get("email")
-            if email and "@" not in email:
-                st.error("⚠️ Email no válido.")
-                return False
-                
-            # Validar NIF
-            nif = datos_editados.get("nif")
-            if nif and not validar_dni_cif(nif):
-                st.error("⚠️ NIF/DNI no válido.")
-                return False
-
-            # Procesar empresa según rol
-            if session_state.role == "admin":
-                empresa_sel = datos_editados.pop("empresa_sel", "")
-                if empresa_sel and empresa_sel in empresas_dict:
-                    datos_editados["empresa_id"] = empresas_dict[empresa_sel]
-                else:
-                    datos_editados["empresa_id"] = None
-            elif session_state.role == "gestor":
-                datos_editados["empresa_id"] = session_state.user.get("empresa_id")
-
-            if not datos_editados.get("empresa_id"):
-                st.error("⚠️ Los tutores deben tener una empresa asignada.")
-                return False
-
-            # Manejar subida de CV - CORREGIDO
-            if "cv_file" in datos_editados and datos_editados["cv_file"] is not None:
-                cv_file = datos_editados.pop("cv_file")
-                try:
-                    # Validar archivo
-                    if cv_file.size > 10 * 1024 * 1024:  # 10MB
-                        st.error("❌ El archivo CV es demasiado grande (máximo 10MB)")
-                        return False
-                    
-                    # Generar path del archivo
-                    empresa_id_tutor = datos_editados.get("empresa_id")
-                    file_extension = cv_file.name.split(".")[-1] if "." in cv_file.name else "pdf"
-                    timestamp = int(datetime.now().timestamp())
-                    file_path = f"empresa_{empresa_id_tutor}/tutores/cv_{tutor_id}_{timestamp}.{file_extension}"
-                    
-                    with st.spinner("📤 Subiendo CV..."):
-                        # Convertir archivo a bytes
-                        file_bytes = cv_file.getvalue()
-                        
-                        # Subir archivo
-                        upload_res = supabase.storage.from_("curriculums").upload(
-                            file_path,
-                            file_bytes,
-                            file_options={
-                                "content-type": cv_file.type,
-                                "cache-control": "3600",
-                                "upsert": "true"
-                            }
-                        )
-                        
-                        # Verificar si la subida fue exitosa
-                        if hasattr(upload_res, 'error') and upload_res.error:
-                            raise Exception(f"Error de subida: {upload_res.error}")
-                        
-                        # Obtener URL pública
-                        public_url = supabase.storage.from_("curriculums").get_public_url(file_path)
-                        datos_editados["cv_url"] = public_url
-                        
-                        st.success("✅ CV subido correctamente")
-                    
-                except Exception as e:
-                    st.error(f"❌ Error al subir CV: {e}")
-                    # Continuar sin CV si falla la subida
-                    datos_editados.pop("cv_url", None)
-
-            # Limpiar campos auxiliares
-            datos_limpios = {k: v for k, v in datos_editados.items() 
-                           if not k.endswith("_sel") and k != "cv_file"}
-
-            # Actualizar en base de datos
-            result = supabase.table("tutores").update(datos_limpios).eq("id", tutor_id).execute()
-            
-            if result and not (hasattr(result, 'error') and result.error):
-                # Limpiar cache
-                data_service.get_tutores_completos.clear()
-                st.success("✅ Tutor actualizado correctamente.")
-                return True
-            else:
-                st.error("❌ Error al actualizar tutor.")
-                return False
-                
-        except Exception as e:
-            st.error(f"❌ Error al guardar tutor: {e}")
-            return False
-
-    def crear_tutor(datos_nuevos):
-        """Crea un nuevo tutor."""
-        try:
-            # Validaciones básicas
-            if not datos_nuevos.get("nombre") or not datos_nuevos.get("apellidos"):
-                st.error("⚠️ Nombre y apellidos son obligatorios.")
-                return False
-                
-            if not datos_nuevos.get("tipo_tutor"):
-                st.error("⚠️ El tipo de tutor es obligatorio.")
-                return False
-
-            # Validar email
-            email = datos_nuevos.get("email")
-            if email and "@" not in email:
-                st.error("⚠️ Email no válido.")
-                return False
-                
-            # Validar NIF
-            nif = datos_nuevos.get("nif")
-            if nif and not validar_dni_cif(nif):
-                st.error("⚠️ NIF/DNI no válido.")
-                return False
-
-            # Procesar empresa según rol
-            if session_state.role == "admin":
-                empresa_sel = datos_nuevos.pop("empresa_sel", "")
-                if empresa_sel and empresa_sel in empresas_dict:
-                    datos_nuevos["empresa_id"] = empresas_dict[empresa_sel]
-                else:
-                    datos_nuevos["empresa_id"] = None
-            elif session_state.role == "gestor":
-                datos_nuevos["empresa_id"] = session_state.user.get("empresa_id")
-
-            if not datos_nuevos.get("empresa_id"):
-                st.error("⚠️ Los tutores deben tener una empresa asignada.")
-                return False
-
-            # Generar ID para el tutor
-            tutor_id = str(uuid.uuid4())
-            datos_nuevos["id"] = tutor_id
-
-            # Manejar subida de CV - CORREGIDO
-            if "cv_file" in datos_nuevos and datos_nuevos["cv_file"] is not None:
-                cv_file = datos_nuevos.pop("cv_file")
-                try:
-                    # Validar archivo
-                    if cv_file.size > 10 * 1024 * 1024:  # 10MB
-                        st.error("❌ El archivo CV es demasiado grande (máximo 10MB)")
-                        return False
-                    
-                    # Generar path del archivo
-                    empresa_id_tutor = datos_nuevos.get("empresa_id")
-                    file_extension = cv_file.name.split(".")[-1] if "." in cv_file.name else "pdf"
-                    timestamp = int(datetime.now().timestamp())
-                    file_path = f"empresa_{empresa_id_tutor}/tutores/cv_{tutor_id}_{timestamp}.{file_extension}"
-                    
-                    with st.spinner("📤 Subiendo CV..."):
-                        # Convertir archivo a bytes
-                        file_bytes = cv_file.getvalue()
-                        
-                        # Subir archivo
-                        upload_res = supabase.storage.from_("curriculums").upload(
-                            file_path,
-                            file_bytes,
-                            file_options={
-                                "content-type": cv_file.type,
-                                "cache-control": "3600",
-                                "upsert": "true"
-                            }
-                        )
-                        
-                        # Verificar si la subida fue exitosa
-                        if hasattr(upload_res, 'error') and upload_res.error:
-                            raise Exception(f"Error de subida: {upload_res.error}")
-                        
-                        # Obtener URL pública
-                        public_url = supabase.storage.from_("curriculums").get_public_url(file_path)
-                        datos_nuevos["cv_url"] = public_url
-                        
-                        st.success("✅ CV subido correctamente")
-                    
-                except Exception as e:
-                    st.error(f"❌ Error al subir CV: {e}")
-                    # Continuar sin CV si falla la subida
-                    datos_nuevos.pop("cv_url", None)
-
-            # Limpiar campos auxiliares
-            datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                           if not k.endswith("_sel") and k != "cv_file"}
-            
-            # Añadir timestamp
-            datos_limpios["created_at"] = datetime.utcnow().isoformat()
-
-            # Crear en base de datos
-            result = supabase.table("tutores").insert(datos_limpios).execute()
-            
-            if result and not (hasattr(result, 'error') and result.error):
-                # Limpiar cache
-                data_service.get_tutores_completos.clear()
-                st.success("✅ Tutor creado correctamente.")
-                return True
-            else:
-                st.error("❌ Error al crear tutor.")
-                return False
-                
-        except Exception as e:
-            st.error(f"❌ Error al crear tutor: {e}")
-            return False
-
-    # =========================
-    # CONFIGURACIÓN DE CAMPOS PARA LISTADO_CON_FICHA
-    # =========================
-    def get_campos_dinamicos(datos):
-        """Campos a mostrar dinámicamente."""
-        campos_base = [
-            "nombre", "apellidos", "nif", "email", "telefono",
-            "tipo_tutor", "especialidad", "tipo_documento", "titulacion", 
-            "experiencia_profesional", "experiencia_docente",
-            "direccion", "ciudad", "provincia", "codigo_postal"
-        ]
-        
-        # Solo admin puede seleccionar empresa
-        if session_state.role == "admin":
-            campos_base.insert(-1, "empresa_sel")
-        
-        # Archivo CV siempre al final
-        campos_base.append("cv_file")
-            
-        return campos_base
-
-    # Especialidades FUNDAE
-    especialidades_opciones = [
-        "", "Administración y Gestión", "Comercio y Marketing", 
-        "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
-        "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
-        "Química", "Imagen Personal", "Industrias Extractivas",
-        "Fabricación Mecánica", "Instalación y Mantenimiento", 
-        "Electricidad y Electrónica", "Energía y Agua", 
-        "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
-        "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
-        "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
-        "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
-        "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
-    ]
-
-    campos_select = {
-    "tipo_tutor": ["", "interno", "externo"],
-    "especialidad": especialidades_opciones,
-    "tipo_documento": ["", "NIF", "NIE", "Pasaporte"]
-    }
-    
-    if session_state.role == "admin" and empresas_dict:
-        empresas_opciones = [""] + sorted(empresas_dict.keys())
-        campos_select["empresa_sel"] = empresas_opciones
-
-    campos_readonly = ["id", "created_at", "cv_url"]
-    
-    # Configuración de archivos
-    campos_file = ["cv_file"]
-    
-    campos_obligatorios = ["nombre", "apellidos", "tipo_tutor"]
-    
-    campos_help = {
-        "nombre": "Nombre del tutor (obligatorio)",
-        "apellidos": "Apellidos del tutor (obligatorio)", 
-        "email": "Email de contacto del tutor",
-        "telefono": "Teléfono de contacto",
-        "nif": "NIF/DNI del tutor (obligatorio para FUNDAE)",
-        "tipo_documento": "Tipo de documento de identidad (obligatorio FUNDAE)",
-        "tipo_tutor": "Tipo: interno (empleado) o externo (colaborador) - obligatorio",
-        "especialidad": "Área de especialización del tutor",
-        "empresa_sel": "Empresa a la que pertenece (solo admin)",
-        "cv_file": "Subir CV del tutor (PDF, DOC o DOCX, máximo 10MB)",
-        "direccion": "Dirección completa",
-        "ciudad": "Ciudad de residencia",
-        "provincia": "Provincia",
-        "codigo_postal": "Código postal",
-        "titulacion": "Titulación académica del tutor",
-        "experiencia_profesional": "Años de experiencia profesional",
-        "experiencia_docente": "Años de experiencia en docencia/formación"
-    }
-
-    # =========================
-    # LISTADO PRINCIPAL CON LISTADO_CON_FICHA
+    # Listado de tutores
     # =========================
     st.markdown("### 📊 Listado de Tutores")
-    
+
     if df_tutores.empty:
-        st.info("ℹ️ No hay tutores registrados.")
+        st.info("📋 No hay tutores registrados.")
     else:
-        # Preparar datos para display
-        df_display = df_tutores.copy()
-        
-        # Convertir relaciones a campos de selección
-        if session_state.role == "admin" and empresas_dict:
-            # Mapear empresa_id a nombre para admin
-            df_display["empresa_sel"] = df_display["empresa_id"].map(
-                {v: k for k, v in empresas_dict.items()}
-            ).fillna("")
+        columnas = ["nif", "nombre", "apellidos", "email", "telefono", "especialidad"]
+        if session_state.role == "admin" and "empresa_nombre" in df_tutores.columns:
+            columnas.append("empresa_nombre")
+        if "cv_url" in df_tutores.columns:
+            columnas.append("cv_url")
 
-        # Columnas visibles en la tabla
-        columnas_visibles = [
-            "nombre", "apellidos", "email", "telefono",
-            "tipo_tutor", "especialidad"
-        ]
-        if "empresa_nombre" in df_display.columns:
-            columnas_visibles.append("empresa_nombre")
-
-        # Función para convertir selects a IDs antes de guardar
-        def preparar_datos_para_guardar(datos):
-            # Convertir empresa_sel a empresa_id si es admin
-            if session_state.role == "admin" and "empresa_sel" in datos:
-                empresa_sel = datos.get("empresa_sel", "")
-                if empresa_sel and empresa_sel in empresas_dict:
-                    datos["empresa_id"] = empresas_dict[empresa_sel]
-                datos.pop("empresa_sel", None)
-            elif session_state.role == "gestor":
-                # Para gestor, usar su empresa automáticamente
-                datos["empresa_id"] = session_state.user.get("empresa_id")
-            
-            return datos
-
-        def guardar_wrapper(tutor_id, datos):
-            datos = preparar_datos_para_guardar(datos)
-            return guardar_tutor(tutor_id, datos)
-            
-        def crear_wrapper(datos):
-            datos = preparar_datos_para_guardar(datos)
-            return crear_tutor(datos)
-
-        # Mensaje informativo según rol
-        if session_state.role == "gestor":
-            st.info("💡 **Información:** Como gestor, solo puedes gestionar tutores de tu empresa.")
-        else:
-            st.info("💡 **Información:** Los tutores deben tener CV y especialización para cumplir requisitos FUNDAE.")
-
-        # Usar listado_con_ficha con toda la funcionalidad integrada
-        listado_con_ficha(
-            df=df_display,
-            columnas_visibles=columnas_visibles,
-            titulo="Tutor",
-            on_save=guardar_wrapper,
-            on_create=crear_wrapper if puede_modificar else None,
-            id_col="id",
-            campos_select=campos_select,
-            campos_readonly=campos_readonly,
-            campos_file=campos_file,
-            campos_dinamicos=get_campos_dinamicos,
-            campos_obligatorios=campos_obligatorios,
-            allow_creation=puede_modificar,
-            campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "especialidad"]
+        event = st.dataframe(
+            df_tutores[columnas],
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
         )
+
+        if event.selection.rows:
+            selected_idx = event.selection.rows[0]
+            tutor_seleccionado = df_tutores.iloc[selected_idx]
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                if st.button("✏️ Editar Tutor", type="primary", use_container_width=True):
+                    st.session_state.tutor_editando = tutor_seleccionado["id"]
+                    st.rerun()
 
     st.divider()
 
     # =========================
-    # EXPORTACIÓN Y RESUMEN
+    # Crear nuevo tutor
+    # =========================
+    if session_state.role in ["admin", "gestor"]:
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("➕ Crear Nuevo Tutor", type="primary", use_container_width=True):
+                st.session_state.tutor_editando = "nuevo"
+                st.rerun()
+
+    # =========================
+    # Formulario de edición/creación
+    # =========================
+    if hasattr(st.session_state, 'tutor_editando') and st.session_state.tutor_editando:
+        mostrar_formulario_tutor(supabase, session_state, data_service, st.session_state.tutor_editando)
+
+    # =========================
+    # Bloque de gestión de currículums
+    # =========================
+    if session_state.role in ["admin", "gestor"]:
+        st.divider()
+        mostrar_gestion_curriculums(supabase, df_tutores, empresa_id)
+
+    # =========================
+    # Exportación
     # =========================
     if not df_tutores.empty:
-        with st.expander("📊 Exportar y Resumen", expanded=False):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.button("📥 Exportar Tutores CSV", use_container_width=True):
-                    export_csv(df_tutores, "tutores_export")
-                    
-            with col2:
-                st.markdown("**Resumen de tutores:**")
-                st.write(f"- Total tutores: {len(df_tutores)}")
-                
-                if len(df_tutores) > 0:
-                    internos_pct = (len(df_tutores[df_tutores["tipo_tutor"] == "interno"]) / len(df_tutores)) * 100
-                    st.write(f"- Tutores internos: {internos_pct:.1f}%")
-                    
-                    con_cv_pct = (len(df_tutores[df_tutores["cv_url"].notna() & (df_tutores["cv_url"] != "")]) / len(df_tutores)) * 100
-                    st.write(f"- Con CV subido: {con_cv_pct:.1f}%")
+        st.divider()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📊 Exportar a CSV"):
+                export_csv(df_tutores, filename="tutores.csv")
+        with col2:
+            st.metric("📋 Registros mostrados", len(df_tutores))
 
-    # =========================
-    # INFORMACIÓN Y AYUDA
-    # =========================
-    with st.expander("ℹ️ Información sobre Tutores FUNDAE", expanded=False):
-        st.markdown("""
-        **Gestión de Tutores para FUNDAE**
-        
-        **Tipos de tutores:**
-        - **Internos**: Empleados de la empresa que imparten formación
-        - **Externos**: Colaboradores especializados contratados
-        
-        **Requisitos FUNDAE:**
-        - CV actualizado obligatorio para validación
-        - Especialidad según catálogo oficial de familias profesionales
-        - Experiencia mínima en el área de especialización
-        
-        **Flujo recomendado:**
-        1. Registrar tutor con datos completos
-        2. Subir CV en formato PDF (recomendado)
-        3. Asignar especialidad según familia profesional
-        4. Vincular a grupos formativos correspondientes
-        
-        **Documentación requerida:**
-        - Curriculum vitae actualizado
-        - Titulación académica
-        - Certificados de experiencia profesional
-        """)
-        
-    st.caption("💡 Los tutores cualificados son esenciales para la aprobación de grupos formativos en FUNDAE.")
 
-    # =========================
-    # VERIFICACIONES DE CONFIGURACIÓN (Solo para admin)
-    # =========================
-    if session_state.role == "admin":
-        with st.expander("🔧 Configuración del Sistema (Admin)", expanded=False):
-            st.markdown("**Verificar configuración de buckets de Supabase:**")
-            
-            # Verificar bucket curriculums
-            try:
-                bucket_list = supabase.storage.list_buckets()
-                bucket_names = [b.name for b in bucket_list if hasattr(b, 'name')]
-                
-                if "curriculums" in bucket_names:
-                    st.success("✅ Bucket 'curriculums' configurado correctamente")
-                else:
-                    st.error("❌ Bucket 'curriculums' no encontrado")
-                    st.info("💡 Crear bucket 'curriculums' en Supabase Storage")
-                    
-            except Exception as e:
-                st.warning(f"⚠️ No se pudo verificar buckets: {e}")
-                
-            # Mostrar estadísticas de archivos
-            if not df_tutores.empty:
-                tutores_con_cv = df_tutores[df_tutores["cv_url"].notna() & (df_tutores["cv_url"] != "")]
-                st.info(f"📄 {len(tutores_con_cv)} de {len(df_tutores)} tutores tienen CV subido ({len(tutores_con_cv)/len(df_tutores)*100:.1f}%)")
+def mostrar_formulario_tutor(supabase, session_state, data_service, tutor_id):
+    """Formulario unificado para crear/editar tutores."""
+    es_creacion = tutor_id == "nuevo"
+
+    if es_creacion:
+        st.markdown("### ➕ Crear Nuevo Tutor")
+        tutor_data = {}
+    else:
+        st.markdown("### ✏️ Editar Tutor")
+        try:
+            result = supabase.table("tutores").select("*").eq("id", tutor_id).execute()
+            if result.data:
+                tutor_data = result.data[0]
+            else:
+                st.error("Tutor no encontrado")
+                return
+        except Exception as e:
+            st.error(f"Error al cargar tutor: {e}")
+            return
+
+    with st.expander("📋 Datos Básicos", expanded=True):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            nombre = st.text_input("Nombre *", value=tutor_data.get("nombre", ""), key="tutor_nombre")
+            apellidos = st.text_input("Apellidos *", value=tutor_data.get("apellidos", ""), key="tutor_apellidos")
+            email = st.text_input("Email *", value=tutor_data.get("email", ""), key="tutor_email")
+            telefono = st.text_input("Teléfono", value=tutor_data.get("telefono", ""), key="tutor_telefono")
+        with col2:
+            nif = st.text_input("NIF", value=tutor_data.get("nif", ""), key="tutor_nif")
+            especialidad = st.text_input("Especialidad", value=tutor_data.get("especialidad", ""), key="tutor_especialidad")
+            direccion = st.text_input("Dirección", value=tutor_data.get("direccion", ""), key="tutor_direccion")
+            ciudad = st.text_input("Ciudad", value=tutor_data.get("ciudad", ""), key="tutor_ciudad")
+
+    # Botones
+    st.divider()
+    if es_creacion:
+        if st.button("➕ Crear Tutor", type="primary"):
+            crear_tutor(supabase, data_service, session_state, nombre, apellidos, email, telefono, nif, especialidad, direccion, ciudad)
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 Guardar Cambios", type="primary"):
+                actualizar_tutor(supabase, data_service, tutor_id, nombre, apellidos, email, telefono, nif, especialidad, direccion, ciudad)
+        with col2:
+            if st.button("❌ Cancelar"):
+                del st.session_state.tutor_editando
+                st.rerun()
+
+
+def crear_tutor(supabase, data_service, session_state, nombre, apellidos, email, telefono, nif, especialidad, direccion, ciudad):
+    """Crear tutor nuevo."""
+    try:
+        datos = {
+            "nombre": nombre,
+            "apellidos": apellidos,
+            "email": email,
+            "telefono": telefono,
+            "nif": nif,
+            "especialidad": especialidad,
+            "direccion": direccion,
+            "ciudad": ciudad,
+            "empresa_id": session_state.user.get("empresa_id"),
+            "created_at": datetime.utcnow().isoformat()
+        }
+        supabase.table("tutores").insert(datos).execute()
+        data_service.get_tutores_completos.clear()
+        st.success("Tutor creado correctamente.")
+        del st.session_state.tutor_editando
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al crear tutor: {e}")
+
+
+def actualizar_tutor(supabase, data_service, tutor_id, nombre, apellidos, email, telefono, nif, especialidad, direccion, ciudad):
+    """Actualizar tutor existente."""
+    try:
+        datos = {
+            "nombre": nombre,
+            "apellidos": apellidos,
+            "email": email,
+            "telefono": telefono,
+            "nif": nif,
+            "especialidad": especialidad,
+            "direccion": direccion,
+            "ciudad": ciudad,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        supabase.table("tutores").update(datos).eq("id", tutor_id).execute()
+        data_service.get_tutores_completos.clear()
+        st.success("Tutor actualizado correctamente.")
+        del st.session_state.tutor_editando
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al actualizar tutor: {e}")
+
+
+def mostrar_gestion_curriculums(supabase, df_tutores, empresa_id):
+    """Gestión independiente de currículums de tutores."""
+    st.markdown("### 📂 Gestión de Currículums")
+
+    if df_tutores.empty:
+        st.info("No hay tutores disponibles para gestionar currículums.")
+        return
+
+    tutor_opciones = {f"{row['nombre']} {row['apellidos']}": row["id"] for _, row in df_tutores.iterrows()}
+    tutor_seleccionado = st.selectbox("Seleccionar tutor", list(tutor_opciones.keys()))
+
+    tutor_id = tutor_opciones[tutor_seleccionado]
+    tutor_row = df_tutores[df_tutores["id"] == tutor_id].iloc[0]
+
+    if tutor_row.get("cv_url"):
+        st.success(f"📄 Currículum ya subido: [Ver archivo]({tutor_row['cv_url']})")
+
+    archivo = st.file_uploader("Subir nuevo currículum", type=["pdf", "doc", "docx"])
+
+    if archivo and st.button("⬆️ Subir/Actualizar CV"):
+        try:
+            ruta = f"curriculums/{empresa_id}/{tutor_id}/{archivo.name}"
+            supabase.storage.from_("curriculums").upload(ruta, archivo.getvalue(), {"upsert": "true"})
+            url = supabase.storage.from_("curriculums").get_public_url(ruta)
+
+            supabase.table("tutores").update({"cv_url": url}).eq("id", tutor_id).execute()
+
+            st.success("✅ Currículum subido y asignado correctamente.")
+            st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al subir currículum: {e}")
