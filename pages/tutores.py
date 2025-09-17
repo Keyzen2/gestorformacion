@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from utils import export_csv, validar_dni_cif
+from components import listado_con_ficha
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
@@ -435,6 +436,25 @@ def main(supabase, session_state):
             st.info("💡 **Información:** Como gestor, solo puedes gestionar tutores de tu empresa.")
         else:
             st.info("💡 **Información:** Los tutores deben tener CV y especialización para cumplir requisitos FUNDAE.")
+        
+        # =========================
+        # TABLA PRINCIPAL CON GESTIÓN CV INTEGRADA
+        # =========================
+        listado_con_ficha(
+            df=df_display,
+            columnas_visibles=columnas_visibles,
+            titulo="Tutor",
+            on_save=guardar_wrapper,
+            on_create=None,  # Creación abajo
+            id_col="id",
+            campos_select=campos_select,
+            campos_readonly=campos_readonly,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=campos_obligatorios,
+            allow_creation=False,
+            campos_help=campos_help,
+            search_columns=[]  # Sin búsqueda - ya filtrado arriba
+        )
 
         # =========================
         # CREAR NUEVO TUTOR (DEBAJO DE LA TABLA)
