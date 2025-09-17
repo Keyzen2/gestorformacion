@@ -1041,6 +1041,88 @@ def update_ajustes_app(supabase, data_dict):
 # =========================
 # FUNCIONES FUNDAE (añadir al final de utils.py)
 # =========================
+def validar_grupo_fundae_completo(datos_grupo):
+    """Validación completa para XML FUNDAE."""
+    errores = []
+    
+    # Campos obligatorios básicos
+    campos_requeridos = [
+        ("codigo_grupo", "Código del grupo"),
+        ("fecha_inicio", "Fecha de inicio"), 
+        ("fecha_fin_prevista", "Fecha fin prevista"),
+        ("localidad", "Localidad"),
+        ("responsable", "Responsable"),
+        ("telefono_contacto", "Teléfono de contacto"),
+        ("n_participantes_previstos", "Participantes previstos")
+    ]
+    
+    for campo, nombre in campos_requeridos:
+        if not datos_grupo.get(campo):
+            errores.append(f"❌ {nombre} es obligatorio")
+    
+    # Validar teléfono formato FUNDAE
+    tel = datos_grupo.get("telefono_contacto", "")
+    if tel and not re.match(r'^\d{9,12}$', tel.replace(' ', '').replace('-', '')):
+        errores.append("❌ Teléfono debe tener entre 9 y 12 dígitos")
+    
+    # Validar participantes
+    try:
+        n_part = int(datos_grupo.get("n_participantes_previstos", 0))
+        if not (1 <= n_part <= 9999):
+            errores.append("❌ Participantes debe estar entre 1 y 9999")
+    except:
+        errores.append("❌ Participantes debe ser un número válido")
+    
+    return len(errores) == 0, errores
+
+def preparar_datos_xml_inicio_simple(grupo_id, supabase):
+    """Prepara datos para XML FUNDAE con estructura actual."""
+    try:
+        # Datos del grupo con acción
+        grupo = supabase.table("grupos").select("""
+            *, 
+            accion_formativa:acciones_formativas(codigo, denominacion, num_horas)
+        """).eq("id", grupo_id).single().execute()
+        
+        if not grupo.data:
+            return None, ["Grupo no encontrado"]
+            
+        grupo_data = grupo.data
+        
+        # Validar completitud
+        es_valido, errores = validar_grupo_fundae_completo(grupo_data)
+        if not es_valido:
+            return None, errores
+        
+        # Tutores con tipos de documento automáticos
+        tutores = supabase.table("tutores_grupos").select("""
+            tutor:tutores(*)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        tutores_fundae = []
+        for tg in tutores.data or []:
+            tutor = tg.get("tutor")
+            if tutor:
+                # Detectar tipo automáticamente
+                tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
+                tutor_fundae = {**tutor, "tipo_documento_fundae": tipo_doc}
+                tutores_fundae.append(tutor_fundae)
+        
+        # Empresas participantes
+        empresas = supabase.table("empresas_grupos").select("""
+            empresa:empresas(cif, nombre)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        empresas_fundae = [eg["empresa"] for eg in empresas.data or [] if eg.get("empresa")]
+        
+        return {
+            "grupo": grupo_data,
+            "tutores": tutores_fundae,
+            "empresas": empresas_fundae
+        }, []
+        
+    except Exception as e:
+        return None, [f"Error: {str(e)}"]
 
 def actualizar_tipo_documento_tutores(supabase):
     """
