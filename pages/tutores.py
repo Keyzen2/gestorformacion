@@ -451,6 +451,157 @@ if session_state.role == "admin" and empresas_dict:
                                 "nombre": nombre,
                                 "apellidos": apellidos,
                                 "email": email,
+    =========================
+    # PREPARAR DATOS PARA DISPLAY
+    # =========================
+    def preparar_datos_display(df_orig):
+        """Prepara datos para mostrar en formularios con valores compatibles."""
+        df_display = df_orig.copy()
+        
+        # Convertir empresa_id a nombre para admin
+        if session_state.role == "admin" and empresas_dict:
+            df_display["empresa_sel"] = df_display["empresa_id"].map(
+                {v: k for k, v in empresas_dict.items()}
+            ).fillna("")
+
+        # Asegurar que tipo_tutor tenga valores válidos
+        if "tipo_tutor" in df_display.columns:
+            df_display["tipo_tutor"] = df_display["tipo_tutor"].fillna("").astype(str)
+            # Normalizar valores
+            df_display["tipo_tutor"] = df_display["tipo_tutor"].replace({
+                "Interno": "interno",
+                "Externo": "externo"
+            })
+
+        # Asegurar que especialidad esté en las opciones
+        if "especialidad" in df_display.columns:
+            df_display["especialidad"] = df_display["especialidad"].fillna("")
+            # Solo mantener especialidades válidas
+            mask_validas = df_display["especialidad"].isin(especialidades_opciones)
+            df_display.loc[~mask_validas, "especialidad"] = ""
+
+        # Mapear códigos de tipo_documento a texto para display
+        if "tipo_documento" in df_display.columns:
+            tipo_doc_map = {10: "NIF", 20: "Pasaporte", 60: "NIE", "": "", None: ""}
+            df_display["tipo_documento_texto"] = df_display["tipo_documento"].map(tipo_doc_map).fillna("")
+
+        # Añadir columna de estado del CV
+        df_display["cv_status"] = df_display["cv_url"].apply(
+            lambda x: "✅ Con CV" if pd.notna(x) and x != "" else "⏳ Sin CV"
+        )
+        
+        return df_display
+
+    # =========================
+    # MOSTRAR TABLA Y FORMULARIOS
+    # =========================
+    if df_filtrado.empty:
+        if df_tutores.empty:
+            st.info("ℹ️ No hay tutores registrados.")
+        else:
+            st.warning("🔍 No se encontraron tutores con los filtros aplicados.")
+            if st.button("🔄 Limpiar filtros"):
+                st.rerun()
+    else:
+        # Preparar datos para display con valores compatibles
+        df_display = preparar_datos_display(df_filtrado)
+        
+        # Columnas visibles en la tabla + gestión CV
+        columnas_visibles = [
+            "nombre", "apellidos", "email", "telefono",
+            "tipo_tutor", "especialidad", "cv_status"
+        ]
+        
+        if "empresa_nombre" in df_display.columns:
+            columnas_visibles.insert(-1, "empresa_nombre")
+
+        # =========================
+        # TABLA PRINCIPAL - ESTILO GRUPOS.PY
+        # =========================
+        st.markdown("### Selecciona un tutor para editarlo:")
+
+        try:
+            event = st.dataframe(
+                df_display[columnas_visibles],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="tabla_tutores_principal"
+            )
+        except Exception as e:
+            st.error(f"❌ Error al mostrar tabla: {e}")
+            return
+
+        # Manejar selección para edición
+        if event and hasattr(event, 'selection') and event.selection.get("rows"):
+            try:
+                selected_idx = event.selection["rows"][0]
+                if selected_idx < len(df_display):
+                    tutor_seleccionado = df_display.iloc[selected_idx]
+                    
+                    # Mostrar formulario de edición manual
+                    st.markdown("---")
+                    st.markdown("### ✏️ Editar Tutor Seleccionado")
+                    st.caption(f"Editando: {tutor_seleccionado['nombre']} {tutor_seleccionado.get('apellidos', '')}")
+                    
+                    with st.form(f"form_editar_tutor_{tutor_seleccionado['id']}", clear_on_submit=False):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            nombre = st.text_input("Nombre *", value=tutor_seleccionado.get('nombre', ''), key="edit_nombre")
+                            email = st.text_input("Email", value=tutor_seleccionado.get('email', ''), key="edit_email")
+                            tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], 
+                                                    index=["", "interno", "externo"].index(tutor_seleccionado.get('tipo_tutor', '')) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
+                                                    key="edit_tipo")
+                            nif = st.text_input("NIF/DNI", value=tutor_seleccionado.get('nif', ''), key="edit_nif")
+                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key="edit_direccion")
+                        
+                        with col2:
+                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key="edit_apellidos")
+                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key="edit_telefono")
+                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
+                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
+                                                      key="edit_especialidad")
+                            
+                            # Crear selectbox para tipo_documento con códigos
+                            opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
+                            valor_actual = tutor_seleccionado.get('tipo_documento')
+                            if pd.isna(valor_actual) or valor_actual == "":
+                                indice_tipo_doc = 0
+                            else:
+                                indice_tipo_doc = 0
+                                for i, (codigo, texto) in enumerate(opciones_tipo_doc):
+                                    if codigo == valor_actual:
+                                        indice_tipo_doc = i
+                                        break
+                            
+                            tipo_documento = st.selectbox(
+                                "Tipo documento", 
+                                opciones_tipo_doc,
+                                index=indice_tipo_doc,
+                                format_func=lambda x: x[1],  # Mostrar solo el texto
+                                key="edit_tipo_doc"
+                            )
+                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key="edit_ciudad")
+                        
+                        col3, col4 = st.columns(2)
+                        with col3:
+                            provincia = st.text_input("Provincia", value=tutor_seleccionado.get('provincia', ''), key="edit_provincia")
+                            if "titulacion" in df_tutores.columns:  # Solo mostrar si existe en BD
+                                titulacion = st.text_area("Titulación", value=tutor_seleccionado.get('titulacion', ''), key="edit_titulacion")
+                        with col4:
+                            codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key="edit_cp")
+                            if session_state.role == "admin" and empresas_dict:
+                                empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), 
+                                                         index=([""] + sorted(empresas_dict.keys())).index(tutor_seleccionado.get('empresa_sel', '')) if tutor_seleccionado.get('empresa_sel') in ([""] + sorted(empresas_dict.keys())) else 0,
+                                                         key="edit_empresa")
+                        
+                        if st.form_submit_button("💾 Guardar Cambios", type="primary"):
+                            datos_editados = {
+                                "nombre": nombre,
+                                "apellidos": apellidos,
+                                "email": email,
                                 "telefono": telefono,
                                 "nif": nif,
                                 "tipo_tutor": tipo_tutor,
@@ -476,6 +627,7 @@ if session_state.role == "admin" and empresas_dict:
                 st.error(f"❌ Error al procesar selección: {e}")
 
         st.divider()
+
         # =========================
         # CREAR NUEVO TUTOR (DEBAJO DE LA TABLA)
         # =========================
