@@ -298,7 +298,7 @@ if session_state.role == "admin" and empresas_dict:
             st.error(f"❌ Error al crear tutor: {e}")
             return False
 
-    =========================
+    #=========================
     # PREPARAR DATOS PARA DISPLAY
     # =========================
     def preparar_datos_display(df_orig):
