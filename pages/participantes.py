@@ -137,7 +137,13 @@ def main(supabase, session_state):
             if datos_nuevos.get("nif") and not validar_dni_cif(datos_nuevos["nif"]):
                 st.error("⚠️ NIF no válido.")
                 return False
-
+                
+            # Validar NISS
+            niss = datos_nuevos.get("niss")
+            if niss and not re.match(r'^\d{12}$', niss):
+                st.error("⚠️ NISS debe tener exactamente 12 dígitos.")
+                return False
+                
             # Validar empresa obligatoria para participantes
             empresa_id_part = datos_nuevos.get("empresa_id")
             if not empresa_id_part:
@@ -293,7 +299,7 @@ def main(supabase, session_state):
 
     def get_campos_dinamicos(datos):
         """Define campos del formulario."""
-        campos = ["email", "nombre", "apellidos", "nif", "telefono", "fecha_nacimiento", "sexo"]
+        campos = ["email", "nombre", "apellidos", "nif", "telefono", "fecha_nacimiento", "sexo" , "tipo_documento", "niss"]
         
         if session_state.role == "admin":
             campos.extend(["empresa_sel", "grupo_sel"])
@@ -306,6 +312,7 @@ def main(supabase, session_state):
     # Configuración de campos para listado_con_ficha
     campos_select = {
         "sexo": ["", "M", "F"],
+        "tipo_documento": ["", "NIF", "NIE", "Pasaporte"],
         "grupo_sel": [""] + sorted(grupos_dict.keys())
     }
     
@@ -323,6 +330,8 @@ def main(supabase, session_state):
         "telefono": "Teléfono de contacto",
         "fecha_nacimiento": "Fecha de nacimiento",
         "sexo": "Sexo del participante (M/F)",
+        "tipo_documento": "Tipo de documento de identidad (obligatorio FUNDAE)",
+        "niss": "Número de la Seguridad Social (12 dígitos, obligatorio FUNDAE)",
         "empresa_sel": "Empresa del participante (obligatorio)",
         "grupo_sel": "Grupo formativo asignado"
     }
