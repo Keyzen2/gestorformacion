@@ -26,15 +26,15 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
+    # Inicializar estado seguro
+    if "participante_editando" not in st.session_state:
+        st.session_state.participante_editando = None
+        
     # Inicializar servicios
     data_service = get_data_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
     empresa_id = session_state.user.get("empresa_id")
 
-    puede_crear = (
-        session_state.role == "admin" or
-        (session_state.role == "gestor" and empresa_id)
-    )
     # =========================
     # Cargar datos
     # =========================
@@ -77,6 +77,28 @@ def main(supabase, session_state):
 
     st.divider()
 
+    # =========================
+    # Botón crear participante
+    # =========================
+    puede_crear = (
+        session_state.role == "admin" or
+        (session_state.role == "gestor" and empresa_id)
+    )
+
+    if puede_crear:
+        if st.button("➕ Crear Nuevo Participante", type="primary"):
+            st.session_state.participante_editando = "nuevo"
+            st.rerun()
+
+    # =========================
+    # Formulario edición/creación
+    # =========================
+    if st.session_state.participante_editando:
+        mostrar_formulario_participante(
+            supabase, session_state, data_service, grupos_service,
+            st.session_state.participante_editando, empresas_dict, grupos_dict, empresa_id
+        )
+        
     # =========================
     # Filtros de búsqueda
     # =========================
@@ -152,15 +174,6 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # FORMULARIO DE EDICIÓN/CREACIÓN
-    # =========================
-    if hasattr(st.session_state, 'participante_editando') and st.session_state.participante_editando:
-        mostrar_formulario_participante(
-            supabase, session_state, data_service, grupos_service,
-            st.session_state.participante_editando, empresas_dict, grupos_dict, empresa_id
-        )
-
-    # =========================
     # GESTIÓN DE DIPLOMAS (mantener sección existente)
     # =========================
     if session_state.role in ["admin", "gestor"]:
@@ -192,12 +205,12 @@ def main(supabase, session_state):
     st.caption("💡 Los participantes son usuarios que pertenecen a grupos formativos y pueden obtener diplomas al completar los cursos.")
 
 
-def mostrar_formulario_participante(supabase, session_state, data_service, grupos_service, 
+def mostrar_formulario_participante(supabase, session_state, data_service, grupos_service,
                                    participante_id, empresas_dict, grupos_dict, empresa_id):
     """Formulario unificado para crear/editar participantes con lógica mejorada."""
-    
+
     es_creacion = participante_id == "nuevo"
-    
+
     if es_creacion:
         st.markdown("### ➕ Crear Nuevo Participante")
         participante_data = {}
@@ -207,16 +220,13 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
             result = supabase.table("participantes").select("*").eq("id", participante_id).limit(1).execute()
             participante_data = result.data[0] if result.data else {}
             if not participante_data:
-                st.error("Participante no encontrado")
-                if "participante_editando" in st.session_state:
-                    del st.session_state.participante_editando
-                return
+                st.error("❌ Participante no encontrado")
+                st.session_state.participante_editando = None
+                st.stop()
         except Exception as e:
-            st.error(f"Error al cargar participante: {e}")
-            if "participante_editando" in st.session_state:
-                del st.session_state.participante_editando
-            return
-
+            st.error(f"❌ Error al cargar participante: {e}")
+            st.session_state.participante_editando = None
+            st.stop()
 
     # =========================
     # SECCIÓN 1: DATOS BÁSICOS
