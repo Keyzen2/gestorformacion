@@ -31,6 +31,10 @@ def main(supabase, session_state):
     grupos_service = get_grupos_service(supabase, session_state)
     empresa_id = session_state.user.get("empresa_id")
 
+    puede_crear = (
+        session_state.role == "admin" or
+        (session_state.role == "gestor" and empresa_id)
+    )
     # =========================
     # Cargar datos
     # =========================
