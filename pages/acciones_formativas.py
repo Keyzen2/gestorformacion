@@ -32,7 +32,7 @@ def main(supabase, session_state):
             df_filtered = df_filtered[df_filtered["empresa_id"] == empresa_id]
 
     # =========================
-    # KPIs MEJORADOS - CORREGIDO CAMPO DE FECHA
+    # MÉTRICAS UNIFICADAS
     # =========================
     if not df_filtered.empty:
         # Calcular métricas
@@ -72,18 +72,8 @@ def main(supabase, session_state):
             st.metric("🆕 Nuevas este mes", nuevas_mes)
         with col3:
             st.metric("📅 Nuevas este año", nuevas_ano)
-    else:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📚 Total Acciones", 0)
-        with col2:
-            st.metric("🆕 Nuevas este mes", 0)
-        with col3:
-            st.metric("📅 Nuevas este año", 0)
 
     st.divider()
-
-    allow_creation = grupos_service.can_modify_data()
 
     # =========================
     # FUNCIONES CRUD MEJORADAS (SIN FECHAS)
@@ -202,8 +192,60 @@ def main(supabase, session_state):
     }
 
     # =========================
-    # FORMULARIO DE CREACIÓN ESTILO GRUPOS.PY
+    # LISTADO PRINCIPAL DE ACCIONES 
     # =========================
+    if not df_filtered.empty:
+        df_display = df_filtered.copy()
+
+        # Preparar campos calculados para mostrar
+        if "cod_area_profesional" in df_display.columns:
+            df_display["area_profesional_sel"] = df_display.apply(
+                lambda row: next(
+                    (k for k, v in areas_dict.items() if v == row.get("cod_area_profesional")),
+                    row.get("area_profesional", "")
+                ), axis=1
+            )
+
+        if "codigo_grupo_accion" in df_display.columns:
+            df_display["grupo_accion_sel"] = df_display.apply(
+                lambda row: next(
+                    (g["nombre"] for _, g in grupos_acciones_df.iterrows() 
+                     if g["codigo"] == row.get("codigo_grupo_accion")),
+                    ""
+                ), axis=1
+            )
+
+        # Configurar listado_con_ficha SIN métricas duplicadas
+        listado_con_ficha(
+            df_display,
+            columnas_visibles=[
+                "codigo_accion", "nombre", "modalidad", "nivel", 
+                "num_horas", "certificado_profesionalidad", "area_profesional"
+            ],
+            titulo="Acciones Formativas",  # CORREGIDO: plural correcto
+            on_save=guardar_accion,
+            on_create=None,  # Creación manejada abajo
+            id_col="id",
+            campos_select=campos_select,
+            campos_textarea=campos_textarea,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=["codigo_accion", "nombre"],
+            search_columns=["nombre", "codigo_accion", "area_profesional", "modalidad"],
+            campos_readonly=["id", "created_at"],
+            allow_creation=False,  # Deshabilitado para evitar duplicación
+            campos_help=campos_help,
+            show_metrics=False  # DESACTIVAR métricas del componente
+        )
+    else:
+        st.info("ℹ️ No hay acciones formativas disponibles.")
+
+    st.divider()
+
+    # =========================
+    # FORMULARIO DE CREACIÓN (AL FINAL)
+    # =========================
+    allow_creation = grupos_service.can_modify_data()
+    
     if allow_creation:
         with st.expander("➕ Crear nueva acción formativa", expanded=False):
             st.markdown("**Complete los datos básicos de la acción formativa**")
@@ -321,65 +363,8 @@ def main(supabase, session_state):
             with col2:
                 if st.button("❌ Cancelar", use_container_width=True):
                     st.rerun()
-
-    st.divider()
-
-    # =========================
-    # LISTADO DE ACCIONES MEJORADO
-    # =========================
-    st.markdown("### 📋 Catálogo de Acciones Formativas")
-    
-    if not df_filtered.empty:
-        df_display = df_filtered.copy()
-
-        # Preparar campos calculados para mostrar
-        if "cod_area_profesional" in df_display.columns:
-            df_display["area_profesional_sel"] = df_display.apply(
-                lambda row: next(
-                    (k for k, v in areas_dict.items() if v == row.get("cod_area_profesional")),
-                    row.get("area_profesional", "")
-                ), axis=1
-            )
-
-        if "codigo_grupo_accion" in df_display.columns:
-            df_display["grupo_accion_sel"] = df_display.apply(
-                lambda row: next(
-                    (g["nombre"] for _, g in grupos_acciones_df.iterrows() 
-                     if g["codigo"] == row.get("codigo_grupo_accion")),
-                    ""
-                ), axis=1
-            )
-
-        # MOSTRAR SIN FECHAS - Delegar búsqueda al componente
-        columnas_visibles = [
-            "codigo_accion", "nombre", "modalidad", "nivel", 
-            "num_horas", "certificado_profesionalidad", "area_profesional"
-        ]
-
-        listado_con_ficha(
-            df_filtered,  # Usar datos ya filtrados por rol
-            columnas_visibles=columnas_visibles,
-            titulo="Acción Formativa",
-            on_save=guardar_accion,
-            on_create=None,  # Creación manejada arriba
-            id_col="id",
-            campos_select=campos_select,
-            campos_textarea=campos_textarea,
-            campos_dinamicos=get_campos_dinamicos,
-            campos_obligatorios=["codigo_accion", "nombre"],
-            search_columns=["nombre", "codigo_accion", "area_profesional", "modalidad"],
-            campos_readonly=["id", "created_at"],
-            allow_creation=False,  # Deshabilitado porque lo manejamos arriba
-            campos_help=campos_help
-        )
     else:
-        st.info("ℹ️ No hay acciones formativas disponibles.")
-        
-        if allow_creation:
-            st.markdown("### 🚀 ¡Crea tu primera acción formativa!")
-            st.markdown("Use el formulario de arriba para comenzar")
-
-    st.divider()
+        st.info("ℹ️ No tienes permisos para crear nuevas acciones formativas.")
     
     # =========================
     # INFORMACIÓN FINAL
