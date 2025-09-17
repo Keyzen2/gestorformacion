@@ -330,8 +330,7 @@ def main(supabase, session_state):
             campos_obligatorios=campos_obligatorios,
             allow_creation=False,  # Deshabilitado para evitar duplicación
             campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "especialidad"],
-            show_metrics=False  # Desactivar métricas del componente
+            search_columns=["nombre", "apellidos", "email", "especialidad"]
         )
     else:
         st.info("ℹ️ No hay tutores registrados.")
