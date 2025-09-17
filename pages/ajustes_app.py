@@ -66,6 +66,8 @@ def main(supabase, session_state):
                     "mensaje_footer": mensaje_footer,
                     "email_soporte": email_soporte
                 })
+                # Limpiar cache antes de mostrar éxito
+                st.cache_data.clear()
                 st.success("✅ Configuración básica actualizada")
                 st.rerun()
             except Exception as e:
@@ -297,7 +299,7 @@ def main(supabase, session_state):
     with col1:
         if st.button("🔄 Recargar configuración", help="Recarga ajustes desde la base de datos"):
             try:
-                st.cache_data.clear()  # Limpiar cache si existe
+                st.cache_data.clear()  # Limpiar cache
                 st.success("✅ Configuración recargada")
                 st.rerun()
             except Exception as e:
@@ -346,6 +348,7 @@ def main(supabase, session_state):
                         "tarjeta_comercial_clientes": "Gestionar cartera de clientes"
                     }
                     update_ajustes_app(supabase, defaults)
+                    st.cache_data.clear()
                     st.success("✅ Configuración restablecida")
                     st.rerun()
                 except Exception as e:
