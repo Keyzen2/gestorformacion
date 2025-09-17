@@ -206,6 +206,8 @@ def main(supabase, session_state):
                     "telefono": datos_nuevos.get("telefono"),
                     "fecha_nacimiento": datos_nuevos.get("fecha_nacimiento"),
                     "sexo": datos_nuevos.get("sexo"),
+                    "tipo_documento": datos_nuevos.get("tipo_documento"),
+                    "niss": datos_nuevos.get("niss"), 
                     "empresa_id": empresa_id_part,
                     "grupo_id": datos_nuevos.get("grupo_id"),
                     "created_at": datetime.utcnow().isoformat()
@@ -266,6 +268,8 @@ def main(supabase, session_state):
                 "sexo": datos_editados.get("sexo"),
                 "empresa_id": empresa_id_part,
                 "grupo_id": datos_editados.get("grupo_id"),
+                "tipo_documento": datos_editados.get("tipo_documento"),
+                "niss": datos_editados.get("niss"), 
                 "updated_at": datetime.utcnow().isoformat()
             }
 
