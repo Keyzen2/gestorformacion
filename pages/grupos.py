@@ -937,57 +937,59 @@ def mostrar_seccion_tutores(grupos_service, grupo_id):
     except Exception as e:
         st.error(f"Error al cargar sección de tutores: {e}")
 
-    def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
-        """Gestión de Centro Gestor (solo Teleformación/Mixta)."""
-        with st.expander("🏢 Centro Gestor (solo Teleformación/Mixta)", expanded=False):
-            try:
-                info_mod = grupos_service.supabase.table("grupos").select(
-                    "accion_formativa:acciones_formativas(modalidad)"
-                ).eq("id", grupo_id).limit(1).execute()
+def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
+    """Gestión de Centro Gestor (solo Teleformación/Mixta)."""
+    with st.expander("🏢 Centro Gestor (solo Teleformación/Mixta)", expanded=False):
+        try:
+            info_mod = grupos_service.supabase.table("grupos").select(
+                "accion_formativa:acciones_formativas(modalidad)"
+            ).eq("id", grupo_id).limit(1).execute()
+            
+            modalidad_accion_raw = ""
+            if info_mod.data and info_mod.data[0].get("accion_formativa"):
+                modalidad_accion_raw = info_mod.data[0]["accion_formativa"].get("modalidad", "")
+            
+            modalidad_norm = grupos_service.normalizar_modalidad_fundae(modalidad_accion_raw)
+            
+            if modalidad_norm in ["TELEFORMACION", "MIXTA"]:
+                st.markdown("### Centro gestor en plataforma de Teleformación")
+                
+                centro_actual = grupos_service.get_centro_gestor_grupo(grupo_id)
+                if centro_actual and centro_actual.get("centro"):
+                    c = centro_actual["centro"]
+                    st.info(
+                        f"Centro gestor actual: **{c.get('razon_social','(sin nombre)')}** "
+                        f"— CIF: {c.get('cif','N/A')} — CP: {c.get('codigo_postal','N/A')}"
+                    )
 
-                modalidad_accion_raw = ""
-                if info_mod.data and info_mod.data[0].get("accion_formativa"):
-                    modalidad_accion_raw = info_mod.data[0]["accion_formativa"].get("modalidad", "")
-
-                modalidad_norm = grupos_service.normalizar_modalidad_fundae(modalidad_accion_raw)
-
-                if modalidad_norm in ["TELEFORMACION", "MIXTA"]:
-                    st.markdown("### Centro gestor en plataforma de Teleformación")
-
-                    centro_actual = grupos_service.get_centro_gestor_grupo(grupo_id)
-                    if centro_actual and centro_actual.get("centro"):
-                        c = centro_actual["centro"]
-                        st.info(
-                            f"Centro gestor actual: **{c.get('razon_social','(sin nombre)')}** "
-                            f"— CIF: {c.get('cif','N/A')} — CP: {c.get('codigo_postal','N/A')}"
-                        )
-    
-                    df_centros = grupos_service.get_centros_para_grupo(grupo_id)
-                    if df_centros.empty:
-                        st.warning("No hay centros gestores disponibles para este grupo.")
-                    else:
-                        opciones = {
-                            (row.get("razon_social") or row.get("nombre_comercial") or row.get("cif") or row.get("id")): row["id"]
-                            for _, row in df_centros.iterrows()
-                        }
-
-                        sel = st.selectbox("Seleccionar centro gestor", list(opciones.keys()))
-
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("Asignar centro gestor"):
-                                ok = grupos_service.assign_centro_gestor_a_grupo(grupo_id, opciones[sel])
-                                if ok:
-                                    st.success("Centro gestor asignado correctamente.")
-                                    st.rerun()
-                        with col2:
-                            if centro_actual and st.button("❌ Desasignar centro gestor"):
-                                ok = grupos_service.unassign_centro_gestor_de_grupo(grupo_id)
-                                if ok:
-                                    st.success("Centro gestor desasignado.")
-                                    st.rerun()
-            except Exception as e:
-                st.error(f"Error en sección Centro Gestor: {e}")
+                df_centros = grupos_service.get_centros_para_grupo(grupo_id)
+                if df_centros.empty:
+                    st.warning("No hay centros gestores disponibles para este grupo.")
+                else:
+                    opciones = {
+                        str(row.get("razon_social") or row.get("nombre_comercial") or row.get("cif") or row.get("id")): row["id"]
+                        for _, row in df_centros.iterrows()  # ✅ CORREGIDO
+                    }
+                    
+                    sel = st.selectbox("Seleccionar centro gestor", list(opciones.keys()))
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Asignar centro gestor"):
+                            ok = grupos_service.assign_centro_gestor_a_grupo(grupo_id, opciones[sel])
+                            if ok:
+                                st.success("Centro gestor asignado correctamente.")
+                                st.rerun()
+                    
+                    with col2:
+                        if centro_actual and st.button("❌ Desasignar centro gestor"):
+                            ok = grupos_service.unassign_centro_gestor_de_grupo(grupo_id)
+                            if ok:
+                                st.success("Centro gestor desasignado.")
+                                st.rerun()
+                                
+        except Exception as e:
+            st.error(f"Error en sección Centro Gestor: {e}")
 
 def mostrar_seccion_empresas(grupos_service, grupo_id):
     """Gestión de empresas participantes - CON MANEJO DE ERRORES."""
