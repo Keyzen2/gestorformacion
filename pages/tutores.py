@@ -324,10 +324,10 @@ def main(supabase, session_state):
         "tipo_tutor": ["", "interno", "externo"],
         "especialidad": especialidades_opciones,
         "tipo_documento": [
-            ("", "Seleccionar tipo"),
-            (10, "NIF"),
-            (20, "Pasaporte"), 
-            (60, "NIE")
+             "", "Seleccionar tipo",
+             10, "NIF",
+             20, "Pasaporte", 
+             60, "NIE"
         ]
     }
     
