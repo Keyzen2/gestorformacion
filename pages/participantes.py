@@ -80,8 +80,8 @@ def main(supabase, session_state):
     # =========================
     # FORMULARIO DE EDICIÓN/CREACIÓN
     # =========================
-    if "participante_seleccionado" in st.session_state:
-        participante_id = st.session_state.participante_seleccionado
+    if "participante_editando" in st.session_state:
+        participante_id = st.session_state.participante_editando
         mostrar_formulario_participante(
             supabase, session_state, data_service, grupos_service,
             participante_id, empresas_dict, grupos_dict, empresa_id
@@ -131,7 +131,7 @@ def main(supabase, session_state):
     
     if puede_crear:
         if st.button("➕ Crear Nuevo Participante", type="primary"):
-            st.session_state.participante_seleccionado = "nuevo"
+            st.session_state.participante_editando = "nuevo"
             st.rerun()
 
     # =========================
@@ -168,8 +168,8 @@ def main(supabase, session_state):
         # Procesar selección
         if event.selection.rows:
             selected_idx = event.selection.rows[0]
-            participante_seleccionado = df_filtered.iloc[selected_idx]
-            st.session_state.participante_seleccionado = participante_seleccionado["id"]
+            participante_editando = df_filtered.iloc[selected_idx]
+            st.session_state.participante_editando = participante_editando["id"]
             st.rerun()
 
     st.divider()
@@ -222,12 +222,12 @@ def mostrar_formulario_participante(supabase, session_state, data_service, grupo
             participante_data = result.data[0] if result.data else {}
             if not participante_data:
                 st.error("Participante no encontrado")
-                if "participante_seleccionado" in st.session_state:
+                if "participante_editando" in st.session_state:
                     st.session_state.participante_editando = None
                 return
         except Exception as e:
             st.error(f"Error al cargar participante: {e}")
-            if "participante_seleccionado" in st.session_state:
+            if "participante_editando" in st.session_state:
                 st.session_state.participante_editando = None
             return
 
@@ -633,18 +633,18 @@ def mostrar_seccion_diplomas(supabase, session_state, empresa_id):
                     opciones_participantes.append((opcion, p))
                 
                 if opciones_participantes:
-                    participante_seleccionado = st.selectbox(
+                    participante_editando = st.selectbox(
                         "Seleccionar participante para gestionar diploma:",
                         options=[None] + [op[0] for op in opciones_participantes],
                         format_func=lambda x: "Seleccionar..." if x is None else x,
                         key="diploma_participante_selector"
                     )
                     
-                    if participante_seleccionado:
+                    if participante_editando:
                         # Encontrar datos del participante seleccionado
                         participante_data = None
                         for opcion, data in opciones_participantes:
-                            if opcion == participante_seleccionado:
+                            if opcion == participante_editando:
                                 participante_data = data
                                 break
                         
