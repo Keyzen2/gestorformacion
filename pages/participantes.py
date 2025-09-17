@@ -598,7 +598,7 @@ def mostrar_seccion_diplomas(supabase, session_state, empresa_id):
             if fecha_fin:
                 try:
                     fecha_fin_dt = pd.to_datetime(fecha_fin, errors='coerce').date()
-                    if fecha_fin_dt < hoy:
+                    if fecha_fin_dt <= hoy:
                         grupos_finalizados.append(grupo)
                 except:
                     continue
