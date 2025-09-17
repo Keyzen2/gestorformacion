@@ -4,7 +4,6 @@ from datetime import datetime
 from services.data_service import get_data_service
 from services.grupos_service import get_grupos_service
 
-
 def main(supabase, session_state):
     st.markdown("## 📊 Panel del Gestor")
     st.caption("Visión general de la plataforma para gestores y administradores.")
