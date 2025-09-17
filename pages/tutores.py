@@ -399,10 +399,27 @@ def main(supabase, session_state):
                             especialidad = st.selectbox("Especialidad", especialidades_opciones, 
                                                       index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
                                                       key="edit_especialidad")
-                            tipo_documento = st.selectbox("Tipo documento", ["", "NIF", "Pasaporte", "NIE"], 
-                                                        index=["", "NIF", "Pasaporte", "NIE"].index(tutor_seleccionado.get('tipo_documento', '')) if tutor_seleccionado.get('tipo_documento') in ["", "NIF", "Pasaporte", "NIE"] else 0,
-                                                        key="edit_tipo_doc")
-                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key="edit_ciudad")
+                            # Crear selectbox para tipo_documento con códigos
+                            opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
+                            # Encontrar índice del valor actual
+                            valor_actual = tutor_seleccionado.get('tipo_documento')
+                            if pd.isna(valor_actual) or valor_actual == "":
+                                indice_tipo_doc = 0
+                            else:
+                                # Buscar el código en las opciones
+                                indice_tipo_doc = 0
+                                for i, (codigo, texto) in enumerate(opciones_tipo_doc):
+                                    if codigo == valor_actual:
+                                        indice_tipo_doc = i
+                                        break
+                            
+                            tipo_documento = st.selectbox(
+                                "Tipo documento", 
+                                opciones_tipo_doc,
+                                index=indice_tipo_doc,
+                                format_func=lambda x: x[1],  # Mostrar solo el texto
+                                key="edit_tipo_doc"
+                            )
                         
                         col3, col4 = st.columns(2)
                         with col3:
@@ -424,7 +441,7 @@ def main(supabase, session_state):
                                 "nif": nif,
                                 "tipo_tutor": tipo_tutor,
                                 "especialidad": especialidad,
-                                "tipo_documento": tipo_documento,
+                                "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None,
                                 "direccion": direccion,
                                 "ciudad": ciudad,
                                 "provincia": provincia,
@@ -464,7 +481,12 @@ def main(supabase, session_state):
                         apellidos = st.text_input("Apellidos *", key="nuevo_apellidos")
                         telefono = st.text_input("Teléfono", key="nuevo_telefono")
                         especialidad = st.selectbox("Especialidad", especialidades_opciones, key="nuevo_especialidad")
-                        tipo_documento = st.selectbox("Tipo documento", ["", "NIF", "Pasaporte", "NIE"], key="nuevo_tipo_doc")
+                        tipo_documento = st.selectbox(
+                            "Tipo documento", 
+                            [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")],
+                            format_func=lambda x: x[1],  # Mostrar solo el texto
+                            key="nuevo_tipo_doc"
+                        )
                         ciudad = st.text_input("Ciudad", key="nuevo_ciudad")
                     
                     col3, col4 = st.columns(2)
@@ -485,7 +507,7 @@ def main(supabase, session_state):
                             "nif": nif,
                             "tipo_tutor": tipo_tutor,
                             "especialidad": especialidad,
-                            "tipo_documento": tipo_documento,
+                            "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None
                             "direccion": direccion,
                             "ciudad": ciudad,
                             "provincia": provincia,
