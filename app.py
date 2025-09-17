@@ -450,7 +450,8 @@ else:
                 "comercial": ajustes.get("bienvenida_comercial", "Área Comercial - CRM")
             }
 
-            st.title("👋 Bienvenido al Gestor de Formación")
+            titulo_app = ajustes.get("nombre_app", "Gestor de Formación")
+            st.title(f"👋 Bienvenido al {titulo_app}")
             st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
 
             # ===============================
