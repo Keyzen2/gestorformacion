@@ -61,10 +61,7 @@ def main(supabase, session_state):
         with col4:
             st.metric("📄 Con CV", con_cv, f"{(con_cv/total_tutores*100):.1f}%" if total_tutores > 0 else "0%")
 
-        # Barra de progreso general
-        if total_tutores > 0:
-            progreso = (con_cv / total_tutores) * 100
-            st.progress(con_cv / total_tutores, f"Progreso currículums: {progreso:.1f}%")
+        # Sin barra de progreso - ya está en las métricas
 
     st.divider()
 
@@ -393,13 +390,32 @@ def main(supabase, session_state):
             st.info("💡 **Información:** Los tutores deben tener CV y especialización para cumplir requisitos FUNDAE.")
 
         # =========================
-        # EXPANSOR PARA CREAR TUTOR (NO DESPLEGADO POR DEFECTO)
+        # TABLA PRINCIPAL CON GESTIÓN CV INTEGRADA
+        # =========================
+        listado_con_ficha(
+            df=df_display,
+            columnas_visibles=columnas_visibles,
+            titulo="Tutor",
+            on_save=guardar_wrapper,
+            on_create=None,  # Creación abajo
+            id_col="id",
+            campos_select=campos_select,
+            campos_readonly=campos_readonly,
+            campos_dinamicos=get_campos_dinamicos,
+            campos_obligatorios=campos_obligatorios,
+            allow_creation=False,
+            campos_help=campos_help,
+            search_columns=[]  # Sin búsqueda - ya filtrado arriba
+        )
+
+        # =========================
+        # CREAR NUEVO TUTOR (DEBAJO DE LA TABLA)
         # =========================
         if puede_modificar:
             with st.expander("➕ Crear Nuevo Tutor", expanded=False):
                 st.markdown("**Formulario de creación de tutor**")
                 
-                # Usar listado_con_ficha solo para creación
+                # Crear DataFrame vacío para el formulario
                 df_vacio = pd.DataFrame()
                 
                 listado_con_ficha(
@@ -418,41 +434,33 @@ def main(supabase, session_state):
                     search_columns=[]
                 )
 
-        # =========================
-        # TABLA PRINCIPAL CON EDICIÓN
-        # =========================
-        st.markdown("#### 📋 Lista de Tutores")
-        listado_con_ficha(
-            df=df_display,
-            columnas_visibles=columnas_visibles,
-            titulo="Tutor",
-            on_save=guardar_wrapper,
-            on_create=None,  # Creación ya está arriba
-            id_col="id",
-            campos_select=campos_select,
-            campos_readonly=campos_readonly,
-            campos_dinamicos=get_campos_dinamicos,
-            campos_obligatorios=campos_obligatorios,
-            allow_creation=False,
-            campos_help=campos_help,
-            search_columns=["nombre", "apellidos", "email", "especialidad"]
-        )
-
         st.divider()
 
         # =========================
-        # GESTIÓN DE CURRÍCULUMS INTEGRADA EN LA TABLA
+        # GESTIÓN DE CURRÍCULUMS (RESPETA FILTROS)
         # =========================
         st.markdown("### 📄 Gestión de Currículums")
-        st.caption("Subir y gestionar currículums de tutores seleccionados")
+        st.caption("Subir y gestionar currículums (filtros aplicados)")
         
-        # Seleccionar tutores sin CV para facilitar la gestión
-        tutores_sin_cv = df_display[~(df_display["cv_url"].notna() & (df_display["cv_url"] != ""))].copy()
+        # Aplicar los mismos filtros que la tabla principal
+        tutores_cv_filtrados = df_display.copy()
         
+        # Separar tutores con y sin CV de los datos YA filtrados
+        tutores_sin_cv = tutores_cv_filtrados[~(tutores_cv_filtrados["cv_url"].notna() & (tutores_cv_filtrados["cv_url"] != ""))].copy()
+        tutores_con_cv = tutores_cv_filtrados[tutores_cv_filtrados["cv_url"].notna() & (tutores_cv_filtrados["cv_url"] != "")].copy()
+        
+        # Mostrar métricas de CV filtradas
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("⏳ Sin CV", len(tutores_sin_cv))
+        with col2:
+            st.metric("✅ Con CV", len(tutores_con_cv))
+        
+        # Gestión de tutores SIN CV
         if not tutores_sin_cv.empty:
-            st.warning(f"⚠️ {len(tutores_sin_cv)} tutores sin CV:")
+            st.warning(f"⚠️ {len(tutores_sin_cv)} tutores sin CV (mostrados con filtros):")
             
-            for idx, tutor in tutores_sin_cv.head(5).iterrows():  # Mostrar los primeros 5
+            for idx, tutor in tutores_sin_cv.head(5).iterrows():
                 nombre_completo = f"{tutor['nombre']} {tutor.get('apellidos', '')}".strip()
                 empresa_nombre = tutor.get("empresa_nombre", "Sin empresa")
                 
@@ -462,13 +470,14 @@ def main(supabase, session_state):
             if len(tutores_sin_cv) > 5:
                 st.caption(f"... y {len(tutores_sin_cv) - 5} tutores más sin CV")
         else:
-            st.success("✅ Todos los tutores tienen CV subido")
+            if len(tutores_cv_filtrados) > 0:
+                st.success("✅ Todos los tutores mostrados tienen CV")
+            else:
+                st.info("ℹ️ No hay tutores para mostrar con los filtros aplicados")
 
-        # Tutores con CV - gestión de actualización
-        tutores_con_cv = df_display[df_display["cv_url"].notna() & (df_display["cv_url"] != "")].copy()
-        
+        # Gestión de tutores CON CV
         if not tutores_con_cv.empty:
-            with st.expander(f"📄 Tutores con CV ({len(tutores_con_cv)})", expanded=False):
+            with st.expander(f"📄 Gestionar CVs existentes ({len(tutores_con_cv)})", expanded=False):
                 for idx, tutor in tutores_con_cv.iterrows():
                     nombre_completo = f"{tutor['nombre']} {tutor.get('apellidos', '')}".strip()
                     empresa_nombre = tutor.get("empresa_nombre", "Sin empresa")
@@ -479,27 +488,34 @@ def main(supabase, session_state):
                         st.markdown(f"**👤 {nombre_completo}** - {empresa_nombre}")
                     
                     with col_actions:
-                        if st.button("👁️ Ver", key=f"ver_cv_{tutor['id']}"):
-                            st.markdown(f"🔗 [Abrir CV]({tutor['cv_url']})")
+                        # Botones en una sola fila
+                        col_btn1, col_btn2, col_btn3 = st.columns(3)
                         
-                        if st.button("🔄 Actualizar", key=f"update_cv_{tutor['id']}"):
-                            with st.form(f"update_form_{tutor['id']}"):
-                                cv_file = st.file_uploader(
-                                    "Nuevo CV",
-                                    type=["pdf", "doc", "docx"],
-                                    key=f"new_cv_{tutor['id']}",
-                                    help="PDF, DOC o DOCX, máximo 10MB"
-                                )
-                                
-                                if st.form_submit_button("📤 Actualizar CV"):
-                                    if cv_file is not None:
-                                        success = subir_cv_tutor(supabase, data_service, tutor, cv_file)
-                                        if success:
-                                            st.rerun()
+                        with col_btn1:
+                            if st.button("👁️", key=f"ver_cv_{tutor['id']}", help="Ver CV"):
+                                st.markdown(f"🔗 [Abrir CV]({tutor['cv_url']})")
                         
-                        if st.button("🗑️ Eliminar", key=f"delete_cv_{tutor['id']}"):
-                            if eliminar_cv_tutor(supabase, data_service, tutor["id"]):
-                                st.rerun()
+                        with col_btn2:
+                            if st.button("🔄", key=f"update_cv_{tutor['id']}", help="Actualizar CV"):
+                                # Formulario inline para actualizar
+                                with st.form(f"update_form_{tutor['id']}"):
+                                    cv_file = st.file_uploader(
+                                        "Nuevo CV",
+                                        type=["pdf", "doc", "docx"],
+                                        key=f"new_cv_{tutor['id']}",
+                                        help="PDF, DOC o DOCX, máximo 10MB"
+                                    )
+                                    
+                                    if st.form_submit_button("📤 Actualizar"):
+                                        if cv_file is not None:
+                                            success = subir_cv_tutor(supabase, data_service, tutor, cv_file)
+                                            if success:
+                                                st.rerun()
+                        
+                        with col_btn3:
+                            if st.button("🗑️", key=f"delete_cv_{tutor['id']}", help="Eliminar CV"):
+                                if eliminar_cv_tutor(supabase, data_service, tutor["id"]):
+                                    st.rerun()
 
     # =========================
     # EXPORTACIÓN Y RESUMEN
