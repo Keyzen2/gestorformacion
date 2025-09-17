@@ -829,9 +829,30 @@ def mostrar_seccion_diplomas_completa(supabase, session_state, empresa_id):
                                                 st.error(f"❌ Error al leer el archivo: {e}")
                                                 continue
                                             
-                                            # Generar nombre único
+                                            # Generar estructura de carpetas organizada
                                             timestamp = int(datetime.now().timestamp())
-                                            filename = f"diploma_{participante['id']}_{timestamp}.pdf"
+                                            
+                                            # Obtener información del grupo y empresa para estructura de carpetas
+                                            grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
+                                            
+                                            # Determinar empresa_id del participante
+                                            if session_state.role == "gestor" and empresa_id:
+                                                participante_empresa_id = empresa_id
+                                            else:
+                                                # Para admin, obtener empresa del participante
+                                                part_empresa = supabase.table("participantes").select("empresa_id").eq("id", participante["id"]).execute()
+                                                participante_empresa_id = part_empresa.data[0]["empresa_id"] if part_empresa.data else "sin_empresa"
+                                            
+                                            # Estructura de carpetas: empresa/grupo/accion/participante
+                                            accion_id = grupo_info.get("accion_formativa", {}).get("id", "sin_accion") if grupo_info.get("accion_formativa") else "sin_accion"
+                                            grupo_codigo = grupo_info.get("codigo_grupo", f"grupo_{participante['grupo_id']}")
+                                            
+                                            # Limpiar nombres para nombres de archivo seguros
+                                            grupo_codigo_limpio = re.sub(r'[^\w\-_]', '_', grupo_codigo)
+                                            participante_nif = participante.get('nif', participante['id'])
+                                            participante_nif_limpio = re.sub(r'[^\w\-_]', '_', str(participante_nif))
+                                            
+                                            filename = f"empresa_{participante_empresa_id}/grupos/{grupo_codigo_limpio}/accion_{accion_id}/diploma_{participante_nif_limpio}_{timestamp}.pdf"
                                             
                                             # Subir a bucket de Supabase
                                             try:
