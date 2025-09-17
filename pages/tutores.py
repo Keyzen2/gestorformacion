@@ -190,7 +190,10 @@ def main(supabase, session_state):
                 if empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
                 else:
-                    datos_editados["empresa_id"] = None
+                    # Mantener empresa actual si no se selecciona nueva
+                    tutor_actual = df_tutores[df_tutores["id"] == tutor_id].iloc[0] if not df_tutores.empty else None
+                    if tutor_actual is not None:
+                        datos_editados["empresa_id"] = tutor_actual.get("empresa_id")
             elif session_state.role == "gestor":
                 datos_editados["empresa_id"] = session_state.user.get("empresa_id")
 
@@ -198,9 +201,11 @@ def main(supabase, session_state):
                 st.error("⚠️ Los tutores deben tener una empresa asignada.")
                 return False
 
-            # Limpiar campos auxiliares
+            # Limpiar campos auxiliares y añadir timestamp de actualización
             datos_limpios = {k: v for k, v in datos_editados.items() 
-                           if not k.endswith("_sel")}
+                           if not k.endswith("_sel") and v is not None and str(v).strip() != ""}
+            
+            datos_limpios["updated_at"] = datetime.utcnow().isoformat()
 
             # Actualizar en base de datos
             result = supabase.table("tutores").update(datos_limpios).eq("id", tutor_id).execute()
@@ -211,7 +216,8 @@ def main(supabase, session_state):
                 st.success("✅ Tutor actualizado correctamente.")
                 return True
             else:
-                st.error("❌ Error al actualizar tutor.")
+                error_msg = getattr(result, 'error', 'Error desconocido') if hasattr(result, 'error') else 'Error desconocido'
+                st.error(f"❌ Error al actualizar tutor: {error_msg}")
                 return False
                 
         except Exception as e:
@@ -287,7 +293,7 @@ def main(supabase, session_state):
     # CONFIGURACIÓN DE CAMPOS PARA LISTADO_CON_FICHA
     # =========================
     def get_campos_dinamicos(datos):
-        """Campos a mostrar dinámicamente."""
+        """Campos a mostrar dinámicamente con preparación de datos."""
         campos_base = [
             "nombre", "apellidos", "nif", "email", "telefono",
             "tipo_tutor", "especialidad", "tipo_documento", "titulacion", 
@@ -300,6 +306,47 @@ def main(supabase, session_state):
             campos_base.insert(-1, "empresa_sel")
             
         return campos_base
+
+    # Preparar datos display con valores compatibles para selects
+    def preparar_datos_display(df_orig):
+        """Prepara datos para mostrar en formularios con valores compatibles."""
+        df_display = df_orig.copy()
+        
+        # Convertir empresa_id a nombre para admin
+        if session_state.role == "admin" and empresas_dict:
+            df_display["empresa_sel"] = df_display["empresa_id"].map(
+                {v: k for k, v in empresas_dict.items()}
+            ).fillna("")
+
+        # Asegurar que tipo_tutor tenga valores válidos
+        if "tipo_tutor" in df_display.columns:
+            df_display["tipo_tutor"] = df_display["tipo_tutor"].fillna("").astype(str)
+            # Normalizar valores
+            df_display["tipo_tutor"] = df_display["tipo_tutor"].replace({
+                "Interno": "interno",
+                "Externo": "externo"
+            })
+
+        # Asegurar que especialidad esté en las opciones
+        if "especialidad" in df_display.columns:
+            df_display["especialidad"] = df_display["especialidad"].fillna("")
+            # Solo mantener especialidades válidas
+            mask_validas = df_display["especialidad"].isin(especialidades_opciones)
+            df_display.loc[~mask_validas, "especialidad"] = ""
+
+        # Asegurar que tipo_documento esté en las opciones válidas
+        if "tipo_documento" in df_display.columns:
+            df_display["tipo_documento"] = df_display["tipo_documento"].fillna("")
+            valores_validos = ["", "NIF", "Pasaporte", "NIE"]
+            mask_validas = df_display["tipo_documento"].isin(valores_validos)
+            df_display.loc[~mask_validas, "tipo_documento"] = ""
+
+        # Añadir columna de estado del CV
+        df_display["cv_status"] = df_display["cv_url"].apply(
+            lambda x: "✅ Con CV" if pd.notna(x) and x != "" else "⏳ Sin CV"
+        )
+        
+        return df_display
 
     # Especialidades ya definidas arriba
     campos_select = {
@@ -347,26 +394,14 @@ def main(supabase, session_state):
             if st.button("🔄 Limpiar filtros"):
                 st.rerun()
     else:
-        # Preparar datos para display
-        df_display = df_filtrado.copy()
+        # Preparar datos para display con valores compatibles
+        df_display = preparar_datos_display(df_filtrado)
         
-        # Convertir relaciones a campos de selección
-        if session_state.role == "admin" and empresas_dict:
-            # Mapear empresa_id a nombre para admin
-            df_display["empresa_sel"] = df_display["empresa_id"].map(
-                {v: k for k, v in empresas_dict.items()}
-            ).fillna("")
-
         # Columnas visibles en la tabla + gestión CV
         columnas_visibles = [
             "nombre", "apellidos", "email", "telefono",
             "tipo_tutor", "especialidad", "cv_status"
         ]
-        
-        # Añadir columna de estado del CV
-        df_display["cv_status"] = df_display["cv_url"].apply(
-            lambda x: "✅ Con CV" if pd.notna(x) and x != "" else "⏳ Sin CV"
-        )
         
         if "empresa_nombre" in df_display.columns:
             columnas_visibles.insert(-1, "empresa_nombre")
@@ -383,7 +418,13 @@ def main(supabase, session_state):
                 # Para gestor, usar su empresa automáticamente
                 datos["empresa_id"] = session_state.user.get("empresa_id")
             
-            return datos
+            # Limpiar valores vacíos
+            datos_limpios = {}
+            for k, v in datos.items():
+                if v is not None and str(v).strip() != "":
+                    datos_limpios[k] = v
+            
+            return datos_limpios
 
         def guardar_wrapper(tutor_id, datos):
             datos = preparar_datos_para_guardar(datos)
