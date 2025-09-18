@@ -431,10 +431,17 @@ else:
                     mod_import = __import__(mod_path, fromlist=["main"])
                     mod_import.main(supabase_admin, st.session_state)
         else:
-            rol = st.session_state.role
-            hoy = datetime.today().date()
-            empresa = st.session_state.get("empresa", {})
-            empresa_crm = st.session_state.get("empresa_crm", {})
+            # 🔧 REDIRECCIÓN AUTOMÁTICA PARA GESTORES
+            if st.session_state.role == "gestor":
+                # Cargar panel_gestor directamente para gestores
+                from pages.panel_gestor import main as panel_gestor_main
+                panel_gestor_main(supabase_admin, st.session_state)
+            else:
+                # Código original para admin, alumno, comercial
+                rol = st.session_state.role
+                hoy = datetime.today().date()
+                empresa = st.session_state.get("empresa", {})
+                empresa_crm = st.session_state.get("empresa_crm", {})
 
             ajustes = get_ajustes_app(supabase_admin, campos=[
                 "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
