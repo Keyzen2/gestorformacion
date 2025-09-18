@@ -391,31 +391,85 @@ class ProyectosService:
             total_proyectos = len(df_proyectos)
             proyectos_activos = len(df_proyectos[df_proyectos['estado_proyecto'] == 'EN_EJECUCION'])
             
-            # Presupuestos
-            presupuesto_total = df_proyectos['presupuesto_total'].fillna(0).sum()
-            importe_concedido = df_proyectos['importe_concedido'].fillna(0).sum()
+            # Presupuestos - manejo seguro de valores numéricos
+            def safe_numeric_sum(series):
+                try:
+                    # Convertir a numérico, forzando errores a NaN
+                    numeric_series = pd.to_numeric(series, errors='coerce')
+                    # Llenar NaN con 0 y sumar
+                    return numeric_series.fillna(0).sum()
+                except:
+                    return 0
             
-            # Tasa de éxito
-            con_estado_subvencion = df_proyectos[df_proyectos['estado_subvencion'].notna() & (df_proyectos['estado_subvencion'] != '')]
-            if len(con_estado_subvencion) > 0:
-                concedidos = len(con_estado_subvencion[con_estado_subvencion['estado_subvencion'] == 'CONCEDIDA'])
-                tasa_exito = (concedidos / len(con_estado_subvencion)) * 100
-            else:
+            presupuesto_total = safe_numeric_sum(df_proyectos.get('presupuesto_total', pd.Series(dtype=float)))
+            importe_concedido = safe_numeric_sum(df_proyectos.get('importe_concedido', pd.Series(dtype=float)))
+            
+            # Tasa de éxito - manejo seguro
+            try:
+                # Filtrar proyectos que tienen estado de subvención válido
+                con_estado_subvencion = df_proyectos[
+                    df_proyectos['estado_subvencion'].notna() & 
+                    (df_proyectos['estado_subvencion'] != '') &
+                    (df_proyectos['estado_subvencion'] != 'CONVOCADA')
+                ]
+                
+                if len(con_estado_subvencion) > 0:
+                    concedidos = len(con_estado_subvencion[con_estado_subvencion['estado_subvencion'] == 'CONCEDIDA'])
+                    tasa_exito = (concedidos / len(con_estado_subvencion)) * 100
+                else:
+                    tasa_exito = 0
+            except Exception as e:
+                st.warning(f"Error calculando tasa de éxito: {e}")
                 tasa_exito = 0
             
-            # Próximos vencimientos (próximos 30 días)
-            hoy = datetime.now().date()
-            fecha_limite = hoy + timedelta(days=30)
-            
-            proximos_vencimientos = 0
-            for _, proyecto in df_proyectos.iterrows():
-                for fecha_col in ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']:
-                    fecha = proyecto.get(fecha_col)
-                    if fecha and isinstance(fecha, (datetime, pd.Timestamp)):
-                        fecha = fecha.date() if hasattr(fecha, 'date') else fecha
-                    if fecha and hoy <= fecha <= fecha_limite:
-                        proximos_vencimientos += 1
-                        break
+            # Próximos vencimientos - manejo seguro de fechas
+            try:
+                hoy = datetime.now().date()
+                fecha_limite = hoy + timedelta(days=30)
+                
+                proximos_vencimientos = 0
+                
+                # Campos de fecha a verificar
+                campos_fecha = ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
+                
+                for _, proyecto in df_proyectos.iterrows():
+                    for fecha_col in campos_fecha:
+                        fecha_valor = proyecto.get(fecha_col)
+                        
+                        # Manejo seguro de conversión de fechas
+                        try:
+                            if pd.isna(fecha_valor) or fecha_valor is None:
+                                continue
+                                
+                            # Si es string, intentar convertir
+                            if isinstance(fecha_valor, str):
+                                if fecha_valor.strip() == '':
+                                    continue
+                                fecha_dt = pd.to_datetime(fecha_valor, errors='coerce')
+                                if pd.isna(fecha_dt):
+                                    continue
+                                fecha = fecha_dt.date()
+                            # Si ya es datetime o date
+                            elif hasattr(fecha_valor, 'date'):
+                                fecha = fecha_valor.date() if callable(getattr(fecha_valor, 'date', None)) else fecha_valor
+                            # Si es date directamente
+                            elif isinstance(fecha_valor, datetime.date):
+                                fecha = fecha_valor
+                            else:
+                                continue
+                            
+                            # Verificar si está en rango
+                            if hoy <= fecha <= fecha_limite:
+                                proximos_vencimientos += 1
+                                break  # Solo contar una vez por proyecto
+                                
+                        except Exception as fecha_error:
+                            # Si hay cualquier error con una fecha específica, continuamos
+                            continue
+                            
+            except Exception as e:
+                st.warning(f"Error calculando vencimientos: {e}")
+                proximos_vencimientos = 0
             
             return {
                 "total_proyectos": total_proyectos,
@@ -428,7 +482,15 @@ class ProyectosService:
             
         except Exception as e:
             st.error(f"Error al calcular métricas: {e}")
-            return {}
+            # Retornar métricas por defecto en caso de error
+            return {
+                "total_proyectos": 0,
+                "proyectos_activos": 0,
+                "presupuesto_total": 0,
+                "importe_concedido": 0,
+                "tasa_exito": 0,
+                "proximos_vencimientos": 0
+            }
     
     def filtrar_proyectos(self, df_proyectos: pd.DataFrame, filtros: Dict[str, Any]) -> pd.DataFrame:
         """Aplica filtros a los proyectos"""
