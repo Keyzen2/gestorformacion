@@ -1,9 +1,3 @@
-"""
-GRUPOS.PY - PARTE 1: Base con Modal @st.dialog()
-Basado en el código real existente - Rediseñado Enero 2025
-🎨 Mejoras: Modal nativo, KPIs modernos, Estados visuales
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, time
