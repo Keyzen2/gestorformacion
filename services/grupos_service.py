@@ -188,7 +188,7 @@ class GruposService:
                 n_participantes_previstos, n_participantes_finalizados,
                 n_aptos, n_no_aptos, observaciones, empresa_id, created_at,
                 accion_formativa:acciones_formativas(id, nombre, modalidad, num_horas),
-                empresa:empresas!fk_empresa(id, nombre)
+                empresa:empresas!grupos_empresa_id_fkey(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "grupos")
 
