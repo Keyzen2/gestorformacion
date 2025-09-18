@@ -346,7 +346,14 @@ class EmpresasService:
         except Exception as e:
             print(f"Error obteniendo empresa por ID: {e}")
             return None
-    
+            
+    def get_empresas_dict(self) -> dict:
+        """Devuelve dict {nombre: id} de todas las empresas visibles."""
+        df = self.get_empresas()
+        if df.empty:
+            return {}
+        return {row["nombre"]: row["id"] for _, row in df.iterrows() if row.get("id") and row.get("nombre")}
+        
     def get_empresas_para_grupos(self) -> Dict[str, str]:
         """
         Obtiene empresas que pueden asignarse a grupos según rol.
