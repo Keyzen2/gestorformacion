@@ -311,22 +311,12 @@ def route():
         if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
             st.session_state.page = "mis_grupos"
             
-         # --- Panel del Gestor (solo gestores con formación activa) ---
+    # --- Panel del Gestor (solo gestores con formación activa) ---
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📊 Panel de Formación")
-        panel_menu = {
-            "Panel del Gestor": "panel_gestor"
-        }
-        for label, page_key in panel_menu.items():
-            if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
-                st.session_state.page = page_key
-
-    # --- Cargar panel del gestor si se selecciona desde el sidebar ---
-    if st.session_state.get("page") == "panel_gestor":
-        from pages.panel_gestor import main as panel_gestor_main
-        panel_gestor_main(supabase_admin, st.session_state)
-        st.stop()  # ⚠️ evita que se mezclen otras páginas debajo
+        if st.sidebar.button("Panel del Gestor", key=f"panel_gestor_{rol}"):
+            st.session_state.page = "panel_gestor"
                     
     # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
@@ -436,13 +426,14 @@ else:
                     mod_path = f"pages.{mod}"
                     mod_import = __import__(mod_path, fromlist=["main"])
                     mod_import.main(supabase_admin, st.session_state)
+
         else:
             rol = st.session_state.role
             hoy = datetime.today().date()
             empresa = st.session_state.get("empresa", {})
             empresa_crm = st.session_state.get("empresa_crm", {})
-            
-            # ✅ Ajustes cargados siempre, independientemente del rol
+
+            # ✅ Ajustes cargados siempre
             ajustes = get_ajustes_app(
                 supabase_admin,
                 campos=[
@@ -453,20 +444,20 @@ else:
                     "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
                 ]
             )
-            
-            # 🔧 Redirección automática para gestores
+
+            # 🔧 Aquí ya NO se corta la ejecución
             if rol == "gestor":
-                from pages.panel_gestor import main as panel_gestor_main
-                panel_gestor_main(supabase_admin, st.session_state)
-                st.stop()   # 👈 evita que se ejecute lo de abajo y se mezclen cosas
+                # el gestor ya tiene acceso al panel desde el sidebar,
+                # así que en "home" simplemente mostramos un saludo
+                st.title("👋 Bienvenido al Panel del Gestor")
+                st.subheader(ajustes.get("bienvenida_gestor", "Panel de Gestión de Formación"))
             else:
                 bienvenida_por_rol = {
                     "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
-                    "gestor": ajustes.get("bienvenida_gestor", "Panel del Gestor"),
                     "alumno": ajustes.get("bienvenida_alumno", "Área del Alumno"),
                     "comercial": ajustes.get("bienvenida_comercial", "Área Comercial - CRM")
                 }
-            
+
                 titulo_app = ajustes.get("nombre_app", "Gestor de Formación")
                 st.title(f"👋 Bienvenido al {titulo_app}")
                 st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
