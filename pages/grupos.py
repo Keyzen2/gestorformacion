@@ -618,3 +618,8 @@ def main_grupos_con_modales(supabase, session_state):
             grupo_data = st.session_state.grupo_seleccionado
             modal_editar_grupo_completo(grupo_data, grupos_service)
 
+# =========================
+# ALIAS PARA COMPATIBILIDAD CON APP.PY
+# =========================
+def main(supabase, session_state):
+    return main_grupos_con_modales(supabase, session_state)
