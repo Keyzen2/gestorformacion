@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date, time
+from datetime import datetime, date, time, timedelta
 from services.grupos_service import get_grupos_service
-from services.data_service import get_data_service
 from utils import validar_dni_cif, export_csv
 import re
 import math
@@ -13,38 +12,32 @@ import math
 
 MODALIDADES_FUNDAE = {
     "PRESENCIAL": "PRESENCIAL",
-    "TELEFORMACION": "TELEFORMACION", 
+    "TELEFORMACION": "TELEFORMACION",
     "MIXTA": "MIXTA"
 }
-
-INTERVALOS_TIEMPO = [
-    f"{h:02d}:{m:02d}" for h in range(6, 24) for m in [0, 15, 30, 45]
-]
 
 DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
 NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
 # =========================
-# FUNCIONES AUXILIARES 
+# FUNCIONES AUXILIARES GENERALES
 # =========================
 
 def safe_int_conversion(value, default=0):
-    """Convierte un valor a entero de forma segura, manejando NaN y None."""
+    """Convierte un valor a entero de forma segura para formularios y modales."""
     if value is None:
         return default
-    if pd.isna(value):  # Maneja NaN de pandas
-        return default
-    if math.isnan(float(value)) if isinstance(value, (int, float)) else False:
+    if pd.isna(value):
         return default
     try:
         return int(float(value))
     except (ValueError, TypeError):
         return default
+
 def safe_date_conversion(date_value):
-    """Convierte valores de fecha de forma segura."""
+    """Convierte valores de fecha de forma segura (str, datetime, date)."""
     if not date_value:
         return None
-    
     if isinstance(date_value, str):
         try:
             return datetime.fromisoformat(date_value.replace('Z', '+00:00')).date()
@@ -52,28 +45,26 @@ def safe_date_conversion(date_value):
             return None
     elif hasattr(date_value, 'date'):
         return date_value.date() if callable(getattr(date_value, 'date', None)) else date_value
-    
-    return date_value   
+    return date_value
+
 # =========================
 # FUNCIONES DE ESTADO
 # =========================
 
 def determinar_estado_grupo(grupo_data):
-    """Determina el estado automático del grupo según las fechas y datos."""
+    """Determina el estado automático del grupo según fechas y datos de finalización."""
     if not grupo_data:
         return "ABIERTO"
-    
+
     fecha_fin_prevista = grupo_data.get("fecha_fin_prevista")
     fecha_fin_real = grupo_data.get("fecha_fin")
     n_finalizados = grupo_data.get("n_participantes_finalizados")
     n_aptos = grupo_data.get("n_aptos")
     n_no_aptos = grupo_data.get("n_no_aptos")
-    
-    # Si tiene datos de finalización completos
+
     if all([fecha_fin_real, n_finalizados is not None, n_aptos is not None, n_no_aptos is not None]):
         return "FINALIZADO"
-    
-    # Si la fecha prevista ya pasó
+
     if fecha_fin_prevista:
         try:
             fecha_fin_dt = datetime.fromisoformat(str(fecha_fin_prevista).replace('Z', '+00:00'))
@@ -81,1807 +72,549 @@ def determinar_estado_grupo(grupo_data):
                 return "FINALIZAR"
         except:
             pass
-    
+
     return "ABIERTO"
 
 def get_grupos_pendientes_finalizacion(df_grupos):
-    """Obtiene grupos que están pendientes de finalización."""
+    """Devuelve grupos que están pendientes de finalización."""
     if df_grupos.empty:
         return []
-    
     pendientes = []
-    hoy = date.today()
-    
     for _, grupo in df_grupos.iterrows():
-        estado = determinar_estado_grupo(grupo.to_dict())
-        if estado == "FINALIZAR":
+        if determinar_estado_grupo(grupo.to_dict()) == "FINALIZAR":
             pendientes.append(grupo.to_dict())
-    
     return pendientes
 
 # =========================
-# FUNCIONES DE HORARIOS FUNDAE
+# VALIDACIONES FUNDAE
 # =========================
 
 def validar_horario_fundae(horario_str):
-    """Valida que el horario cumpla con el formato FUNDAE."""
+    """Valida formato FUNDAE de horarios."""
     if not horario_str:
         return False, "Horario requerido"
-    
-    # Debe contener días
     if "Días:" not in horario_str:
         return False, "Debe especificar días de la semana"
-    
-    # Debe contener al menos un tramo horario
     if not any(x in horario_str for x in ["Mañana:", "Tarde:"]):
         return False, "Debe especificar al menos un tramo horario"
-    
     return True, ""
-
-def construir_horario_fundae(manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados):
-    """Construye string de horario en formato FUNDAE."""
-    partes = []
-    
-    # Tramo mañana
-    if manana_inicio and manana_fin:
-        partes.append(f"Mañana: {manana_inicio} - {manana_fin}")
-    
-    # Tramo tarde  
-    if tarde_inicio and tarde_fin:
-        partes.append(f"Tarde: {tarde_inicio} - {tarde_fin}")
-    
-    # Días
-    if dias_seleccionados:
-        dias_str = "-".join([d for d in DIAS_SEMANA if d in dias_seleccionados])
-        if dias_str:
-            partes.append(f"Días: {dias_str}")
-    
-    return " | ".join(partes)
-
-def parsear_horario_fundae(horario_str):
-    """Parsea un horario FUNDAE a sus componentes."""
-    if not horario_str:
-        return None, None, None, None, []
-    
-    manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
-    dias = []
-    
-    try:
-        # Separar por | y procesar cada parte
-        partes = horario_str.split(" | ")
-        
-        for parte in partes:
-            parte = parte.strip()
-            
-            if parte.startswith("Mañana:"):
-                horas = parte.replace("Mañana: ", "").split(" - ")
-                if len(horas) == 2:
-                    manana_inicio, manana_fin = horas[0].strip(), horas[1].strip()
-            
-            elif parte.startswith("Tarde:"):
-                horas = parte.replace("Tarde: ", "").split(" - ")  
-                if len(horas) == 2:
-                    tarde_inicio, tarde_fin = horas[0].strip(), horas[1].strip()
-            
-            elif parte.startswith("Días:"):
-                dias_str = parte.replace("Días: ", "").strip()
-                dias = dias_str.split("-")
-    
-    except Exception:
-        pass
-    
-    return manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias
-
-# =========================
-# FUNCIONES DE VALIDACIÓN FUNDAE
-# =========================
 
 def validar_campos_obligatorios_fundae(datos):
     """Valida campos obligatorios para XML FUNDAE."""
     errores = []
-    
-    # Campos básicos obligatorios
     campos_requeridos = {
         "fecha_inicio": "Fecha de inicio",
         "fecha_fin_prevista": "Fecha fin prevista",
         "localidad": "Localidad",
         "n_participantes_previstos": "Participantes previstos"
     }
-    
     for campo, nombre in campos_requeridos.items():
         if not datos.get(campo):
             errores.append(f"{nombre} es obligatorio para FUNDAE")
-    
-    # Validaciones específicas
+
     modalidad = datos.get("modalidad")
     if modalidad and modalidad not in MODALIDADES_FUNDAE:
         errores.append("Modalidad debe ser PRESENCIAL, TELEFORMACION o MIXTA")
-    
-    # Participantes entre 1 y 30
+
     try:
         n_part = int(datos.get("n_participantes_previstos", 0))
         if n_part < 1 or n_part > 30:
             errores.append("Participantes previstos debe estar entre 1 y 30")
     except:
         errores.append("Participantes previstos debe ser un número")
-    
-    # Horario válido
+
     horario = datos.get("horario")
     if horario:
         es_valido, error_horario = validar_horario_fundae(horario)
         if not es_valido:
             errores.append(f"Horario: {error_horario}")
-    
+
     return errores
-    
+
 def validar_datos_finalizacion(datos):
     """Valida datos de finalización de grupo."""
     errores = []
-    
     try:
         finalizados = int(datos.get("n_participantes_finalizados", 0))
         aptos = int(datos.get("n_aptos", 0))
-        no_aptos = int(datos.get("n_no_aptos", 0))  # CORREGIDO: era n_no_apaptos
-        
+        no_aptos = int(datos.get("n_no_aptos", 0))
+
         if finalizados <= 0:
             errores.append("Debe haber al menos 1 participante finalizado")
-        
         if aptos + no_aptos != finalizados:
-            errores.append("La suma de aptos + no aptos debe igual participantes finalizados")
-        
+            errores.append("La suma de aptos + no aptos debe igualar finalizados")
         if aptos < 0 or no_aptos < 0:
             errores.append("Los números no pueden ser negativos")
-            
     except ValueError:
         errores.append("Los campos numéricos deben ser números enteros")
-    
     return errores
-
 # =========================
-# COMPONENTES UI ESPECIALIZADOS
+# MODALES COMPLETOS PARA GRUPOS
 # =========================
 
-def mostrar_kpis_grupos(df_grupos):
-    """Muestra KPIs de grupos con estados automáticos."""
-    if df_grupos.empty:
-        st.info("📋 No hay grupos registrados.")
-        return
-    
-    # Contar por estados
-    total = len(df_grupos)
-    abiertos = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "ABIERTO")
-    por_finalizar = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "FINALIZAR") 
-    finalizados = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "FINALIZADO")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("📊 Total Grupos", total)
-    with col2:
-        st.metric("🟢 Abiertos", abiertos)
-    with col3:
-        if por_finalizar > 0:
-            st.metric("🟡 Por Finalizar", por_finalizar, delta=f"+{por_finalizar}")
-        else:
-            st.metric("🟡 Por Finalizar", por_finalizar)
-    with col4:
-        st.metric("✅ Finalizados", finalizados)
+@st.dialog("Crear Nuevo Grupo FUNDAE", width="large")
+def modal_crear_grupo_completo(grupos_service):
+    """Modal completo para crear grupo con todas las secciones"""
+    st.markdown("### ✨ Nuevo Grupo Formativo FUNDAE")
+    st.caption("Complete los datos del grupo. Las secciones avanzadas estarán disponibles después de crear el grupo.")
 
-def mostrar_avisos_grupos(grupos_pendientes):
-    """Muestra avisos de grupos pendientes de finalización - CORREGIDO."""
-    if not grupos_pendientes:
+    acciones_dict = grupos_service.get_acciones_dict()
+    if not acciones_dict:
+        st.error("❌ No hay acciones formativas disponibles. Crea una acción formativa primero.")
         return
-    
-    st.warning(f"⚠️ **{len(grupos_pendientes)} grupo(s) pendiente(s) de finalización**")
-    
-    with st.expander("Ver grupos pendientes", expanded=False):
-        for grupo in grupos_pendientes[:5]:  # Mostrar máximo 5
-            col1, col2 = st.columns([3, 1])
+
+    with st.form("form_crear_grupo_completo", clear_on_submit=False):
+        # =====================
+        # SECCIÓN 1: DATOS BÁSICOS FUNDAE
+        # =====================
+        with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
+            col1, col2 = st.columns(2)
             with col1:
-                st.write(f"**{grupo.get('codigo_grupo')}** - Fin previsto: {grupo.get('fecha_fin_prevista')}")
+                codigo_grupo = st.text_input("Código del Grupo *", max_chars=50)
+                acciones_nombres = list(acciones_dict.keys())
+                accion_formativa = st.selectbox("Acción Formativa *", acciones_nombres)
+                accion_id = acciones_dict[accion_formativa]
+                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
+                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
+                st.text_input("Modalidad", value=modalidad_grupo, disabled=True)
+                fecha_inicio = st.date_input("Fecha de Inicio *", value=datetime.now().date())
             with col2:
-                # CORRECCIÓN: Implementar funcionalidad del botón finalizar
-                if st.button("Finalizar", key=f"finalizar_{grupo.get('id')}", type="secondary"):
-                    # Establecer el grupo para edición y forzar estado FINALIZAR
-                    grupo_copy = grupo.copy()
-                    # Asegurarse de que aparezca la sección de finalización
-                    if not grupo_copy.get('fecha_fin'):
-                        grupo_copy['_mostrar_finalizacion'] = True
-                    st.session_state.grupo_seleccionado = grupo_copy
-                    st.rerun()
+                provincias = grupos_service.get_provincias()
+                prov_opciones = {p["nombre"]: p["id"] for p in provincias}
+                provincia_sel = st.selectbox("Provincia *", options=list(prov_opciones.keys()))
+                localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
+                loc_nombres = [l["nombre"] for l in localidades]
+                localidad_sel = st.selectbox("Localidad *", options=loc_nombres)
+                cp = st.text_input("Código Postal")
+                fecha_fin_prevista = st.date_input("Fecha Fin Prevista *", value=datetime.now().date() + timedelta(days=30))
 
-def crear_selector_horario_fundae(prefix=""):
-    """Crea un selector de horario compatible con FUNDAE - IMPLEMENTACIÓN COMPLETA."""
-    st.markdown("#### Configuración de Horarios FUNDAE")
-    st.caption("Intervalos de 15 minutos obligatorios según normativa FUNDAE")
-    
-    # Opción de configuración
-    tipo_horario = st.radio(
-        "Tipo de jornada:",
-        ["Solo Mañana", "Solo Tarde", "Mañana y Tarde"],
-        horizontal=True,
-        key=f"{prefix}_tipo_horario"
-    )
-    
-    col1, col2 = st.columns(2)
-    
-    manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
-    
-    # Generar intervalos de tiempo correctamente
-    intervalos_manana = []
-    intervalos_tarde = []
-    
-    for h in range(6, 15):  # 06:00 a 14:45
-        for m in [0, 15, 30, 45]:
-            hora_str = f"{h:02d}:{m:02d}"
-            intervalos_manana.append(hora_str)
-    
-    for h in range(15, 24):  # 15:00 a 23:45
-        for m in [0, 15, 30, 45]:
-            if h == 23 and m > 0:  # Máximo 23:00
-                break
-            hora_str = f"{h:02d}:{m:02d}"
-            intervalos_tarde.append(hora_str)
-    
-    # Tramo mañana
-    if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
-        with col1:
-            st.markdown("**Tramo Mañana (06:00 - 15:00)**")
-            
-            sub_col1, sub_col2 = st.columns(2)
-            with sub_col1:
-                manana_inicio = st.selectbox(
-                    "Hora inicio:",
-                    intervalos_manana[:-1],  # Hasta 14:45
-                    index=12,  # 09:00
-                    key=f"{prefix}_manana_inicio"
-                )
-            with sub_col2:
-                if manana_inicio:
-                    # Filtrar horas fin que sean posteriores al inicio
+            col3, col4 = st.columns(2)
+            with col3:
+                responsable = st.text_input("Responsable del Grupo *")
+                n_participantes_previstos = st.number_input("Participantes Previstos *", min_value=1, max_value=30, value=8)
+            with col4:
+                telefono_contacto = st.text_input("Teléfono de Contacto *")
+
+            lugar_imparticion = st.text_area("Lugar de Impartición", height=60)
+            observaciones = st.text_area("Observaciones", height=80)
+
+        # =====================
+        # SECCIÓN 2: HORARIOS FUNDAE
+        # =====================
+        with st.expander("🕐 2. Horarios de Impartición", expanded=True):
+            tipo_horario = st.radio("Tipo de jornada:", ["Solo Mañana", "Solo Tarde", "Mañana y Tarde"], horizontal=True)
+            col_h1, col_h2 = st.columns(2)
+
+            intervalos_manana = [f"{h:02d}:{m:02d}" for h in range(6, 15) for m in [0, 15, 30, 45]]
+            intervalos_tarde = [f"{h:02d}:{m:02d}" for h in range(15, 24) for m in [0, 15, 30, 45] if not (h == 23 and m > 0)]
+
+            manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
+            if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
+                with col_h1:
+                    manana_inicio = st.selectbox("Inicio Mañana:", intervalos_manana[:-1], index=12)
                     idx_inicio = intervalos_manana.index(manana_inicio)
                     horas_fin_validas = intervalos_manana[idx_inicio + 1:]
-                    
-                    manana_fin = st.selectbox(
-                        "Hora fin:",
-                        horas_fin_validas,
-                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
-                        key=f"{prefix}_manana_fin"
-                    )
-    
-    # Tramo tarde
-    if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
-        with col2:
-            st.markdown("**Tramo Tarde (15:00 - 23:00)**")
-            
-            sub_col1, sub_col2 = st.columns(2)
-            with sub_col1:
-                tarde_inicio = st.selectbox(
-                    "Hora inicio:",
-                    intervalos_tarde[:-1],  # Hasta 22:45
-                    index=0,  # 15:00
-                    key=f"{prefix}_tarde_inicio"
-                )
-            with sub_col2:
-                if tarde_inicio:
-                    # Filtrar horas fin que sean posteriores al inicio
+                    manana_fin = st.selectbox("Fin Mañana:", horas_fin_validas)
+            if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
+                with col_h2:
+                    tarde_inicio = st.selectbox("Inicio Tarde:", intervalos_tarde[:-1], index=0)
                     idx_inicio = intervalos_tarde.index(tarde_inicio)
                     horas_fin_validas = intervalos_tarde[idx_inicio + 1:]
-                    
-                    tarde_fin = st.selectbox(
-                        "Hora fin:",
-                        horas_fin_validas,
-                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
-                        key=f"{prefix}_tarde_fin"
-                    )
-    
-    # Días de la semana
-    st.markdown("**Días de Impartición**")
-    cols = st.columns(7)
-    dias_seleccionados = []
-    
-    for i, (dia_corto, dia_largo) in enumerate(zip(DIAS_SEMANA, NOMBRES_DIAS)):
-        with cols[i]:
-            if st.checkbox(
-                dia_largo,
-                value=dia_corto in ["L", "M", "X", "J", "V"],  # L-V por defecto
-                key=f"{prefix}_dia_{dia_corto}"
-            ):
-                dias_seleccionados.append(dia_corto)
-    
-    # Construir horario final
-    horario_final = construir_horario_fundae(
-        manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados
-    )
-    
-    if horario_final:
-        st.success(f"Horario FUNDAE: {horario_final}")
-        
-        # Validar formato
-        es_valido, error = validar_horario_fundae(horario_final)
-        if not es_valido:
-            st.error(f"Error: {error}")
-    else:
-        st.warning("Configure al menos un tramo horario y días")
-    
-    return horario_final
-  
-    # =====================
-    # SECCIÓN 1: DATOS BÁSICOS FUNDAE (Siempre expandida)
-    # =====================
-    with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
-        st.markdown("**Información obligatoria para XML FUNDAE**")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Código del grupo
-            if es_creacion:
-                codigo_grupo = st.text_input(
-                    "Código del Grupo *",
-                    value=datos_grupo.get("codigo_grupo", ""),
-                    max_chars=50,
-                    help="Código único identificativo del grupo (máximo 50 caracteres)",
-                    key="form_codigo_grupo"
-                )
-            else:
-                codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                st.text_input(
-                    "Código del Grupo",
-                    value=codigo_grupo,
-                    disabled=True,
-                    help="No se puede modificar después de la creación"
-                )
-            
-            # Acción formativa
-            acciones_nombres = list(acciones_dict.keys())
-            if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
-                # Buscar el nombre de la acción actual
-                accion_actual = None
+                    tarde_fin = st.selectbox("Fin Tarde:", horas_fin_validas)
+
+            st.markdown("**Días de Impartición**")
+            dias_cols = st.columns(7)
+            dias_seleccionados = []
+            for i, (dia_corto, dia_largo) in enumerate(zip(DIAS_SEMANA, NOMBRES_DIAS)):
+                with dias_cols[i]:
+                    if st.checkbox(dia_largo, value=dia_corto in ["L", "M", "X", "J", "V"], key=f"dia_crear_{dia_corto}"):
+                        dias_seleccionados.append(dia_corto)
+
+            horarios_partes = []
+            if manana_inicio and manana_fin:
+                horarios_partes.append(f"Mañana: {manana_inicio} - {manana_fin}")
+            if tarde_inicio and tarde_fin:
+                horarios_partes.append(f"Tarde: {tarde_inicio} - {tarde_fin}")
+            if dias_seleccionados:
+                horarios_partes.append(f"Días: {'-'.join(dias_seleccionados)}")
+
+            horario_final = " | ".join(horarios_partes)
+            if horario_final:
+                st.success(f"Horario FUNDAE: {horario_final}")
+
+        st.divider()
+        col_submit, col_cancel = st.columns([2, 1])
+        with col_submit:
+            submitted = st.form_submit_button("✅ Crear Grupo", type="primary")
+        with col_cancel:
+            if st.form_submit_button("❌ Cancelar"):
+                st.rerun()
+
+        if submitted:
+            errores = []
+            if not codigo_grupo:
+                errores.append("El código del grupo es obligatorio")
+            if not responsable:
+                errores.append("El responsable es obligatorio")
+            if not telefono_contacto:
+                errores.append("El teléfono de contacto es obligatorio")
+            if fecha_inicio >= fecha_fin_prevista:
+                errores.append("La fecha de fin debe ser posterior a la de inicio")
+            if not dias_seleccionados:
+                errores.append("Debe seleccionar al menos un día de la semana")
+
+            if errores:
+                for error in errores:
+                    st.error(f"⚠️ {error}")
+                return
+
+            datos_crear = {
+                "codigo_grupo": codigo_grupo,
+                "accion_formativa_id": acciones_dict[accion_formativa],
+                "modalidad": modalidad_grupo,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat(),
+                "provincia": provincia_sel,
+                "localidad": localidad_sel,
+                "cp": cp,
+                "responsable": responsable,
+                "telefono_contacto": telefono_contacto,
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_final
+            }
+            if grupos_service.rol == "gestor":
+                datos_crear["empresa_id"] = grupos_service.empresa_id
+
+            try:
+                exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
+                if exito:
+                    st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+                    st.balloons()
+                    grupos_service.get_grupos_completos.clear()
+                    st.rerun()
+                else:
+                    st.error("❌ Error al crear el grupo")
+            except Exception as e:
+                st.error(f"❌ Error al crear grupo: {e}")
+
+
+@st.dialog("Editar Grupo FUNDAE", width="large")
+def modal_editar_grupo_completo(grupo_data, grupos_service):
+    """Modal completo para editar grupo con todas las secciones"""
+    st.markdown(f"### ✏️ Editar Grupo: {grupo_data['codigo_grupo']}")
+    estado_actual = determinar_estado_grupo(grupo_data)
+    color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
+    st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
+
+    acciones_dict = grupos_service.get_acciones_dict()
+    with st.form("form_editar_grupo_completo", clear_on_submit=False):
+        # =====================
+        # SECCIÓN 1: DATOS BÁSICOS
+        # =====================
+        with st.expander("📋 1. Datos Básicos FUNDAE", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.text_input("Código del Grupo", value=grupo_data.get('codigo_grupo', ''), disabled=True)
+                acciones_nombres = list(acciones_dict.keys())
+                accion_actual = ""
                 for nombre, id_accion in acciones_dict.items():
-                    if id_accion == datos_grupo.get("accion_formativa_id"):
+                    if id_accion == grupo_data.get('accion_formativa_id'):
                         accion_actual = nombre
                         break
-                indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
-            else:
-                indice_actual = 0
-            
-            accion_formativa = st.selectbox(
-                "Acción Formativa *",
-                acciones_nombres,
-                index=indice_actual,
-                help="Selecciona la acción formativa asociada",
-                key="form_accion_formativa"
-            )
-    
-            # 🔹 Calcular modalidad automáticamente desde la acción formativa
-            accion_id = acciones_dict[accion_formativa]
-            accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)  # 'Presencial' | 'Online' | 'Mixta'
-            modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
-    
-            # Mostrar modalidad en solo lectura
-            st.text_input(
-                "Modalidad",
-                value=modalidad_grupo,
-                disabled=True,
-                help="Modalidad tomada automáticamente de la acción formativa"
-            )
-            
-            # Fechas
-            fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
-            fecha_inicio = st.date_input(
-                "Fecha de Inicio *",
-                value=fecha_inicio_value,
-                help="Fecha de inicio de la formación",
-                key="form_fecha_inicio"
-            )
-    
-            fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
-            fecha_fin_prevista = st.date_input(
-                "Fecha Fin Prevista *",
-                value=fecha_fin_prevista_value,
-                help="Fecha prevista de finalización",
-                key="form_fecha_fin_prevista"
-            )
-        
-        with col2:
-            # Localidad y Provincia (obligatorios FUNDAE con selectores)
-            provincias = grupos_service.get_provincias()
-            prov_opciones = {p["nombre"]: p["id"] for p in provincias}
-            
-            provincia_actual = datos_grupo.get("provincia") if datos_grupo else None
-            
-            provincia_sel = st.selectbox(
-                "Provincia *",
-                options=list(prov_opciones.keys()),
-                index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
-                help="Provincia de impartición (obligatorio FUNDAE)",
-                key="form_provincia"
-            )
-            
-            localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
-            loc_nombres = [l["nombre"] for l in localidades]
-            
-            localidad_actual = datos_grupo.get("localidad") if datos_grupo else None
-            
-            localidad_sel = st.selectbox(
-                "Localidad *",
-                options=loc_nombres,
-                index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
-                help="Localidad de impartición (obligatorio FUNDAE)",
-                key="form_localidad"
-            )
-            
-            provincia = provincia_sel
-            localidad = localidad_sel
-            
-            cp = st.text_input(
-                "Código Postal",
-                value=datos_grupo.get("cp", ""),
-                help="Código postal de impartición",
-                key="form_cp"
-            )
+                idx_accion = acciones_nombres.index(accion_actual) if accion_actual in acciones_nombres else 0
+                accion_formativa = st.selectbox("Acción Formativa *", acciones_nombres, index=idx_accion)
+                accion_id = acciones_dict[accion_formativa]
+                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(grupos_service.get_accion_modalidad(accion_id))
+                st.text_input("Modalidad", value=modalidad_grupo, disabled=True)
+                fecha_inicio = st.date_input("Fecha de Inicio *", value=safe_date_conversion(grupo_data.get('fecha_inicio')))
+            with col2:
+                provincias = grupos_service.get_provincias()
+                prov_opciones = {p["nombre"]: p["id"] for p in provincias}
+                provincia_actual = grupo_data.get("provincia", "")
+                idx_prov = list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0
+                provincia_sel = st.selectbox("Provincia *", list(prov_opciones.keys()), index=idx_prov)
+                localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
+                loc_nombres = [l["nombre"] for l in localidades]
+                localidad_actual = grupo_data.get("localidad", "")
+                idx_loc = loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0
+                localidad_sel = st.selectbox("Localidad *", loc_nombres, index=idx_loc if loc_nombres else -1)
+                cp = st.text_input("Código Postal", value=grupo_data.get('cp', ''))
+                fecha_fin_prevista = st.date_input("Fecha Fin Prevista *", value=safe_date_conversion(grupo_data.get('fecha_fin_prevista')))
+            col3, col4 = st.columns(2)
+            with col3:
+                responsable = st.text_input("Responsable del Grupo *", value=grupo_data.get('responsable', ''))
+                n_participantes_previstos = st.number_input("Participantes Previstos *", min_value=1, max_value=30, value=int(grupo_data.get('n_participantes_previstos', 8)))
+            with col4:
+                telefono_contacto = st.text_input("Teléfono de Contacto *", value=grupo_data.get('telefono_contacto', ''))
+            lugar_imparticion = st.text_area("Lugar de Impartición", value=grupo_data.get('lugar_imparticion', ''), height=60)
+            observaciones = st.text_area("Observaciones", value=grupo_data.get('observaciones', ''), height=80)
 
-            responsable = st.text_input(
-                "Responsable del Grupo *",
-                value=datos_grupo.get("responsable", ""),
-                help="Persona responsable del grupo (obligatorio FUNDAE)",
-                key="form_responsable"
-            )
-            
-            telefono_contacto = st.text_input(
-                "Teléfono de Contacto *",
-                value=datos_grupo.get("telefono_contacto", ""),
-                help="Teléfono de contacto del responsable (obligatorio FUNDAE)",
-                key="form_telefono_contacto"
-            )
-            # CORRECCIÓN: Manejar valores None y 0 correctamente
-            n_participantes_actual = datos_grupo.get("n_participantes_previstos")
-            if n_participantes_actual is None or n_participantes_actual == 0:
-                n_participantes_actual = 8  # Valor por defecto válido
-            
-            n_participantes_previstos = st.number_input(
-                "Participantes Previstos *",
-                min_value=1,
-                max_value=30,
-                value=int(n_participantes_actual),
-                help="Número de participantes previstos (1-30)",
-                key="form_n_participantes"
-            )
-        
-        # Lugar de impartición
-        lugar_imparticion = st.text_area(
-            "Lugar de Impartición",
-            value=datos_grupo.get("lugar_imparticion", ""),
-            height=60,
-            help="Descripción detallada del lugar donde se impartirá la formación",
-            key="form_lugar_imparticion"
-        )
-        
-        # Observaciones
-        observaciones = st.text_area(
-            "Observaciones",
-            value=datos_grupo.get("observaciones", ""),
-            height=80,
-            help="Información adicional sobre el grupo (opcional)",
-            key="form_observaciones"
-        )
-        
         # =====================
-        # SECCIÓN 2: HORARIOS FUNDAE (Expandida por defecto)
+        # SECCIÓN 2: HORARIOS
         # =====================
-        with st.expander("⏰ 2. Horarios de Impartición", expanded=True):
-            # Cargar horario actual si existe
-            horario_actual = datos_grupo.get("horario", "")
-            
-            if horario_actual and not es_creacion:
+        with st.expander("🕐 2. Horarios de Impartición", expanded=False):
+            horario_actual = grupo_data.get('horario', '')
+            if horario_actual:
                 st.info(f"**Horario actual**: {horario_actual}")
-                
-                # Opción para mantener o cambiar
-                cambiar_horario = st.checkbox("Modificar horario", key="cambiar_horario")
-                
+                cambiar_horario = st.checkbox("Modificar horario", key="cambiar_horario_edit")
                 if cambiar_horario:
-                    # Parsear horario actual para prellenar campos
-                    m_ini, m_fin, t_ini, t_fin, dias = parsear_horario_fundae(horario_actual)
-                    horario_nuevo = crear_selector_horario_fundae("edit")
+                    horario_nuevo = st.text_area("Nuevo horario", value=horario_actual, height=100)
                 else:
                     horario_nuevo = horario_actual
             else:
-                # Crear nuevo horario
-                horario_nuevo = crear_selector_horario_fundae("new")
-        
+                horario_nuevo = st.text_area("Horario FUNDAE", height=100)
+
         # =====================
-        # SECCIÓN 3: FINALIZACIÓN (Condicional)
+        # SECCIÓN 3: FINALIZACIÓN
         # =====================
-        # CORRECCIÓN: Mejorar lógica de cuándo mostrar finalización
         mostrar_finalizacion = (
-            not es_creacion
-            and (
-                estado_actual in ["FINALIZAR", "FINALIZADO"]
-                or (fecha_fin_prevista and fecha_fin_prevista <= date.today())
-                or datos_grupo.get("_mostrar_finalizacion", False)
-            )
+            estado_actual in ["FINALIZAR", "FINALIZADO"] or
+            (fecha_fin_prevista and fecha_fin_prevista <= datetime.now().date())
         )
-    
         datos_finalizacion = {}
         if mostrar_finalizacion:
             with st.expander("🏁 3. Datos de Finalización", expanded=(estado_actual == "FINALIZAR")):
-                st.markdown("**Complete los datos de finalización para FUNDAE**")
-                
-                if estado_actual == "FINALIZAR":
-                    st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    fecha_fin_real = st.date_input(
-                        "Fecha Fin Real *",
-                        value=datetime.fromisoformat(datos_grupo["fecha_fin"]).date() if datos_grupo.get("fecha_fin") else date.today(),
-                        help="Fecha real de finalización del grupo",
-                        key="form_fecha_fin_real"
-                    )
-                    
-                    # CORRECCIÓN: Manejo seguro de valores NaN
-                    n_finalizados_raw = datos_grupo.get("n_participantes_finalizados")
-                    n_finalizados_actual = safe_int_conversion(n_finalizados_raw, 0)
-                    
-                    n_finalizados = st.number_input(
-                        "Participantes Finalizados *",
-                        min_value=0,
-                        max_value=n_participantes_previstos,
-                        value=n_finalizados_actual,
-                        help="Número de participantes que finalizaron la formación",
-                        key="form_n_finalizados"
-                    )
-                
-                with col2:
-                    # CORRECCIÓN: Manejo seguro de valores NaN para aptos
-                    n_aptos_raw = datos_grupo.get("n_aptos")
-                    n_aptos_actual = safe_int_conversion(n_aptos_raw, 0)
-                    
-                    # CORRECCIÓN: Manejo seguro de valores NaN para no aptos  
-                    n_no_aptos_raw = datos_grupo.get("n_no_aptos")
-                    n_no_aptos_actual = safe_int_conversion(n_no_aptos_raw, 0)
-                    
-                    n_aptos = st.number_input(
-                        "Participantes Aptos *",
-                        min_value=0,
-                        max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                        value=n_aptos_actual,
-                        help="Número de participantes aptos",
-                        key="form_n_aptos"
-                    )
-                    
-                    n_no_aptos = st.number_input(
-                        "Participantes No Aptos *",
-                        min_value=0,
-                        max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos,
-                        value=n_no_aptos_actual,
-                        help="Número de participantes no aptos",
-                        key="form_n_no_aptos"
-                    )
-                
-                # Validación en tiempo real
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    fecha_fin_real = st.date_input("Fecha Fin Real *", value=safe_date_conversion(grupo_data.get("fecha_fin")) or datetime.now().date())
+                    n_finalizados = st.number_input("Participantes Finalizados *", min_value=0, max_value=n_participantes_previstos, value=safe_int_conversion(grupo_data.get("n_participantes_finalizados"), 0))
+                with col_f2:
+                    n_aptos = st.number_input("Participantes Aptos *", min_value=0, max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos, value=safe_int_conversion(grupo_data.get("n_aptos"), 0))
+                    n_no_aptos = st.number_input("Participantes No Aptos *", min_value=0, max_value=n_finalizados if n_finalizados > 0 else n_participantes_previstos, value=safe_int_conversion(grupo_data.get("n_no_aptos"), 0))
                 if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
                     st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
                 elif n_finalizados > 0:
                     st.success("✅ Números de finalización coherentes")
-                
                 datos_finalizacion = {
                     "fecha_fin": fecha_fin_real.isoformat(),
                     "n_participantes_finalizados": n_finalizados,
                     "n_aptos": n_aptos,
                     "n_no_aptos": n_no_aptos
                 }
-            # =====================
-        # BOTONES DE ACCIÓN
+
         # =====================
-        st.divider()
-    
-        if es_creacion:
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                if st.button("➕ Crear Grupo", type="primary", use_container_width=True):
-                    # Preparar datos para crear
-                    # En CREAR
-                    datos_crear = {
-                        "codigo_grupo": codigo_grupo,
-                        "accion_formativa_id": acciones_dict[accion_formativa],
-                        "modalidad": modalidad_grupo,   # ← derivada de la acción
-                        "fecha_inicio": fecha_inicio.isoformat(),
-                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "provincia": provincia,
-                        "localidad": localidad,
-                        "cp": cp,
-                        "responsable": responsable,
-                        "telefono_contacto": telefono_contacto,
-                        "n_participantes_previstos": n_participantes_previstos,
-                        "lugar_imparticion": lugar_imparticion,
-                        "observaciones": observaciones,
-                        "horario": horario_nuevo if horario_nuevo else None
-                    }
-
-    
-                    # CORRECCIÓN: Asignar empresa según rol automáticamente
-                    if grupos_service.rol == "gestor":
-                        datos_crear["empresa_id"] = grupos_service.empresa_id
-                    # Para admin, se asignará la empresa en la sección empresas participantes
-    
-                    # Validar datos obligatorios
-                    errores = validar_campos_obligatorios_fundae(datos_crear)
-    
-                    if errores:
-                        st.error("❌ Errores de validación:")
-                        for error in errores:
-                            st.error(f"• {error}")
-                    else:
-                        # Crear grupo
-                        try:
-                            exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
-                            if exito:
-                                st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                                # CORRECCIÓN: Cargar el grupo recién creado para edición
-                                grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                                if grupo_creado.data:
-                                    st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                    st.rerun()
-                            else:
-                                st.error("❌ Error al crear el grupo")
-                        except Exception as e:
-                            st.error(f"❌ Error al crear grupo: {e}")
-    
-            with col2:
-                if st.button("❌ Cancelar", use_container_width=True):
-                    st.session_state.grupo_seleccionado = None
-                    st.rerun()
-    
-        else:
-            # Botones para edición
-            col1, col2, col3 = st.columns(3)
-    
-            with col1:
-                if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                    # Preparar datos para actualizar
-                    # En ACTUALIZAR
-                    datos_actualizar = {
-                        "modalidad": modalidad_grupo,   # ← derivada de la acción
-                        "fecha_inicio": fecha_inicio.isoformat(),
-                        "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                        "provincia": provincia,
-                        "localidad": localidad,
-                        "cp": cp,
-                        "responsable": responsable,
-                        "telefono_contacto": telefono_contacto,
-                        "n_participantes_previstos": n_participantes_previstos,
-                        "lugar_imparticion": lugar_imparticion,
-                        "observaciones": observaciones,
-                        "horario": horario_nuevo if horario_nuevo else None
-                    }
-    
-                    # Agregar datos de finalización si están disponibles
-                    if datos_finalizacion:
-                        datos_actualizar.update(datos_finalizacion)
-    
-                    # Validar datos
-                    errores = validar_campos_obligatorios_fundae(datos_actualizar)
-                    if datos_finalizacion:
-                        errores.extend(validar_datos_finalizacion(datos_actualizar))
-    
-                    if errores:
-                        st.error("❌ Errores de validación:")
-                        for error in errores:
-                            st.error(f"• {error}")
-                    else:
-                        # Actualizar grupo
-                        try:
-                            if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
-                                st.success("✅ Cambios guardados correctamente")
-                                # CORRECCIÓN: Recargar datos del grupo actualizado
-                                grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                                if grupo_actualizado.data:
-                                    st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
-                                st.rerun()
-                            else:
-                                st.error("❌ Error al guardar cambios")
-                        except Exception as e:
-                            st.error(f"❌ Error al actualizar: {e}")
-    
-            with col2:
-                if st.button("🔄 Recargar", use_container_width=True):
-                    # CORRECCIÓN: Recargar datos del grupo desde BD
-                    try:
-                        grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                        if grupo_recargado.data:
-                            st.session_state.grupo_seleccionado = grupo_recargado.data[0]
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al recargar: {e}")
-    
-            with col3:
-                if st.button("❌ Cancelar", use_container_width=True):
-                    st.session_state.grupo_seleccionado = None
-                    st.rerun()
-    
-        return datos_grupo.get("id") if datos_grupo else None
-
-# =========================
-# SECCIONES ADICIONALES (Solo para grupos existentes)
-# =========================
-
-def mostrar_secciones_adicionales(grupos_service, grupo_id):
-    """Muestra las secciones adicionales para grupos ya creados."""
-    
-    # SECCIÓN 4: TUTORES
-    with st.expander("👨‍🏫 4. Tutores Asignados", expanded=False):
-        mostrar_seccion_tutores(grupos_service, grupo_id)
-        
-    # SECCIÓN 4.b: CENTRO GESTOR
-    with st.expander("🏢 4.b Centro Gestor", expanded=False):
-        mostrar_seccion_centro_gestor(grupos_service, grupo_id)
-        
-    # SECCIÓN 5: EMPRESAS PARTICIPANTES  
-    with st.expander("🏢 5. Empresas Participantes", expanded=False):
-        mostrar_seccion_empresas(grupos_service, grupo_id)
-    
-    # SECCIÓN 6: PARTICIPANTES
-    with st.expander("👥 6. Participantes del Grupo", expanded=False):
-        mostrar_seccion_participantes(grupos_service, grupo_id)
-    
-    # SECCIÓN 7: COSTES FUNDAE
-    with st.expander("💰 7. Costes y Bonificaciones FUNDAE", expanded=False):
-        mostrar_seccion_costes(grupos_service, grupo_id)
-
-def mostrar_seccion_tutores(grupos_service, grupo_id):
-    """Gestión de tutores del grupo - CON MANEJO DE ERRORES."""
-    st.markdown("**Gestión de Tutores**")
-    
-    try:
-        # Tutores actuales
-        df_tutores = grupos_service.get_tutores_grupo(grupo_id)
-        
-        if not df_tutores.empty:
-            st.markdown("##### Tutores Asignados")
-            for _, row in df_tutores.iterrows():
-                tutor = row.get("tutor", {})
-                if not tutor:  # Verificar que tutor no sea None
-                    continue
-                    
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    nombre_completo = f"{tutor.get('nombre', '')} {tutor.get('apellidos', '')}"
-                    st.write(f"**{nombre_completo.strip()}**")
-                    st.caption(f"Email: {tutor.get('email', 'N/A')} | Especialidad: {tutor.get('especialidad', 'N/A')}")
-                with col2:
-                    if st.button("Quitar", key=f"quitar_tutor_{row.get('id')}", type="secondary"):
-                        try:
-                            if grupos_service.delete_tutor_grupo(row.get("id")):
-                                st.success("Tutor eliminado")
-                                st.rerun()
-                            else:
-                                st.error("Error al eliminar tutor")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        else:
-            st.info("No hay tutores asignados")
-        
-        # Añadir tutores
-        st.markdown("##### Añadir Tutores")
-        try:
-            df_tutores_disponibles = grupos_service.get_tutores_completos()
-            
-            if not df_tutores_disponibles.empty:
-                # Filtrar tutores ya asignados
-                tutores_asignados = set()
-                for _, row in df_tutores.iterrows():
-                    tutor = row.get("tutor", {})
-                    if tutor and tutor.get("id"):
-                        tutores_asignados.add(tutor.get("id"))
-                
-                df_disponibles = df_tutores_disponibles[
-                    ~df_tutores_disponibles["id"].isin(tutores_asignados)
-                ]
-                
-                if not df_disponibles.empty:
-                    opciones_tutores = {}
-                    for _, row in df_disponibles.iterrows():
-                        nombre = row.get('nombre_completo', f"{row.get('nombre', '')} {row.get('apellidos', '')}")
-                        especialidad = row.get('especialidad', 'Sin especialidad')
-                        opciones_tutores[f"{nombre} - {especialidad}"] = row["id"]
-                    
-                    tutores_seleccionados = st.multiselect(
-                        "Seleccionar tutores:",
-                        opciones_tutores.keys(),
-                        key=f"tutores_add_{grupo_id}"
-                    )
-                    
-                    if tutores_seleccionados and st.button("Asignar Tutores", type="primary"):
-                        exitos = 0
-                        for tutor_nombre in tutores_seleccionados:
-                            tutor_id = opciones_tutores[tutor_nombre]
-                            try:
-                                if grupos_service.create_tutor_grupo(grupo_id, tutor_id):
-                                    exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al asignar {tutor_nombre}: {e}")
-                        
-                        if exitos > 0:
-                            st.success(f"Se asignaron {exitos} tutores")
-                            st.rerun()
-                else:
-                    st.info("Todos los tutores disponibles ya están asignados")
-            else:
-                st.warning("No hay tutores disponibles en el sistema")
-        except Exception as e:
-            st.error(f"Error al cargar tutores disponibles: {e}")
-            
-    except Exception as e:
-        st.error(f"Error al cargar sección de tutores: {e}")
-
-def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
-    """Gestión de Centro Gestor (solo Teleformación/Mixta)."""
-    with st.expander("🏢 Centro Gestor (solo Teleformación/Mixta)", expanded=False):
-        try:
-            info_mod = grupos_service.supabase.table("grupos").select(
-                "accion_formativa:acciones_formativas(modalidad)"
-            ).eq("id", grupo_id).limit(1).execute()
-            
-            modalidad_accion_raw = ""
-            if info_mod.data and info_mod.data[0].get("accion_formativa"):
-                modalidad_accion_raw = info_mod.data[0]["accion_formativa"].get("modalidad", "")
-            
-            modalidad_norm = grupos_service.normalizar_modalidad_fundae(modalidad_accion_raw)
-            
-            if modalidad_norm in ["TELEFORMACION", "MIXTA"]:
-                st.markdown("### Centro gestor en plataforma de Teleformación")
-                
-                centro_actual = grupos_service.get_centro_gestor_grupo(grupo_id)
-                if centro_actual and centro_actual.get("centro"):
-                    c = centro_actual["centro"]
-                    st.info(
-                        f"Centro gestor actual: **{c.get('razon_social','(sin nombre)')}** "
-                        f"— CIF: {c.get('cif','N/A')} — CP: {c.get('codigo_postal','N/A')}"
-                    )
-
-                df_centros = grupos_service.get_centros_para_grupo(grupo_id)
-                if df_centros.empty:
-                    st.warning("No hay centros gestores disponibles para este grupo.")
-                else:
-                    opciones = {
-                        str(row.get("razon_social") or row.get("nombre_comercial") or row.get("cif") or row.get("id")): row["id"]
-                        for _, row in df_centros.iterrows()  # ✅ CORREGIDO
-                    }
-                    
-                    sel = st.selectbox("Seleccionar centro gestor", list(opciones.keys()))
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("Asignar centro gestor"):
-                            ok = grupos_service.assign_centro_gestor_a_grupo(grupo_id, opciones[sel])
-                            if ok:
-                                st.success("Centro gestor asignado correctamente.")
-                                st.rerun()
-                    
-                    with col2:
-                        if centro_actual and st.button("❌ Desasignar centro gestor"):
-                            ok = grupos_service.unassign_centro_gestor_de_grupo(grupo_id)
-                            if ok:
-                                st.success("Centro gestor desasignado.")
-                                st.rerun()
-                                
-        except Exception as e:
-            st.error(f"Error en sección Centro Gestor: {e}")
-
-def mostrar_seccion_empresas(grupos_service, grupo_id):
-    """Gestión de empresas participantes - CON MANEJO DE ERRORES."""
-    st.markdown("**Empresas Participantes**")
-    
-    if grupos_service.rol == "gestor":
-        st.info("Como gestor, tu empresa está vinculada automáticamente al grupo")
-    
-    try:
-        # Empresas actuales
-        df_empresas = grupos_service.get_empresas_grupo(grupo_id)
-        
-        if not df_empresas.empty:
-            st.markdown("##### Empresas Asignadas")
-            for _, row in df_empresas.iterrows():
-                empresa = row.get("empresa", {})
-                if not empresa:  # Verificar que empresa no sea None
-                    continue
-                    
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{empresa.get('nombre', 'Sin nombre')}**")
-                    cif = empresa.get('cif', 'Sin CIF')
-                    fecha = row.get('fecha_asignacion', 'Sin fecha')
-                    if isinstance(fecha, str) and len(fecha) > 10:
-                        fecha = fecha[:10]  # Solo la fecha, sin hora
-                    st.caption(f"CIF: {cif} | Fecha: {fecha}")
-                with col2:
-                    if grupos_service.rol == "admin" and st.button(
-                        "Quitar", 
-                        key=f"quitar_empresa_{row.get('id')}", 
-                        type="secondary"
-                    ):
-                        try:
-                            if grupos_service.delete_empresa_grupo(row.get("id")):
-                                st.success("Empresa eliminada")
-                                st.rerun()
-                            else:
-                                st.error("Error al eliminar empresa")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-        else:
-            st.info("No hay empresas asignadas")
-        
-        # Añadir empresas (solo admin)
-        if grupos_service.rol == "admin":
-            st.markdown("##### Añadir Empresas")
+        # SECCIONES INFORMATIVAS
+        # =====================
+        with st.expander("👨‍🏫 4. Tutores del Grupo", expanded=False):
             try:
-                empresas_dict = grupos_service.get_empresas_dict()
-                
-                if empresas_dict:
-                    # Filtrar empresas ya asignadas
-                    empresas_asignadas = set()
+                df_tutores = grupos_service.get_tutores_grupo(grupo_data['id'])
+                if not df_tutores.empty:
+                    st.markdown("**Tutores asignados:**")
+                    for _, row in df_tutores.head(5).iterrows():
+                        tutor = row.get("tutor", {})
+                        if tutor:
+                            nombre_completo = f"{tutor.get('nombre', '')} {tutor.get('apellidos', '')}"
+                            st.write(f"• {nombre_completo.strip()} - {tutor.get('especialidad', 'Sin especialidad')}")
+                else:
+                    st.info("No hay tutores asignados")
+            except Exception as e:
+                st.error(f"Error al cargar tutores: {e}")
+
+        with st.expander("🏢 5. Empresas Participantes", expanded=False):
+            try:
+                df_empresas = grupos_service.get_empresas_grupo(grupo_data['id'])
+                if not df_empresas.empty:
+                    st.markdown("**Empresas participantes:**")
                     for _, row in df_empresas.iterrows():
                         empresa = row.get("empresa", {})
-                        if empresa and empresa.get("nombre"):
-                            empresas_asignadas.add(empresa.get("nombre"))
-                    
-                    empresas_disponibles = {
-                        nombre: id_emp for nombre, id_emp in empresas_dict.items()
-                        if nombre not in empresas_asignadas
-                    }
-                    
-                    if empresas_disponibles:
-                        empresas_seleccionadas = st.multiselect(
-                            "Seleccionar empresas:",
-                            empresas_disponibles.keys(),
-                            key=f"empresas_add_{grupo_id}"
-                        )
-                        
-                        if empresas_seleccionadas and st.button("Asignar Empresas", type="primary"):
-                            exitos = 0
-                            for empresa_nombre in empresas_seleccionadas:
-                                empresa_id = empresas_disponibles[empresa_nombre]
-                                try:
-                                    if grupos_service.create_empresa_grupo(grupo_id, empresa_id):
-                                        exitos += 1
-                                except Exception as e:
-                                    st.error(f"Error al asignar {empresa_nombre}: {e}")
-                            
-                            if exitos > 0:
-                                st.success(f"Se asignaron {exitos} empresas")
-                                st.rerun()
-                    else:
-                        st.info("Todas las empresas disponibles ya están asignadas")
+                        if empresa:
+                            st.write(f"• {empresa.get('nombre', 'Sin nombre')} - CIF: {empresa.get('cif', 'N/A')}")
                 else:
-                    st.warning("No hay empresas disponibles en el sistema")
+                    st.info("No hay empresas asignadas")
             except Exception as e:
-                st.error(f"Error al cargar empresas disponibles: {e}")
-                
-    except Exception as e:
-        st.error(f"Error al cargar sección de empresas: {e}")
+                st.error(f"Error al cargar empresas: {e}")
 
-def mostrar_seccion_participantes(grupos_service, grupo_id):
-    """Gestión de participantes del grupo - CON MANEJO DE ERRORES ROBUSTO."""
-    st.markdown("**Participantes del Grupo**")
-    
-    try:
-        # Participantes actuales
-        df_participantes = grupos_service.get_participantes_grupo(grupo_id)
-        
-        if not df_participantes.empty:
-            st.markdown("##### Participantes Asignados")
-            
-            # Verificar que las columnas existen
-            columnas_mostrar = []
-            columnas_disponibles = ["nif", "nombre", "apellidos", "email", "telefono"]
-            for col in columnas_disponibles:
-                if col in df_participantes.columns:
-                    columnas_mostrar.append(col)
-            
-            if columnas_mostrar:
-                st.dataframe(
-                    df_participantes[columnas_mostrar],
-                    use_container_width=True,
-                    hide_index=True
-                )
-            else:
-                st.warning("No se pueden mostrar los datos de participantes (columnas faltantes)")
-            
-            # Desasignar participantes
-            with st.expander("Desasignar Participantes"):
-                participantes_opciones = []
-                for _, row in df_participantes.iterrows():
-                    nif = row.get('nif', 'Sin NIF')
-                    nombre = row.get('nombre', '')
-                    apellidos = row.get('apellidos', '')
-                    participantes_opciones.append(f"{nif} - {nombre} {apellidos}")
-                
-                if participantes_opciones:
-                    participantes_quitar = st.multiselect(
-                        "Seleccionar participantes a desasignar:",
-                        participantes_opciones,
-                        key=f"participantes_quitar_{grupo_id}"
-                    )
-                    
-                    if participantes_quitar and st.button("Desasignar Seleccionados", type="secondary"):
-                        exitos = 0
-                        for participante_str in participantes_quitar:
-                            try:
-                                nif = participante_str.split(" - ")[0]
-                                participante_row = df_participantes[df_participantes["nif"] == nif]
-                                if not participante_row.empty:
-                                    participante_id = participante_row.iloc[0]["id"]
-                                    if grupos_service.desasignar_participante_de_grupo(participante_id):
-                                        exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al desasignar {participante_str}: {e}")
-                        
-                        if exitos > 0:
-                            st.success(f"Se desasignaron {exitos} participantes")
-                            st.rerun()
-        else:
-            st.info("No hay participantes asignados")
-        
-        # Asignar participantes
-        st.markdown("##### Asignar Participantes")
-        
-        tab1, tab2 = st.tabs(["Individual", "Masivo (Excel)"])
-        
-        with tab1:
+        with st.expander("👥 6. Participantes del Grupo", expanded=False):
             try:
-                df_disponibles = grupos_service.get_participantes_disponibles(grupo_id)
-                
-                if not df_disponibles.empty:
-                    participantes_opciones = {}
-                    for _, row in df_disponibles.iterrows():
-                        nif = row.get('nif', 'Sin NIF')
-                        nombre = row.get('nombre', '')
-                        apellidos = row.get('apellidos', '')
-                        participantes_opciones[f"{nif} - {nombre} {apellidos}"] = row["id"]
-                    
-                    participantes_seleccionados = st.multiselect(
-                        "Seleccionar participantes:",
-                        participantes_opciones.keys(),
-                        key=f"participantes_add_{grupo_id}"
-                    )
-                    
-                    if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
-                        exitos = 0
-                        for participante_str in participantes_seleccionados:
-                            participante_id = participantes_opciones[participante_str]
-                            try:
-                                if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
-                                    exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al asignar {participante_str}: {e}")
-                        
-                        if exitos > 0:
-                            st.success(f"Se asignaron {exitos} participantes")
-                            st.rerun()
+                df_participantes = grupos_service.get_participantes_grupo(grupo_data['id'])
+                if not df_participantes.empty:
+                    st.metric("Participantes asignados", len(df_participantes))
                 else:
-                    st.info("No hay participantes disponibles")
+                    st.info("No hay participantes asignados")
             except Exception as e:
-                st.error(f"Error al cargar participantes disponibles: {e}")
-        
-        with tab2:
-            st.markdown("**Importación masiva desde Excel**")
-            st.markdown("1. Sube un archivo Excel con una columna 'dni' o 'nif'")
-            st.markdown("2. Se buscarán automáticamente en el sistema")
-            
-            archivo_excel = st.file_uploader(
-                "Subir archivo Excel",
-                type=["xlsx"],
-                key=f"excel_participantes_{grupo_id}"
-            )
-            
-            if archivo_excel:
-                try:
-                    df_import = pd.read_excel(archivo_excel)
-                    
-                    # Detectar columna de NIF
-                    col_nif = None
-                    for col in ["dni", "nif", "DNI", "NIF"]:
-                        if col in df_import.columns:
-                            col_nif = col
-                            break
-                    
-                    if not col_nif:
-                        st.error("El archivo debe contener una columna 'dni' o 'nif'")
-                    else:
-                        st.dataframe(df_import.head(), use_container_width=True)
-                        
-                        if st.button("Procesar Archivo", type="primary"):
-                            try:
-                                nifs = [str(d).strip() for d in df_import[col_nif] if pd.notna(d)]
-                                nifs_validos = [d for d in nifs if validar_dni_cif(d)]
-                                
-                                df_disp_masivo = grupos_service.get_participantes_disponibles(grupo_id)
-                                disponibles = {p["nif"]: p["id"] for _, p in df_disp_masivo.iterrows()}
-                                
-                                asignados = 0
-                                errores = []
-                                
-                                for nif in nifs_validos:
-                                    participante_id = disponibles.get(nif)
-                                    if participante_id:
-                                        try:
-                                            if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
-                                                asignados += 1
-                                        except Exception as e:
-                                            errores.append(f"NIF {nif}: {str(e)}")
-                                    else:
-                                        errores.append(f"NIF {nif} no encontrado o ya asignado")
-                                
-                                if asignados > 0:
-                                    st.success(f"Se asignaron {asignados} participantes")
-                                if errores:
-                                    st.warning("Errores encontrados:")
-                                    for error in errores[:10]:  # Mostrar máximo 10 errores
-                                        st.warning(f"• {error}")
-                                
-                                if asignados > 0:
-                                    st.rerun()
-                            except Exception as e:
-                                st.error(f"Error al procesar datos: {e}")
-                
-                except Exception as e:
-                    st.error(f"Error al leer archivo Excel: {e}")
-                    
-    except Exception as e:
-        st.error(f"Error al cargar sección de participantes: {e}")
+                st.error(f"Error al cargar participantes: {e}")
 
-def mostrar_seccion_costes(grupos_service, grupo_id):
-    """Gestión de costes y bonificaciones FUNDAE - CON VALIDACIONES ROBUSTAS."""
-    st.markdown("**Costes y Bonificaciones FUNDAE**")
-    
-    # Obtener datos del grupo para cálculos
-    try:
-        # Consulta más robusta con manejo de errores
-        grupo_info = grupos_service.supabase.table("grupos").select("""
-            modalidad, n_participantes_previstos,
-            accion_formativa:acciones_formativas(num_horas)
-        """).eq("id", grupo_id).execute()
-        
-        if not grupo_info.data:
-            st.error("No se pudo cargar información del grupo")
-            return
-            
-        datos_grupo = grupo_info.data[0]
-        modalidad = datos_grupo.get("modalidad", "PRESENCIAL")
-        
-        # Validar participantes
-        participantes_raw = datos_grupo.get("n_participantes_previstos")
-        if participantes_raw is None or participantes_raw == 0:
-            participantes = 1  # Valor mínimo por defecto
-            st.warning("Número de participantes no definido, usando valor por defecto: 1")
-        else:
-            participantes = int(participantes_raw)
-        
-        # Validar horas de la acción formativa
-        accion_formativa = datos_grupo.get("accion_formativa")
-        if accion_formativa and accion_formativa.get("num_horas"):
-            horas = int(accion_formativa.get("num_horas", 0))
-        else:
-            horas = 0
-            st.warning("Horas de la acción formativa no definidas")
-            
-    except Exception as e:
-        st.error(f"Error al cargar datos del grupo: {e}")
-        return
-    
-    # Calcular límite FUNDAE solo si tenemos datos válidos
-    if horas > 0 and participantes > 0:
-        try:
-            limite_boni, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
-        except Exception as e:
-            st.error(f"Error al calcular límites FUNDAE: {e}")
-            limite_boni, tarifa_max = 0, 13.0  # Valores por defecto
-    else:
-        limite_boni, tarifa_max = 0, 13.0
-        st.warning("No se pueden calcular límites FUNDAE sin horas y participantes válidos")
-    
-    # Mostrar información base
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Modalidad", modalidad)
-    with col2:
-        st.metric("Participantes", participantes)
-    with col3:
-        st.metric("Horas", horas)
-    with col4:
-        st.metric("Límite Bonificación", f"{limite_boni:,.2f} €")
-    
-    # Formulario de costes
-    try:
-        costes_actuales = grupos_service.get_grupo_costes(grupo_id)
-    except Exception as e:
-        st.error(f"Error al cargar costes actuales: {e}")
-        costes_actuales = {}
-    
-    with st.form(f"costes_{grupo_id}"):
-        st.markdown("##### Costes de Formación")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            costes_directos = st.number_input(
-                "Costes Directos (€)",
-                value=float(costes_actuales.get("costes_directos", 0)),
-                min_value=0.0,
-                key=f"directos_{grupo_id}"
-            )
-            
-            costes_indirectos = st.number_input(
-                "Costes Indirectos (€)",
-                value=float(costes_actuales.get("costes_indirectos", 0)),
-                min_value=0.0,
-                help="Máximo 30% de costes directos",
-                key=f"indirectos_{grupo_id}"
-            )
-            
-            costes_organizacion = st.number_input(
-                "Costes Organización (€)",
-                value=float(costes_actuales.get("costes_organizacion", 0)),
-                min_value=0.0,
-                key=f"organizacion_{grupo_id}"
-            )
-        
-        with col2:
-            costes_salariales = st.number_input(
-                "Costes Salariales (€)",
-                value=float(costes_actuales.get("costes_salariales", 0)),
-                min_value=0.0,
-                key=f"salariales_{grupo_id}"
-            )
-            
-            cofinanciacion_privada = st.number_input(
-                "Cofinanciación Privada (€)",
-                value=float(costes_actuales.get("cofinanciacion_privada", 0)),
-                min_value=0.0,
-                key=f"cofinanciacion_{grupo_id}"
-            )
-            
-            tarifa_hora = st.number_input(
-                "Tarifa por Hora (€)",
-                value=float(costes_actuales.get("tarifa_hora", tarifa_max)),
-                min_value=0.0,
-                max_value=tarifa_max,
-                help=f"Máximo FUNDAE: {tarifa_max} €/h",
-                key=f"tarifa_{grupo_id}"
-            )
-        
-        # Validaciones
-        total_costes = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
-        limite_calculado = tarifa_hora * horas * participantes
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Costes", f"{total_costes:,.2f} €")
-        with col2:
-            st.metric("Límite Calculado", f"{limite_calculado:,.2f} €")
-        
-        # Validar porcentaje indirectos
-        if costes_directos > 0:
-            pct_indirectos = (costes_indirectos / costes_directos) * 100
-            if pct_indirectos > 30:
-                st.error(f"Costes indirectos ({pct_indirectos:.1f}%) superan el 30% permitido")
-            else:
-                st.success(f"Costes indirectos dentro del límite ({pct_indirectos:.1f}%)")
-        
-        observaciones_costes = st.text_area(
-            "Observaciones",
-            value=costes_actuales.get("observaciones", ""),
-            key=f"obs_costes_{grupo_id}"
-        )
-        
-        if st.form_submit_button("Guardar Costes", type="primary"):
-            datos_costes = {
-                "grupo_id": grupo_id,
-                "costes_directos": costes_directos,
-                "costes_indirectos": costes_indirectos,
-                "costes_organizacion": costes_organizacion,
-                "costes_salariales": costes_salariales,
-                "cofinanciacion_privada": cofinanciacion_privada,
-                "tarifa_hora": tarifa_hora,
-                "modalidad": modalidad,
-                "total_costes_formacion": total_costes,
-                "limite_maximo_bonificacion": limite_calculado
-            }
-            
-            # Validar antes de guardar
-            if costes_directos > 0 and (costes_indirectos / costes_directos) > 0.3:
-                st.error("No se puede guardar: costes indirectos superan el 30%")
-            elif tarifa_hora > tarifa_max:
-                st.error(f"No se puede guardar: tarifa/hora supera el máximo ({tarifa_max} €)")
-            else:
-                try:
-                    if costes_actuales:
-                        exito = grupos_service.update_grupo_coste(grupo_id, datos_costes)
-                    else:
-                        exito = grupos_service.create_grupo_coste(datos_costes)
-                    
-                    if exito:
-                        st.success("Costes guardados correctamente")
-                        st.rerun()
-                    else:
-                        st.error("Error al guardar costes")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-                  
-@st.dialog("Crear Nuevo Grupo", width="large")
-def modal_crear_grupo(grupos_service, data_service, session_state):
-    """Modal para crear nuevo grupo formativo"""
-    
-    st.markdown("### ✨ Nuevo Grupo Formativo")
-    st.caption("Complete los datos básicos del grupo. Podrá añadir tutores, empresas y participantes después.")
-    
-    with st.form("form_crear_grupo_modal", clear_on_submit=True):
-        # Cargar acciones formativas para el selectbox
-        try:
-            acciones_df = data_service.get_acciones_formativas()
-            acciones_dict = {f"{row['denominacion']} ({row['codigo']})": row['id'] 
-                           for _, row in acciones_df.iterrows()} if not acciones_df.empty else {}
-        except Exception as e:
-            st.error(f"Error al cargar acciones formativas: {e}")
-            acciones_dict = {}
-        
-        # Datos básicos
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            codigo_grupo = st.text_input("Código del Grupo *", 
-                placeholder="Ej: FORM2025001", 
-                help="Código único identificativo")
-            
-            if acciones_dict:
-                accion_selected = st.selectbox("Acción Formativa *", 
-                    [""] + list(acciones_dict.keys()),
-                    help="Selecciona el curso/acción formativa")
-            else:
-                st.warning("No hay acciones formativas disponibles. Crea una primero.")
-                accion_selected = ""
-            
-            modalidad = st.selectbox("Modalidad *", 
-                ["", "PRESENCIAL", "TELEFORMACION", "MIXTA"],
-                help="Modalidad según normativa FUNDAE")
-            
-            lugar_imparticion = st.text_input("Lugar de Impartición *",
-                placeholder="Dirección completa del centro")
-        
-        with col2:
-            localidad = st.text_input("Localidad *", 
-                placeholder="Ciudad donde se imparte")
-            
-            provincia = st.text_input("Provincia", 
-                placeholder="Provincia (opcional)")
-            
-            cp = st.text_input("Código Postal", 
-                placeholder="12345")
-            
-            n_participantes_previstos = st.number_input("Participantes Previstos *", 
-                min_value=1, max_value=30, value=15,
-                help="Entre 1 y 30 según normativa FUNDAE")
-        
-        # Fechas
-        st.subheader("📅 Fechas del Grupo")
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            fecha_inicio = st.date_input("Fecha de Inicio *")
-        
-        with col4:
-            fecha_fin_prevista = st.date_input("Fecha Fin Prevista *")
-        
-        # Horarios
-        st.subheader("🕐 Horarios")
-        
-        tipo_horario = st.selectbox("Tipo de Horario", 
-            ["Solo Mañana", "Solo Tarde", "Mañana y Tarde"])
-        
-        col5, col6 = st.columns(2)
-        
-        if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
-            with col5:
-                st.markdown("**Horario de Mañana**")
-                hora_inicio_manana = st.time_input("Inicio Mañana", value=datetime.strptime("09:00", "%H:%M").time())
-                hora_fin_manana = st.time_input("Fin Mañana", value=datetime.strptime("13:00", "%H:%M").time())
-        
-        if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
-            with col6:
-                st.markdown("**Horario de Tarde**")
-                hora_inicio_tarde = st.time_input("Inicio Tarde", value=datetime.strptime("16:00", "%H:%M").time())
-                hora_fin_tarde = st.time_input("Fin Tarde", value=datetime.strptime("20:00", "%H:%M").time())
-        
-        # Días de la semana
-        st.markdown("**Días de la Semana**")
-        col_dias = st.columns(5)
-        dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"]
-        dias_seleccionados = []
-        
-        for i, dia in enumerate(dias_semana):
-            with col_dias[i]:
-                if st.checkbox(dia, value=True, key=f"dia_{i}"):
-                    dias_seleccionados.append(dia[:1])  # L, M, X, J, V
-        
-        # Observaciones
-        observaciones = st.text_area("Observaciones", 
-            placeholder="Información adicional sobre el grupo...")
-        
-        # Botones
-        col_submit, col_cancel = st.columns([2, 1])
-        
-        with col_submit:
-            submitted = st.form_submit_button("✅ Crear Grupo", type="primary", use_container_width=True)
-        
-        if submitted:
-            # Validaciones
-            errores = []
-            
-            if not codigo_grupo:
-                errores.append("El código del grupo es obligatorio")
-            
-            if not accion_selected or not acciones_dict:
-                errores.append("Debe seleccionar una acción formativa")
-            
-            if not modalidad:
-                errores.append("La modalidad es obligatoria")
-            
-            if not lugar_imparticion:
-                errores.append("El lugar de impartición es obligatorio")
-            
-            if not localidad:
-                errores.append("La localidad es obligatoria")
-            
-            if not fecha_inicio or not fecha_fin_prevista:
-                errores.append("Las fechas son obligatorias")
-            
-            if fecha_inicio and fecha_fin_prevista and fecha_inicio >= fecha_fin_prevista:
-                errores.append("La fecha de fin debe ser posterior a la de inicio")
-            
-            if not dias_seleccionados:
-                errores.append("Debe seleccionar al menos un día de la semana")
-            
-            if errores:
-                for error in errores:
-                    st.error(f"⚠️ {error}")
-                return
-            
-            # Construir string de horarios
-            horarios_partes = []
-            
-            if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
-                horarios_partes.append(f"Mañana: {hora_inicio_manana.strftime('%H:%M')} - {hora_fin_manana.strftime('%H:%M')}")
-            
-            if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
-                horarios_partes.append(f"Tarde: {hora_inicio_tarde.strftime('%H:%M')} - {hora_fin_tarde.strftime('%H:%M')}")
-            
-            horarios_partes.append(f"Días: {'-'.join(dias_seleccionados)}")
-            horarios_str = " | ".join(horarios_partes)
-            
-            # Preparar datos para crear
-            datos_grupo = {
-                "codigo_grupo": codigo_grupo,
-                "accion_formativa_id": acciones_dict[accion_selected],
-                "modalidad": modalidad,
-                "lugar_imparticion": lugar_imparticion,
-                "localidad": localidad,
-                "provincia": provincia,
-                "cp": cp,
-                "fecha_inicio": fecha_inicio,
-                "fecha_fin_prevista": fecha_fin_prevista,
-                "n_participantes_previstos": n_participantes_previstos,
-                "horarios": horarios_str,
-                "observaciones": observaciones,
-                "estado": "ABIERTO"
-            }
-            
-            # Añadir empresa según rol
-            if session_state.role == "gestor":
-                datos_grupo["empresa_id"] = session_state.user.get("empresa_id")
-            
-            # Crear grupo
-            if grupos_service.crear_grupo(datos_grupo):
-                st.success("✅ Grupo creado correctamente")
-                st.rerun()
-
-
-@st.dialog("Editar Grupo", width="large") 
-def modal_editar_grupo(grupo_data, grupos_service, data_service, session_state):
-    """Modal para editar grupo existente"""
-    
-    st.markdown(f"### ✏️ Editar Grupo: {grupo_data['codigo_grupo']}")
-    st.caption(f"Estado actual: {grupo_data.get('estado', 'ABIERTO')}")
-    
-    with st.form("form_editar_grupo_modal", clear_on_submit=False):
-        # Cargar acciones formativas
-        try:
-            acciones_df = data_service.get_acciones_formativas()
-            acciones_dict = {f"{row['denominacion']} ({row['codigo']})": row['id'] 
-                           for _, row in acciones_df.iterrows()} if not acciones_df.empty else {}
-            
-            # Encontrar acción actual
-            accion_actual = ""
-            for nombre, id_accion in acciones_dict.items():
-                if id_accion == grupo_data.get('accion_formativa_id'):
-                    accion_actual = nombre
-                    break
-        except Exception as e:
-            st.error(f"Error al cargar acciones formativas: {e}")
-            acciones_dict = {}
-            accion_actual = ""
-        
-        # Datos básicos - prellenados
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            codigo_grupo = st.text_input("Código del Grupo *", 
-                value=grupo_data.get('codigo_grupo', ''))
-            
-            if acciones_dict:
-                opciones_accion = [""] + list(acciones_dict.keys())
-                idx_accion = opciones_accion.index(accion_actual) if accion_actual in opciones_accion else 0
-                accion_selected = st.selectbox("Acción Formativa *", 
-                    opciones_accion, index=idx_accion)
-            else:
-                accion_selected = ""
-            
-            modalidades = ["", "PRESENCIAL", "TELEFORMACION", "MIXTA"]
-            idx_modalidad = modalidades.index(grupo_data.get('modalidad', '')) if grupo_data.get('modalidad') in modalidades else 0
-            modalidad = st.selectbox("Modalidad *", modalidades, index=idx_modalidad)
-            
-            lugar_imparticion = st.text_input("Lugar de Impartición *",
-                value=grupo_data.get('lugar_imparticion', ''))
-        
-        with col2:
-            localidad = st.text_input("Localidad *", 
-                value=grupo_data.get('localidad', ''))
-            
-            provincia = st.text_input("Provincia", 
-                value=grupo_data.get('provincia', ''))
-            
-            cp = st.text_input("Código Postal", 
-                value=grupo_data.get('cp', ''))
-            
-            n_participantes_previstos = st.number_input("Participantes Previstos *", 
-                min_value=1, max_value=30, 
-                value=int(grupo_data.get('n_participantes_previstos', 15)))
-        
-        # Fechas
-        st.subheader("📅 Fechas del Grupo")
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            fecha_inicio = st.date_input("Fecha de Inicio *", 
-                value=grupo_data.get('fecha_inicio'))
-        
-        with col4:
-            fecha_fin_prevista = st.date_input("Fecha Fin Prevista *", 
-                value=grupo_data.get('fecha_fin_prevista'))
-        
-        # Parsing de horarios existentes (simplificado para el modal)
-        horarios_actuales = grupo_data.get('horarios', '')
-        
-        # Horarios simplificados en modal de edición
-        st.subheader("🕐 Horarios")
-        st.info("💡 Para modificar horarios complejos, use la vista principal del grupo")
-        
-        horarios_nuevos = st.text_area("Horarios", 
-            value=horarios_actuales,
-            help="Formato: Mañana: HH:MM - HH:MM | Tarde: HH:MM - HH:MM | Días: L-M-X-J-V",
-            height=100)
-        
-        # Observaciones
-        observaciones = st.text_area("Observaciones", 
-            value=grupo_data.get('observaciones', ''),
-            height=100)
-        
-        # Estado (si está en finalización)
-        if grupo_data.get('estado') == 'FINALIZAR':
-            st.subheader("📋 Datos de Finalización")
-            col5, col6 = st.columns(2)
-            
-            with col5:
-                fecha_fin = st.date_input("Fecha Fin Real", 
-                    value=grupo_data.get('fecha_fin'))
-                n_participantes_finalizados = st.number_input("Participantes Finalizados", 
-                    min_value=0, value=int(grupo_data.get('n_participantes_finalizados', 0)))
-            
-            with col6:
-                n_aptos = st.number_input("Aptos", 
-                    min_value=0, value=int(grupo_data.get('n_aptos', 0)))
-                n_no_aptos = st.number_input("No Aptos", 
-                    min_value=0, value=int(grupo_data.get('n_no_aptos', 0)))
-        
-        # Botones
-        col_save, col_delete = st.columns([3, 1])
-        
+        st.divider()
+        col_save, col_reload, col_delete = st.columns([2, 1, 1])
         with col_save:
-            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
-        
-        with col_delete:
-            if session_state.role == "admin":
-                delete_clicked = st.form_submit_button("🗑️ Eliminar", help="Solo administradores")
-        
-        if submitted:
-            # Preparar datos actualizados
-            datos_actualizados = {
-                "codigo_grupo": codigo_grupo,
-                "modalidad": modalidad,
-                "lugar_imparticion": lugar_imparticion,
-                "localidad": localidad,
-                "provincia": provincia,
-                "cp": cp,
-                "fecha_inicio": fecha_inicio,
-                "fecha_fin_prevista": fecha_fin_prevista,
-                "n_participantes_previstos": n_participantes_previstos,
-                "horarios": horarios_nuevos,
-                "observaciones": observaciones
-            }
-            
-            # Añadir acción formativa si está seleccionada
-            if accion_selected and acciones_dict:
-                datos_actualizados["accion_formativa_id"] = acciones_dict[accion_selected]
-            
-            # Añadir datos de finalización si aplica
-            if grupo_data.get('estado') == 'FINALIZAR':
-                datos_actualizados.update({
-                    "fecha_fin": fecha_fin,
-                    "n_participantes_finalizados": n_participantes_finalizados,
-                    "n_aptos": n_aptos,
-                    "n_no_aptos": n_no_aptos
-                })
-            
-            # Actualizar grupo
-            if grupos_service.actualizar_grupo(grupo_data['id'], datos_actualizados):
-                st.success("✅ Grupo actualizado correctamente")
+            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary")
+        with col_reload:
+            if st.form_submit_button("🔄 Recargar"):
                 st.rerun()
+        with col_delete:
+            if grupos_service.session_state.role == "admin":
+                if st.form_submit_button("🗑️ Eliminar"):
+                    confirmar_key = f"confirm_delete_grupo_{grupo_data['id']}"
+                    if st.session_state.get(confirmar_key, False):
+                        try:
+                            if grupos_service.delete_grupo(grupo_data['id']):
+                                st.success("Grupo eliminado correctamente")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Error al eliminar: {e}")
+                    else:
+                        st.session_state[confirmar_key] = True
+                        st.warning("Presione de nuevo para confirmar eliminación")
+
+        if submitted:
+            datos_actualizar = {
+                "modalidad": modalidad_grupo,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat(),
+                "provincia": provincia_sel,
+                "localidad": localidad_sel,
+                "cp": cp,
+                "responsable": responsable,
+                "telefono_contacto": telefono_contacto,
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_nuevo
+            }
+            if datos_finalizacion:
+                datos_actualizar.update(datos_finalizacion)
+            try:
+                if grupos_service.update_grupo(grupo_data["id"], datos_actualizar):
+                    st.success("✅ Cambios guardados correctamente")
+                    grupos_service.get_grupos_completos.clear()
+                    st.rerun()
+                else:
+                    st.error("❌ Error al guardar cambios")
+            except Exception as e:
+                st.error(f"❌ Error al actualizar: {e}")
 # =========================
-# FUNCIÓN PRINCIPAL ACTUALIZADA
+# FILTROS AVANZADOS
 # =========================
-def main(supabase, session_state):
-    """Función principal de gestión de grupos."""
-    st.title("👥 Gestión de Grupos FUNDAE")
-    st.caption("Creación y administración de grupos formativos según estándares FUNDAE")
-    
-    # Verificar permisos
+
+def crear_filtros_avanzados_grupos(grupos_service):
+    """Panel de filtros avanzados para grupos"""
+    st.markdown("#### 🔍 Filtros de Búsqueda")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        buscar_texto = st.text_input("Buscar grupo", placeholder="Código, localidad...", key="buscar_grupo_texto")
+    with col2:
+        estados_opciones = ["Todos", "ABIERTO", "FINALIZAR", "FINALIZADO"]
+        estado_filtro = st.selectbox("Estado", estados_opciones, key="filtro_estado_grupo")
+    with col3:
+        modalidades_opciones = ["Todas", "PRESENCIAL", "TELEFORMACION", "MIXTA"]
+        modalidad_filtro = st.selectbox("Modalidad", modalidades_opciones, key="filtro_modalidad_grupo")
+    with col4:
+        try:
+            provincias = grupos_service.get_provincias()
+            prov_opciones = ["Todas"] + [p["nombre"] for p in provincias]
+            provincia_filtro = st.selectbox("Provincia", prov_opciones, key="filtro_provincia_grupo")
+        except:
+            provincia_filtro = "Todas"
+    with col5:
+        filtro_fecha = st.selectbox("Período", ["Todos", "Este mes", "Próximos 30 días", "Finalizados este año"], key="filtro_fecha_grupo")
+
+    filtros = {
+        'buscar_texto': buscar_texto if buscar_texto else None,
+        'estado': estado_filtro if estado_filtro != "Todos" else None,
+        'modalidad': modalidad_filtro if modalidad_filtro != "Todas" else None,
+        'provincia': provincia_filtro if provincia_filtro != "Todas" else None,
+        'periodo': filtro_fecha if filtro_fecha != "Todos" else None
+    }
+    st.session_state.filtros_grupos = filtros
+    return filtros
+
+
+def aplicar_filtros_grupos(df_grupos, filtros):
+    """Aplica los filtros seleccionados al dataframe de grupos"""
+    if df_grupos.empty:
+        return df_grupos
+    df_filtrado = df_grupos.copy()
+    if "Estado" not in df_filtrado.columns:
+        df_filtrado["Estado"] = df_filtrado.apply(lambda row: determinar_estado_grupo(row.to_dict()), axis=1)
+
+    if filtros.get('buscar_texto'):
+        texto = filtros['buscar_texto'].lower()
+        mask = (
+            df_filtrado['codigo_grupo'].str.lower().str.contains(texto, na=False) |
+            df_filtrado.get('localidad', pd.Series(dtype='object')).str.lower().str.contains(texto, na=False) |
+            df_filtrado.get('accion_nombre', pd.Series(dtype='object')).str.lower().str.contains(texto, na=False)
+        )
+        df_filtrado = df_filtrado[mask]
+
+    if filtros.get('estado'):
+        df_filtrado = df_filtrado[df_filtrado['Estado'] == filtros['estado']]
+    if filtros.get('modalidad'):
+        df_filtrado = df_filtrado[df_filtrado['modalidad'] == filtros['modalidad']]
+    if filtros.get('provincia'):
+        df_filtrado = df_filtrado[df_filtrado.get('provincia', '') == filtros['provincia']]
+
+    if filtros.get('periodo'):
+        hoy = datetime.now().date()
+        if filtros['periodo'] == "Este mes":
+            inicio_mes = hoy.replace(day=1)
+            fin_mes = (inicio_mes + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            mask = (
+                (pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date >= inicio_mes) &
+                (pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date <= fin_mes)
+            )
+            df_filtrado = df_filtrado[mask]
+        elif filtros['periodo'] == "Próximos 30 días":
+            fecha_limite = hoy + timedelta(days=30)
+            mask = (
+                (pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date >= hoy) &
+                (pd.to_datetime(df_filtrado['fecha_inicio'], errors='coerce').dt.date <= fecha_limite)
+            )
+            df_filtrado = df_filtrado[mask]
+        elif filtros['periodo'] == "Finalizados este año":
+            inicio_año = hoy.replace(month=1, day=1)
+            mask = (
+                (df_filtrado['Estado'] == 'FINALIZADO') &
+                (pd.to_datetime(df_filtrado.get('fecha_fin', df_filtrado['fecha_fin_prevista']), errors='coerce').dt.date >= inicio_año)
+            )
+            df_filtrado = df_filtrado[mask]
+
+    return df_filtrado
+# =========================
+# FUNCIÓN MAIN ACTUALIZADA
+# =========================
+
+def main_grupos_con_modales(supabase, session_state):
+    """Función principal actualizada con modales completos y filtros avanzados"""
+    st.title("👥 Gestión de Grupos de Formación")
+    st.caption("Creación, edición y seguimiento de grupos FUNDAE con todas sus secciones.")
+    st.divider()
+
     if session_state.role not in ["admin", "gestor"]:
-        st.warning("🔒 No tienes permisos para acceder a esta sección")
-        return
-    
-    # Inicializar servicios
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
+        st.stop()
+
     grupos_service = get_grupos_service(supabase, session_state)
-    
-    # También necesitamos data_service para los modales
-    try:
-        from services.data_service import get_data_service
-        data_service = get_data_service(supabase, session_state)
-    except ImportError:
-        st.error("❌ Error: No se pudo cargar data_service. Revisa la importación.")
-        return
-    
-    # Cargar datos
+
+    # KPIs
     try:
         df_grupos = grupos_service.get_grupos_completos()
+        mostrar_kpis_grupos(df_grupos)
+        grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
+        mostrar_avisos_grupos(grupos_pendientes)
     except Exception as e:
-        st.error(f"❌ Error al cargar datos: {e}")
-        return
-    
-    # Mostrar KPIs
-    mostrar_kpis_grupos(df_grupos)
-    
-    # Mostrar avisos de grupos pendientes
-    grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
-    mostrar_avisos_grupos(grupos_pendientes)
-    
+        st.error(f"Error al cargar estadísticas: {e}")
+        df_grupos = pd.DataFrame()
+
+    # Filtros
+    filtros = crear_filtros_avanzados_grupos(grupos_service)
+    df_filtrado = aplicar_filtros_grupos(df_grupos, filtros)
+
+    # Tabla de grupos
+    st.markdown("### 📋 Listado de Grupos")
+    if df_filtrado.empty:
+        st.info("No hay grupos que cumplan los filtros.")
+    else:
+        st.dataframe(df_filtrado[["codigo_grupo", "accion_nombre", "modalidad", "provincia", "localidad", "fecha_inicio", "fecha_fin_prevista", "Estado"]], use_container_width=True, hide_index=True)
+
     st.divider()
-    
-    # Botones de acción principales
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-    
-    with col_btn1:
-        if st.button("➕ Nuevo Grupo", type="primary", use_container_width=True):
-            modal_crear_grupo(grupos_service, data_service, session_state)
-    
-    with col_btn2:
-        if st.button("🔄 Actualizar", use_container_width=True):
-            # Limpiar caches
-            grupos_service.get_grupos_completos.clear()
-            if hasattr(data_service, 'clear_all_cache'):
-                data_service.clear_all_cache()
-            st.rerun()
-    
-    st.divider()
-    
-    # Tabla principal de grupos
-    st.markdown("### 📊 Listado de Grupos")
-    st.caption("Selecciona un grupo de la tabla para editarlo")
-    
-    if df_grupos.empty:
-        st.info("📋 No hay grupos registrados. Crea tu primer grupo usando el botón 'Nuevo Grupo'.")
-        return
-    
-    # Preparar datos para mostrar
-    df_display = df_grupos.copy()
-    
-    # Añadir columna de estado
-    df_display["Estado"] = df_display.apply(lambda row: determinar_estado_grupo(row.to_dict()), axis=1)
-    
-    # Seleccionar columnas para mostrar
-    columnas_mostrar = ["codigo_grupo", "accion_nombre", "modalidad", "fecha_inicio", "fecha_fin_prevista", "localidad", "n_participantes_previstos", "Estado"]
-    columnas_disponibles = [col for col in columnas_mostrar if col in df_display.columns]
-    
-    # Mostrar tabla con selección
-    try:
-        event = st.dataframe(
-            df_display[columnas_disponibles],
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row",
-            key="tabla_grupos_principal"
-        )
-        
-        # Manejar selección de tabla para edición modal
-        if event and hasattr(event, 'selection') and event.selection.get("rows"):
-            selected_idx = event.selection["rows"][0]
-            if selected_idx < len(df_display):
-                grupo_seleccionado = df_display.iloc[selected_idx]
-                
-                # Mostrar información del grupo seleccionado y botón de edición
-                st.markdown("---")
-                st.markdown("### 📝 Grupo Seleccionado")
-                
-                col_info, col_actions = st.columns([3, 1])
-                
-                with col_info:
-                    estado_color = {
-                        "ABIERTO": "🟢",
-                        "FINALIZAR": "🟡", 
-                        "FINALIZADO": "🔵",
-                        "CANCELADO": "🔴"
-                    }.get(grupo_seleccionado.get('Estado', 'ABIERTO'), "⚪")
-                    
-                    st.info(f"""
-                    **{grupo_seleccionado['codigo_grupo']}** - {grupo_seleccionado.get('modalidad', 'N/A')}  
-                    📍 {grupo_seleccionado.get('localidad', 'N/A')} | 👥 {grupo_seleccionado.get('n_participantes_previstos', 0)} participantes  
-                    {estado_color} Estado: {grupo_seleccionado.get('Estado', 'ABIERTO')}
-                    """)
-                
-                with col_actions:
-                    if st.button("✏️ Editar Grupo", type="primary", use_container_width=True, key="btn_editar_modal"):
-                        modal_editar_grupo(grupo_seleccionado, grupos_service, data_service, session_state)
-                
-                # Si el grupo está en estado correcto, mostrar secciones adicionales
-                if grupo_seleccionado.get('Estado') in ['ABIERTO', 'FINALIZAR', 'FINALIZADO']:
-                    st.divider()
-                    st.markdown("### 🔧 Gestión Avanzada del Grupo")
-                    
-                    # Pestañas para las secciones adicionales (estas se mantienen como antes)
-                    tab1, tab2, tab3, tab4 = st.tabs(["👥 Tutores", "🏢 Empresas", "🎓 Participantes", "💰 Costes"])
-                    
-                    with tab1:
-                        st.markdown("#### Gestión de Tutores")
-                        st.info("Funcionalidad de gestión de tutores del grupo")
-                        # Aquí puedes mantener tu lógica existente de tutores
-                        # o implementar modales también para estas secciones
-                    
-                    with tab2:
-                        st.markdown("#### Empresas Participantes")
-                        st.info("Funcionalidad de gestión de empresas del grupo")
-                        # Lógica existente de empresas
-                    
-                    with tab3:
-                        st.markdown("#### Participantes del Grupo")
-                        st.info("Funcionalidad de gestión de participantes del grupo")
-                        # Lógica existente de participantes
-                    
-                    with tab4:
-                        st.markdown("#### Control de Costes FUNDAE")
-                        st.info("Funcionalidad de gestión de costes del grupo")
-                        # Lógica existente de costes
-                        
-    except Exception as e:
-        st.error(f"❌ Error al mostrar tabla: {e}")
-        return
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        if st.button("➕ Crear Nuevo Grupo"):
+            modal_crear_grupo_completo(grupos_service)
+    with col2:
+        if "grupo_seleccionado" in st.session_state and st.session_state.grupo_seleccionado:
+            grupo_data = st.session_state.grupo_seleccionado
+            modal_editar_grupo_completo(grupo_data, grupos_service)
+
