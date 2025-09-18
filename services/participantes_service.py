@@ -33,8 +33,8 @@ class ParticipantesService:
             query = _self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at,
-                grupos!fk_participante_grupo (id, codigo_grupo),
-                empresas!fk_participante_empresa (id, nombre)
+                grupo:grupos!fk_participante_grupo (id, codigo_grupo),
+                empresa:empresas!fk_participante_empresa (id, nombre, cif)
             """)
             query = _self._apply_empresa_filter(query)
 
