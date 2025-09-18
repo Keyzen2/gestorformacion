@@ -365,6 +365,65 @@ def modal_editar_grupo_completo(grupo_data, grupos_service):
                     horario_nuevo = horario_actual
             else:
                 horario_nuevo = st.text_area("Horario FUNDAE", height=100)
+                
+# =========================
+# KPIs Y AVISOS (REQUIRED POR main_grupos_con_modales)
+# =========================
+
+def mostrar_kpis_grupos(df_grupos: pd.DataFrame):
+    """Muestra KPIs de grupos calculando el estado automáticamente."""
+    if df_grupos.empty:
+        st.info("📋 No hay grupos registrados.")
+        return
+
+    total = len(df_grupos)
+    abiertos = 0
+    por_finalizar = 0
+    finalizados = 0
+
+    for _, g in df_grupos.iterrows():
+        estado = determinar_estado_grupo(g.to_dict())
+        if estado == "ABIERTO":
+            abiertos += 1
+        elif estado == "FINALIZAR":
+            por_finalizar += 1
+        elif estado == "FINALIZADO":
+            finalizados += 1
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("📊 Total Grupos", total)
+    with c2:
+        st.metric("🟢 Abiertos", abiertos)
+    with c3:
+        st.metric("🟡 Por Finalizar", por_finalizar)
+    with c4:
+        st.metric("✅ Finalizados", finalizados)
+
+
+def mostrar_avisos_grupos(grupos_pendientes: list):
+    """Avisos de grupos pendientes de finalización + acceso rápido a finalizar."""
+    if not grupos_pendientes:
+        return
+
+    st.warning(f"⚠️ **{len(grupos_pendientes)} grupo(s) pendiente(s) de finalización**")
+
+    with st.expander("Ver grupos pendientes", expanded=False):
+        for grupo in grupos_pendientes[:5]:  # muestra máximo 5
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                fin_prev = grupo.get('fecha_fin_prevista')
+                fin_prev_str = str(fin_prev)[:10] if fin_prev else "—"
+                st.write(f"**{grupo.get('codigo_grupo', '—')}** · Fin previsto: {fin_prev_str}")
+            with col2:
+                # Botón que “abre” el grupo en modo edición/finalización
+                if st.button("Finalizar", key=f"finalizar_{grupo.get('id')}", type="secondary"):
+                    g = grupo.copy()
+                    # Fuerza la aparición de la sección de finalización en el editor
+                    if not g.get('fecha_fin'):
+                        g['_mostrar_finalizacion'] = True
+                    st.session_state.grupo_seleccionado = g
+                    st.rerun()
 
         # =====================
         # SECCIÓN 3: FINALIZACIÓN
