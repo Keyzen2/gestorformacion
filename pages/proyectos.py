@@ -5,6 +5,7 @@ import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 from services.proyectos_service import get_proyectos_service
 
+# Instalar primero: pip install streamlit-option-menu
 try:
     from streamlit_option_menu import option_menu
     OPTION_MENU_AVAILABLE = True
@@ -80,30 +81,51 @@ def mostrar_dashboard(proyectos_service):
         st.info("📝 No hay proyectos registrados. Crea tu primer proyecto en la pestaña 'Proyectos'.")
         return
     
-    # Calcular métricas
-    metricas = proyectos_service.calcular_metricas_dashboard(df_proyectos)
+    # Calcular métricas con manejo de errores
+    try:
+        metricas = proyectos_service.calcular_metricas_dashboard(df_proyectos)
+        
+        # Verificar que las métricas se calcularon correctamente
+        metricas_requeridas = ["total_proyectos", "proyectos_activos", "presupuesto_total", "importe_concedido", "tasa_exito", "proximos_vencimientos"]
+        for metrica in metricas_requeridas:
+            if metrica not in metricas:
+                st.warning(f"Métrica '{metrica}' no disponible")
+                metricas[metrica] = 0
+                
+    except Exception as e:
+        st.error(f"Error al calcular métricas del dashboard: {e}")
+        # Métricas por defecto en caso de error
+        metricas = {
+            "total_proyectos": len(df_proyectos) if not df_proyectos.empty else 0,
+            "proyectos_activos": 0,
+            "presupuesto_total": 0,
+            "importe_concedido": 0,
+            "tasa_exito": 0,
+            "proximos_vencimientos": 0
+        }
     
     # Mostrar métricas principales - usando características 1.49
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        delta_activos = f"{metricas['proyectos_activos']}/{metricas['total_proyectos']}"
+        delta_activos = f"{metricas.get('proyectos_activos', 0)}/{metricas.get('total_proyectos', 0)}"
         st.metric(
             "🚀 Proyectos Activos", 
-            metricas['proyectos_activos'],
+            metricas.get('proyectos_activos', 0),
             delta=delta_activos,
             help="Proyectos en ejecución vs total"
         )
     
     with col2:
-        if metricas['importe_concedido'] > 0:
-            delta_presupuesto = f"+{metricas['importe_concedido']:,.0f}€ concedido"
+        importe_concedido = metricas.get('importe_concedido', 0)
+        if importe_concedido > 0:
+            delta_presupuesto = f"+{importe_concedido:,.0f}€ concedido"
         else:
             delta_presupuesto = "Sin financiación concedida"
         
         st.metric(
             "💰 Presupuesto Total", 
-            f"{metricas['presupuesto_total']:,.0f}€",
+            f"{metricas.get('presupuesto_total', 0):,.0f}€",
             delta=delta_presupuesto,
             help="Presupuesto total vs importe concedido"
         )
@@ -111,7 +133,7 @@ def mostrar_dashboard(proyectos_service):
     with col3:
         st.metric(
             "🎯 Tasa de Éxito", 
-            f"{metricas['tasa_exito']:.1f}%",
+            f"{metricas.get('tasa_exito', 0):.1f}%",
             delta="Concedidos/Presentados",
             help="Porcentaje de proyectos concedidos vs presentados"
         )
@@ -119,7 +141,7 @@ def mostrar_dashboard(proyectos_service):
     with col4:
         st.metric(
             "⏰ Próximos Hitos", 
-            metricas['proximos_vencimientos'],
+            metricas.get('proximos_vencimientos', 0),
             delta="Próximos 30 días",
             help="Fechas clave en los próximos 30 días"
         )
@@ -131,43 +153,79 @@ def mostrar_dashboard(proyectos_service):
     
     with col_left:
         st.markdown("#### 📊 Estados de Proyectos")
-        if not df_proyectos.empty:
-            estados_count = df_proyectos['estado_proyecto'].value_counts()
-            fig_estados = px.pie(
-                values=estados_count.values, 
-                names=estados_count.index,
-                title="Distribución por Estado",
-                color_discrete_sequence=px.colors.qualitative.Set3
-            )
-            fig_estados.update_layout(height=400)
-            st.plotly_chart(fig_estados, use_container_width=True)
+        if not df_proyectos.empty and 'estado_proyecto' in df_proyectos.columns:
+            try:
+                estados_count = df_proyectos['estado_proyecto'].value_counts()
+                if not estados_count.empty:
+                    fig_estados = px.pie(
+                        values=estados_count.values, 
+                        names=estados_count.index,
+                        title="Distribución por Estado",
+                        color_discrete_sequence=px.colors.qualitative.Set3
+                    )
+                    fig_estados.update_layout(height=400)
+                    st.plotly_chart(fig_estados, use_container_width=True)
+                else:
+                    st.info("No hay datos de estados para mostrar")
+            except Exception as e:
+                st.error(f"Error al generar gráfico de estados: {e}")
+        else:
+            st.info("No hay datos disponibles para el gráfico de estados")
     
     with col_right:
         st.markdown("#### 💸 Evolución de Presupuestos")
         if not df_proyectos.empty and 'year_proyecto' in df_proyectos.columns:
-            presupuesto_por_año = df_proyectos.groupby('year_proyecto')['presupuesto_total'].sum().reset_index()
-            fig_presupuesto = px.bar(
-                presupuesto_por_año, 
-                x='year_proyecto', 
-                y='presupuesto_total',
-                title="Presupuesto por Año",
-                labels={'presupuesto_total': 'Presupuesto (€)', 'year_proyecto': 'Año'}
-            )
-            fig_presupuesto.update_layout(height=400)
-            st.plotly_chart(fig_presupuesto, use_container_width=True)
+            try:
+                # Crear columna year_proyecto si no existe
+                if 'year_proyecto' not in df_proyectos.columns:
+                    # Intentar extraer año de fecha_inicio
+                    try:
+                        df_proyectos['year_proyecto'] = pd.to_datetime(df_proyectos['fecha_inicio'], errors='coerce').dt.year
+                    except:
+                        df_proyectos['year_proyecto'] = datetime.now().year
+                
+                presupuesto_por_año = df_proyectos.groupby('year_proyecto')['presupuesto_total'].sum().reset_index()
+                
+                if not presupuesto_por_año.empty:
+                    fig_presupuesto = px.bar(
+                        presupuesto_por_año, 
+                        x='year_proyecto', 
+                        y='presupuesto_total',
+                        title="Presupuesto por Año",
+                        labels={'presupuesto_total': 'Presupuesto (€)', 'year_proyecto': 'Año'}
+                    )
+                    fig_presupuesto.update_layout(height=400)
+                    st.plotly_chart(fig_presupuesto, use_container_width=True)
+                else:
+                    st.info("No hay datos de presupuesto para mostrar")
+            except Exception as e:
+                st.error(f"Error al generar gráfico de presupuestos: {e}")
+        else:
+            st.info("No hay datos disponibles para el gráfico de presupuestos")
     
     # Tabla de proyectos próximos a vencer
     st.markdown("#### ⚠️ Proyectos con Fechas Próximas")
-    proyectos_urgentes = obtener_proyectos_urgentes(df_proyectos)
-    
-    if not proyectos_urgentes.empty:
-        st.dataframe(
-            proyectos_urgentes[['nombre', 'estado_proyecto', 'fecha_fin', 'fecha_justificacion', 'dias_restantes']],
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.success("✅ No hay fechas urgentes en los próximos 30 días")
+    try:
+        proyectos_urgentes = obtener_proyectos_urgentes(df_proyectos)
+        
+        if not proyectos_urgentes.empty:
+            columnas_urgentes = ['nombre', 'estado_proyecto', 'fecha_fin', 'fecha_justificacion', 'dias_restantes']
+            # Verificar que las columnas existen
+            columnas_disponibles_urgentes = [col for col in columnas_urgentes if col in proyectos_urgentes.columns]
+            
+            if columnas_disponibles_urgentes:
+                st.dataframe(
+                    proyectos_urgentes[columnas_disponibles_urgentes],
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("No se pueden mostrar detalles de proyectos urgentes")
+        else:
+            st.success("✅ No hay fechas urgentes en los próximos 30 días")
+    except Exception as e:
+        st.error(f"Error al mostrar proyectos urgentes: {e}")
+        st.info("No se pueden mostrar proyectos con fechas próximas")
 
 
 @st.dialog("Editar Proyecto", width="large") 
@@ -890,7 +948,7 @@ def mostrar_opciones_exportacion(df_proyectos):
 
 
 def obtener_proyectos_urgentes(df_proyectos):
-    """Obtiene proyectos con fechas próximas a vencer"""
+    """Obtiene proyectos con fechas próximas a vencer - VERSIÓN CORREGIDA"""
     
     if df_proyectos.empty:
         return pd.DataFrame()
@@ -901,21 +959,60 @@ def obtener_proyectos_urgentes(df_proyectos):
     proyectos_urgentes = []
     
     for _, proyecto in df_proyectos.iterrows():
-        for fecha_col in ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']:
-            fecha = proyecto.get(fecha_col)
-            if fecha and isinstance(fecha, (datetime, pd.Timestamp)):
-                fecha = fecha.date() if hasattr(fecha, 'date') else fecha
+        campos_fecha = ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
+        
+        for fecha_col in campos_fecha:
+            fecha_valor = proyecto.get(fecha_col)
             
-            if fecha and hoy <= fecha <= fecha_limite:
-                dias_restantes = (fecha - hoy).days
-                proyectos_urgentes.append({
-                    'nombre': proyecto['nombre'],
-                    'estado_proyecto': proyecto['estado_proyecto'],
-                    'fecha_fin': proyecto.get('fecha_fin'),
-                    'fecha_justificacion': proyecto.get('fecha_justificacion'),
-                    'dias_restantes': dias_restantes,
-                    'tipo_vencimiento': fecha_col.replace('fecha_', '').title()
-                })
-                break  # Solo agregar una vez por proyecto
+            # Manejo seguro de conversión de fechas
+            fecha_convertida = None
+            
+            try:
+                # Saltar valores nulos o vacíos
+                if pd.isna(fecha_valor) or fecha_valor is None:
+                    continue
+                    
+                # Si es string vacío
+                if isinstance(fecha_valor, str) and fecha_valor.strip() == '':
+                    continue
+                
+                # Convertir según el tipo
+                if isinstance(fecha_valor, str):
+                    # Intentar parsear string como fecha
+                    fecha_dt = pd.to_datetime(fecha_valor, errors='coerce')
+                    if not pd.isna(fecha_dt):
+                        fecha_convertida = fecha_dt.date()
+                elif hasattr(fecha_valor, 'date'):
+                    # Es datetime-like
+                    fecha_convertida = fecha_valor.date() if callable(getattr(fecha_valor, 'date', None)) else fecha_valor
+                elif isinstance(fecha_valor, datetime.date):
+                    # Ya es date
+                    fecha_convertida = fecha_valor
+                    
+                # Si logramos convertir la fecha y está en rango
+                if fecha_convertida and hoy <= fecha_convertida <= fecha_limite:
+                    dias_restantes = (fecha_convertida - hoy).days
+                    
+                    proyectos_urgentes.append({
+                        'nombre': proyecto.get('nombre', 'Sin nombre'),
+                        'estado_proyecto': proyecto.get('estado_proyecto', 'N/A'),
+                        'fecha_fin': proyecto.get('fecha_fin'),
+                        'fecha_justificacion': proyecto.get('fecha_justificacion'),
+                        'dias_restantes': dias_restantes,
+                        'tipo_vencimiento': fecha_col.replace('fecha_', '').replace('_', ' ').title(),
+                        'fecha_urgente': fecha_convertida
+                    })
+                    break  # Solo agregar una vez por proyecto
+                    
+            except Exception as e:
+                # Si hay error con una fecha específica, continuar con la siguiente
+                continue
     
-    return pd.DataFrame(proyectos_urgentes)
+    # Convertir a DataFrame
+    df_result = pd.DataFrame(proyectos_urgentes)
+    
+    # Ordenar por días restantes si hay datos
+    if not df_result.empty and 'dias_restantes' in df_result.columns:
+        df_result = df_result.sort_values('dias_restantes')
+    
+    return df_result
