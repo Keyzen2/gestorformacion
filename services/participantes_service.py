@@ -33,38 +33,44 @@ class ParticipantesService:
             query = _self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at,
-                grupo:grupos(id, codigo_grupo),
-                empresa:empresas(id, nombre)
+                grupos!fk_participante_grupo (id, codigo_grupo),
+                empresas!fk_participante_empresa (id, nombre)
             """)
             query = _self._apply_empresa_filter(query)
-            
-            res = query.order("created_at", desc=True).execute()
+
+                res = query.order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data or [])
-            
+
             # Aplanar relaciones
             if not df.empty:
-                if "grupo" in df.columns:
-                    df["grupo_codigo"] = df["grupo"].apply(
+                # Relación con grupos
+                if "grupos" in df.columns:
+                    df["grupo_codigo"] = df["grupos"].apply(
                         lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
                     )
-                    df["grupo_id"] = df["grupo"].apply(
+                    df["grupo_id"] = df["grupos"].apply(
                         lambda x: x.get("id") if isinstance(x, dict) else None
                     )
                 else:
                     df["grupo_codigo"] = ""
                     df["grupo_id"] = None
-                
-                if "empresa" in df.columns:
-                    df["empresa_nombre"] = df["empresa"].apply(
+
+                # Relación con empresas
+                if "empresas" in df.columns:
+                    df["empresa_nombre"] = df["empresas"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                    )
+                    df["empresa_id"] = df["empresas"].apply(
+                        lambda x: x.get("id") if isinstance(x, dict) else None
                     )
                 else:
                     df["empresa_nombre"] = ""
-            
+                    df["empresa_id"] = None
+
             return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
-
+        
     # =========================
     # OPERACIONES CRUD
     # =========================
