@@ -83,13 +83,18 @@ def main(supabase, session_state):
     
     with col3:
         total_participantes = len(df_participantes)
-        # Participantes del último mes
+        # Participantes del último mes - VERSIÓN CORREGIDA
         if not df_participantes.empty and 'created_at' in df_participantes.columns:
-            fecha_mes_pasado = datetime.now() - timedelta(days=30)
-            nuevos_mes = len(df_participantes[
-                pd.to_datetime(df_participantes['created_at'], errors='coerce') > fecha_mes_pasado
-            ])
-            delta_part = f"+{nuevos_mes} este mes" if nuevos_mes > 0 else "Sin nuevos este mes"
+            try:
+                fecha_mes_pasado = datetime.now() - timedelta(days=30)
+                df_temp = df_participantes.copy()
+                # Convertir a datetime con UTC para comparación segura
+                df_temp['created_at'] = pd.to_datetime(df_temp['created_at'], errors='coerce', utc=True)
+                fecha_limite = pd.Timestamp(fecha_mes_pasado, tz='UTC')
+                nuevos_mes = len(df_temp[df_temp['created_at'] > fecha_limite])
+                delta_part = f"+{nuevos_mes} este mes" if nuevos_mes > 0 else None
+            except Exception:
+                delta_part = None
         else:
             delta_part = None
             
