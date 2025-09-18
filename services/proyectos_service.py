@@ -85,6 +85,20 @@ class ProyectosService:
             if self.user_role == "gestor":
                 datos_proyecto["empresa_id"] = self.user_empresa_id
             
+            # Convertir fechas a strings para serialización JSON
+            fecha_campos = ['fecha_convocatoria', 'fecha_inicio', 'fecha_ejecucion', 
+                           'fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
+            for campo in fecha_campos:
+                if datos_proyecto.get(campo):
+                    # Convertir date object a string ISO
+                    fecha = datos_proyecto[campo]
+                    if hasattr(fecha, 'isoformat'):
+                        datos_proyecto[campo] = fecha.isoformat()
+                    elif isinstance(fecha, str):
+                        datos_proyecto[campo] = fecha
+                    else:
+                        datos_proyecto[campo] = str(fecha)
+            
             # Añadir timestamps
             datos_proyecto["created_at"] = datetime.utcnow().isoformat()
             datos_proyecto["updated_at"] = datetime.utcnow().isoformat()
@@ -121,6 +135,20 @@ class ProyectosService:
             if not self.can_modify_data():
                 st.error("No tienes permisos para modificar proyectos")
                 return False
+            
+            # Convertir fechas a strings para serialización JSON
+            fecha_campos = ['fecha_convocatoria', 'fecha_inicio', 'fecha_ejecucion', 
+                           'fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
+            for campo in fecha_campos:
+                if datos_actualizados.get(campo):
+                    # Convertir date object a string ISO
+                    fecha = datos_actualizados[campo]
+                    if hasattr(fecha, 'isoformat'):
+                        datos_actualizados[campo] = fecha.isoformat()
+                    elif isinstance(fecha, str):
+                        datos_actualizados[campo] = fecha
+                    else:
+                        datos_actualizados[campo] = str(fecha)
             
             # Añadir timestamp de actualización
             datos_actualizados["updated_at"] = datetime.utcnow().isoformat()
