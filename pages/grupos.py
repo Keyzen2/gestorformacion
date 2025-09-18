@@ -970,11 +970,13 @@ def main_grupos_con_modales(supabase, session_state):
             on_select="rerun",
             key="tabla_grupos"
         )
-        if "tabla_grupos" in st.session_state and st.session_state["tabla_grupos"].selection:
-            idx = st.session_state["tabla_grupos"].selection.rows[0]
-            grupo_sel = df_filtrado.iloc[idx].to_dict()
-            st.session_state.grupo_seleccionado = grupo_sel
-            modal_editar_grupo_completo(grupo_sel, grupos_service)
+        if "tabla_grupos" in st.session_state:
+            seleccion = st.session_state["tabla_grupos"].selection
+            if seleccion and seleccion.rows:
+                idx = seleccion.rows[0]
+                grupo_sel = df_filtrado.iloc[idx].to_dict()
+                st.session_state.grupo_seleccionado = grupo_sel
+                modal_editar_grupo_completo(grupo_sel, grupos_service)
 
     st.divider()
     col1, col2 = st.columns([1, 1])
