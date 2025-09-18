@@ -5,7 +5,6 @@ import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 from services.proyectos_service import get_proyectos_service
 
-# Instalar primero: pip install streamlit-option-menu
 try:
     from streamlit_option_menu import option_menu
     OPTION_MENU_AVAILABLE = True
