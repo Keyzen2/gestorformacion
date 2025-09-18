@@ -331,6 +331,7 @@ def route():
             "Grupos": "grupos",
             "Participantes": "participantes",
             "Tutores": "tutores",
+            "Proyectos": "proyectos",
             "Documentos": "documentos"
         }
         for label, page_key in formacion_menu.items():
