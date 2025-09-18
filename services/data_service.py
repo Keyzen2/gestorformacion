@@ -38,7 +38,7 @@ class DataService:
                 fecha_nacimiento, sexo, created_at, updated_at, 
                 grupo_id, empresa_id,
                 grupo:grupos!fk_participante_grupo(id, codigo_grupo),
-                empresa:empresas(id, nombre)
+                empresa:empresas!fk_empresa(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "participantes")
         
@@ -453,7 +453,7 @@ class DataService:
                 id, nombre, apellidos, email, telefono, nif, tipo_tutor,
                 direccion, ciudad, provincia, codigo_postal, cv_url, 
                 especialidad, created_at, empresa_id,
-                empresa:empresas(id, nombre)
+                empresa:empresas!fk_empresa(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "tutores")
             
@@ -482,7 +482,7 @@ class DataService:
                 id, nombre, apellidos, email, telefono, nif, tipo_tutor,
                 direccion, ciudad, provincia, codigo_postal, cv_url, 
                 especialidad, created_at, empresa_id,
-                empresa:empresas(id, nombre)
+                empresa:empresas!fk_empresa(id, nombre)
             """)
     
             # Aplicar filtro de empresa
