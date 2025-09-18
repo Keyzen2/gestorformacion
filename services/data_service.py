@@ -554,7 +554,7 @@ class DataService:
                 query = _self.supabase.table("usuarios").select("""
                     id, auth_id, email, rol, empresa_id, nif, nombre_completo, 
                     telefono, nombre, grupo_id, created_at,
-                    empresa:empresas(id, nombre, cif),
+                    empresa:empresas!fk_empresa(id, nombre, cif),
                     grupo:grupos(id, codigo_grupo)
                 """)
             else:
