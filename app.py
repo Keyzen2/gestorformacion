@@ -311,17 +311,6 @@ def route():
         if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
             st.session_state.page = "mis_grupos"
             
-    # --- Panel del Gestor (solo gestores con formación activa) ---
-    if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📊 Panel de Formación")
-        panel_menu = {
-            "Panel del Gestor": "panel_gestor"
-        }
-        for label, page_key in panel_menu.items():
-            if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
-                st.session_state.page = page_key
-
     # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
