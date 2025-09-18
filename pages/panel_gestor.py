@@ -182,7 +182,9 @@ def mostrar_analytics(df_participantes, df_grupos, df_proyectos):
             # Filtrar fechas válidas y últimos 6 meses
             df_part_valid = df_part_clean[df_part_clean['fecha_registro'].notna()].copy()
             fecha_limite = datetime.now() - timedelta(days=180)  # 6 meses
-            df_part_recent = df_part_valid[df_part_valid['fecha_registro'] > fecha_limite]
+            # Convertir fecha_limite a timestamp con timezone para comparación segura
+            fecha_limite_tz = pd.Timestamp(fecha_limite, tz='UTC')
+            df_part_recent = df_part_valid[df_part_valid['fecha_registro'] > fecha_limite_tz]
             
             if not df_part_recent.empty:
                 # Agrupar por mes
