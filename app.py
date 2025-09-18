@@ -311,6 +311,12 @@ def route():
         if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
             st.session_state.page = "mis_grupos"
             
+    # --- Administración Gestor (solo gestor) ---
+    if rol == "gestor":
+        st.sidebar.markdown("### 📌 Área del Gestor")
+        if st.sidebar.button("📊 Panel Gestor", use_container_width=True):
+            from pages.panel_gestor import main as panel_gestor_main
+            panel_gestor_main(supabase_admin, st.session_state)     
     # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
