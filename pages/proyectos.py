@@ -1,0 +1,857 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import plotly.figure_factory as ff
+from datetime import datetime, timedelta
+from services.proyectos_service import get_proyectos_service
+
+# Instalar primero: pip install streamlit-option-menu
+try:
+    from streamlit_option_menu import option_menu
+    OPTION_MENU_AVAILABLE = True
+except ImportError:
+    OPTION_MENU_AVAILABLE = False
+    st.warning("⚠️ Para mejor experiencia, instala: pip install streamlit-option-menu")
+
+def main(supabase, session_state):
+    """Página principal de gestión de proyectos"""
+    
+    # Verificar permisos
+    if session_state.role not in {"admin", "gestor"}:
+        st.warning("🔒 No tienes permisos para acceder a esta sección.")
+        return
+    
+    # Inicializar servicio
+    try:
+        proyectos_service = get_proyectos_service(supabase, session_state)
+    except Exception as e:
+        st.error(f"❌ Error al inicializar servicio: {e}")
+        return
+    
+    # Header principal
+    st.title("📊 Gestión de Proyectos de Formación")
+    st.caption("Control integral de proyectos, subvenciones y ejecución de formación")
+    
+    # Navegación principal
+    if OPTION_MENU_AVAILABLE:
+        tab_selected = option_menu(
+            menu_title=None,
+            options=["Dashboard", "Proyectos", "Gantt", "Grupos", "Reportes"],
+            icons=["speedometer2", "folder", "calendar3", "people", "file-text"],
+            menu_icon="cast",
+            default_index=0,
+            orientation="horizontal",
+            styles={
+                "container": {"padding": "0!important", "background-color": "#fafafa"},
+                "icon": {"color": "orange", "font-size": "18px"},
+                "nav-link": {"font-size": "16px", "text-align": "left", "margin":"0px"},
+                "nav-link-selected": {"background-color": "#02ab21"},
+            }
+        )
+    else:
+        # Fallback sin option_menu
+        tab_selected = st.selectbox("Seleccionar vista:", 
+            ["Dashboard", "Proyectos", "Gantt", "Grupos", "Reportes"])
+    
+    st.divider()
+    
+    # Enrutamiento según selección
+    if tab_selected == "Dashboard":
+        mostrar_dashboard(proyectos_service)
+    elif tab_selected == "Proyectos":
+        gestionar_proyectos(proyectos_service, supabase, session_state)
+    elif tab_selected == "Gantt":
+        mostrar_vista_gantt(proyectos_service)
+    elif tab_selected == "Grupos":
+        gestionar_grupos_proyecto(proyectos_service)
+    elif tab_selected == "Reportes":
+        mostrar_reportes(proyectos_service)
+
+
+def mostrar_dashboard(proyectos_service):
+    """Dashboard principal con métricas y resumen"""
+    
+    st.markdown("### 📈 Dashboard de Proyectos")
+    
+    # Cargar datos
+    with st.spinner("Cargando datos del dashboard..."):
+        df_proyectos = proyectos_service.get_proyectos_completos()
+    
+    if df_proyectos.empty:
+        st.info("📝 No hay proyectos registrados. Crea tu primer proyecto en la pestaña 'Proyectos'.")
+        return
+    
+    # Calcular métricas
+    metricas = proyectos_service.calcular_metricas_dashboard(df_proyectos)
+    
+    # Mostrar métricas principales - usando características 1.49
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        delta_activos = f"{metricas['proyectos_activos']}/{metricas['total_proyectos']}"
+        st.metric(
+            "🚀 Proyectos Activos", 
+            metricas['proyectos_activos'],
+            delta=delta_activos,
+            help="Proyectos en ejecución vs total"
+        )
+    
+    with col2:
+        if metricas['importe_concedido'] > 0:
+            delta_presupuesto = f"+{metricas['importe_concedido']:,.0f}€ concedido"
+        else:
+            delta_presupuesto = "Sin financiación concedida"
+        
+        st.metric(
+            "💰 Presupuesto Total", 
+            f"{metricas['presupuesto_total']:,.0f}€",
+            delta=delta_presupuesto,
+            help="Presupuesto total vs importe concedido"
+        )
+    
+    with col3:
+        st.metric(
+            "🎯 Tasa de Éxito", 
+            f"{metricas['tasa_exito']:.1f}%",
+            delta="Concedidos/Presentados",
+            help="Porcentaje de proyectos concedidos vs presentados"
+        )
+    
+    with col4:
+        st.metric(
+            "⏰ Próximos Hitos", 
+            metricas['proximos_vencimientos'],
+            delta="Próximos 30 días",
+            help="Fechas clave en los próximos 30 días"
+        )
+    
+    st.divider()
+    
+    # Gráficos del dashboard
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("#### 📊 Estados de Proyectos")
+        if not df_proyectos.empty:
+            estados_count = df_proyectos['estado_proyecto'].value_counts()
+            fig_estados = px.pie(
+                values=estados_count.values, 
+                names=estados_count.index,
+                title="Distribución por Estado",
+                color_discrete_sequence=px.colors.qualitative.Set3
+            )
+            fig_estados.update_layout(height=400)
+            st.plotly_chart(fig_estados, use_container_width=True)
+    
+    with col_right:
+        st.markdown("#### 💸 Evolución de Presupuestos")
+        if not df_proyectos.empty and 'year_proyecto' in df_proyectos.columns:
+            presupuesto_por_año = df_proyectos.groupby('year_proyecto')['presupuesto_total'].sum().reset_index()
+            fig_presupuesto = px.bar(
+                presupuesto_por_año, 
+                x='year_proyecto', 
+                y='presupuesto_total',
+                title="Presupuesto por Año",
+                labels={'presupuesto_total': 'Presupuesto (€)', 'year_proyecto': 'Año'}
+            )
+            fig_presupuesto.update_layout(height=400)
+            st.plotly_chart(fig_presupuesto, use_container_width=True)
+    
+    # Tabla de proyectos próximos a vencer
+    st.markdown("#### ⚠️ Proyectos con Fechas Próximas")
+    proyectos_urgentes = obtener_proyectos_urgentes(df_proyectos)
+    
+    if not proyectos_urgentes.empty:
+        st.dataframe(
+            proyectos_urgentes[['nombre', 'estado_proyecto', 'fecha_fin', 'fecha_justificacion', 'dias_restantes']],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.success("✅ No hay fechas urgentes en los próximos 30 días")
+
+
+def gestionar_proyectos(proyectos_service, supabase, session_state):
+    """Gestión CRUD de proyectos"""
+    
+    st.markdown("### 📁 Gestión de Proyectos")
+    
+    # Filtros de búsqueda
+    crear_filtros_proyecto(proyectos_service)
+    
+    st.divider()
+    
+    # Botón para crear nuevo proyecto
+    if proyectos_service.can_modify_data():
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+        with col_btn1:
+            if st.button("➕ Nuevo Proyecto", type="primary", use_container_width=True):
+                modal_crear_proyecto(proyectos_service, supabase, session_state)
+        
+        with col_btn2:
+            if st.button("🔄 Actualizar", use_container_width=True):
+                proyectos_service.get_proyectos_completos.clear()
+                st.rerun()
+    
+    # Cargar y mostrar proyectos
+    with st.spinner("Cargando proyectos..."):
+        df_proyectos = proyectos_service.get_proyectos_completos()
+    
+    if df_proyectos.empty:
+        st.info("📝 No hay proyectos registrados.")
+        return
+    
+    # Aplicar filtros desde session_state
+    filtros = st.session_state.get('filtros_proyecto', {})
+    df_filtrado = proyectos_service.filtrar_proyectos(df_proyectos, filtros)
+    
+    if len(df_filtrado) != len(df_proyectos):
+        st.info(f"🎯 Mostrando {len(df_filtrado)} de {len(df_proyectos)} proyectos")
+    
+    # Tabla principal de proyectos
+    st.markdown("#### Selecciona un proyecto para editarlo:")
+    
+    columnas_visibles = [
+        'nombre', 'tipo_proyecto', 'estado_proyecto', 'estado_subvencion',
+        'fecha_inicio', 'fecha_fin', 'presupuesto_total', 'empresa_nombre'
+    ]
+    
+    # Preparar datos para mostrar
+    df_display = df_filtrado[columnas_visibles].copy()
+    
+    # Formatear columnas
+    if 'presupuesto_total' in df_display.columns:
+        df_display['presupuesto_total'] = df_display['presupuesto_total'].apply(
+            lambda x: f"{x:,.0f}€" if pd.notna(x) and x > 0 else "Sin presupuesto"
+        )
+    
+    try:
+        event = st.dataframe(
+            df_display,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="tabla_proyectos_principal"
+        )
+        
+        # Manejar selección para edición
+        if event and hasattr(event, 'selection') and event.selection.get("rows"):
+            selected_idx = event.selection["rows"][0]
+            if selected_idx < len(df_filtrado):
+                proyecto_seleccionado = df_filtrado.iloc[selected_idx]
+                mostrar_formulario_edicion_proyecto(proyecto_seleccionado, proyectos_service)
+                
+    except Exception as e:
+        st.error(f"❌ Error al mostrar tabla: {e}")
+
+
+def crear_filtros_proyecto(proyectos_service):
+    """Panel de filtros para proyectos"""
+    
+    st.markdown("#### 🔍 Filtros de Búsqueda")
+    
+    col1, col2, col3, col4, col5 = st.columns(5)
+    
+    with col1:
+        años = list(range(2020, 2031))
+        año_seleccionado = st.selectbox("📅 Año", ["Todos"] + años, key="filtro_año")
+    
+    with col2:
+        estados_proyecto = ["Todos", "CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"]
+        estado_filtro = st.selectbox("🔄 Estado Proyecto", estados_proyecto, key="filtro_estado")
+    
+    with col3:
+        estados_subvencion = ["Todos", "CONVOCADA", "PRESUPUESTO", "CONCEDIDA", "PERDIDA"]
+        subvencion_filtro = st.selectbox("💰 Estado Subvención", estados_subvencion, key="filtro_subvencion")
+    
+    with col4:
+        tipos = ["Todos", "FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"]
+        tipo_filtro = st.selectbox("📂 Tipo", tipos, key="filtro_tipo")
+    
+    with col5:
+        buscar_texto = st.text_input("🔍 Buscar", placeholder="Nombre, organismo...", key="filtro_buscar")
+    
+    # Guardar filtros en session_state
+    st.session_state.filtros_proyecto = {
+        'año': año_seleccionado if año_seleccionado != "Todos" else None,
+        'estado_proyecto': estado_filtro if estado_filtro != "Todos" else None,
+        'estado_subvencion': subvencion_filtro if subvencion_filtro != "Todos" else None,
+        'tipo_proyecto': tipo_filtro if tipo_filtro != "Todos" else None,
+        'buscar_texto': buscar_texto if buscar_texto else None
+    }
+
+
+@st.dialog("Crear Nuevo Proyecto", width="large")
+def modal_crear_proyecto(proyectos_service, supabase, session_state):
+    """Modal para crear nuevo proyecto"""
+    
+    st.markdown("### ✨ Nuevo Proyecto de Formación")
+    
+    with st.form("form_crear_proyecto", clear_on_submit=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            nombre = st.text_input("Nombre del Proyecto *", placeholder="Ej: Formación Digital 2025")
+            tipo_proyecto = st.selectbox("Tipo de Proyecto *", 
+                ["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"])
+            organismo = st.text_input("Organismo Responsable", 
+                placeholder="Ej: SEPE, Fundación Estatal...")
+            presupuesto = st.number_input("Presupuesto Total (€)", min_value=0.0, step=1000.0, value=0.0)
+            responsable_nombre = st.text_input("Responsable del Proyecto")
+        
+        with col2:
+            descripcion = st.text_area("Descripción del Proyecto", height=100)
+            estado_proyecto = st.selectbox("Estado del Proyecto", 
+                ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"])
+            estado_subvencion = st.selectbox("Estado de Subvención", 
+                ["CONVOCADA", "PRESUPUESTO", "CONCEDIDA", "PERDIDA"], 
+                help="Dejar en blanco si no aplica")
+            importe_concedido = st.number_input("Importe Concedido (€)", min_value=0.0, step=1000.0, value=0.0)
+            responsable_email = st.text_input("Email del Responsable")
+        
+        # Fechas clave
+        st.subheader("📅 Fechas Importantes")
+        col3, col4, col5 = st.columns(3)
+        
+        with col3:
+            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=None)
+            fecha_inicio = st.date_input("Fecha Inicio", value=None)
+        
+        with col4:
+            fecha_ejecucion = st.date_input("Fecha Ejecución", value=None)
+            fecha_fin = st.date_input("Fecha Fin", value=None)
+        
+        with col5:
+            fecha_justificacion = st.date_input("Fecha Justificación", value=None)
+            fecha_presentacion = st.date_input("Presentación Informes", value=None)
+        
+        # Empresa (solo para admin)
+        empresa_id = None
+        if session_state.role == "admin":
+            st.subheader("🏢 Asignación de Empresa")
+            try:
+                empresas_result = supabase.table("empresas").select("id, nombre").execute()
+                if empresas_result.data:
+                    empresas_dict = {emp['nombre']: emp['id'] for emp in empresas_result.data}
+                    empresa_nombre = st.selectbox("Empresa Responsable", [""] + list(empresas_dict.keys()))
+                    if empresa_nombre:
+                        empresa_id = empresas_dict[empresa_nombre]
+            except Exception as e:
+                st.error(f"Error al cargar empresas: {e}")
+        
+        col_submit, col_cancel = st.columns([1, 3])
+        with col_submit:
+            submitted = st.form_submit_button("✅ Crear Proyecto", type="primary", use_container_width=True)
+        
+        if submitted:
+            # Validaciones
+            if not nombre:
+                st.error("El nombre del proyecto es obligatorio")
+                return
+            
+            if not tipo_proyecto:
+                st.error("Debe seleccionar un tipo de proyecto")
+                return
+            
+            # Preparar datos
+            datos_proyecto = {
+                "nombre": nombre,
+                "descripcion": descripcion,
+                "tipo_proyecto": tipo_proyecto,
+                "estado_proyecto": estado_proyecto,
+                "estado_subvencion": estado_subvencion if estado_subvencion != "CONVOCADA" else None,
+                "fecha_convocatoria": fecha_convocatoria,
+                "fecha_inicio": fecha_inicio,
+                "fecha_ejecucion": fecha_ejecucion,
+                "fecha_fin": fecha_fin,
+                "fecha_justificacion": fecha_justificacion,
+                "fecha_presentacion_informes": fecha_presentacion,
+                "presupuesto_total": presupuesto,
+                "importe_concedido": importe_concedido if importe_concedido > 0 else None,
+                "organismo_responsable": organismo,
+                "responsable_nombre": responsable_nombre,
+                "responsable_email": responsable_email,
+                "empresa_id": empresa_id
+            }
+            
+            if proyectos_service.crear_proyecto(datos_proyecto):
+                st.success("Proyecto creado correctamente")
+                st.rerun()
+
+
+def mostrar_formulario_edicion_proyecto(proyecto, proyectos_service):
+    """Formulario de edición de proyecto seleccionado"""
+    
+    st.markdown("---")
+    st.markdown("### ✏️ Editar Proyecto Seleccionado")
+    st.caption(f"Editando: {proyecto['nombre']}")
+    
+    with st.form(f"form_editar_proyecto_{proyecto['id']}", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            nombre = st.text_input("Nombre del Proyecto", value=proyecto.get('nombre', ''))
+            tipo_proyecto = st.selectbox("Tipo de Proyecto", 
+                ["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"],
+                index=["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"].index(proyecto.get('tipo_proyecto', 'FORMACION')))
+            organismo = st.text_input("Organismo Responsable", value=proyecto.get('organismo_responsable', ''))
+            presupuesto = st.number_input("Presupuesto Total (€)", 
+                min_value=0.0, step=1000.0, value=float(proyecto.get('presupuesto_total', 0)))
+        
+        with col2:
+            descripcion = st.text_area("Descripción", value=proyecto.get('descripcion', ''))
+            estado_proyecto = st.selectbox("Estado del Proyecto", 
+                ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"],
+                index=["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"].index(proyecto.get('estado_proyecto', 'CONVOCADO')))
+            
+            estados_subv = ["", "CONVOCADA", "PRESUPUESTO", "CONCEDIDA", "PERDIDA"]
+            estado_subv_actual = proyecto.get('estado_subvencion', '')
+            idx_subv = estados_subv.index(estado_subv_actual) if estado_subv_actual in estados_subv else 0
+            estado_subvencion = st.selectbox("Estado de Subvención", estados_subv, index=idx_subv)
+            
+            importe_concedido = st.number_input("Importe Concedido (€)", 
+                min_value=0.0, step=1000.0, value=float(proyecto.get('importe_concedido', 0)))
+        
+        # Fechas
+        st.subheader("📅 Fechas del Proyecto")
+        col3, col4, col5 = st.columns(3)
+        
+        with col3:
+            fecha_inicio = st.date_input("Fecha Inicio", value=proyecto.get('fecha_inicio'))
+            fecha_ejecucion = st.date_input("Fecha Ejecución", value=proyecto.get('fecha_ejecucion'))
+        
+        with col4:
+            fecha_fin = st.date_input("Fecha Fin", value=proyecto.get('fecha_fin'))
+            fecha_justificacion = st.date_input("Fecha Justificación", value=proyecto.get('fecha_justificacion'))
+        
+        with col5:
+            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=proyecto.get('fecha_convocatoria'))
+            fecha_presentacion = st.date_input("Presentación Informes", value=proyecto.get('fecha_presentacion_informes'))
+        
+        # Responsable
+        st.subheader("👤 Responsable del Proyecto")
+        col6, col7 = st.columns(2)
+        
+        with col6:
+            responsable_nombre = st.text_input("Nombre", value=proyecto.get('responsable_nombre', ''))
+        
+        with col7:
+            responsable_email = st.text_input("Email", value=proyecto.get('responsable_email', ''))
+        
+        col_save, col_delete = st.columns([3, 1])
+        
+        with col_save:
+            if st.form_submit_button("💾 Guardar Cambios", type="primary"):
+                datos_actualizados = {
+                    "nombre": nombre,
+                    "descripcion": descripcion,
+                    "tipo_proyecto": tipo_proyecto,
+                    "estado_proyecto": estado_proyecto,
+                    "estado_subvencion": estado_subvencion if estado_subvencion else None,
+                    "fecha_inicio": fecha_inicio,
+                    "fecha_ejecucion": fecha_ejecucion,
+                    "fecha_fin": fecha_fin,
+                    "fecha_justificacion": fecha_justificacion,
+                    "fecha_convocatoria": fecha_convocatoria,
+                    "fecha_presentacion_informes": fecha_presentacion,
+                    "presupuesto_total": presupuesto,
+                    "importe_concedido": importe_concedido if importe_concedido > 0 else None,
+                    "organismo_responsable": organismo,
+                    "responsable_nombre": responsable_nombre,
+                    "responsable_email": responsable_email
+                }
+                
+                if proyectos_service.actualizar_proyecto(proyecto['id'], datos_actualizados):
+                    st.rerun()
+        
+        with col_delete:
+            if proyectos_service.can_modify_data() and proyectos_service.session_state.role == "admin":
+                if st.form_submit_button("🗑️ Eliminar", help="Solo administradores"):
+                    if st.session_state.get(f"confirm_delete_{proyecto['id']}", False):
+                        if proyectos_service.eliminar_proyecto(proyecto['id']):
+                            st.rerun()
+                    else:
+                        st.session_state[f"confirm_delete_{proyecto['id']}"] = True
+                        st.warning("Presiona de nuevo para confirmar eliminación")
+
+
+def mostrar_vista_gantt(proyectos_service):
+    """Vista de timeline Gantt para proyectos"""
+    
+    st.markdown("### 📅 Vista Timeline - Gantt")
+    st.caption("Visualización temporal de proyectos y sus hitos")
+    
+    # Cargar proyectos
+    df_proyectos = proyectos_service.get_proyectos_completos()
+    
+    if df_proyectos.empty:
+        st.info("📝 No hay proyectos para mostrar en el timeline")
+        return
+    
+    # Filtros específicos para Gantt
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        año_gantt = st.selectbox("Año para Timeline", ["Todos"] + list(range(2020, 2031)), key="gantt_año")
+    
+    with col2:
+        estado_gantt = st.multiselect("Estados a mostrar", 
+            ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"],
+            default=["EN_EJECUCION", "FINALIZADO"])
+    
+    with col3:
+        mostrar_hitos = st.checkbox("Mostrar hitos detallados", value=False)
+    
+    # Filtrar datos para Gantt
+    df_gantt = df_proyectos.copy()
+    
+    if año_gantt != "Todos":
+        df_gantt = df_gantt[df_gantt['year_proyecto'] == año_gantt]
+    
+    if estado_gantt:
+        df_gantt = df_gantt[df_gantt['estado_proyecto'].isin(estado_gantt)]
+    
+    if df_gantt.empty:
+        st.warning("No hay proyectos que coincidan con los filtros seleccionados")
+        return
+    
+    # Preparar datos para el gráfico Gantt
+    gantt_data = []
+    
+    for _, proyecto in df_gantt.iterrows():
+        # Usar fecha_inicio y fecha_fin, con fallbacks
+        fecha_start = proyecto.get('fecha_inicio') or proyecto.get('fecha_ejecucion')
+        fecha_end = proyecto.get('fecha_fin') or proyecto.get('fecha_justificacion')
+        
+        if fecha_start and fecha_end:
+            gantt_data.append({
+                'Task': proyecto['nombre'][:30] + ('...' if len(proyecto['nombre']) > 30 else ''),
+                'Start': fecha_start,
+                'Finish': fecha_end,
+                'Resource': proyecto['estado_proyecto'],
+                'Description': f"Tipo: {proyecto['tipo_proyecto']} | Empresa: {proyecto.get('empresa_nombre', 'N/A')}"
+            })
+    
+    if not gantt_data:
+        st.warning("No hay proyectos con fechas válidas para mostrar en el timeline")
+        return
+    
+    # Crear gráfico Gantt usando Plotly
+    try:
+        # Colores por estado
+        colors = {
+            'CONVOCADO': '#e74c3c',
+            'EN_EJECUCION': '#f39c12', 
+            'FINALIZADO': '#27ae60',
+            'JUSTIFICADO': '#3498db'
+        }
+        
+        fig = ff.create_gantt(
+            gantt_data,
+            colors=colors,
+            index_col='Resource',
+            show_colorbar=True,
+            group_tasks=True,
+            title="Timeline de Proyectos",
+            height=600
+        )
+        
+        fig.update_layout(
+            xaxis_title="Línea de Tiempo",
+            yaxis_title="Proyectos",
+            showlegend=True
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Información adicional
+        st.markdown("#### 📊 Resumen del Timeline")
+        col_info1, col_info2, col_info3 = st.columns(3)
+        
+        with col_info1:
+            st.metric("Proyectos en Timeline", len(gantt_data))
+        
+        with col_info2:
+            if gantt_data:
+                fecha_min = min([item['Start'] for item in gantt_data])
+                fecha_max = max([item['Finish'] for item in gantt_data])
+                duracion = (fecha_max - fecha_min).days
+                st.metric("Duración Total", f"{duracion} días")
+        
+        with col_info3:
+            proyectos_activos_gantt = len([item for item in gantt_data if item['Resource'] == 'EN_EJECUCION'])
+            st.metric("En Ejecución", proyectos_activos_gantt)
+        
+    except Exception as e:
+        st.error(f"Error al crear el gráfico Gantt: {e}")
+        st.info("Verifica que los proyectos tengan fechas de inicio y fin válidas")
+
+
+def gestionar_grupos_proyecto(proyectos_service):
+    """Gestión de asignación de grupos a proyectos"""
+    
+    st.markdown("### 👥 Asignación de Grupos a Proyectos")
+    st.caption("Vincular grupos formativos con proyectos")
+    
+    # Seleccionar proyecto
+    df_proyectos = proyectos_service.get_proyectos_completos()
+    
+    if df_proyectos.empty:
+        st.info("📝 No hay proyectos registrados")
+        return
+    
+    proyecto_options = {f"{row['nombre']} ({row['estado_proyecto']})": row['id'] 
+                       for _, row in df_proyectos.iterrows()}
+    
+    proyecto_seleccionado = st.selectbox("Seleccionar Proyecto", list(proyecto_options.keys()))
+    
+    if not proyecto_seleccionado:
+        return
+    
+    proyecto_id = proyecto_options[proyecto_seleccionado]
+    
+    # Mostrar información del proyecto
+    proyecto_info = df_proyectos[df_proyectos['id'] == proyecto_id].iloc[0]
+    
+    col_info1, col_info2, col_info3 = st.columns(3)
+    with col_info1:
+        st.info(f"**Tipo:** {proyecto_info['tipo_proyecto']}")
+    with col_info2:
+        st.info(f"**Estado:** {proyecto_info['estado_proyecto']}")
+    with col_info3:
+        st.info(f"**Empresa:** {proyecto_info.get('empresa_nombre', 'N/A')}")
+    
+    st.divider()
+    
+    # Grupos actualmente asignados
+    df_grupos_asignados = proyectos_service.get_grupos_proyecto(proyecto_id)
+    
+    st.markdown("#### 📋 Grupos Asignados")
+    if not df_grupos_asignados.empty:
+        col_grupos_asignados = ['grupo_codigo', 'grupo_modalidad', 'grupo_estado', 'grupo_fecha_inicio']
+        st.dataframe(df_grupos_asignados[col_grupos_asignados], use_container_width=True, hide_index=True)
+        
+        # Opción para desasignar
+        if proyectos_service.can_modify_data():
+            grupo_a_desasignar = st.selectbox("Desasignar grupo", 
+                [""] + df_grupos_asignados['grupo_codigo'].tolist())
+            
+            if grupo_a_desasignar and st.button("❌ Desasignar Grupo"):
+                grupo_id = df_grupos_asignados[df_grupos_asignados['grupo_codigo'] == grupo_a_desasignar]['grupo_id'].iloc[0]
+                if proyectos_service.desasignar_grupo_proyecto(proyecto_id, grupo_id):
+                    st.rerun()
+    else:
+        st.info("No hay grupos asignados a este proyecto")
+    
+    # Asignar nuevos grupos
+    if proyectos_service.can_modify_data():
+        st.markdown("#### ➕ Asignar Nuevos Grupos")
+        
+        df_grupos_disponibles = proyectos_service.get_grupos_disponibles()
+        
+        if not df_grupos_disponibles.empty:
+            # Filtrar grupos ya asignados
+            grupos_ya_asignados = df_grupos_asignados['grupo_id'].tolist() if not df_grupos_asignados.empty else []
+            df_disponibles = df_grupos_disponibles[~df_grupos_disponibles['id'].isin(grupos_ya_asignados)]
+            
+            if not df_disponibles.empty:
+                grupos_options = {f"{row['codigo_grupo']} - {row['modalidad']} ({row['estado']})": row['id'] 
+                                for _, row in df_disponibles.iterrows()}
+                
+                grupo_a_asignar = st.selectbox("Seleccionar grupo para asignar", 
+                    [""] + list(grupos_options.keys()))
+                
+                if grupo_a_asignar and st.button("✅ Asignar Grupo al Proyecto"):
+                    grupo_id = grupos_options[grupo_a_asignar]
+                    if proyectos_service.asignar_grupo_proyecto(proyecto_id, grupo_id):
+                        st.rerun()
+            else:
+                st.info("Todos los grupos disponibles ya están asignados a este proyecto")
+        else:
+            st.info("No hay grupos disponibles para asignar")
+
+
+def mostrar_reportes(proyectos_service):
+    """Reportes y exportación de datos"""
+    
+    st.markdown("### 📊 Reportes y Análisis")
+    
+    df_proyectos = proyectos_service.get_proyectos_completos()
+    
+    if df_proyectos.empty:
+        st.info("📝 No hay datos para generar reportes")
+        return
+    
+    # Opciones de reporte
+    tipo_reporte = st.selectbox("Tipo de Reporte", [
+        "Resumen Ejecutivo",
+        "Estado de Subvenciones", 
+        "Análisis Financiero",
+        "Timeline de Proyectos",
+        "Exportar Datos"
+    ])
+    
+    if tipo_reporte == "Resumen Ejecutivo":
+        mostrar_reporte_ejecutivo(df_proyectos)
+    elif tipo_reporte == "Estado de Subvenciones":
+        mostrar_reporte_subvenciones(df_proyectos)
+    elif tipo_reporte == "Análisis Financiero":
+        mostrar_reporte_financiero(df_proyectos)
+    elif tipo_reporte == "Exportar Datos":
+        mostrar_opciones_exportacion(df_proyectos)
+
+
+def mostrar_reporte_ejecutivo(df_proyectos):
+    """Reporte ejecutivo con métricas principales"""
+    
+    st.markdown("#### 📈 Resumen Ejecutivo")
+    
+    # Métricas por año
+    st.markdown("##### Distribución por Año")
+    if 'year_proyecto' in df_proyectos.columns:
+        distribucion_año = df_proyectos['year_proyecto'].value_counts().sort_index()
+        fig_año = px.bar(x=distribucion_año.index, y=distribucion_año.values, 
+                        title="Proyectos por Año")
+        st.plotly_chart(fig_año, use_container_width=True)
+    
+    # Tabla resumen por estado
+    st.markdown("##### Resumen por Estado")
+    resumen_estados = df_proyectos.groupby('estado_proyecto').agg({
+        'nombre': 'count',
+        'presupuesto_total': 'sum',
+        'importe_concedido': 'sum'
+    }).rename(columns={'nombre': 'Cantidad'})
+    
+    st.dataframe(resumen_estados, use_container_width=True)
+
+
+def mostrar_reporte_subvenciones(df_proyectos):
+    """Reporte específico de subvenciones"""
+    
+    st.markdown("#### 💰 Estado de Subvenciones")
+    
+    # Filtrar solo proyectos con estado de subvención
+    df_subvenciones = df_proyectos[df_proyectos['estado_subvencion'].notna() & 
+                                  (df_proyectos['estado_subvencion'] != '')]
+    
+    if df_subvenciones.empty:
+        st.info("No hay proyectos con información de subvenciones")
+        return
+    
+    # Gráfico de estados de subvención
+    estados_subv = df_subvenciones['estado_subvencion'].value_counts()
+    fig_subv = px.pie(values=estados_subv.values, names=estados_subv.index,
+                     title="Distribución de Estados de Subvención")
+    st.plotly_chart(fig_subv, use_container_width=True)
+    
+    # Tabla detallada
+    cols_subv = ['nombre', 'estado_subvencion', 'presupuesto_total', 'importe_concedido', 'organismo_responsable']
+    st.dataframe(df_subvenciones[cols_subv], use_container_width=True, hide_index=True)
+
+
+def mostrar_reporte_financiero(df_proyectos):
+    """Análisis financiero de proyectos"""
+    
+    st.markdown("#### 💼 Análisis Financiero")
+    
+    # Métricas financieras
+    presupuesto_total = df_proyectos['presupuesto_total'].sum()
+    importe_concedido = df_proyectos['importe_concedido'].fillna(0).sum()
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("Presupuesto Total", f"{presupuesto_total:,.0f}€")
+    
+    with col2:
+        st.metric("Importe Concedido", f"{importe_concedido:,.0f}€")
+    
+    with col3:
+        if presupuesto_total > 0:
+            porcentaje_concedido = (importe_concedido / presupuesto_total) * 100
+            st.metric("% Concedido", f"{porcentaje_concedido:.1f}%")
+    
+    # Evolución financiera por año
+    if 'year_proyecto' in df_proyectos.columns:
+        finanzas_año = df_proyectos.groupby('year_proyecto').agg({
+            'presupuesto_total': 'sum',
+            'importe_concedido': 'sum'
+        }).fillna(0)
+        
+        fig_finanzas = px.bar(finanzas_año, 
+                             title="Evolución Financiera por Año",
+                             barmode='group')
+        st.plotly_chart(fig_finanzas, use_container_width=True)
+
+
+def mostrar_opciones_exportacion(df_proyectos):
+    """Opciones para exportar datos"""
+    
+    st.markdown("#### 📤 Exportar Datos")
+    
+    formato_export = st.selectbox("Formato de Exportación", ["CSV", "Excel"])
+    
+    # Seleccionar columnas
+    todas_columnas = df_proyectos.columns.tolist()
+    columnas_export = st.multiselect("Columnas a Exportar", todas_columnas, default=todas_columnas[:10])
+    
+    if st.button("Descargar"):
+        if not columnas_export:
+            st.error("Selecciona al menos una columna")
+            return
+        
+        df_export = df_proyectos[columnas_export]
+        
+        if formato_export == "CSV":
+            csv = df_export.to_csv(index=False)
+            st.download_button(
+                label="📥 Descargar CSV",
+                data=csv,
+                file_name=f"proyectos_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+        else:  # Excel
+            from io import BytesIO
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df_export.to_excel(writer, index=False, sheet_name='Proyectos')
+            
+            st.download_button(
+                label="📥 Descargar Excel",
+                data=output.getvalue(),
+                file_name=f"proyectos_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+
+def obtener_proyectos_urgentes(df_proyectos):
+    """Obtiene proyectos con fechas próximas a vencer"""
+    
+    if df_proyectos.empty:
+        return pd.DataFrame()
+    
+    hoy = datetime.now().date()
+    fecha_limite = hoy + timedelta(days=30)
+    
+    proyectos_urgentes = []
+    
+    for _, proyecto in df_proyectos.iterrows():
+        for fecha_col in ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']:
+            fecha = proyecto.get(fecha_col)
+            if fecha and isinstance(fecha, (datetime, pd.Timestamp)):
+                fecha = fecha.date() if hasattr(fecha, 'date') else fecha
+            
+            if fecha and hoy <= fecha <= fecha_limite:
+                dias_restantes = (fecha - hoy).days
+                proyectos_urgentes.append({
+                    'nombre': proyecto['nombre'],
+                    'estado_proyecto': proyecto['estado_proyecto'],
+                    'fecha_fin': proyecto.get('fecha_fin'),
+                    'fecha_justificacion': proyecto.get('fecha_justificacion'),
+                    'dias_restantes': dias_restantes,
+                    'tipo_vencimiento': fecha_col.replace('fecha_', '').title()
+                })
+                break  # Solo agregar una vez por proyecto
+    
+    return pd.DataFrame(proyectos_urgentes)
