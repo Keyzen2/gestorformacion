@@ -69,29 +69,51 @@ def main(supabase, session_state):
 import pandas as pd
 
 def safe_date_value(fecha_valor):
-    """Convierte fecha de forma segura para st.date_input"""
+    """Convierte fecha de forma segura para st.date_input - VERSIÓN CORREGIDA"""
     if fecha_valor is None:
         return None
     
     try:
+        # Si es NaT de pandas, retornar None
+        if pd.isna(fecha_valor):
+            return None
+            
+        # Si es string vacío
+        if isinstance(fecha_valor, str) and fecha_valor.strip() == '':
+            return None
+        
         # Si es string, convertir a date
         if isinstance(fecha_valor, str):
-            return pd.to_datetime(fecha_valor).date() if fecha_valor else None
+            fecha_dt = pd.to_datetime(fecha_valor, errors='coerce')
+            if pd.isna(fecha_dt):  # Si falló la conversión
+                return None
+            return fecha_dt.date()
         
-        # Si es datetime/timestamp, extraer date
-        if hasattr(fecha_valor, 'date'):
+        # Si es Timestamp de pandas, verificar si es NaT
+        if hasattr(fecha_valor, '_typ') and fecha_valor._typ == 'timestamp':
+            if pd.isna(fecha_valor):
+                return None
             return fecha_valor.date()
         
-        # Si es pandas timestamp, verificar si es NaT
-        if pd.api.types.is_datetime64_any_dtype(type(fecha_valor)):
-            if pd.notna(fecha_valor):
-                return pd.to_datetime(fecha_valor).date()
-            else:
+        # Si es datetime, extraer date
+        if isinstance(fecha_valor, datetime):
+            return fecha_valor.date()
+            
+        # Si ya es date
+        if isinstance(fecha_valor, date):
+            return fecha_valor
+        
+        # Para otros tipos con método .date()
+        if hasattr(fecha_valor, 'date') and callable(fecha_valor.date):
+            try:
+                return fecha_valor.date()
+            except (AttributeError, ValueError):
                 return None
                 
-        return fecha_valor
+        # Si nada funciona, retornar None
+        return None
         
-    except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError, Exception):
         return None
         
 def mostrar_dashboard(proyectos_service):
@@ -735,9 +757,8 @@ def mostrar_vista_gantt(proyectos_service):
         st.error(f"Error al crear el gráfico Gantt: {e}")
         st.info("Verifica que los proyectos tengan fechas de inicio y fin válidas")
 
-
-def gestionar_grupos_proyecto(proyectos_service):
-    """Gestión de asignación de grupos a proyectos"""
+def gestionar_grupos_proyecto_corregido(proyectos_service):
+    """Gestión de asignación de grupos a proyectos - VERSIÓN CORREGIDA"""
     
     st.markdown("### 👥 Asignación de Grupos a Proyectos")
     st.caption("Vincular grupos formativos con proyectos")
@@ -772,23 +793,76 @@ def gestionar_grupos_proyecto(proyectos_service):
     
     st.divider()
     
-    # Grupos actualmente asignados
-    df_grupos_asignados = proyectos_service.get_grupos_proyecto(proyecto_id)
-    
-    st.markdown("#### 📋 Grupos Asignados")
-    if not df_grupos_asignados.empty:
-        col_grupos_asignados = ['grupo_codigo', 'grupo_modalidad', 'grupo_estado', 'grupo_fecha_inicio']
-        st.dataframe(df_grupos_asignados[col_grupos_asignados], use_container_width=True, hide_index=True)
-        
-        # Opción para desasignar
-        if proyectos_service.can_modify_data():
-            grupo_a_desasignar = st.selectbox("Desasignar grupo", 
-                [""] + df_grupos_asignados['grupo_codigo'].tolist())
+    # 🔧 CORRECCIÓN: Cargar grupos con información de acción formativa
+    try:
+        if proyectos_service.session_state.role == "gestor":
+            grupos_res = proyectos_service.supabase.table("grupos").select("""
+                id, codigo_grupo, estado, localidad, fecha_inicio, fecha_fin_prevista,
+                accion_formativa:acciones_formativas(nombre, modalidad, num_horas)
+            """).eq("empresa_id", proyectos_service.session_state.user.get("empresa_id")).execute()
+        else:
+            grupos_res = proyectos_service.supabase.table("grupos").select("""
+                id, codigo_grupo, estado, localidad, fecha_inicio, fecha_fin_prevista,
+                accion_formativa:acciones_formativas(nombre, modalidad, num_horas)
+            """).execute()
             
-            if grupo_a_desasignar and st.button("❌ Desasignar Grupo"):
-                grupo_id = df_grupos_asignados[df_grupos_asignados['grupo_codigo'] == grupo_a_desasignar]['grupo_id'].iloc[0]
-                if proyectos_service.desasignar_grupo_proyecto(proyecto_id, grupo_id):
-                    st.rerun()
+        grupos_disponibles = grupos_res.data or []
+        
+    except Exception as e:
+        st.error(f"Error al cargar grupos: {e}")
+        grupos_disponibles = []
+    
+    if not grupos_disponibles:
+        st.info("No hay grupos disponibles")
+        return
+    
+    # Grupos actualmente asignados
+    try:
+        grupos_proyecto_res = proyectos_service.supabase.table("proyecto_grupos")\
+            .select("grupo_id, created_at")\
+            .eq("proyecto_id", proyecto_id)\
+            .execute()
+        
+        grupos_asignados_ids = [pg["grupo_id"] for pg in (grupos_proyecto_res.data or [])]
+        
+    except Exception as e:
+        st.error(f"Error al cargar grupos del proyecto: {e}")
+        grupos_asignados_ids = []
+    
+    # Mostrar grupos asignados
+    st.markdown("#### 📋 Grupos Asignados")
+    if grupos_asignados_ids:
+        grupos_asignados = [g for g in grupos_disponibles if g["id"] in grupos_asignados_ids]
+        
+        for grupo in grupos_asignados:
+            # Información de acción formativa
+            accion_info = grupo.get('accion_formativa', {})
+            accion_nombre = accion_info.get('nombre', 'Sin acción') if accion_info else 'Sin acción'
+            modalidad = accion_info.get('modalidad', 'No definida') if accion_info else 'No definida'
+            
+            with st.expander(f"📚 {grupo['codigo_grupo']} - {accion_nombre}", expanded=False):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.write(f"**Acción:** {accion_nombre}")
+                    st.write(f"**Modalidad:** {modalidad}")
+                
+                with col2:
+                    st.write(f"**Estado:** {grupo.get('estado', 'No definido').capitalize()}")
+                    st.write(f"**Localidad:** {grupo.get('localidad', 'No definida')}")
+                
+                with col3:
+                    if st.button("🗑️ Quitar", key=f"remove_grupo_{grupo['id']}", help="Quitar grupo del proyecto"):
+                        try:
+                            proyectos_service.supabase.table("proyecto_grupos")\
+                                .delete()\
+                                .eq("proyecto_id", proyecto_id)\
+                                .eq("grupo_id", grupo['id'])\
+                                .execute()
+                            st.success(f"✅ Grupo {grupo['codigo_grupo']} eliminado del proyecto")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al quitar grupo: {e}")
     else:
         st.info("No hay grupos asignados a este proyecto")
     
@@ -796,29 +870,80 @@ def gestionar_grupos_proyecto(proyectos_service):
     if proyectos_service.can_modify_data():
         st.markdown("#### ➕ Asignar Nuevos Grupos")
         
-        df_grupos_disponibles = proyectos_service.get_grupos_disponibles()
+        # Filtrar grupos no asignados
+        grupos_no_asignados = [g for g in grupos_disponibles if g["id"] not in grupos_asignados_ids]
         
-        if not df_grupos_disponibles.empty:
-            # Filtrar grupos ya asignados
-            grupos_ya_asignados = df_grupos_asignados['grupo_id'].tolist() if not df_grupos_asignados.empty else []
-            df_disponibles = df_grupos_disponibles[~df_grupos_disponibles['id'].isin(grupos_ya_asignados)]
+        if not grupos_no_asignados:
+            st.info("Todos los grupos disponibles ya están asignados a este proyecto.")
+            return
+        
+        # 🔧 SELECTOR MEJORADO CON NOMBRES DE ACCIÓN FORMATIVA
+        with st.form("form_asignar_grupo", clear_on_submit=True):
+            grupo_options = []
+            grupo_mapping = {}
             
-            if not df_disponibles.empty:
-                grupos_options = {f"{row['codigo_grupo']} - {row['modalidad']} ({row['estado']})": row['id'] 
-                                for _, row in df_disponibles.iterrows()}
+            for g in grupos_no_asignados:
+                # Extraer información de acción formativa
+                accion_info = g.get('accion_formativa', {})
+                accion_nombre = accion_info.get('nombre', 'Sin acción') if accion_info else 'Sin acción'
+                modalidad = accion_info.get('modalidad', '') if accion_info else ''
+                num_horas = accion_info.get('num_horas', '') if accion_info else ''
+                estado = g.get('estado', 'abierto').capitalize()
                 
-                grupo_a_asignar = st.selectbox("Seleccionar grupo para asignar", 
-                    [""] + list(grupos_options.keys()))
+                # Formato: "GRUP001 - Excel Avanzado (PRESENCIAL) [Abierto] - 40h"
+                display_text = f"{g['codigo_grupo']} - {accion_nombre}"
                 
-                if grupo_a_asignar and st.button("✅ Asignar Grupo al Proyecto"):
-                    grupo_id = grupos_options[grupo_a_asignar]
-                    if proyectos_service.asignar_grupo_proyecto(proyecto_id, grupo_id):
-                        st.rerun()
-            else:
-                st.info("Todos los grupos disponibles ya están asignados a este proyecto")
-        else:
-            st.info("No hay grupos disponibles para asignar")
-
+                if modalidad:
+                    display_text += f" ({modalidad})"
+                
+                display_text += f" [{estado}]"
+                
+                if num_horas:
+                    display_text += f" - {num_horas}h"
+                
+                grupo_options.append(display_text)
+                grupo_mapping[display_text] = g
+            
+            if grupo_options:
+                grupo_seleccionado = st.selectbox(
+                    "Seleccionar grupo para asignar",
+                    options=[""] + grupo_options,
+                    help="Formato: Código - Acción Formativa (Modalidad) [Estado] - Horas"
+                )
+                
+                asignar_clicked = st.form_submit_button("✅ Asignar Grupo al Proyecto", type="primary")
+                
+                if asignar_clicked and grupo_seleccionado:
+                    try:
+                        grupo_data = grupo_mapping[grupo_seleccionado]
+                        
+                        # Verificar que no esté ya asignado
+                        existe = proyectos_service.supabase.table("proyecto_grupos")\
+                            .select("id")\
+                            .eq("proyecto_id", proyecto_id)\
+                            .eq("grupo_id", grupo_data['id'])\
+                            .execute()
+                        
+                        if existe.data:
+                            st.warning("⚠️ Este grupo ya está asignado al proyecto.")
+                        else:
+                            # Asignar grupo al proyecto
+                            proyectos_service.supabase.table("proyecto_grupos").insert({
+                                "proyecto_id": proyecto_id,
+                                "grupo_id": grupo_data['id'],
+                                "fecha_asignacion": datetime.utcnow().isoformat(),
+                                "activo": True
+                            }).execute()
+                            
+                            accion_nombre = grupo_data.get('accion_formativa', {}).get('nombre', grupo_data['codigo_grupo'])
+                            st.success(f"✅ Grupo '{grupo_data['codigo_grupo']} - {accion_nombre}' asignado correctamente")
+                            st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error al asignar grupo: {e}")
+                
+                elif asignar_clicked:
+                    st.warning("⚠️ Selecciona un grupo para asignar")
 
 def mostrar_reportes(proyectos_service):
     """Reportes y exportación de datos"""
@@ -899,38 +1024,79 @@ def mostrar_reporte_subvenciones(df_proyectos):
 
 
 def mostrar_reporte_financiero(df_proyectos):
-    """Análisis financiero de proyectos"""
+    """Análisis financiero de proyectos - VERSIÓN CORREGIDA"""
     
     st.markdown("#### 💼 Análisis Financiero")
     
-    # Métricas financieras
-    presupuesto_total = df_proyectos['presupuesto_total'].sum()
-    importe_concedido = df_proyectos['importe_concedido'].fillna(0).sum()
+    if df_proyectos.empty:
+        st.info("No hay proyectos para analizar.")
+        return
     
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("Presupuesto Total", f"{presupuesto_total:,.0f}€")
-    
-    with col2:
-        st.metric("Importe Concedido", f"{importe_concedido:,.0f}€")
-    
-    with col3:
-        if presupuesto_total > 0:
-            porcentaje_concedido = (importe_concedido / presupuesto_total) * 100
-            st.metric("% Concedido", f"{porcentaje_concedido:.1f}%")
-    
-    # Evolución financiera por año
-    if 'year_proyecto' in df_proyectos.columns:
-        finanzas_año = df_proyectos.groupby('year_proyecto').agg({
-            'presupuesto_total': 'sum',
-            'importe_concedido': 'sum'
-        }).fillna(0)
+    try:
+        # 🔧 CORRECCIÓN: Limpiar y convertir datos numéricos de forma segura
+        df_clean = df_proyectos.copy()
         
-        fig_finanzas = px.bar(finanzas_año, 
-                             title="Evolución Financiera por Año",
-                             barmode='group')
-        st.plotly_chart(fig_finanzas, use_container_width=True)
+        # Convertir presupuesto_total de forma segura
+        df_clean['presupuesto_total'] = pd.to_numeric(
+            df_clean['presupuesto_total'], 
+            errors='coerce'
+        ).fillna(0)
+        
+        # Convertir importe_concedido de forma segura
+        df_clean['importe_concedido'] = pd.to_numeric(
+            df_clean['importe_concedido'], 
+            errors='coerce'
+        ).fillna(0)
+        
+        # Calcular métricas
+        presupuesto_total = float(df_clean['presupuesto_total'].sum())
+        importe_concedido = float(df_clean['importe_concedido'].sum())
+        
+        # Mostrar métricas principales
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Presupuesto Total", f"{presupuesto_total:,.0f}€" if presupuesto_total > 0 else "0€")
+        
+        with col2:
+            st.metric("Importe Concedido", f"{importe_concedido:,.0f}€" if importe_concedido > 0 else "0€")
+        
+        with col3:
+            if presupuesto_total > 0:
+                porcentaje_concedido = (importe_concedido / presupuesto_total) * 100
+                st.metric("% Concedido", f"{porcentaje_concedido:.1f}%")
+            else:
+                st.metric("% Concedido", "0%")
+        
+        # Evolución financiera por año (solo si existe la columna)
+        if 'year_proyecto' in df_clean.columns:
+            try:
+                finanzas_año = df_clean.groupby('year_proyecto').agg({
+                    'presupuesto_total': 'sum',
+                    'importe_concedido': 'sum'
+                }).fillna(0)
+                
+                if not finanzas_año.empty:
+                    fig_finanzas = px.bar(
+                        finanzas_año.reset_index(), 
+                        x='year_proyecto',
+                        y=['presupuesto_total', 'importe_concedido'],
+                        title="Evolución Financiera por Año",
+                        barmode='group',
+                        labels={'value': 'Importe (€)', 'year_proyecto': 'Año'}
+                    )
+                    st.plotly_chart(fig_finanzas, use_container_width=True)
+                else:
+                    st.info("No hay datos de años para mostrar evolución")
+                    
+            except Exception as e:
+                st.warning("No se puede mostrar evolución por año")
+        else:
+            st.info("No hay información de años disponible")
+            
+    except Exception as e:
+        st.error(f"Error al generar reporte financiero: {str(e)}")
+        st.info("Verificando integridad de datos financieros...")
 
 
 def mostrar_opciones_exportacion(df_proyectos):
@@ -972,49 +1138,27 @@ def mostrar_opciones_exportacion(df_proyectos):
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
 
-
 def obtener_proyectos_urgentes(df_proyectos):
-    """Obtiene proyectos con fechas próximas a vencer - VERSIÓN CORREGIDA"""
+    """Obtiene proyectos con fechas próximas a vencer - VERSIÓN ULTRA CORREGIDA"""
     
     if df_proyectos.empty:
         return pd.DataFrame()
     
-    hoy = datetime.now().date()
-    fecha_limite = hoy + timedelta(days=30)
-    
-    proyectos_urgentes = []
-    
-    for _, proyecto in df_proyectos.iterrows():
-        campos_fecha = ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
+    try:
+        hoy = datetime.now().date()
+        fecha_limite = hoy + timedelta(days=30)
         
-        for fecha_col in campos_fecha:
-            fecha_valor = proyecto.get(fecha_col)
+        proyectos_urgentes = []
+        
+        for _, proyecto in df_proyectos.iterrows():
+            campos_fecha = ['fecha_fin', 'fecha_justificacion', 'fecha_presentacion_informes']
             
-            # Manejo seguro de conversión de fechas
-            fecha_convertida = None
-            
-            try:
-                # Saltar valores nulos o vacíos
-                if pd.isna(fecha_valor) or fecha_valor is None:
-                    continue
-                    
-                # Si es string vacío
-                if isinstance(fecha_valor, str) and fecha_valor.strip() == '':
-                    continue
+            for fecha_col in campos_fecha:
+                fecha_valor = proyecto.get(fecha_col)
                 
-                # Convertir según el tipo
-                if isinstance(fecha_valor, str):
-                    # Intentar parsear string como fecha
-                    fecha_dt = pd.to_datetime(fecha_valor, errors='coerce')
-                    if not pd.isna(fecha_dt):
-                        fecha_convertida = fecha_dt.date()
-                elif hasattr(fecha_valor, 'date'):
-                    # Es datetime-like
-                    fecha_convertida = fecha_valor.date() if callable(getattr(fecha_valor, 'date', None)) else fecha_valor
-                elif isinstance(fecha_valor, datetime.date):
-                    # Ya es date
-                    fecha_convertida = fecha_valor
-                    
+                # Usar la función safe_date_value corregida
+                fecha_convertida = safe_date_value(fecha_valor)
+                
                 # Si logramos convertir la fecha y está en rango
                 if fecha_convertida and hoy <= fecha_convertida <= fecha_limite:
                     dias_restantes = (fecha_convertida - hoy).days
@@ -1022,23 +1166,23 @@ def obtener_proyectos_urgentes(df_proyectos):
                     proyectos_urgentes.append({
                         'nombre': proyecto.get('nombre', 'Sin nombre'),
                         'estado_proyecto': proyecto.get('estado_proyecto', 'N/A'),
-                        'fecha_fin': proyecto.get('fecha_fin'),
-                        'fecha_justificacion': proyecto.get('fecha_justificacion'),
+                        'fecha_fin': safe_date_value(proyecto.get('fecha_fin')),
+                        'fecha_justificacion': safe_date_value(proyecto.get('fecha_justificacion')),
                         'dias_restantes': dias_restantes,
                         'tipo_vencimiento': fecha_col.replace('fecha_', '').replace('_', ' ').title(),
                         'fecha_urgente': fecha_convertida
                     })
                     break  # Solo agregar una vez por proyecto
-                    
-            except Exception as e:
-                # Si hay error con una fecha específica, continuar con la siguiente
-                continue
-    
-    # Convertir a DataFrame
-    df_result = pd.DataFrame(proyectos_urgentes)
-    
-    # Ordenar por días restantes si hay datos
-    if not df_result.empty and 'dias_restantes' in df_result.columns:
-        df_result = df_result.sort_values('dias_restantes')
-    
-    return df_result
+        
+        # Convertir a DataFrame
+        df_result = pd.DataFrame(proyectos_urgentes)
+        
+        # Ordenar por días restantes si hay datos
+        if not df_result.empty and 'dias_restantes' in df_result.columns:
+            df_result = df_result.sort_values('dias_restantes')
+        
+        return df_result
+        
+    except Exception as e:
+        # Si hay cualquier error, retornar DataFrame vacío
+        return pd.DataFrame()
