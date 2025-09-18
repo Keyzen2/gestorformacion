@@ -41,7 +41,7 @@ def main(supabase, session_state):
             return
 
     # =========================
-    # MÉTRICAS UNIFICADAS (UNA SOLA VEZ)
+    # MÉTRICAS UNIFICADAS
     # =========================
     if not df_tutores.empty:
         # Calcular métricas principales
@@ -67,36 +67,37 @@ def main(supabase, session_state):
     # =========================
     puede_modificar = data_service.can_modify_data()
 
-    # Especialidades FUNDAE (definir antes de usar en filtros)
+    # Especialidades FUNDAE
     especialidades_opciones = [
-    "", "Administración y Gestión", "Comercio y Marketing", 
-    "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
-    "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
-    "Química", "Imagen Personal", "Industrias Extractivas",
-    "Fabricación Mecánica", "Instalación y Mantenimiento", 
-    "Electricidad y Electrónica", "Energía y Agua", 
-    "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
-    "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
-    "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
-    "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
-    "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
-]
-
-# AQUÍ - al mismo nivel que especialidades_opciones
-campos_select = {
-    "tipo_tutor": ["", "interno", "externo"],
-    "especialidad": especialidades_opciones,
-    "tipo_documento": [
-        ("", "Seleccionar tipo"),
-        (10, "NIF"),           # Código 10 para NIF
-        (20, "Pasaporte"),     # Código 20 para Pasaporte  
-        (60, "NIE")            # Código 60 para NIE
+        "", "Administración y Gestión", "Comercio y Marketing", 
+        "Informática y Comunicaciones", "Sanidad", "Servicios Socioculturales", 
+        "Hostelería y Turismo", "Educación", "Industrias Alimentarias", 
+        "Química", "Imagen Personal", "Industrias Extractivas",
+        "Fabricación Mecánica", "Instalación y Mantenimiento", 
+        "Electricidad y Electrónica", "Energía y Agua", 
+        "Transporte y Mantenimiento de Vehículos", "Edificación y Obra Civil",
+        "Vidrio y Cerámica", "Madera, Mueble y Corcho", 
+        "Textil, Confección y Piel", "Artes Gráficas", "Imagen y Sonido", 
+        "Actividades Físicas y Deportivas", "Marítimo-Pesquera", 
+        "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
     ]
-}
 
-if session_state.role == "admin" and empresas_dict:
-    empresas_opciones = [""] + sorted(empresas_dict.keys())
-    campos_select["empresa_sel"] = empresas_opciones
+    # Campos select
+    campos_select = {
+        "tipo_tutor": ["", "interno", "externo"],
+        "especialidad": especialidades_opciones,
+        "tipo_documento": [
+            ("", "Seleccionar tipo"),
+            (10, "NIF"),           # Código 10 para NIF
+            (20, "Pasaporte"),     # Código 20 para Pasaporte  
+            (60, "NIE")            # Código 60 para NIE
+        ]
+    }
+
+    if session_state.role == "admin" and empresas_dict:
+        empresas_opciones = [""] + sorted(empresas_dict.keys())
+        campos_select["empresa_sel"] = empresas_opciones
+
     # =========================
     # FILTROS DE BÚSQUEDA UNIFICADOS
     # =========================
@@ -298,7 +299,7 @@ if session_state.role == "admin" and empresas_dict:
             st.error(f"❌ Error al crear tutor: {e}")
             return False
 
-    #=========================
+    # =========================
     # PREPARAR DATOS PARA DISPLAY
     # =========================
     def preparar_datos_display(df_orig):
@@ -435,7 +436,9 @@ if session_state.role == "admin" and empresas_dict:
                         col3, col4 = st.columns(2)
                         with col3:
                             provincia = st.text_input("Provincia", value=tutor_seleccionado.get('provincia', ''), key="edit_provincia")
-                            if "titulacion" in df_tutores.columns:  # Solo mostrar si existe en BD
+                            # Verificar si titulacion existe en BD antes de mostrar
+                            titulacion = None
+                            if "titulacion" in df_tutores.columns:
                                 titulacion = st.text_area("Titulación", value=tutor_seleccionado.get('titulacion', ''), key="edit_titulacion")
                         with col4:
                             codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key="edit_cp")
@@ -461,7 +464,7 @@ if session_state.role == "admin" and empresas_dict:
                             }
                             
                             # Solo añadir titulacion si existe en BD
-                            if "titulacion" in df_tutores.columns:
+                            if titulacion is not None and "titulacion" in df_tutores.columns:
                                 datos_editados["titulacion"] = titulacion
                             
                             if session_state.role == "admin" and empresas_dict:
@@ -614,6 +617,11 @@ if session_state.role == "admin" and empresas_dict:
                                             if success:
                                                 st.rerun()
                         
+                        with col_btn3:
+                            if st.button("🗑️", key=f"delete_cv_{tutor['id']}", help="Eliminar CV"):
+                                if eliminar_cv_tutor(supabase, data_service, tutor['id']):
+                                    st.rerun()
+
     # =========================
     # EXPORTACIÓN Y RESUMEN
     # =========================
@@ -815,6 +823,8 @@ def eliminar_cv_tutor(supabase, data_service, tutor_id):
             data_service.get_tutores_completos.clear()
             
             st.success("✅ CV eliminado.")
+            # Limpiar el estado de confirmación
+            st.session_state[confirmar_key] = False
             return True
         else:
             st.session_state[confirmar_key] = True
