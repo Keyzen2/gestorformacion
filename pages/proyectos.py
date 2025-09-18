@@ -5,7 +5,6 @@ import plotly.figure_factory as ff
 from datetime import datetime, timedelta
 from services.proyectos_service import get_proyectos_service
 
-# Instalar primero: pip install streamlit-option-menu
 try:
     from streamlit_option_menu import option_menu
     OPTION_MENU_AVAILABLE = True
@@ -171,8 +170,127 @@ def mostrar_dashboard(proyectos_service):
         st.success("✅ No hay fechas urgentes en los próximos 30 días")
 
 
+@st.dialog("Editar Proyecto", width="large") 
+def modal_editar_proyecto(proyecto, proyectos_service):
+    """Modal para editar proyecto existente"""
+    
+    st.markdown(f"### ✏️ Editar: {proyecto['nombre']}")
+    estado_color = {
+        "CONVOCADO": "🟡",
+        "EN_EJECUCION": "🟢", 
+        "FINALIZADO": "🔵",
+        "JUSTIFICADO": "✅"
+    }.get(proyecto.get('estado_proyecto', 'CONVOCADO'), "⚪")
+    st.caption(f"Estado actual: {estado_color} {proyecto.get('estado_proyecto', 'CONVOCADO')}")
+    
+    with st.form("form_editar_proyecto_modal", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            nombre = st.text_input("Nombre del Proyecto *", value=proyecto.get('nombre', ''))
+            tipo_proyecto = st.selectbox("Tipo de Proyecto *", 
+                ["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"],
+                index=["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"].index(proyecto.get('tipo_proyecto', 'FORMACION')) if proyecto.get('tipo_proyecto') in ["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"] else 0)
+            organismo = st.text_input("Organismo Responsable", value=proyecto.get('organismo_responsable', ''))
+            
+            # Manejar presupuesto con conversión segura
+            presupuesto_actual = proyecto.get('presupuesto_total', 0)
+            try:
+                presupuesto_valor = float(presupuesto_actual) if presupuesto_actual else 0.0
+            except (ValueError, TypeError):
+                presupuesto_valor = 0.0
+            
+            presupuesto = st.number_input("Presupuesto Total (€)", 
+                min_value=0.0, step=1000.0, value=presupuesto_valor)
+            responsable_nombre = st.text_input("Responsable del Proyecto", value=proyecto.get('responsable_nombre', ''))
+        
+        with col2:
+            descripcion = st.text_area("Descripción del Proyecto", value=proyecto.get('descripcion', ''))
+            estado_proyecto = st.selectbox("Estado del Proyecto", 
+                ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"],
+                index=["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"].index(proyecto.get('estado_proyecto', 'CONVOCADO')) if proyecto.get('estado_proyecto') in ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"] else 0)
+            
+            estados_subv = ["", "CONVOCADA", "PRESUPUESTO", "CONCEDIDA", "PERDIDA"]
+            estado_subv_actual = proyecto.get('estado_subvencion', '') or ''
+            idx_subv = estados_subv.index(estado_subv_actual) if estado_subv_actual in estados_subv else 0
+            estado_subvencion = st.selectbox("Estado de Subvención", estados_subv, index=idx_subv)
+            
+            # Manejar importe concedido con conversión segura
+            importe_actual = proyecto.get('importe_concedido', 0)
+            try:
+                importe_valor = float(importe_actual) if importe_actual else 0.0
+            except (ValueError, TypeError):
+                importe_valor = 0.0
+            
+            importe_concedido = st.number_input("Importe Concedido (€)", 
+                min_value=0.0, step=1000.0, value=importe_valor)
+            responsable_email = st.text_input("Email del Responsable", value=proyecto.get('responsable_email', ''))
+        
+        # Fechas clave
+        st.subheader("📅 Fechas Importantes")
+        col3, col4, col5 = st.columns(3)
+        
+        with col3:
+            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=proyecto.get('fecha_convocatoria'))
+            fecha_inicio = st.date_input("Fecha Inicio", value=proyecto.get('fecha_inicio'))
+        
+        with col4:
+            fecha_ejecucion = st.date_input("Fecha Ejecución", value=proyecto.get('fecha_ejecucion'))
+            fecha_fin = st.date_input("Fecha Fin", value=proyecto.get('fecha_fin'))
+        
+        with col5:
+            fecha_justificacion = st.date_input("Fecha Justificación", value=proyecto.get('fecha_justificacion'))
+            fecha_presentacion = st.date_input("Presentación Informes", value=proyecto.get('fecha_presentacion_informes'))
+        
+        # Botones
+        col_save, col_delete = st.columns([3, 1])
+        
+        with col_save:
+            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+        
+        with col_delete:
+            if proyectos_service.can_modify_data() and proyectos_service.session_state.role == "admin":
+                delete_clicked = st.form_submit_button("🗑️ Eliminar", help="Solo administradores")
+        
+        if submitted:
+            datos_actualizados = {
+                "nombre": nombre,
+                "descripcion": descripcion,
+                "tipo_proyecto": tipo_proyecto,
+                "estado_proyecto": estado_proyecto,
+                "estado_subvencion": estado_subvencion if estado_subvencion else None,
+                "fecha_convocatoria": fecha_convocatoria,
+                "fecha_inicio": fecha_inicio,
+                "fecha_ejecucion": fecha_ejecucion,
+                "fecha_fin": fecha_fin,
+                "fecha_justificacion": fecha_justificacion,
+                "fecha_presentacion_informes": fecha_presentacion,
+                "presupuesto_total": presupuesto,
+                "importe_concedido": importe_concedido if importe_concedido > 0 else None,
+                "organismo_responsable": organismo,
+                "responsable_nombre": responsable_nombre,
+                "responsable_email": responsable_email
+            }
+            
+            if proyectos_service.actualizar_proyecto(proyecto['id'], datos_actualizados):
+                st.success("✅ Proyecto actualizado correctamente")
+                st.rerun()
+        
+        # Manejar eliminación
+        if proyectos_service.can_modify_data() and proyectos_service.session_state.role == "admin":
+            if 'delete_clicked' in locals() and delete_clicked:
+                confirmar_key = f"confirm_delete_proyecto_{proyecto['id']}"
+                if st.session_state.get(confirmar_key, False):
+                    if proyectos_service.eliminar_proyecto(proyecto['id']):
+                        st.success("Proyecto eliminado correctamente")
+                        st.rerun()
+                else:
+                    st.session_state[confirmar_key] = True
+                    st.warning("Presione 'Eliminar' de nuevo para confirmar")
+
+
 def gestionar_proyectos(proyectos_service, supabase, session_state):
-    """Gestión CRUD de proyectos"""
+    """Gestión CRUD de proyectos - VERSIÓN CORREGIDA"""
     
     st.markdown("### 📁 Gestión de Proyectos")
     
@@ -216,14 +334,21 @@ def gestionar_proyectos(proyectos_service, supabase, session_state):
         'fecha_inicio', 'fecha_fin', 'presupuesto_total', 'empresa_nombre'
     ]
     
-    # Preparar datos para mostrar
+    # Preparar datos para mostrar con manejo seguro de valores
     df_display = df_filtrado[columnas_visibles].copy()
     
-    # Formatear columnas
+    # Formatear columnas numéricas de forma segura
     if 'presupuesto_total' in df_display.columns:
-        df_display['presupuesto_total'] = df_display['presupuesto_total'].apply(
-            lambda x: f"{x:,.0f}€" if pd.notna(x) and x > 0 else "Sin presupuesto"
-        )
+        def formatear_presupuesto(x):
+            try:
+                if pd.isna(x) or x == '' or x is None:
+                    return "Sin presupuesto"
+                valor = float(x)
+                return f"{valor:,.0f}€" if valor > 0 else "Sin presupuesto"
+            except (ValueError, TypeError):
+                return "Sin presupuesto"
+        
+        df_display['presupuesto_total'] = df_display['presupuesto_total'].apply(formatear_presupuesto)
     
     try:
         event = st.dataframe(
@@ -235,7 +360,7 @@ def gestionar_proyectos(proyectos_service, supabase, session_state):
             key="tabla_proyectos_principal"
         )
         
-        # Manejar selección para edición
+        # Manejar selección para edición MODAL
         if event and hasattr(event, 'selection') and event.selection.get("rows"):
             selected_idx = event.selection["rows"][0]
             if selected_idx < len(df_filtrado):
@@ -244,6 +369,10 @@ def gestionar_proyectos(proyectos_service, supabase, session_state):
                 
     except Exception as e:
         st.error(f"❌ Error al mostrar tabla: {e}")
+        st.write("Detalles del error:", str(e))
+        # Mostrar información de debug
+        st.write("Columnas disponibles:", df_display.columns.tolist())
+        st.write("Tipos de datos:", df_display.dtypes.to_dict())
 
 
 def crear_filtros_proyecto(proyectos_service):
@@ -381,99 +510,34 @@ def modal_crear_proyecto(proyectos_service, supabase, session_state):
 
 
 def mostrar_formulario_edicion_proyecto(proyecto, proyectos_service):
-    """Formulario de edición de proyecto seleccionado"""
+    """Mostrar información del proyecto seleccionado y botón para abrir modal"""
     
     st.markdown("---")
-    st.markdown("### ✏️ Editar Proyecto Seleccionado")
-    st.caption(f"Editando: {proyecto['nombre']}")
+    st.markdown("### 📝 Proyecto Seleccionado")
     
-    with st.form(f"form_editar_proyecto_{proyecto['id']}", clear_on_submit=False):
-        col1, col2 = st.columns(2)
+    col_info, col_actions = st.columns([3, 1])
+    
+    with col_info:
+        estado_color = {
+            "CONVOCADO": "🟡",
+            "EN_EJECUCION": "🟢", 
+            "FINALIZADO": "🔵",
+            "JUSTIFICADO": "✅"
+        }.get(proyecto.get('estado_proyecto', 'CONVOCADO'), "⚪")
         
-        with col1:
-            nombre = st.text_input("Nombre del Proyecto", value=proyecto.get('nombre', ''))
-            tipo_proyecto = st.selectbox("Tipo de Proyecto", 
-                ["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"],
-                index=["FORMACION", "SUBVENCION", "PRIVADO", "CONSULTORIA"].index(proyecto.get('tipo_proyecto', 'FORMACION')))
-            organismo = st.text_input("Organismo Responsable", value=proyecto.get('organismo_responsable', ''))
-            presupuesto = st.number_input("Presupuesto Total (€)", 
-                min_value=0.0, step=1000.0, value=float(proyecto.get('presupuesto_total', 0)))
+        presupuesto = proyecto.get('presupuesto_total', 0)
+        presupuesto_str = f"{presupuesto:,.0f}€" if presupuesto > 0 else "Sin presupuesto"
         
-        with col2:
-            descripcion = st.text_area("Descripción", value=proyecto.get('descripcion', ''))
-            estado_proyecto = st.selectbox("Estado del Proyecto", 
-                ["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"],
-                index=["CONVOCADO", "EN_EJECUCION", "FINALIZADO", "JUSTIFICADO"].index(proyecto.get('estado_proyecto', 'CONVOCADO')))
-            
-            estados_subv = ["", "CONVOCADA", "PRESUPUESTO", "CONCEDIDA", "PERDIDA"]
-            estado_subv_actual = proyecto.get('estado_subvencion', '')
-            idx_subv = estados_subv.index(estado_subv_actual) if estado_subv_actual in estados_subv else 0
-            estado_subvencion = st.selectbox("Estado de Subvención", estados_subv, index=idx_subv)
-            
-            importe_concedido = st.number_input("Importe Concedido (€)", 
-                min_value=0.0, step=1000.0, value=float(proyecto.get('importe_concedido', 0)))
-        
-        # Fechas
-        st.subheader("📅 Fechas del Proyecto")
-        col3, col4, col5 = st.columns(3)
-        
-        with col3:
-            fecha_inicio = st.date_input("Fecha Inicio", value=proyecto.get('fecha_inicio'))
-            fecha_ejecucion = st.date_input("Fecha Ejecución", value=proyecto.get('fecha_ejecucion'))
-        
-        with col4:
-            fecha_fin = st.date_input("Fecha Fin", value=proyecto.get('fecha_fin'))
-            fecha_justificacion = st.date_input("Fecha Justificación", value=proyecto.get('fecha_justificacion'))
-        
-        with col5:
-            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=proyecto.get('fecha_convocatoria'))
-            fecha_presentacion = st.date_input("Presentación Informes", value=proyecto.get('fecha_presentacion_informes'))
-        
-        # Responsable
-        st.subheader("👤 Responsable del Proyecto")
-        col6, col7 = st.columns(2)
-        
-        with col6:
-            responsable_nombre = st.text_input("Nombre", value=proyecto.get('responsable_nombre', ''))
-        
-        with col7:
-            responsable_email = st.text_input("Email", value=proyecto.get('responsable_email', ''))
-        
-        col_save, col_delete = st.columns([3, 1])
-        
-        with col_save:
-            if st.form_submit_button("💾 Guardar Cambios", type="primary"):
-                datos_actualizados = {
-                    "nombre": nombre,
-                    "descripcion": descripcion,
-                    "tipo_proyecto": tipo_proyecto,
-                    "estado_proyecto": estado_proyecto,
-                    "estado_subvencion": estado_subvencion if estado_subvencion else None,
-                    "fecha_inicio": fecha_inicio,
-                    "fecha_ejecucion": fecha_ejecucion,
-                    "fecha_fin": fecha_fin,
-                    "fecha_justificacion": fecha_justificacion,
-                    "fecha_convocatoria": fecha_convocatoria,
-                    "fecha_presentacion_informes": fecha_presentacion,
-                    "presupuesto_total": presupuesto,
-                    "importe_concedido": importe_concedido if importe_concedido > 0 else None,
-                    "organismo_responsable": organismo,
-                    "responsable_nombre": responsable_nombre,
-                    "responsable_email": responsable_email
-                }
-                
-                if proyectos_service.actualizar_proyecto(proyecto['id'], datos_actualizados):
-                    st.rerun()
-        
-        with col_delete:
-            if proyectos_service.can_modify_data() and proyectos_service.session_state.role == "admin":
-                if st.form_submit_button("🗑️ Eliminar", help="Solo administradores"):
-                    if st.session_state.get(f"confirm_delete_{proyecto['id']}", False):
-                        if proyectos_service.eliminar_proyecto(proyecto['id']):
-                            st.rerun()
-                    else:
-                        st.session_state[f"confirm_delete_{proyecto['id']}"] = True
-                        st.warning("Presiona de nuevo para confirmar eliminación")
+        st.info(f"""
+        **{proyecto['nombre']}** - {proyecto.get('tipo_proyecto', 'N/A')}  
+        💰 Presupuesto: {presupuesto_str} | 🏢 {proyecto.get('organismo_responsable', 'N/A')}  
+        {estado_color} Estado: {proyecto.get('estado_proyecto', 'CONVOCADO')}  
+        📅 {proyecto.get('fecha_inicio', 'N/A')} → {proyecto.get('fecha_fin', 'N/A')}
+        """)
+    
+    with col_actions:
+        if st.button("✏️ Editar Proyecto", type="primary", use_container_width=True, key="btn_editar_proyecto_modal"):
+            modal_editar_proyecto(proyecto, proyectos_service)
 
 
 def mostrar_vista_gantt(proyectos_service):
