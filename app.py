@@ -311,7 +311,7 @@ def route():
         if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
             st.session_state.page = "mis_grupos"
             
-     # --- Panel del Gestor (solo gestores con formación activa) ---
+         # --- Panel del Gestor (solo gestores con formación activa) ---
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📊 Panel de Formación")
@@ -321,7 +321,13 @@ def route():
         for label, page_key in panel_menu.items():
             if st.sidebar.button(label, key=f"panel_{page_key}_{rol}"):
                 st.session_state.page = page_key
-                
+    
+    # --- Cargar panel del gestor si se selecciona desde el sidebar ---
+    if st.session_state.get("page") == "panel_gestor":
+        from pages.panel_gestor import main as panel_gestor_main
+        panel_gestor_main(supabase_admin, st.session_state)
+        st.stop()  # ⚠️ evita que se mezclen otras páginas debajo
+                    
     # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
