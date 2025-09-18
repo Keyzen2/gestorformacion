@@ -38,7 +38,7 @@ class ParticipantesService:
             """)
             query = _self._apply_empresa_filter(query)
 
-                res = query.order("created_at", desc=True).execute()
+            res = query.order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data or [])
 
             # Aplanar relaciones
