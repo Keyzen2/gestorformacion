@@ -431,25 +431,26 @@ else:
                 hoy = datetime.today().date()
                 empresa = st.session_state.get("empresa", {})
                 empresa_crm = st.session_state.get("empresa_crm", {})
-
-            ajustes = get_ajustes_app(supabase_admin, campos=[
-                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
-                "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
-                "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
-                "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
-                "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
-            ])
-
-            bienvenida_por_rol = {
-                "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
-                "gestor": ajustes.get("bienvenida_gestor", "Panel del Gestor"),
-                "alumno": ajustes.get("bienvenida_alumno", "Área del Alumno"),
-                "comercial": ajustes.get("bienvenida_comercial", "Área Comercial - CRM")
-            }
-
-            titulo_app = ajustes.get("nombre_app", "Gestor de Formación")
-            st.title(f"👋 Bienvenido al {titulo_app}")
-            st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
+        
+                # 🔧 TODO ESTO DEBE ESTAR INDENTADO DENTRO DEL ELSE:
+                ajustes = get_ajustes_app(supabase_admin, campos=[
+                    "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
+                    "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
+                    "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
+                    "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
+                    "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+                ])
+        
+                bienvenida_por_rol = {
+                    "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
+                    "gestor": ajustes.get("bienvenida_gestor", "Panel del Gestor"),
+                    "alumno": ajustes.get("bienvenida_alumno", "Área del Alumno"),
+                    "comercial": ajustes.get("bienvenida_comercial", "Área Comercial - CRM")
+                }
+        
+                titulo_app = ajustes.get("nombre_app", "Gestor de Formación")
+                st.title(f"👋 Bienvenido al {titulo_app}")
+                st.subheader(bienvenida_por_rol.get(rol, "Bienvenido"))
 
             # ===============================
             # MÉTRICAS DINÁMICAS POR ROL OPTIMIZADAS
