@@ -966,12 +966,12 @@ class GruposService:
 # =========================
 
 # Costes
-get_costes_grupo = get_grupo_costes
-create_coste = create_grupo_coste
+get_costes_grupo = GruposService.get_grupo_costes
+create_coste = GruposService.create_grupo_coste
 
 # Bonificaciones
-get_bonificaciones_grupo = get_grupo_bonificaciones
-create_bonificacion = create_grupo_bonificacion
+get_bonificaciones_grupo = GruposService.get_grupo_bonificaciones
+create_bonificacion = GruposService.create_grupo_bonificacion
 
 # =========================
 # FACTORY FUNCTION
