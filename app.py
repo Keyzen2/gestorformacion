@@ -424,7 +424,9 @@ else:
             hoy = datetime.today().date()
             empresa = st.session_state.get("empresa", {})
             empresa_crm = st.session_state.get("empresa_crm", {})
-        
+            
+            # 🔧 REDIRECCIÓN AUTOMÁTICA PARA GESTORES
+            ajustes = {}  # ✅ valor por defecto para todos los roles
             # 🔧 REDIRECCIÓN AUTOMÁTICA PARA GESTORES
             if rol == "gestor":
                 from pages.panel_gestor import main as panel_gestor_main
