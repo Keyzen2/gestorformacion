@@ -66,7 +66,34 @@ def main(supabase, session_state):
     elif tab_selected == "Reportes":
         mostrar_reportes(proyectos_service)
 
+import pandas as pd
 
+def safe_date_value(fecha_valor):
+    """Convierte fecha de forma segura para st.date_input"""
+    if fecha_valor is None:
+        return None
+    
+    try:
+        # Si es string, convertir a date
+        if isinstance(fecha_valor, str):
+            return pd.to_datetime(fecha_valor).date() if fecha_valor else None
+        
+        # Si es datetime/timestamp, extraer date
+        if hasattr(fecha_valor, 'date'):
+            return fecha_valor.date()
+        
+        # Si es pandas timestamp, verificar si es NaT
+        if pd.api.types.is_datetime64_any_dtype(type(fecha_valor)):
+            if pd.notna(fecha_valor):
+                return pd.to_datetime(fecha_valor).date()
+            else:
+                return None
+                
+        return fecha_valor
+        
+    except (ValueError, TypeError, AttributeError):
+        return None
+        
 def mostrar_dashboard(proyectos_service):
     """Dashboard principal con métricas y resumen"""
     
@@ -288,16 +315,16 @@ def modal_editar_proyecto(proyecto, proyectos_service):
         col3, col4, col5 = st.columns(3)
         
         with col3:
-            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=proyecto.get('fecha_convocatoria'))
-            fecha_inicio = st.date_input("Fecha Inicio", value=proyecto.get('fecha_inicio'))
+            fecha_convocatoria = st.date_input("Fecha Convocatoria", value=safe_date_value(proyecto.get('fecha_convocatoria')))
+            fecha_inicio = st.date_input("Fecha Inicio", value=safe_date_value(proyecto.get('fecha_inicio')))
         
         with col4:
-            fecha_ejecucion = st.date_input("Fecha Ejecución", value=proyecto.get('fecha_ejecucion'))
-            fecha_fin = st.date_input("Fecha Fin", value=proyecto.get('fecha_fin'))
+            fecha_ejecucion = st.date_input("Fecha Ejecución", value=safe_date_value(proyecto.get('fecha_ejecucion')))
+            fecha_fin = st.date_input("Fecha Fin", value=safe_date_value(proyecto.get('fecha_fin')))
         
         with col5:
-            fecha_justificacion = st.date_input("Fecha Justificación", value=proyecto.get('fecha_justificacion'))
-            fecha_presentacion = st.date_input("Presentación Informes", value=proyecto.get('fecha_presentacion_informes'))
+            fecha_justificacion = st.date_input("Fecha Justificación", value=safe_date_value(proyecto.get('fecha_justificacion')))
+            fecha_presentacion = st.date_input("Presentación Informes", value=safe_date_value(proyecto.get('fecha_presentacion_informes')))
         
         # Botones
         col_save, col_delete = st.columns([3, 1])
