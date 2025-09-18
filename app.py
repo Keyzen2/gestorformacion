@@ -429,8 +429,8 @@ else:
                 if rol == "gestor":
                     from pages.panel_gestor import main as panel_gestor_main
                     panel_gestor_main(supabase_admin, st.session_state)
-                
-                # ✅ Ajustes disponibles para todos los roles
+                else:
+                    
                 ajustes = get_ajustes_app(supabase_admin, campos=[
                     "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
                     "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
