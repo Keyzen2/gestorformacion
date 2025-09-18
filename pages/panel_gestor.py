@@ -68,11 +68,16 @@ def main(supabase, session_state):
     
     with col2:
         total_grupos = len(df_grupos)
-        grupos_activos = len(df_grupos[df_grupos.get('estado', 'abierto') == 'abierto']) if not df_grupos.empty else 0
+        # 🔧 CORRECCIÓN: Verificar si existe la columna 'estado' antes de usarla
+        if not df_grupos.empty and 'estado' in df_grupos.columns:
+            grupos_activos = len(df_grupos[df_grupos['estado'] == 'abierto'])
+        else:
+            grupos_activos = 0
+            
         st.metric(
             "👥 Grupos", 
             total_grupos,
-            delta=f"{grupos_activos} activos",
+            delta=f"{grupos_activos} activos" if grupos_activos > 0 else None,
             help="Total de grupos formativos"
         )
     
