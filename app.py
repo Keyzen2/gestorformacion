@@ -426,11 +426,10 @@ else:
             empresa_crm = st.session_state.get("empresa_crm", {})
             
             # 🔧 REDIRECCIÓN AUTOMÁTICA PARA GESTORES
-                if rol == "gestor":
-                    from pages.panel_gestor import main as panel_gestor_main
-                    panel_gestor_main(supabase_admin, st.session_state)
-                else:
-                    
+            if rol == "gestor":
+                from pages.panel_gestor import main as panel_gestor_main
+                panel_gestor_main(supabase_admin, st.session_state)
+            else:
                 ajustes = get_ajustes_app(supabase_admin, campos=[
                     "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
                     "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
