@@ -265,7 +265,55 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al cargar empresas: {e}")
             return {}
+            
+    def create_participante(self, data: dict):
+        """
+        Crea un nuevo participante y lo vincula a un grupo.
+        data debe incluir: dni, nombre, apellidos, email, telefono, grupo_id
+        """
+        try:
+            grupo_id = data.pop("grupo_id")
+            # Insertar participante
+            res = self.supabase.table("participantes").insert(data).execute()
+            if not res.data:
+                return False
+            participante_id = res.data[0]["id"]
+            # Vincular participante al grupo
+            self.supabase.table("grupos_participantes").insert({
+                "grupo_id": grupo_id,
+                "participante_id": participante_id
+            }).execute()
+            self.get_participantes_grupo.clear()
+            return True
+        except Exception as e:
+            print(f"❌ Error al crear participante: {e}")
+            return False
 
+    def importar_participantes_excel(self, grupo_id: str, df: pd.DataFrame) -> int:
+        """
+        Importa participantes desde un DataFrame de Excel.
+        Devuelve el número de participantes importados.
+        """
+        count = 0
+        for _, row in df.iterrows():
+            dni = str(row.get("dni", "")).strip()
+            nombre = str(row.get("nombre", "")).strip()
+            apellidos = str(row.get("apellidos", "")).strip()
+            email = str(row.get("email", "")).strip()
+            telefono = str(row.get("telefono", "")).strip()
+            if not dni or not nombre or not apellidos:
+                continue
+            data = {
+                "dni": dni,
+                "nombre": nombre,
+                "apellidos": apellidos,
+                "email": email,
+                "telefono": telefono,
+                "grupo_id": grupo_id
+            }
+            if self.create_participante(data):
+                count += 1
+        return count
     # =========================
     # ACCIONES FORMATIVAS
     # =========================
@@ -913,6 +961,17 @@ class GruposService:
             # Fallar silenciosamente - el cache se limpiará eventualmente
             pass
 
+# =========================
+# ALIAS PARA COMPATIBILIDAD CON grupos.py
+# =========================
+
+# Costes
+get_costes_grupo = get_grupo_costes
+create_coste = create_grupo_coste
+
+# Bonificaciones
+get_bonificaciones_grupo = get_grupo_bonificaciones
+create_bonificacion = create_grupo_bonificacion
 
 # =========================
 # FACTORY FUNCTION
