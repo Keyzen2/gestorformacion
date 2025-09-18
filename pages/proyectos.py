@@ -69,7 +69,8 @@ def main(supabase, session_state):
 import pandas as pd
 
 def safe_date_value(fecha_valor):
-    """Convierte fecha de forma segura para st.date_input - VERSIÓN CORREGIDA"""
+    """Convierte fecha de forma segura para st.date_input - VERSIÓN FINAL"""
+    
     if fecha_valor is None:
         return None
     
@@ -77,43 +78,48 @@ def safe_date_value(fecha_valor):
         # Si es NaT de pandas, retornar None
         if pd.isna(fecha_valor):
             return None
-            
-        # Si es string vacío
-        if isinstance(fecha_valor, str) and fecha_valor.strip() == '':
-            return None
         
-        # Si es string, convertir a date
+        # Si es string
         if isinstance(fecha_valor, str):
-            fecha_dt = pd.to_datetime(fecha_valor, errors='coerce')
-            if pd.isna(fecha_dt):  # Si falló la conversión
+            fecha_str = fecha_valor.strip()
+            
+            # Si es string vacío
+            if not fecha_str:
                 return None
-            return fecha_dt.date()
-        
-        # Si es Timestamp de pandas, verificar si es NaT
-        if hasattr(fecha_valor, '_typ') and fecha_valor._typ == 'timestamp':
-            if pd.isna(fecha_valor):
+            
+            # Intentar parsear el string directamente
+            try:
+                fecha_dt = pd.to_datetime(fecha_str, errors='coerce')
+                
+                # Verificar si la conversión fue exitosa
+                if pd.isna(fecha_dt):
+                    return None
+                    
+                # Retornar como date
+                return fecha_dt.date()
+                
+            except Exception:
                 return None
-            return fecha_valor.date()
         
-        # Si es datetime, extraer date
+        # Para otros tipos (datetime, date, etc.)
         if isinstance(fecha_valor, datetime):
             return fecha_valor.date()
             
-        # Si ya es date
         if isinstance(fecha_valor, date):
             return fecha_valor
         
-        # Para otros tipos con método .date()
-        if hasattr(fecha_valor, 'date') and callable(fecha_valor.date):
+        # Para objetos con método .date()
+        if hasattr(fecha_valor, 'date') and callable(getattr(fecha_valor, 'date', None)):
             try:
-                return fecha_valor.date()
-            except (AttributeError, ValueError):
-                return None
+                result = fecha_valor.date()
+                if isinstance(result, date):
+                    return result
+            except Exception:
+                pass
                 
-        # Si nada funciona, retornar None
         return None
         
-    except (ValueError, TypeError, AttributeError, Exception):
+    except Exception:
         return None
         
 def mostrar_dashboard(proyectos_service):
