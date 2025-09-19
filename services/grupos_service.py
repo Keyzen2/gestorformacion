@@ -345,6 +345,379 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al obtener modalidad de acción formativa: {e}")
             return ""
+        
+# =========================
+# MÉTODOS DE VALIDACIÓN Y PERMISOS
+# =========================
+
+def validar_permisos_grupo(self, grupo_id: str) -> bool:
+    """Valida si el usuario puede gestionar un grupo específico."""
+    try:
+        if self.rol == "admin":
+            return True
+        
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor puede gestionar grupos de su empresa
+            grupo_info = self.supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
+            if grupo_info.data:
+                return grupo_info.data[0]["empresa_id"] == self.empresa_id
+        
+        return False
+    except Exception as e:
+        st.error(f"Error validando permisos: {e}")
+        return False
+
+# =========================
+# MÉTODOS DE EMPRESAS CON JERARQUÍA
+# =========================
+
+def get_empresas_para_grupos(self) -> Dict[str, str]:
+    """Obtiene empresas que pueden asignarse a grupos según jerarquía."""
+    try:
+        if self.rol == "admin":
+            # Admin puede asignar cualquier empresa
+            res = self.supabase.table("empresas").select("id, nombre, tipo_empresa").order("nombre").execute()
+            
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor puede asignar su empresa y sus clientes
+            res = self.supabase.table("empresas").select("id, nombre, tipo_empresa").or_(
+                f"id.eq.{self.empresa_id},empresa_matriz_id.eq.{self.empresa_id}"
+            ).order("nombre").execute()
+        else:
+            return {}
+        
+        if res.data:
+            # Agregar indicador de tipo para claridad
+            result = {}
+            for emp in res.data:
+                tipo_display = {
+                    "CLIENTE_SAAS": "",
+                    "GESTORA": " (Gestora)",
+                    "CLIENTE_GESTOR": " (Cliente)"
+                }.get(emp.get("tipo_empresa", ""), "")
+                
+                result[f"{emp['nombre']}{tipo_display}"] = emp["id"]
+            return result
+        return {}
+        
+    except Exception as e:
+        st.error(f"Error al cargar empresas para grupos: {e}")
+        return {}
+
+def create_grupo_con_jerarquia(self, datos_grupo: Dict[str, Any]) -> Tuple[bool, str]:
+    """Crea grupo respetando jerarquía de empresas."""
+    try:
+        # Asignar empresa propietaria según rol
+        if self.rol == "gestor" and self.empresa_id:
+            datos_grupo["empresa_id"] = self.empresa_id
+        elif self.rol == "admin":
+            # Admin debe especificar empresa propietaria
+            if not datos_grupo.get("empresa_id"):
+                st.error("Debe especificar empresa propietaria del grupo")
+                return False, ""
+            
+            # Validar que la empresa existe
+            empresa_check = self.supabase.table("empresas").select("id").eq("id", datos_grupo["empresa_id"]).execute()
+            if not empresa_check.data:
+                st.error("La empresa especificada no existe")
+                return False, ""
+        else:
+            st.error("Sin permisos para crear grupos")
+            return False, ""
+        
+        # Crear grupo con validaciones FUNDAE
+        errores_validacion = self.validar_grupo_fundae(datos_grupo)
+        if errores_validacion[1]:  # Si hay errores
+            for error in errores_validacion[1]:
+                st.error(f"Error FUNDAE: {error}")
+            return False, ""
+        
+        # Preparar datos finales
+        datos_grupo.update({
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        })
+        
+        # Crear grupo
+        res = self.supabase.table("grupos").insert(datos_grupo).execute()
+        
+        if not res.data:
+            st.error("Error al crear el grupo en la base de datos")
+            return False, ""
+        
+        grupo_id = res.data[0]["id"]
+        
+        # Auto-asignar empresa propietaria como empresa participante
+        self.create_empresa_grupo(grupo_id, datos_grupo["empresa_id"])
+        
+        # Limpiar caches
+        self.limpiar_cache_grupos()
+        
+        return True, grupo_id
+        
+    except Exception as e:
+        st.error(f"Error al crear grupo: {e}")
+        return False, ""
+
+def get_empresas_asignables_a_grupo(self, grupo_id: str) -> Dict[str, str]:
+    """Obtiene empresas que pueden asignarse como participantes de un grupo específico."""
+    try:
+        # Obtener empresa propietaria del grupo
+        grupo_info = self.supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
+        if not grupo_info.data:
+            return {}
+        
+        empresa_propietaria_id = grupo_info.data[0]["empresa_id"]
+        
+        if self.rol == "admin":
+            # Admin puede asignar cualquier empresa
+            query = self.supabase.table("empresas").select("id, nombre, tipo_empresa")
+            
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor solo puede asignar:
+            # 1. Su propia empresa (si es propietaria del grupo)
+            # 2. Sus empresas clientes
+            if empresa_propietaria_id == self.empresa_id:
+                # Es su grupo, puede asignar su empresa y clientes
+                query = self.supabase.table("empresas").select("id, nombre, tipo_empresa").or_(
+                    f"id.eq.{self.empresa_id},empresa_matriz_id.eq.{self.empresa_id}"
+                )
+            else:
+                # No es su grupo, no puede asignar empresas
+                return {}
+        else:
+            return {}
+        
+        res = query.order("nombre").execute()
+        
+        if res.data:
+            # Filtrar empresas ya asignadas
+            empresas_asignadas = self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
+            asignadas_ids = {emp["empresa_id"] for emp in (empresas_asignadas.data or [])}
+            
+            result = {}
+            for emp in res.data:
+                if emp["id"] not in asignadas_ids:
+                    tipo_display = {
+                        "CLIENTE_SAAS": "",
+                        "GESTORA": " (Gestora)",
+                        "CLIENTE_GESTOR": " (Cliente)"
+                    }.get(emp.get("tipo_empresa", ""), "")
+                    
+                    result[f"{emp['nombre']}{tipo_display}"] = emp["id"]
+            return result
+        return {}
+        
+    except Exception as e:
+        st.error(f"Error al cargar empresas asignables: {e}")
+        return {}
+
+# =========================
+# MÉTODOS DE TUTORES CON JERARQUÍA
+# =========================
+
+def get_tutores_disponibles_jerarquia(self, grupo_id: str = None) -> pd.DataFrame:
+    """Obtiene tutores disponibles respetando jerarquía de empresas."""
+    try:
+        if self.rol == "admin":
+            # Admin ve todos los tutores
+            query = self.supabase.table("tutores").select("""
+                id, nombre, apellidos, email, especialidad, empresa_id,
+                empresa:empresas(nombre, tipo_empresa)
+            """)
+            
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor ve tutores de su empresa y empresas clientes
+            query = self.supabase.table("tutores").select("""
+                id, nombre, apellidos, email, especialidad, empresa_id,
+                empresa:empresas(nombre, tipo_empresa)
+            """).or_(f"empresa_id.eq.{self.empresa_id},empresa_id.in.(select id from empresas where empresa_matriz_id = '{self.empresa_id}')")
+        else:
+            return pd.DataFrame()
+        
+        res = query.order("nombre").execute()
+        df = pd.DataFrame(res.data or [])
+        
+        if not df.empty:
+            # Procesar información de empresa
+            if "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["empresa_tipo"] = df["empresa"].apply(
+                    lambda x: x.get("tipo_empresa") if isinstance(x, dict) else ""
+                )
+            
+            # Crear nombre completo
+            df["nombre_completo"] = df["nombre"].astype(str) + " " + df["apellidos"].fillna("").astype(str)
+            df["nombre_completo"] = df["nombre_completo"].str.strip()
+            
+            # Si es para un grupo específico, filtrar ya asignados
+            if grupo_id:
+                tutores_asignados = self.supabase.table("tutores_grupos").select("tutor_id").eq("grupo_id", grupo_id).execute()
+                asignados_ids = {t["tutor_id"] for t in (tutores_asignados.data or [])}
+                df = df[~df["id"].isin(asignados_ids)]
+        
+        return df
+    except Exception as e:
+        return self._handle_query_error("cargar tutores disponibles", e)
+
+# =========================
+# MÉTODOS DE PARTICIPANTES CON JERARQUÍA
+# =========================
+
+def get_participantes_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene participantes disponibles respetando jerarquía de empresas."""
+    try:
+        # Obtener empresa propietaria del grupo y empresas participantes
+        grupo_info = self.supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
+        if not grupo_info.data:
+            return pd.DataFrame()
+        
+        empresa_propietaria_id = grupo_info.data[0]["empresa_id"]
+        
+        # Obtener empresas participantes del grupo
+        empresas_participantes = self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
+        empresas_ids = [emp["empresa_id"] for emp in (empresas_participantes.data or [])]
+        
+        if not empresas_ids:
+            return pd.DataFrame()
+        
+        # Filtrar participantes según rol
+        if self.rol == "admin":
+            # Admin puede asignar participantes de cualquier empresa participante
+            query = self.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, empresa_id, grupo_id,
+                empresa:empresas(nombre, tipo_empresa)
+            """).in_("empresa_id", empresas_ids)
+            
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor solo puede asignar participantes de empresas que gestiona
+            empresas_permitidas = [self.empresa_id]
+            
+            # Agregar empresas clientes si están en el grupo
+            clientes = self.supabase.table("empresas").select("id").eq("empresa_matriz_id", self.empresa_id).execute()
+            empresas_clientes = [c["id"] for c in (clientes.data or [])]
+            empresas_permitidas.extend([e for e in empresas_clientes if e in empresas_ids])
+            
+            if not empresas_permitidas:
+                return pd.DataFrame()
+            
+            query = self.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, empresa_id, grupo_id,
+                empresa:empresas(nombre, tipo_empresa)
+            """).in_("empresa_id", empresas_permitidas)
+        else:
+            return pd.DataFrame()
+        
+        # Filtrar participantes sin grupo asignado
+        query = query.is_("grupo_id", "null")
+        
+        res = query.order("nombre").execute()
+        df = pd.DataFrame(res.data or [])
+        
+        if not df.empty:
+            # Procesar información de empresa
+            if "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["empresa_tipo"] = df["empresa"].apply(
+                    lambda x: x.get("tipo_empresa") if isinstance(x, dict) else ""
+                )
+        
+        return df
+    except Exception as e:
+        return self._handle_query_error("cargar participantes disponibles", e)
+
+# =========================
+# MÉTODOS DE CENTROS GESTORES CON JERARQUÍA
+# =========================
+
+def get_centros_gestores_jerarquia(self, grupo_id: str) -> pd.DataFrame:
+    """Obtiene centros gestores disponibles respetando jerarquía."""
+    try:
+        if self.rol == "admin":
+            # Admin puede usar centros de empresas participantes en el grupo
+            empresas_grupo = self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
+            empresa_ids = [emp["empresa_id"] for emp in (empresas_grupo.data or [])]
+            
+            if empresa_ids:
+                query = self.supabase.table("centros_gestores").select("*").in_("empresa_id", empresa_ids)
+            else:
+                query = self.supabase.table("centros_gestores").select("*")
+                
+        elif self.rol == "gestor" and self.empresa_id:
+            # Gestor solo puede usar centros de su empresa y clientes en el grupo
+            empresas_permitidas = [self.empresa_id]
+            
+            # Agregar empresas clientes
+            clientes = self.supabase.table("empresas").select("id").eq("empresa_matriz_id", self.empresa_id).execute()
+            empresas_permitidas.extend([c["id"] for c in (clientes.data or [])])
+            
+            query = self.supabase.table("centros_gestores").select("*").in_("empresa_id", empresas_permitidas)
+        else:
+            return pd.DataFrame()
+        
+        res = query.order("razon_social").execute()
+        return pd.DataFrame(res.data or [])
+        
+    except Exception as e:
+        return self._handle_query_error("cargar centros gestores", e)
+
+# =========================
+# MÉTODOS DE VALIDACIÓN FUNDAE
+# =========================
+
+def validar_grupo_fundae(self, datos_grupo: Dict[str, Any], tipo_xml: str = "inicio") -> Tuple[bool, List[str]]:
+    """Valida que un grupo cumpla con los requisitos FUNDAE para generar XML."""
+    errores = []
+    
+    # Campos obligatorios para XML de inicio
+    campos_obligatorios = {
+        "fecha_inicio": "Fecha de inicio", 
+        "fecha_fin_prevista": "Fecha fin prevista",
+        "horario": "Horario",
+        "localidad": "Localidad",
+        "n_participantes_previstos": "Participantes previstos"
+    }
+    
+    # Verificar campos obligatorios
+    for campo, nombre in campos_obligatorios.items():
+        valor = datos_grupo.get(campo)
+        if not valor:
+            errores.append(f"{nombre} es obligatorio para FUNDAE")
+    
+    # Validar modalidad FUNDAE
+    modalidad = datos_grupo.get("modalidad")
+    if modalidad and modalidad not in ["PRESENCIAL", "TELEFORMACION", "MIXTA"]:
+        errores.append("Modalidad debe ser PRESENCIAL, TELEFORMACION o MIXTA")
+    
+    # Validar participantes
+    participantes = datos_grupo.get("n_participantes_previstos")
+    if participantes:
+        try:
+            num_part = int(participantes)
+            if num_part < 1 or num_part > 30:
+                errores.append("Participantes previstos debe estar entre 1 y 30")
+        except (ValueError, TypeError):
+            errores.append("Participantes previstos debe ser un número")
+    
+    return len(errores) == 0, errores
+
+# =========================
+# MÉTODOS AUXILIARES PARA CÁLCULOS FUNDAE
+# =========================
+
+def calcular_limite_fundae(self, modalidad: str, horas: int, participantes: int) -> Tuple[float, float]:
+    """Calcula límite máximo FUNDAE según modalidad."""
+    try:
+        # FUNDAE: Presencial=13€/hora, Teleformación=7.5€/hora
+        tarifa = 7.5 if modalidad in ["Teleformación", "TELEFORMACION"] else 13.0
+        limite = tarifa * horas * participantes
+        return limite, tarifa
+    except:
+        return 0, 0 
     # =========================
     # ACCIONES FORMATIVAS
     # =========================
