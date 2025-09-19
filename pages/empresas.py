@@ -12,37 +12,37 @@ TIPOS_EMPRESA = {
 }
 
 @st.cache_data(ttl=3600)  # Cache por 1 hora
-def cargar_provincias(supabase):
+def cargar_provincias(_supabase):
     """Carga lista de provincias."""
     try:
-        result = supabase.table("provincias").select("id, nombre").order("nombre").execute()
+        result = _supabase.table("provincias").select("id, nombre").order("nombre").execute()
         return {prov["nombre"]: prov["id"] for prov in result.data or []}
     except:
         return {}
 
 @st.cache_data(ttl=3600)
-def cargar_localidades(supabase, provincia_id):
+def cargar_localidades(_supabase, provincia_id):
     """Carga localidades de una provincia."""
     try:
-        result = supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+        result = _supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
         return {loc["nombre"]: loc["id"] for loc in result.data or []}
     except:
         return {}
 
 @st.cache_data(ttl=3600)
-def cargar_sectores(supabase):
+def cargar_sectores(_supabase):
     """Carga sectores empresariales."""
     try:
-        result = supabase.table("sectores_empresariales").select("nombre").order("nombre").execute()
+        result = _supabase.table("sectores_empresariales").select("nombre").order("nombre").execute()
         return [sector["nombre"] for sector in result.data or []]
     except:
         return ["Comercio", "Industria", "Servicios", "Construcción", "Tecnología"]
 
 @st.cache_data(ttl=3600)
-def cargar_cnae(supabase):
+def cargar_cnae(_supabase):
     """Carga códigos CNAE."""
     try:
-        result = supabase.table("codigos_cnae").select("codigo, descripcion").order("codigo").execute()
+        result = _supabase.table("codigos_cnae").select("codigo, descripcion").order("codigo").execute()
         return {f"{cnae['codigo']} - {cnae['descripcion']}": cnae['codigo'] for cnae in result.data or []}
     except:
         return {}
@@ -123,10 +123,10 @@ def mostrar_tabla_empresas(df_empresas, session_state):
         return df_display.iloc[evento.selection.rows[0]]
     return None
 
-def cargar_cuentas_cotizacion(supabase, empresa_id):
+def cargar_cuentas_cotizacion(_supabase, empresa_id):
     """Carga cuentas de cotización de una empresa."""
     try:
-        result = supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", empresa_id).execute()
+        result = _supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", empresa_id).execute()
         return result.data or []
     except:
         return []
