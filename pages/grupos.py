@@ -1234,21 +1234,13 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         datos_grupo = grupo_info.data[0]
         modalidad = datos_grupo.get("modalidad", "PRESENCIAL")
 
-        # Validar participantes
+        # Participantes
         participantes_raw = datos_grupo.get("n_participantes_previstos")
-        if participantes_raw is None or participantes_raw == 0:
-            participantes = 1
-            st.warning("⚠️ Número de participantes no definido, usando valor por defecto: 1")
-        else:
-            participantes = int(participantes_raw)
+        participantes = int(participantes_raw) if participantes_raw else 1
 
-        # Validar horas de la acción formativa
+        # Horas
         accion_formativa = datos_grupo.get("accion_formativa")
-        if accion_formativa and accion_formativa.get("num_horas"):
-            horas = int(accion_formativa.get("num_horas", 0))
-        else:
-            horas = 0
-            st.warning("⚠️ Horas de la acción formativa no definidas")
+        horas = int(accion_formativa.get("num_horas", 0)) if accion_formativa else 0
 
     except Exception as e:
         st.error(f"❌ Error al cargar datos del grupo: {e}")
@@ -1265,21 +1257,18 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         limite_boni, tarifa_max = 0, 13.0
         st.warning("⚠️ No se pueden calcular límites FUNDAE sin horas y participantes válidos")
 
-    # Mostrar información base con métricas modernas
+    # Mostrar info básica
     with st.container(border=True):
         col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("🎯 Modalidad", modalidad)
-        with col2:
-            st.metric("👥 Participantes", participantes)
-        with col3:
-            st.metric("⏱️ Horas", horas)
-        with col4:
-            st.metric("💰 Límite Bonificación", f"{limite_boni:,.2f} €")
+        with col1: st.metric("🎯 Modalidad", modalidad)
+        with col2: st.metric("👥 Participantes", participantes)
+        with col3: st.metric("⏱️ Horas", horas)
+        with col4: st.metric("💰 Límite Bonificación", f"{limite_boni:,.2f} €")
 
-    # Formulario de costes con diseño mejorado
+    # Costes actuales
     try:
-        costes_actuales = grupos_service.get_grupo_costes(grupo_id)
+        df_costes = grupos_service.get_grupo_costes(grupo_id)
+        costes_actuales = df_costes.iloc[0].to_dict() if not df_costes.empty else {}
     except Exception as e:
         st.error(f"Error al cargar costes actuales: {e}")
         costes_actuales = {}
@@ -1288,7 +1277,6 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         st.markdown("##### 💳 Costes de Formación")
 
         col1, col2 = st.columns(2)
-
         with col1:
             costes_directos = st.number_input(
                 "💼 Costes Directos (€)",
@@ -1301,7 +1289,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 value=float(costes_actuales.get("costes_indirectos", 0) or 0),
                 min_value=0.0,
                 step=50.0,
-                help="No pueden superar el 30% de los costes directos"
+                help="No pueden superar el 30% de los directos"
             )
             costes_organizacion = st.number_input(
                 "🗂️ Costes de Organización (€)",
@@ -1309,7 +1297,6 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 min_value=0.0,
                 step=50.0
             )
-
         with col2:
             costes_salariales = st.number_input(
                 "💵 Costes Salariales (€)",
@@ -1324,7 +1311,6 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 step=100.0
             )
 
-        # Calcular totales y validaciones
         total_costes_formacion = costes_directos + costes_indirectos + costes_organizacion
         if costes_indirectos > costes_directos * 0.3:
             st.error("⚠️ Los costes indirectos no pueden superar el 30% de los directos")
@@ -1336,17 +1322,16 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         # Bonificaciones mensuales
         st.markdown("##### 📅 Bonificaciones Mensuales")
         try:
-            bonificaciones = grupos_service.get_grupo_bonificaciones(grupo_id)
+            df_bonis = grupos_service.get_grupo_bonificaciones(grupo_id)
+            boni_dict = {b["mes"]: b["importe"] for _, b in df_bonis.iterrows()} if not df_bonis.empty else {}
         except Exception as e:
             st.error(f"Error al cargar bonificaciones: {e}")
-            bonificaciones = []
+            boni_dict = {}
 
         meses = [
-            "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"
+            "Enero","Febrero","Marzo","Abril","Mayo","Junio",
+            "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"
         ]
-        boni_dict = {b["mes"]: b["importe"] for b in bonificaciones}
-
         nuevas_bonificaciones = {}
         for mes in meses:
             nuevas_bonificaciones[mes] = st.number_input(
@@ -1357,7 +1342,6 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 key=f"boni_{grupo_id}_{mes}"
             )
 
-        # Botones de acción
         st.divider()
         guardar_costes = st.form_submit_button("💾 Guardar Costes y Bonificaciones", type="primary")
 
@@ -1375,8 +1359,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                     "tarifa_hora": tarifa_max
                 }
                 ok1 = grupos_service.update_costes_grupo(grupo_id, datos_costes)
-
-                boni_list = [{"mes": mes, "importe": imp} for mes, imp in nuevas_bonificaciones.items() if imp > 0]
+                boni_list = [{"mes": m, "importe": i} for m, i in nuevas_bonificaciones.items() if i > 0]
                 ok2 = grupos_service.update_bonificaciones_grupo(grupo_id, boni_list)
 
                 if ok1 or ok2:
@@ -1384,6 +1367,61 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                     st.rerun()
                 else:
                     st.error("❌ No se pudo guardar la información")
-
             except Exception as e:
                 st.error(f"❌ Error al guardar: {e}")
+
+
+# =========================
+# FUNCIÓN PRINCIPAL
+# =========================
+def main(supabase, session_state):
+    """Página principal de gestión de grupos con jerarquía."""
+    st.markdown("## 👨‍🏫 Grupos de Formación")
+    st.caption("Gestión de grupos, jerarquía de empresas y FUNDAE")
+
+    grupos_service = get_grupos_service(supabase, session_state)
+
+    # Cargar grupos
+    try:
+        df_grupos = grupos_service.get_grupos_completos()
+    except Exception as e:
+        st.error(f"❌ Error al cargar grupos: {e}")
+        return
+
+    mostrar_metricas_grupos(df_grupos, session_state)
+    pendientes = get_grupos_pendientes_finalizacion(df_grupos)
+    mostrar_avisos_grupos(pendientes)
+
+    st.divider()
+
+    if not df_grupos.empty:
+        st.markdown("### 📋 Listado de Grupos")
+        evento = st.dataframe(
+            df_grupos,
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+        if evento.selection.rows:
+            st.session_state.grupo_seleccionado = df_grupos.iloc[evento.selection.rows[0]].to_dict()
+    else:
+        st.info("No hay grupos disponibles")
+
+    if st.button("➕ Crear Nuevo Grupo", type="primary"):
+        st.session_state.grupo_seleccionado = {"_nuevo": True}
+        st.rerun()
+
+    if st.session_state.get("grupo_seleccionado"):
+        grupo_sel = st.session_state.grupo_seleccionado
+        es_creacion = grupo_sel.get("_nuevo", False)
+        grupo_id = mostrar_formulario_grupo(
+            grupos_service,
+            grupo_seleccionado=None if es_creacion else grupo_sel,
+            es_creacion=es_creacion
+        )
+        if grupo_id and not es_creacion:
+            mostrar_secciones_adicionales(grupos_service, grupo_id)
+            
+except Exception as e:
+        st.error(f"❌ Error inesperado en la página de grupos: {e}")
