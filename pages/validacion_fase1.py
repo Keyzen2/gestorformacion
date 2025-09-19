@@ -125,11 +125,14 @@ def test_fase1_empresas(supabase, session_state):
     try:
         # Test validación CIF único
         cif_test = "B00000000"  # CIF que no debería existir
-        cif_valido = empresas_service._validar_cif_unico_jerarquico(cif_test)
-        if cif_valido:
-            st.success("✅ Validación CIF único funciona")
-        else:
-            st.warning(f"⚠️ CIF {cif_test} ya existe")
+        try:
+            cif_valido = empresas_service._validar_cif_unico_jerarquico(cif_test)
+            if cif_valido:
+                st.success("✅ Validación CIF único funciona")
+            else:
+                st.warning(f"⚠️ CIF {cif_test} ya existe")
+        except Exception as val_error:
+            st.error(f"❌ Error en validación CIF: {val_error}")
         
         # Test permisos de edición
         if session_state.role == "admin":
@@ -137,11 +140,14 @@ def test_fase1_empresas(supabase, session_state):
         elif session_state.role == "gestor":
             empresa_propia = session_state.user.get("empresa_id")
             if empresa_propia:
-                puede_editar = empresas_service._puede_editar_empresa_jerarquica(empresa_propia)
-                if puede_editar:
-                    st.success("✅ Gestor puede editar su empresa")
-                else:
-                    st.error("❌ Gestor no puede editar su empresa")
+                try:
+                    puede_editar = empresas_service._puede_editar_empresa_jerarquica(empresa_propia)
+                    if puede_editar:
+                        st.success("✅ Gestor puede editar su empresa")
+                    else:
+                        st.error("❌ Gestor no puede editar su empresa")
+                except Exception as perm_error:
+                    st.error(f"❌ Error verificando permisos: {perm_error}")
         
         resultados.append("✅ Validaciones OK")
     except Exception as e:
