@@ -88,10 +88,33 @@ def aplicar_filtros_empresas(df_empresas, query, tipo_filter):
             df_filtered = df_filtered[df_filtered["tipo_empresa"] == tipo_filter]
 
     return df_filtered
-
+    
+def get_campos_readonly_jerarquicos(session_state):
+    """Campos readonly según el rol del usuario."""
+    campos_readonly = ["id", "created_at", "updated_at", "fecha_creacion", 
+                      "nivel_jerarquico", "empresa_matriz_id"]
+    
+    # Para gestores: nombre y CIF son readonly en edición (datos sensibles)
+    if session_state.role == "gestor":
+        campos_readonly.extend(["nombre", "cif"])
+    
+    return campos_readonly
+    
+def get_labels_campos():
+    """Labels personalizados para campos."""
+    return {
+        "nombre": "Razón Social",  # Cambiar "nombre" por "Razón Social"
+        "cif": "CIF/NIF",
+        "direccion": "Dirección",
+        "telefono": "Teléfono",
+        "email": "Email",
+        "ciudad": "Ciudad",
+        "provincia": "Provincia",
+        "codigo_postal": "Código Postal"
+    }
+    
 def get_campos_dinamicos_jerarquicos(datos, session_state):
     """Define campos visibles incluyendo jerarquía según el contexto."""
-    # Campos base para creación/edición
     campos_base = [
         "nombre", "cif", "direccion", "ciudad", "provincia",
         "codigo_postal", "telefono", "email"
@@ -131,6 +154,18 @@ def get_campos_select_jerarquicos(session_state, empresas_service):
 
     return campos_select
 
+def verificar_empresa_creada(empresas_service, cif_buscado):
+    """Función para verificar si la empresa se creó en BD."""
+    try:
+        # Buscar directamente en Supabase
+        result = empresas_service.supabase.table("empresas").select("*").eq("cif", cif_buscado).execute()
+        if result.data:
+            st.success(f"✅ Empresa encontrada en BD: {result.data[0]}")
+        else:
+            st.error("❌ Empresa NO encontrada en BD")
+    except Exception as e:
+        st.error(f"Error verificando BD: {e}")
+        
 def get_campos_help_completos():
     """Devuelve campos de ayuda completos incluyendo jerarquía."""
     campos_help = {
@@ -153,32 +188,35 @@ def get_campos_help_completos():
     return campos_help
 
 def crear_empresa_con_jerarquia(datos_nuevos, empresas_service, session_state):
-    """Función mejorada para crear empresa con soporte jerárquico."""
+    """Función mejorada para crear empresa con debugging."""
     try:
-        # Validaciones básicas existentes
+        # Validaciones básicas
         if not datos_nuevos.get("nombre") or not datos_nuevos.get("cif"):
-            st.error("Nombre y CIF son obligatorios.")
+            st.error("Razón Social y CIF son obligatorios.")
             return
 
         if not validar_dni_cif(datos_nuevos["cif"]):
             st.error("El CIF no es válido.")
             return
 
-        # Convertir empresa_matriz_sel a empresa_matriz_id si es admin
-        if session_state.role == "admin" and "empresa_matriz_sel" in datos_nuevos:
-            matriz_sel = datos_nuevos.pop("empresa_matriz_sel", "")
-            gestoras_dict = empresas_service.get_empresas_gestoras_disponibles()
-            if matriz_sel and matriz_sel in gestoras_dict:
-                datos_nuevos["empresa_matriz_id"] = gestoras_dict[matriz_sel]
+        # DEBUG: Mostrar datos que se van a enviar
+        st.write("DEBUG - Datos a crear:", datos_nuevos)
 
         # Usar el servicio con jerarquía
         success, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_nuevos)
+        
         if success:
-            st.success("Empresa creada correctamente.")
+            st.success(f"✅ Empresa cliente creada correctamente con ID: {empresa_id}")
+            # Limpiar cache explícitamente
+            if hasattr(empresas_service, 'get_empresas_con_jerarquia'):
+                empresas_service.get_empresas_con_jerarquia.clear()
             st.rerun()
+        else:
+            st.error("❌ Error al crear la empresa cliente")
 
     except Exception as e:
-        st.error(f"Error al crear empresa: {e}")
+        st.error(f"❌ Error al crear empresa: {e}")
+        st.exception(e)  # Mostrar traceback completo
 
 def guardar_empresa_con_jerarquia(empresa_id, datos_editados, empresas_service, session_state):
     """Función mejorada para guardar empresa respetando jerarquía."""
