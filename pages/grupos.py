@@ -797,7 +797,7 @@ def crear_selector_horario_fundae(prefix=""):
     """Crea un selector de horario compatible con FUNDAE - del código original."""
     st.markdown("#### Configuración de Horarios FUNDAE")
     st.caption("Intervalos de 15 minutos obligatorios según normativa FUNDAE")
-    
+
     # Opción de configuración
     tipo_horario = st.radio(
         "Tipo de jornada:",
@@ -805,32 +805,32 @@ def crear_selector_horario_fundae(prefix=""):
         horizontal=True,
         key=f"{prefix}_tipo_horario"
     )
-    
+
     col1, col2 = st.columns(2)
-    
+
     manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
-    
+
     # Generar intervalos de tiempo correctamente
     intervalos_manana = []
     intervalos_tarde = []
-    
+
     for h in range(6, 15):  # 06:00 a 14:45
         for m in [0, 15, 30, 45]:
             hora_str = f"{h:02d}:{m:02d}"
             intervalos_manana.append(hora_str)
-    
+
     for h in range(15, 24):  # 15:00 a 23:45
         for m in [0, 15, 30, 45]:
             if h == 23 and m > 0:  # Máximo 23:00
                 break
             hora_str = f"{h:02d}:{m:02d}"
             intervalos_tarde.append(hora_str)
-    
+
     # Tramo mañana
     if tipo_horario in ["Solo Mañana", "Mañana y Tarde"]:
         with col1:
             st.markdown("**Tramo Mañana (06:00 - 15:00)**")
-            
+
             sub_col1, sub_col2 = st.columns(2)
             with sub_col1:
                 manana_inicio = st.selectbox(
@@ -844,19 +844,19 @@ def crear_selector_horario_fundae(prefix=""):
                     # Filtrar horas fin que sean posteriores al inicio
                     idx_inicio = intervalos_manana.index(manana_inicio)
                     horas_fin_validas = intervalos_manana[idx_inicio + 1:]
-                    
+
                     manana_fin = st.selectbox(
                         "Hora fin:",
                         horas_fin_validas,
-                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
+                        index=min(15, len(horas_fin_validas) - 1) if horas_fin_validas else 0,
                         key=f"{prefix}_manana_fin"
                     )
-    
+
     # Tramo tarde
     if tipo_horario in ["Solo Tarde", "Mañana y Tarde"]:
         with col2:
             st.markdown("**Tramo Tarde (15:00 - 23:00)**")
-            
+
             sub_col1, sub_col2 = st.columns(2)
             with sub_col1:
                 tarde_inicio = st.selectbox(
@@ -870,19 +870,19 @@ def crear_selector_horario_fundae(prefix=""):
                     # Filtrar horas fin que sean posteriores al inicio
                     idx_inicio = intervalos_tarde.index(tarde_inicio)
                     horas_fin_validas = intervalos_tarde[idx_inicio + 1:]
-                    
+
                     tarde_fin = st.selectbox(
                         "Hora fin:",
                         horas_fin_validas,
-                        index=min(15, len(horas_fin_validas)-1) if horas_fin_validas else 0,
+                        index=min(15, len(horas_fin_validas) - 1) if horas_fin_validas else 0,
                         key=f"{prefix}_tarde_fin"
                     )
-    
+
     # Días de la semana
     st.markdown("**Días de Impartición**")
     cols = st.columns(7)
     dias_seleccionados = []
-    
+
     for i, (dia_corto, dia_largo) in enumerate(zip(DIAS_SEMANA, NOMBRES_DIAS)):
         with cols[i]:
             if st.checkbox(
@@ -891,121 +891,123 @@ def crear_selector_horario_fundae(prefix=""):
                 key=f"{prefix}_dia_{dia_corto}"
             ):
                 dias_seleccionados.append(dia_corto)
-    
+
     # Construir horario final
     horario_final = construir_horario_fundae(
         manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados
     )
-    
+
     if horario_final:
         st.success(f"Horario FUNDAE: {horario_final}")
-        
+
         # Validar formato
         es_valido, error = validar_horario_fundae(horario_final)
         if not es_valido:
             st.error(f"Error: {error}")
     else:
         st.warning("Configure al menos un tramo horario y días")
-    
+
     return horario_final
 
+
 # Validar datos obligatorios
-                errores = validar_campos_obligatorios_fundae(datos_crear)
+errores = validar_campos_obligatorios_fundae(datos_crear)
 
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Crear grupo
-                    try:
-                        exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
-                        if exito:
-                            st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
-                            st.balloons()  # Efecto visual de éxito
-                            
-                            # Cargar el grupo recién creado para edición
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                st.rerun()
-                        else:
-                            st.error("❌ Error al crear el grupo")
-                    except Exception as e:
-                        st.error(f"❌ Error al crear grupo: {e}")
+if errores:
+    st.error("❌ Errores de validación:")
+    for error in errores:
+        st.error(f"• {error}")
+else:
+    # Crear grupo
+    try:
+        exito, grupo_id = grupos_service.create_grupo_completo(datos_crear)
+        if exito:
+            st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+            st.balloons()  # Efecto visual de éxito
 
-        with col2:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
+            # Cargar el grupo recién creado para edición
+            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+            if grupo_creado.data:
+                st.session_state.grupo_seleccionado = grupo_creado.data[0]
                 st.rerun()
+        else:
+            st.error("❌ Error al crear el grupo")
+    except Exception as e:
+        st.error(f"❌ Error al crear grupo: {e}")
 
-    else:
-        # Botones para edición
-        col1, col2, col3 = st.columns(3)
+with col2:
+    if st.button("❌ Cancelar", use_container_width=True):
+        st.session_state.grupo_seleccionado = None
+        st.rerun()
 
-        with col1:
-            if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                # Preparar datos para actualizar
-                datos_actualizar = {
-                    "modalidad": modalidad_grupo,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "provincia": provincia,
-                    "localidad": localidad,
-                    "cp": cp,
-                    "responsable": responsable,
-                    "telefono_contacto": telefono_contacto,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
+else:
+    # Botones para edición
+    col1, col2, col3 = st.columns(3)
 
-                # Agregar datos de finalización si están disponibles
-                if datos_finalizacion:
-                    datos_actualizar.update(datos_finalizacion)
+    with col1:
+        if st.button("💾 Guardar Cambios", type="primary", use_container_width=True):
+            # Preparar datos para actualizar
+            datos_actualizar = {
+                "modalidad": modalidad_grupo,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                "provincia": provincia,
+                "localidad": localidad,
+                "cp": cp,
+                "responsable": responsable,
+                "telefono_contacto": telefono_contacto,
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_nuevo if horario_nuevo else None
+            }
 
-                # Validar datos
-                errores = validar_campos_obligatorios_fundae(datos_actualizar)
-                if datos_finalizacion:
-                    errores.extend(validar_datos_finalizacion(datos_actualizar))
+            # Agregar datos de finalización si están disponibles
+            if datos_finalizacion:
+                datos_actualizar.update(datos_finalizacion)
 
-                if errores:
-                    st.error("❌ Errores de validación:")
-                    for error in errores:
-                        st.error(f"• {error}")
-                else:
-                    # Actualizar grupo
-                    try:
-                        if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
-                            st.success("✅ Cambios guardados correctamente")
-                            # Recargar datos del grupo actualizado
-                            grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                            if grupo_actualizado.data:
-                                st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar cambios")
-                    except Exception as e:
-                        st.error(f"❌ Error al actualizar: {e}")
+            # Validar datos
+            errores = validar_campos_obligatorios_fundae(datos_actualizar)
+            if datos_finalizacion:
+                errores.extend(validar_datos_finalizacion(datos_actualizar))
 
-        with col2:
-            if st.button("🔄 Recargar", use_container_width=True):
-                # Recargar datos del grupo desde BD
+            if errores:
+                st.error("❌ Errores de validación:")
+                for error in errores:
+                    st.error(f"• {error}")
+            else:
+                # Actualizar grupo
                 try:
-                    grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                    if grupo_recargado.data:
-                        st.session_state.grupo_seleccionado = grupo_recargado.data[0]
-                    st.rerun()
+                    if grupos_service.update_grupo(datos_grupo["id"], datos_actualizar):
+                        st.success("✅ Cambios guardados correctamente")
+                        # Recargar datos del grupo actualizado
+                        grupo_actualizado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                        if grupo_actualizado.data:
+                            st.session_state.grupo_seleccionado = grupo_actualizado.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al guardar cambios")
                 except Exception as e:
-                    st.error(f"Error al recargar: {e}")
+                    st.error(f"❌ Error al actualizar: {e}")
 
-        with col3:
-            if st.button("❌ Cancelar", use_container_width=True):
-                st.session_state.grupo_seleccionado = None
+    with col2:
+        if st.button("🔄 Recargar", use_container_width=True):
+            # Recargar datos del grupo desde BD
+            try:
+                grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                if grupo_recargado.data:
+                    st.session_state.grupo_seleccionado = grupo_recargado.data[0]
                 st.rerun()
+            except Exception as e:
+                st.error(f"Error al recargar: {e}")
 
-    return datos_grupo.get("id") if datos_grupo else None
+    with col3:
+        if st.button("❌ Cancelar", use_container_width=True):
+            st.session_state.grupo_seleccionado = None
+            st.rerun()
+
+return datos_grupo.get("id") if datos_grupo else None
+
 
 # =========================
 # SECCIONES ADICIONALES (basadas en código original)
