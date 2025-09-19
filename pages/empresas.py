@@ -188,7 +188,7 @@ def gestionar_cuentas_cotizacion(cuentas_existentes, key_prefix=""):
     
     return cuentas_actuales
 
-def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False):
+def mostrar_formulario_empresa_interactivo(empresa_data, empresas_service, session_state, es_creacion=False):
     """Formulario FUNDAE interactivo con validaciones en tiempo real."""
     
     if es_creacion:
@@ -550,6 +550,8 @@ def actualizar_cuentas_cotizacion(supabase, empresa_id, cuentas):
             }).execute()
     except Exception as e:
         st.warning(f"Error actualizando cuentas: {e}")
+# Alias de compatibilidad para mantener compatibilidad con llamadas antiguas
+mostrar_formulario_empresa = mostrar_formulario_empresa_interactivo
 
 def main(supabase, session_state):
     st.title("Gestión de Empresas FUNDAE")
