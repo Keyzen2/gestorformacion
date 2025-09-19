@@ -79,7 +79,7 @@ class ParticipantesService:
                 id, nif, nombre, apellidos, email, telefono, 
                 fecha_nacimiento, sexo, created_at, grupo_id, empresa_id,
                 grupo:grupos(id, codigo_grupo),
-                empresa:empresas!participantes_empresa_id_fkey(
+                empresa:empresas!fk_participante_empresa(
                     id, nombre, tipo_empresa, nivel_jerarquico,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
                 )
@@ -176,7 +176,7 @@ class ParticipantesService:
                 id, nif, nombre, apellidos, email, telefono, fecha_nacimiento, 
                 sexo, created_at, updated_at, grupo_id, empresa_id,
                 grupo:grupos(id, codigo_grupo),
-                empresa:empresas!participantes_empresa_id_fkey(
+                empresa:empresas!fk_participante_empresa(
                     id, nombre, tipo_empresa, nivel_jerarquico,
                     empresa_matriz:empresas!empresa_matriz_id(id, nombre)
                 )
