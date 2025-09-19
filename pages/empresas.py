@@ -11,7 +11,7 @@ TIPOS_EMPRESA = {
     "CLIENTE_GESTOR": "Cliente de Gestora"
 }
 
-@st.cache_data(ttl=3600)  # Cache por 1 hora
+@st.cache_data(ttl=3600)
 def cargar_provincias(_supabase):
     """Carga lista de provincias."""
     try:
@@ -34,7 +34,9 @@ def cargar_sectores(_supabase):
     """Carga sectores empresariales."""
     try:
         result = _supabase.table("sectores_empresariales").select("nombre").order("nombre").execute()
-        return [sector["nombre"] for sector in result.data or []]
+        sectores = [sector["nombre"] for sector in result.data or []]
+        # Eliminar duplicados que puedan existir
+        return list(set(sectores))
     except:
         return ["Comercio", "Industria", "Servicios", "Construcción", "Tecnología"]
 
@@ -123,16 +125,71 @@ def mostrar_tabla_empresas(df_empresas, session_state):
         return df_display.iloc[evento.selection.rows[0]]
     return None
 
-def cargar_cuentas_cotizacion(_supabase, empresa_id):
-    """Carga cuentas de cotización de una empresa."""
-    try:
-        result = _supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", empresa_id).execute()
-        return result.data or []
-    except:
-        return []
+def gestionar_cuentas_cotizacion(cuentas_existentes, key_prefix=""):
+    """Componente para gestionar múltiples cuentas de cotización."""
+    st.markdown("#### Cuentas de Cotización")
+    
+    # Inicializar lista de cuentas en session_state
+    session_key = f"{key_prefix}_cuentas_cotizacion"
+    if session_key not in st.session_state:
+        st.session_state[session_key] = cuentas_existentes.copy() if cuentas_existentes else []
+    
+    # Mostrar cuentas existentes
+    cuentas_actuales = st.session_state[session_key]
+    
+    if cuentas_actuales:
+        st.write("**Cuentas configuradas:**")
+        for i, cuenta in enumerate(cuentas_actuales):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                principal_text = " (Principal)" if cuenta.get("es_principal") else ""
+                st.text(f"• {cuenta['numero_cuenta']}{principal_text}")
+            with col2:
+                if st.button("Principal", key=f"{key_prefix}_principal_{i}", 
+                           disabled=cuenta.get("es_principal", False)):
+                    # Marcar como principal y quitar principal de otras
+                    for j, c in enumerate(cuentas_actuales):
+                        c["es_principal"] = (j == i)
+                    st.rerun()
+            with col3:
+                if st.button("Eliminar", key=f"{key_prefix}_eliminar_{i}"):
+                    cuentas_actuales.pop(i)
+                    st.rerun()
+    
+    # Formulario para añadir nueva cuenta
+    st.markdown("**Añadir nueva cuenta:**")
+    col1, col2, col3 = st.columns([3, 1, 1])
+    
+    with col1:
+        nueva_cuenta = st.text_input("Número de cuenta", key=f"{key_prefix}_nueva_cuenta", placeholder="Ej: 281234567890")
+    
+    with col2:
+        es_principal = st.checkbox("Principal", key=f"{key_prefix}_es_principal")
+    
+    with col3:
+        if st.button("Añadir", key=f"{key_prefix}_anadir"):
+            if nueva_cuenta:
+                # Si se marca como principal, quitar principal de otras
+                if es_principal:
+                    for cuenta in cuentas_actuales:
+                        cuenta["es_principal"] = False
+                
+                # Añadir nueva cuenta
+                cuentas_actuales.append({
+                    "numero_cuenta": nueva_cuenta,
+                    "es_principal": es_principal
+                })
+                
+                # Limpiar el input
+                st.session_state[f"{key_prefix}_nueva_cuenta"] = ""
+                st.rerun()
+            else:
+                st.error("Introduce un número de cuenta")
+    
+    return cuentas_actuales
 
-def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False):
-    """Formulario FUNDAE completo para empresas."""
+def mostrar_formulario_empresa_interactivo(empresa_data, empresas_service, session_state, es_creacion=False):
+    """Formulario FUNDAE interactivo con validaciones en tiempo real."""
     
     if es_creacion:
         st.subheader("Nueva Empresa Cliente")
@@ -143,80 +200,92 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
     
     # Cargar datos auxiliares
     provincias_dict = cargar_provincias(empresas_service.supabase)
-    sectores_list = cargar_sectores(empresas_service.supabase)
+    sectores_list = sorted(cargar_sectores(empresas_service.supabase))
     cnae_dict = cargar_cnae(empresas_service.supabase)
     
-    form_key = f"form_empresa_{'crear' if es_creacion else 'editar'}_{datos.get('id', 'nuevo')}"
-    with st.form(form_key, clear_on_submit=es_creacion):
-        
-        # =========================
-        # BLOQUE IDENTIFICACIÓN
-        # =========================
-        st.markdown("### Identificación")
-        
-        # Datos principales
-        st.markdown("#### Datos Principales")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Para gestores: nombre y CIF readonly en edición
-            if session_state.role == "gestor" and not es_creacion:
-                st.text_input("Razón Social", value=datos.get("nombre", ""), disabled=True)
-                nombre = datos.get("nombre", "")
-                st.text_input("CIF", value=datos.get("cif", ""), disabled=True)
-                cif = datos.get("cif", "")
-            else:
-                nombre = st.text_input("Razón Social", value=datos.get("nombre", ""))
-                cif = st.text_input("CIF", value=datos.get("cif", ""))
-        
-        with col2:
-            sector = st.selectbox("Sector", options=[""] + sectores_list, 
-                                index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0)
-            convenio_referencia = st.text_input("Convenio de Referencia", value=datos.get("convenio_referencia", ""))
-        
-        # Código CNAE con búsqueda
-        if cnae_dict:
-            cnae_actual = datos.get("codigo_cnae", "")
-            cnae_display = next((k for k, v in cnae_dict.items() if v == cnae_actual), "")
-            codigo_cnae_sel = st.selectbox(
-                "Código CNAE", 
-                options=[""] + list(cnae_dict.keys()),
-                index=list(cnae_dict.keys()).index(cnae_display) + 1 if cnae_display else 0,
-                help="Busque escribiendo el código o descripción"
-            )
-            codigo_cnae = cnae_dict.get(codigo_cnae_sel, "") if codigo_cnae_sel else ""
+    # =========================
+    # BLOQUE IDENTIFICACIÓN
+    # =========================
+    st.markdown("### Identificación")
+    
+    # Datos principales
+    st.markdown("#### Datos Principales")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Para gestores: nombre y CIF readonly en edición
+        if session_state.role == "gestor" and not es_creacion:
+            st.text_input("Razón Social", value=datos.get("nombre", ""), disabled=True)
+            nombre = datos.get("nombre", "")
+            st.text_input("CIF", value=datos.get("cif", ""), disabled=True)
+            cif = datos.get("cif", "")
+            cif_valido = True  # Asumir válido si está readonly
         else:
-            codigo_cnae = st.text_input("Código CNAE", value=datos.get("codigo_cnae", ""))
-        
-        # Domicilio Social
-        st.markdown("#### Domicilio Social")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            calle = st.text_input("Calle", value=datos.get("calle", ""))
-            numero = st.text_input("Número", value=datos.get("numero", ""))
-        
-        with col2:
-            codigo_postal = st.text_input("Código Postal", value=datos.get("codigo_postal", ""))
+            nombre = st.text_input("Razón Social", value=datos.get("nombre", ""))
+            cif = st.text_input("CIF", value=datos.get("cif", ""))
             
-            # Selector de provincia
-            provincia_actual = datos.get("provincia_id")
-            if provincia_actual and provincias_dict:
-                provincia_nombre = next((k for k, v in provincias_dict.items() if v == provincia_actual), "")
-            else:
-                provincia_nombre = ""
-            
-            provincia_sel = st.selectbox(
-                "Provincia", 
-                options=[""] + list(provincias_dict.keys()),
-                index=list(provincias_dict.keys()).index(provincia_nombre) + 1 if provincia_nombre else 0
-            )
-            provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
+            # Validación en tiempo real del CIF
+            cif_valido = True
+            if cif:
+                cif_valido = validar_dni_cif(cif)
+                if not cif_valido:
+                    st.error("⚠️ CIF no válido")
+                else:
+                    st.success("✅ CIF válido")
+    
+    with col2:
+        sector = st.selectbox("Sector", options=[""] + sectores_list, 
+                            index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0)
+        convenio_referencia = st.text_input("Convenio de Referencia", value=datos.get("convenio_referencia", ""))
+    
+    # Código CNAE con búsqueda
+    if cnae_dict:
+        cnae_actual = datos.get("codigo_cnae", "")
+        cnae_display = next((k for k, v in cnae_dict.items() if v == cnae_actual), "")
+        codigo_cnae_sel = st.selectbox(
+            "Código CNAE", 
+            options=[""] + list(cnae_dict.keys()),
+            index=list(cnae_dict.keys()).index(cnae_display) + 1 if cnae_display else 0,
+            help="Busque escribiendo el código o descripción"
+        )
+        codigo_cnae = cnae_dict.get(codigo_cnae_sel, "") if codigo_cnae_sel else ""
+    else:
+        codigo_cnae = st.text_input("Código CNAE", value=datos.get("codigo_cnae", ""))
+    
+    # Domicilio Social
+    st.markdown("#### Domicilio Social")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        calle = st.text_input("Calle", value=datos.get("calle", ""))
+        numero = st.text_input("Número", value=datos.get("numero", ""))
+    
+    with col2:
+        codigo_postal = st.text_input("Código Postal", value=datos.get("codigo_postal", ""))
         
-        with col3:
-            # Selector de localidad (depende de provincia)
-            if provincia_id:
-                localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)
+        # Selector de provincia con recarga automática
+        provincia_actual = datos.get("provincia_id")
+        if provincia_actual and provincias_dict:
+            provincia_nombre = next((k for k, v in provincias_dict.items() if v == provincia_actual), "")
+        else:
+            provincia_nombre = ""
+        
+        provincia_sel = st.selectbox(
+            "Provincia", 
+            options=[""] + list(provincias_dict.keys()),
+            index=list(provincias_dict.keys()).index(provincia_nombre) + 1 if provincia_nombre else 0,
+            key="selector_provincia"
+        )
+        provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
+    
+    with col3:
+        # Selector de localidad que se actualiza automáticamente
+        localidad_id = None
+        localidad_sel = ""
+        
+        if provincia_id:
+            localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)
+            if localidades_dict:
                 localidad_actual = datos.get("localidad_id")
                 if localidad_actual and localidades_dict:
                     localidad_nombre = next((k for k, v in localidades_dict.items() if v == localidad_actual), "")
@@ -226,225 +295,261 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 localidad_sel = st.selectbox(
                     "Población",
                     options=[""] + list(localidades_dict.keys()),
-                    index=list(localidades_dict.keys()).index(localidad_nombre) + 1 if localidad_nombre else 0
+                    index=list(localidades_dict.keys()).index(localidad_nombre) + 1 if localidad_nombre else 0,
+                    key="selector_localidad"
                 )
                 localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
             else:
-                st.selectbox("Población", options=["Seleccione provincia primero"], disabled=True)
-                localidad_id = None
-            
-            telefono = st.text_input("Teléfono", value=datos.get("telefono", ""))
+                st.selectbox("Población", options=["Sin localidades disponibles"], disabled=True)
+        else:
+            st.selectbox("Población", options=["Seleccione provincia primero"], disabled=True)
         
-        # Representante Legal
-        st.markdown("#### Representante Legal")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            representante_tipo_documento = st.selectbox(
-                "Tipo Documento", 
-                options=["", "NIF", "NIE", "PASAPORTE"],
-                index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", ""))
-            )
-        
-        with col2:
-            representante_numero_documento = st.text_input("Nº Documento", value=datos.get("representante_numero_documento", ""))
-        
-        with col3:
-            representante_nombre_apellidos = st.text_input("Nombre y Apellidos", value=datos.get("representante_nombre_apellidos", ""))
-        
-        # Notificaciones
-        st.markdown("#### Notificaciones")
-        email_notificaciones = st.text_input("Email", value=datos.get("email_notificaciones", datos.get("email", "")))
-        
-        # Contrato de Encomienda
-        st.markdown("#### Contrato de Encomienda")
-        fecha_contrato_encomienda = st.date_input(
-            "Fecha Contrato Encomienda", 
-            value=datos.get("fecha_contrato_encomienda") if datos.get("fecha_contrato_encomienda") else date.today()
+        telefono = st.text_input("Teléfono", value=datos.get("telefono", ""))
+    
+    # Representante Legal
+    st.markdown("#### Representante Legal")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        representante_tipo_documento = st.selectbox(
+            "Tipo Documento", 
+            options=["", "NIF", "NIE", "PASAPORTE"],
+            index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", "")) if datos.get("representante_tipo_documento") in ["", "NIF", "NIE", "PASAPORTE"] else 0
         )
-        
-        # =========================
-        # BLOQUE CARACTERÍSTICAS
-        # =========================
-        st.markdown("### Características")
-        
+    
+    with col2:
+        representante_numero_documento = st.text_input("Nº Documento", value=datos.get("representante_numero_documento", ""))
+    
+    with col3:
+        representante_nombre_apellidos = st.text_input("Nombre y Apellidos", value=datos.get("representante_nombre_apellidos", ""))
+    
+    # Notificaciones
+    st.markdown("#### Notificaciones")
+    email_notificaciones = st.text_input("Email", value=datos.get("email_notificaciones", datos.get("email", "")))
+    
+    # Contrato de Encomienda
+    st.markdown("#### Contrato de Encomienda")
+    fecha_contrato_encomienda = st.date_input(
+        "Fecha Contrato Encomienda", 
+        value=datos.get("fecha_contrato_encomienda") if datos.get("fecha_contrato_encomienda") else date.today()
+    )
+    
+    # =========================
+    # BLOQUE CARACTERÍSTICAS
+    # =========================
+    st.markdown("### Características")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        nueva_creacion = st.checkbox("Nueva creación", value=datos.get("nueva_creacion", False))
+        representacion_legal_trabajadores = st.checkbox(
+            "¿Existe Representación Legal de las Personas Trabajadoras?", 
+            value=datos.get("representacion_legal_trabajadores", False)
+        )
+        plantilla_media_anterior = st.number_input(
+            "Plantilla media de la empresa en el año anterior", 
+            min_value=0, 
+            value=datos.get("plantilla_media_anterior", 0)
+        )
+    
+    with col2:
+        es_pyme = st.checkbox("PYME", value=datos.get("es_pyme", True))
+        voluntad_acumular_credito = st.checkbox(
+            "¿Manifiesta la empresa la voluntad de acumular su crédito de formación?",
+            value=datos.get("voluntad_acumular_credito", False)
+        )
+        tiene_erte = st.checkbox("ERTE", value=datos.get("tiene_erte", False))
+    
+    # Gestión de cuentas de cotización (interactiva)
+    cuentas_existentes = []
+    if not es_creacion and datos.get("id"):
+        try:
+            result = empresas_service.supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", datos["id"]).execute()
+            cuentas_existentes = result.data or []
+        except:
+            cuentas_existentes = []
+    
+    key_prefix = f"empresa_{datos.get('id', 'nueva')}"
+    cuentas_cotizacion = gestionar_cuentas_cotizacion(cuentas_existentes, key_prefix)
+    
+    # Campos de módulos solo para admin
+    if session_state.role == "admin":
+        st.markdown("### Configuración de Módulos")
         col1, col2 = st.columns(2)
         
         with col1:
-            nueva_creacion = st.checkbox("Nueva creación", value=datos.get("nueva_creacion", False))
-            representacion_legal_trabajadores = st.checkbox(
-                "¿Existe Representación Legal de las Personas Trabajadoras?", 
-                value=datos.get("representacion_legal_trabajadores", False)
-            )
-            plantilla_media_anterior = st.number_input(
-                "Plantilla media de la empresa en el año anterior", 
-                min_value=0, 
-                value=datos.get("plantilla_media_anterior", 0)
-            )
+            formacion_activo = st.checkbox("Formación", value=datos.get("formacion_activo", True))
+            iso_activo = st.checkbox("ISO 9001", value=datos.get("iso_activo", False))
         
         with col2:
-            es_pyme = st.checkbox("PYME", value=datos.get("es_pyme", True))
-            voluntad_acumular_credito = st.checkbox(
-                "¿Manifiesta la empresa la voluntad de acumular su crédito de formación con el siguiente o los dos siguientes ejercicios?",
-                value=datos.get("voluntad_acumular_credito", False)
-            )
-            tiene_erte = st.checkbox("ERTE", value=datos.get("tiene_erte", False))
-        
-        # Cuentas de Cotización
-        st.markdown("#### Cuentas de Cotización")
-        
-        if not es_creacion:
-            cuentas_existentes = cargar_cuentas_cotizacion(empresas_service.supabase, datos.get("id"))
-            if cuentas_existentes:
-                st.write("Cuentas existentes:")
-                for cuenta in cuentas_existentes:
-                    principal_text = " (Principal)" if cuenta.get("es_principal") else ""
-                    st.text(f"• {cuenta['numero_cuenta']}{principal_text}")
-        
-        cuenta_cotizacion_nueva = st.text_input("Nueva Cuenta de Cotización", placeholder="Opcional: agregar nueva cuenta")
-        es_principal_nueva = st.checkbox("Marcar como cuenta principal") if cuenta_cotizacion_nueva else False
-        
-        # Campos de módulos solo para admin
-        if session_state.role == "admin":
-            st.markdown("### Configuración de Módulos")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                formacion_activo = st.checkbox("Formación", value=datos.get("formacion_activo", True))
-                iso_activo = st.checkbox("ISO 9001", value=datos.get("iso_activo", False))
-            
-            with col2:
-                rgpd_activo = st.checkbox("RGPD", value=datos.get("rgpd_activo", False))
-                docu_avanzada_activo = st.checkbox("Doc. Avanzada", value=datos.get("docu_avanzada_activo", False))
-        else:
-            formacion_activo = datos.get("formacion_activo", True)
-            iso_activo = datos.get("iso_activo", False)
-            rgpd_activo = datos.get("rgpd_activo", False)
-            docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
-        
-        # Botones de acción
-        st.markdown("---")
-        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
-        
-        with col_btn1:
-            submitted = st.form_submit_button("Guardar", type="primary", use_container_width=True)
-        
-        with col_btn2:
-            if not es_creacion and session_state.role == "admin":
-                eliminar = st.form_submit_button("Eliminar", type="secondary", use_container_width=True)
-            else:
-                eliminar = False
-        
-        # Procesar formulario
-        if submitted:
-            # Validaciones básicas
-            errores = []
-            if not nombre or not cif:
-                errores.append("Razón Social y CIF son obligatorios")
-            
-            if not validar_dni_cif(cif):
-                errores.append("El CIF no es válido")
-            
-            if not fecha_contrato_encomienda:
-                errores.append("Fecha de Contrato de Encomienda es obligatoria")
-            
-            if representante_tipo_documento and not representante_numero_documento:
-                errores.append("Si especifica tipo de documento del representante, debe indicar el número")
-            
-            if errores:
-                for error in errores:
-                    st.error(f"⚠️ {error}")
-                return False
-            
-            # Preparar datos
-            datos_empresa = {
-                "nombre": nombre,
-                "cif": cif,
-                "sector": sector,
-                "convenio_referencia": convenio_referencia,
-                "codigo_cnae": codigo_cnae,
-                "calle": calle,
-                "numero": numero,
-                "codigo_postal": codigo_postal,
-                "provincia_id": provincia_id,
-                "localidad_id": localidad_id,
-                "telefono": telefono,
-                "representante_tipo_documento": representante_tipo_documento if representante_tipo_documento else None,
-                "representante_numero_documento": representante_numero_documento,
-                "representante_nombre_apellidos": representante_nombre_apellidos,
-                "email_notificaciones": email_notificaciones,
-                "fecha_contrato_encomienda": fecha_contrato_encomienda.isoformat() if fecha_contrato_encomienda else None,
-                "nueva_creacion": nueva_creacion,
-                "representacion_legal_trabajadores": representacion_legal_trabajadores,
-                "plantilla_media_anterior": plantilla_media_anterior,
-                "es_pyme": es_pyme,
-                "voluntad_acumular_credito": voluntad_acumular_credito,
-                "tiene_erte": tiene_erte,
-                "formacion_activo": formacion_activo,
-                "iso_activo": iso_activo,
-                "rgpd_activo": rgpd_activo,
-                "docu_avanzada_activo": docu_avanzada_activo,
-                # Campos de compatibilidad
-                "email": email_notificaciones,
-                "direccion": f"{calle} {numero}" if calle else "",
-                "ciudad": localidad_sel if localidad_sel else "",
-                "provincia": provincia_sel if provincia_sel else ""
-            }
-            
-            # DEBUG: Mostrar datos que se van a enviar
-            with st.expander("Debug - Datos a enviar", expanded=False):
-                st.json(datos_empresa)
-            
-            try:
-                if es_creacion:
-                    # Crear nueva empresa
-                    success, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
-                    if success:
-                        st.success(f"✅ Empresa cliente creada correctamente (ID: {empresa_id})")
-                        
-                        # Agregar cuenta de cotización si se especificó
-                        if cuenta_cotizacion_nueva:
-                            try:
-                                empresas_service.supabase.table("cuentas_cotizacion").insert({
-                                    "empresa_id": empresa_id,
-                                    "numero_cuenta": cuenta_cotizacion_nueva,
-                                    "es_principal": es_principal_nueva
-                                }).execute()
-                                st.success("Cuenta de cotización agregada")
-                            except Exception as e:
-                                st.warning(f"Empresa creada pero error al agregar cuenta: {e}")
-                        
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al crear la empresa cliente")
-                else:
-                    # Actualizar empresa existente
-                    success = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
-                    if success:
-                        st.success("✅ Empresa actualizada correctamente")
-                        
-                        # Agregar nueva cuenta de cotización si se especificó
-                        if cuenta_cotizacion_nueva:
-                            try:
-                                empresas_service.supabase.table("cuentas_cotizacion").insert({
-                                    "empresa_id": datos["id"],
-                                    "numero_cuenta": cuenta_cotizacion_nueva,
-                                    "es_principal": es_principal_nueva
-                                }).execute()
-                                st.success("Nueva cuenta de cotización agregada")
-                            except Exception as e:
-                                st.warning(f"Empresa actualizada pero error al agregar cuenta: {e}")
-                        
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al actualizar la empresa")
-                        
-            except Exception as e:
-                st.error(f"❌ Error procesando empresa: {e}")
-                st.exception(e)
-                return False
+            rgpd_activo = st.checkbox("RGPD", value=datos.get("rgpd_activo", False))
+            docu_avanzada_activo = st.checkbox("Doc. Avanzada", value=datos.get("docu_avanzada_activo", False))
+    else:
+        formacion_activo = datos.get("formacion_activo", True)
+        iso_activo = datos.get("iso_activo", False)
+        rgpd_activo = datos.get("rgpd_activo", False)
+        docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
     
-    return False
+    # Botones de acción
+    st.markdown("---")
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+    
+    # Validaciones finales antes de permitir guardar
+    puede_guardar = all([
+        nombre,
+        cif and cif_valido,
+        fecha_contrato_encomienda,
+        len(cuentas_cotizacion) > 0
+    ])
+    
+    if not puede_guardar:
+        errores_validacion = []
+        if not nombre:
+            errores_validacion.append("Razón Social requerida")
+        if not cif or not cif_valido:
+            errores_validacion.append("CIF válido requerido")
+        if not fecha_contrato_encomienda:
+            errores_validacion.append("Fecha contrato requerida")
+        if len(cuentas_cotizacion) == 0:
+            errores_validacion.append("Al menos una cuenta de cotización")
+        
+        st.warning(f"⚠️ Completar: {', '.join(errores_validacion)}")
+    
+    with col_btn1:
+        if st.button("Guardar", type="primary", use_container_width=True, disabled=not puede_guardar):
+            # Procesar guardar
+            procesar_guardar_empresa(
+                datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
+                calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
+                representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
+                email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
+                representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
+                voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
+                rgpd_activo, docu_avanzada_activo, cuentas_cotizacion,
+                provincia_sel, localidad_sel, empresas_service, session_state, es_creacion
+            )
+    
+    with col_btn2:
+        if not es_creacion and session_state.role == "admin":
+            if st.button("Eliminar", type="secondary", use_container_width=True):
+                if st.session_state.get("confirmar_eliminar"):
+                    try:
+                        success = empresas_service.delete_empresa_con_jerarquia(datos["id"])
+                        if success:
+                            st.success("✅ Empresa eliminada correctamente")
+                            del st.session_state["confirmar_eliminar"]
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al eliminar la empresa")
+                    except Exception as e:
+                        st.error(f"❌ Error eliminando empresa: {e}")
+                else:
+                    st.session_state["confirmar_eliminar"] = True
+                    st.warning("⚠️ Presiona 'Eliminar' nuevamente para confirmar")
+
+def procesar_guardar_empresa(datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
+                           calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
+                           representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
+                           email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
+                           representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
+                           voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
+                           rgpd_activo, docu_avanzada_activo, cuentas_cotizacion,
+                           provincia_sel, localidad_sel, empresas_service, session_state, es_creacion):
+    """Procesa el guardado de la empresa."""
+    
+    # Preparar datos
+    datos_empresa = {
+        "nombre": nombre,
+        "cif": cif,
+        "sector": sector,
+        "convenio_referencia": convenio_referencia,
+        "codigo_cnae": codigo_cnae,
+        "calle": calle,
+        "numero": numero,
+        "codigo_postal": codigo_postal,
+        "provincia_id": provincia_id,
+        "localidad_id": localidad_id,
+        "telefono": telefono,
+        "representante_tipo_documento": representante_tipo_documento if representante_tipo_documento else None,
+        "representante_numero_documento": representante_numero_documento,
+        "representante_nombre_apellidos": representante_nombre_apellidos,
+        "email_notificaciones": email_notificaciones,
+        "fecha_contrato_encomienda": fecha_contrato_encomienda.isoformat() if fecha_contrato_encomienda else None,
+        "nueva_creacion": nueva_creacion,
+        "representacion_legal_trabajadores": representacion_legal_trabajadores,
+        "plantilla_media_anterior": plantilla_media_anterior,
+        "es_pyme": es_pyme,
+        "voluntad_acumular_credito": voluntad_acumular_credito,
+        "tiene_erte": tiene_erte,
+        "formacion_activo": formacion_activo,
+        "iso_activo": iso_activo,
+        "rgpd_activo": rgpd_activo,
+        "docu_avanzada_activo": docu_avanzada_activo,
+        # Campos de compatibilidad
+        "email": email_notificaciones,
+        "direccion": f"{calle} {numero}" if calle else "",
+        "ciudad": localidad_sel if localidad_sel else "",
+        "provincia": provincia_sel if provincia_sel else ""
+    }
+    
+    try:
+        if es_creacion:
+            # Crear nueva empresa
+            success, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
+            if success:
+                st.success(f"✅ Empresa cliente creada correctamente")
+                
+                # Guardar cuentas de cotización
+                guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
+                
+                st.rerun()
+            else:
+                st.error("❌ Error al crear la empresa cliente")
+        else:
+            # Actualizar empresa existente
+            success = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
+            if success:
+                st.success("✅ Empresa actualizada correctamente")
+                
+                # Actualizar cuentas de cotización
+                actualizar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
+                
+                st.rerun()
+            else:
+                st.error("❌ Error al actualizar la empresa")
+                
+    except Exception as e:
+        st.error(f"❌ Error procesando empresa: {e}")
+
+def guardar_cuentas_cotizacion(supabase, empresa_id, cuentas):
+    """Guarda las cuentas de cotización."""
+    try:
+        for cuenta in cuentas:
+            if not cuenta.get("id"):  # Nueva cuenta
+                supabase.table("cuentas_cotizacion").insert({
+                    "empresa_id": empresa_id,
+                    "numero_cuenta": cuenta["numero_cuenta"],
+                    "es_principal": cuenta.get("es_principal", False)
+                }).execute()
+    except Exception as e:
+        st.warning(f"Error guardando cuentas: {e}")
+
+def actualizar_cuentas_cotizacion(supabase, empresa_id, cuentas):
+    """Actualiza las cuentas de cotización."""
+    try:
+        # Eliminar todas las cuentas existentes y crear nuevas (simplificado)
+        supabase.table("cuentas_cotizacion").delete().eq("empresa_id", empresa_id).execute()
+        
+        # Insertar las cuentas actuales
+        for cuenta in cuentas:
+            supabase.table("cuentas_cotizacion").insert({
+                "empresa_id": empresa_id,
+                "numero_cuenta": cuenta["numero_cuenta"],
+                "es_principal": cuenta.get("es_principal", False)
+            }).execute()
+    except Exception as e:
+        st.warning(f"Error actualizando cuentas: {e}")
 
 def main(supabase, session_state):
     st.title("Gestión de Empresas FUNDAE")
