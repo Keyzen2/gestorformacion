@@ -243,8 +243,6 @@ class GruposService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar grupos completos", e)
-
-# Continúa desde get_grupos_completos...
     
     @st.cache_data(ttl=600)
     def get_grupos_dict(_self) -> Dict[str, str]:
@@ -577,7 +575,7 @@ class GruposService:
             st.error(f"Error al eliminar empresa del grupo: {e}")
             return False
 
-# =========================
+    # =========================
     # MÉTODOS DE TUTORES CON JERARQUÍA
     # =========================
 
