@@ -299,7 +299,7 @@ def route():
         base_menu = {
             "Panel Admin": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
-            "Empresas": "empresas",
+            "Empresas": "empresas",  # ✅ Admin mantiene acceso a empresas del SaaS
             "Ajustes de la App": "ajustes_app"
         }
         for label, page_key in base_menu.items():
@@ -322,14 +322,28 @@ def route():
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 📚 Gestión de Formación")
-        formacion_menu = {
-            "Acciones Formativas": "acciones_formativas",
-            "Grupos": "grupos",
-            "Participantes": "participantes",
-            "Tutores": "tutores",
-            "Proyectos": "proyectos",
-            "Documentos": "documentos"
-        }
+        
+        # ✅ CAMBIO: Menú diferenciado por rol
+        if rol == "admin":
+            formacion_menu = {
+                "Acciones Formativas": "acciones_formativas",
+                "Grupos": "grupos",
+                "Participantes": "participantes",
+                "Tutores": "tutores",
+                "Proyectos": "proyectos",
+                "Documentos": "documentos"
+            }
+        elif rol == "gestor":
+            formacion_menu = {
+                "Empresas": "empresas",  # ✅ NUEVO: Gestores ahora tienen acceso
+                "Acciones Formativas": "acciones_formativas",
+                "Grupos": "grupos",
+                "Participantes": "participantes",
+                "Tutores": "tutores",
+                "Proyectos": "proyectos",
+                "Documentos": "documentos"
+            }
+        
         for label, page_key in formacion_menu.items():
             if st.sidebar.button(label, key=f"formacion_{page_key}_{rol}"):
                 st.session_state.page = page_key
@@ -451,6 +465,18 @@ else:
                 # así que en "home" simplemente mostramos un saludo
                 st.title("👋 Bienvenido al Panel del Gestor")
                 st.subheader(ajustes.get("bienvenida_gestor", "Panel de Gestión de Formación"))
+                
+                # ✅ NUEVO: Información sobre funcionalidad de empresas
+                with st.expander("🆕 Nueva Funcionalidad: Gestión de Empresas"):
+                    st.markdown("""
+                    **Ahora puedes gestionar empresas clientes:**
+                    - 🏢 Crear empresas que dependen de la tuya
+                    - 📚 Asignar empresas clientes a grupos de formación  
+                    - 👥 Gestionar participantes de múltiples empresas
+                    - 📄 Organizar diplomas por empresa cliente
+                    
+                    Accede desde **📚 Gestión de Formación > Empresas**
+                    """)
             else:
                 bienvenida_por_rol = {
                     "admin": ajustes.get("bienvenida_admin", "Panel de Administración SaaS"),
