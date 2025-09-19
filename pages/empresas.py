@@ -181,20 +181,21 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         with col1:
             # Para gestores: nombre y CIF readonly en edición
             if session_state.role == "gestor" and not es_creacion:
-                st.text_input("🏢 Razón Social", value=datos.get("nombre", ""), disabled=True)
+                st.text_input("🏢 Razón Social", value=datos.get("nombre", ""), disabled=True, key=f"{form_id}_nombre_readonly")
                 nombre = datos.get("nombre", "")
-                st.text_input("📄 CIF", value=datos.get("cif", ""), disabled=True)
+                st.text_input("📄 CIF", value=datos.get("cif", ""), disabled=True, key=f"{form_id}_cif_readonly")
                 cif = datos.get("cif", "")
                 cif_valido = True
             else:
-                nombre = st.text_input("🏢 Razón Social", value=datos.get("nombre", ""))
-                cif = st.text_input("📄 CIF", value=datos.get("cif", ""))
+                nombre = st.text_input("🏢 Razón Social", value=datos.get("nombre", ""), key=f"{form_id}_nombre")
+                cif = st.text_input("📄 CIF", value=datos.get("cif", ""), key=f"{form_id}_cif")
                 cif_valido = validar_dni_cif(cif) if cif else True
         
         with col2:
             sector = st.selectbox("🏭 Sector", options=[""] + sectores_list, 
-                                index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0)
-            convenio_referencia = st.text_input("📋 Convenio de Referencia", value=datos.get("convenio_referencia", ""))
+                                index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0,
+                                key=f"{form_id}_sector")
+            convenio_referencia = st.text_input("📋 Convenio de Referencia", value=datos.get("convenio_referencia", ""), key=f"{form_id}_convenio")
         
         # Código CNAE
         if cnae_dict:
@@ -204,22 +205,23 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 "🔢 Código CNAE", 
                 options=[""] + list(cnae_dict.keys()),
                 index=list(cnae_dict.keys()).index(cnae_display) + 1 if cnae_display else 0,
-                help="Busque escribiendo el código o descripción"
+                help="Busque escribiendo el código o descripción",
+                key=f"{form_id}_cnae_select"
             )
             codigo_cnae = cnae_dict.get(codigo_cnae_sel, "") if codigo_cnae_sel else ""
         else:
-            codigo_cnae = st.text_input("🔢 Código CNAE", value=datos.get("codigo_cnae", ""))
+            codigo_cnae = st.text_input("🔢 Código CNAE", value=datos.get("codigo_cnae", ""), key=f"{form_id}_cnae_input")
         
         # Domicilio Social
         st.markdown("#### 🏠 Domicilio Social")
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            calle = st.text_input("🛣️ Calle", value=datos.get("calle", ""))
-            numero = st.text_input("🏠 Número", value=datos.get("numero", ""))
+            calle = st.text_input("🛣️ Calle", value=datos.get("calle", ""), key=f"{form_id}_calle")
+            numero = st.text_input("🏠 Número", value=datos.get("numero", ""), key=f"{form_id}_numero")
         
         with col2:
-            codigo_postal = st.text_input("📮 Código Postal", value=datos.get("codigo_postal", ""))
+            codigo_postal = st.text_input("📮 Código Postal", value=datos.get("codigo_postal", ""), key=f"{form_id}_cp")
             
             # Selector de provincia
             provincia_actual = datos.get("provincia_id")
@@ -231,7 +233,8 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             provincia_sel = st.selectbox(
                 "🗺️ Provincia", 
                 options=[""] + list(provincias_dict.keys()),
-                index=list(provincias_dict.keys()).index(provincia_nombre) + 1 if provincia_nombre else 0
+                index=list(provincias_dict.keys()).index(provincia_nombre) + 1 if provincia_nombre else 0,
+                key=f"{form_id}_provincia"
             )
             provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
         
@@ -246,19 +249,20 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                     localidad_sel = st.selectbox(
                         "🏘️ Población",
                         options=[""] + list(localidades_dict.keys()),
-                        index=list(localidades_dict.keys()).index(localidad_nombre) + 1 if localidad_nombre else 0
+                        index=list(localidades_dict.keys()).index(localidad_nombre) + 1 if localidad_nombre else 0,
+                        key=f"{form_id}_localidad"
                     )
                     localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
                 else:
-                    st.selectbox("🏘️ Población", options=["Sin localidades"], disabled=True)
+                    st.selectbox("🏘️ Población", options=["Sin localidades"], disabled=True, key=f"{form_id}_localidad_empty")
                     localidad_id = None
                     localidad_sel = ""
             else:
-                st.selectbox("🏘️ Población", options=["Seleccione provincia"], disabled=True)
+                st.selectbox("🏘️ Población", options=["Seleccione provincia"], disabled=True, key=f"{form_id}_localidad_disabled")
                 localidad_id = None
                 localidad_sel = ""
             
-            telefono = st.text_input("📞 Teléfono", value=datos.get("telefono", ""))
+            telefono = st.text_input("📞 Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_telefono")
         
         # Representante Legal
         st.markdown("#### 👤 Representante Legal")
@@ -268,24 +272,26 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             representante_tipo_documento = st.selectbox(
                 "📄 Tipo Documento", 
                 options=["", "NIF", "NIE", "PASAPORTE"],
-                index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", "")) if datos.get("representante_tipo_documento") in ["", "NIF", "NIE", "PASAPORTE"] else 0
+                index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", "")) if datos.get("representante_tipo_documento") in ["", "NIF", "NIE", "PASAPORTE"] else 0,
+                key=f"{form_id}_tipo_doc"
             )
         
         with col2:
-            representante_numero_documento = st.text_input("🆔 Nº Documento", value=datos.get("representante_numero_documento", ""))
+            representante_numero_documento = st.text_input("🆔 Nº Documento", value=datos.get("representante_numero_documento", ""), key=f"{form_id}_num_doc")
         
         with col3:
-            representante_nombre_apellidos = st.text_input("👤 Nombre y Apellidos", value=datos.get("representante_nombre_apellidos", ""))
+            representante_nombre_apellidos = st.text_input("👤 Nombre y Apellidos", value=datos.get("representante_nombre_apellidos", ""), key=f"{form_id}_nombre_apellidos")
         
         # Notificaciones
         st.markdown("#### 📧 Notificaciones")
-        email_notificaciones = st.text_input("📧 Email", value=datos.get("email_notificaciones", datos.get("email", "")))
+        email_notificaciones = st.text_input("📧 Email", value=datos.get("email_notificaciones", datos.get("email", "")), key=f"{form_id}_email")
         
         # Contrato de Encomienda
         st.markdown("#### 📋 Contrato de Encomienda")
         fecha_contrato_encomienda = st.date_input(
             "📅 Fecha Contrato Encomienda", 
-            value=datos.get("fecha_contrato_encomienda") if datos.get("fecha_contrato_encomienda") else date.today()
+            value=datos.get("fecha_contrato_encomienda") if datos.get("fecha_contrato_encomienda") else date.today(),
+            key=f"{form_id}_fecha_contrato"
         )
         
         # =========================
@@ -296,24 +302,27 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         col1, col2 = st.columns(2)
         
         with col1:
-            nueva_creacion = st.checkbox("🆕 Nueva creación", value=datos.get("nueva_creacion", False))
+            nueva_creacion = st.checkbox("🆕 Nueva creación", value=datos.get("nueva_creacion", False), key=f"{form_id}_nueva_creacion")
             representacion_legal_trabajadores = st.checkbox(
                 "👥 ¿Existe Representación Legal de las Personas Trabajadoras?", 
-                value=datos.get("representacion_legal_trabajadores", False)
+                value=datos.get("representacion_legal_trabajadores", False),
+                key=f"{form_id}_repr_legal"
             )
             plantilla_media_anterior = st.number_input(
                 "👥 Plantilla media del año anterior", 
                 min_value=0, 
-                value=datos.get("plantilla_media_anterior", 0)
+                value=datos.get("plantilla_media_anterior", 0),
+                key=f"{form_id}_plantilla"
             )
         
         with col2:
-            es_pyme = st.checkbox("🏢 PYME", value=datos.get("es_pyme", True))
+            es_pyme = st.checkbox("🏢 PYME", value=datos.get("es_pyme", True), key=f"{form_id}_pyme")
             voluntad_acumular_credito = st.checkbox(
                 "💰 ¿Voluntad de acumular crédito de formación?",
-                value=datos.get("voluntad_acumular_credito", False)
+                value=datos.get("voluntad_acumular_credito", False),
+                key=f"{form_id}_acumular_credito"
             )
-            tiene_erte = st.checkbox("⚠️ ERTE", value=datos.get("tiene_erte", False))
+            tiene_erte = st.checkbox("⚠️ ERTE", value=datos.get("tiene_erte", False), key=f"{form_id}_erte")
         
         # Campos de módulos solo para admin
         if session_state.role == "admin":
@@ -321,12 +330,12 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             col1, col2 = st.columns(2)
             
             with col1:
-                formacion_activo = st.checkbox("📚 Formación", value=datos.get("formacion_activo", True))
-                iso_activo = st.checkbox("📋 ISO 9001", value=datos.get("iso_activo", False))
+                formacion_activo = st.checkbox("📚 Formación", value=datos.get("formacion_activo", True), key=f"{form_id}_formacion")
+                iso_activo = st.checkbox("📋 ISO 9001", value=datos.get("iso_activo", False), key=f"{form_id}_iso")
             
             with col2:
-                rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False))
-                docu_avanzada_activo = st.checkbox("📁 Doc. Avanzada", value=datos.get("docu_avanzada_activo", False))
+                rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False), key=f"{form_id}_rgpd")
+                docu_avanzada_activo = st.checkbox("📁 Doc. Avanzada", value=datos.get("docu_avanzada_activo", False), key=f"{form_id}_docu")
         else:
             formacion_activo = datos.get("formacion_activo", True)
             iso_activo = datos.get("iso_activo", False)
@@ -420,10 +429,10 @@ def mostrar_gestion_cuentas(cuentas_key):
     
     # Botón para añadir nueva cuenta usando popover
     with st.popover("➕ Añadir Cuenta"):
-        nueva_cuenta = st.text_input("Número de cuenta", placeholder="Ej: 281234567890")
-        es_principal = st.checkbox("Marcar como principal")
+        nueva_cuenta = st.text_input("Número de cuenta", placeholder="Ej: 281234567890", key=f"nueva_cuenta_{cuentas_key}")
+        es_principal = st.checkbox("Marcar como principal", key=f"es_principal_{cuentas_key}")
         
-        if st.button("✅ Añadir"):
+        if st.button("✅ Añadir", key=f"anadir_{cuentas_key}"):
             if nueva_cuenta:
                 # Si se marca como principal, quitar de otras
                 if es_principal:
