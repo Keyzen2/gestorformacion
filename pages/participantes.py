@@ -483,7 +483,7 @@ def mostrar_importacion_masiva_con_jerarquia(supabase, session_state, participan
                 with col1:
                     st.metric("📊 Total filas", len(df_import))
                 with col2:
-                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+, na=False).sum()
+                    emails_validos = df_import["email"].str.match(r'^[^@]+@[^@]+\.[^@]+$', na=False).sum()
                     st.metric("📧 Emails válidos", emails_validos)
                 with col3:
                     emails_duplicados = df_import["email"].duplicated().sum()
