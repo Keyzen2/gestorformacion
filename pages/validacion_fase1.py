@@ -177,9 +177,6 @@ def test_fase1_empresas(supabase, session_state):
     
     return todos_ok
 
-# =========================
-# TEST INTERACTIVO DE CREACIÓN
-# =========================
 def test_crear_empresa_interactivo(supabase, session_state):
     """Test interactivo para crear una empresa real."""
     
@@ -238,11 +235,19 @@ def test_crear_empresa_interactivo(supabase, session_state):
             except Exception as e:
                 st.error(f"❌ Excepción: {e}")
 
-# =========================
-# FUNCIÓN PRINCIPAL
-# =========================
 def main(supabase, session_state):
-    """Función principal de validación (para pages/validacion_fase1.py)."""
+    """Función principal que Streamlit ejecuta automáticamente."""
+    
+    # Verificar autenticación
+    if not session_state.get("authenticated"):
+        st.error("❌ Debes iniciar sesión para acceder a esta página")
+        return
+    
+    # Verificar permisos
+    if session_state.role not in ["admin", "gestor"]:
+        st.error("❌ No tienes permisos para acceder a esta validación")
+        st.info("💡 Solo administradores y gestores pueden ejecutar las validaciones de FASE 1")
+        return
     
     # Tabs para organizar tests
     tab1, tab2 = st.tabs(["🔍 Validación Automática", "🧪 Test Interactivo"])
@@ -277,6 +282,7 @@ def main(supabase, session_state):
             "email": session_state.user.get("email")
         })
 
+# Esta parte es importante para Streamlit
 if __name__ == "__main__":
     # Para testing independiente
     pass
