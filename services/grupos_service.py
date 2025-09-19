@@ -378,6 +378,28 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al eliminar acción formativa: {e}")
             return False
+    def get_accion_modalidad(self, accion_id: str) -> str:
+        """Obtiene la modalidad de una acción formativa por su ID."""
+        try:
+            res = self.supabase.table("acciones_formativas").select("modalidad").eq("id", accion_id).single().execute()
+            if res.data:
+                return res.data.get("modalidad", "")
+            return ""
+        except Exception as e:
+            st.error(f"❌ Error al obtener modalidad de la acción: {e}")
+            return ""
+
+    def normalizar_modalidad_fundae(self, modalidad_raw: str) -> str:
+        """Normaliza la modalidad en valores aceptados por FUNDAE."""
+        if not modalidad_raw:
+            return "PRESENCIAL"
+        modalidad_raw = modalidad_raw.upper()
+        if "TELE" in modalidad_raw:
+            return "TELEFORMACION"
+        if "MIX" in modalidad_raw or "MIXTA" in modalidad_raw:
+            return "MIXTA"
+        return "PRESENCIAL"
+
     # =========================
     # COSTES FUNDAE DE GRUPO
     # =========================
