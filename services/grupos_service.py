@@ -422,6 +422,50 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al eliminar coste de grupo: {e}")
             return False
+    # =========================
+    # BONIFICACIONES FUNDAE DE GRUPO
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
+        """Obtiene las bonificaciones asociadas a un grupo."""
+        try:
+            res = _self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar bonificaciones de grupo", e)
+
+    def create_grupo_bonificacion(_self, grupo_id: str, datos_bonif: Dict[str, Any]) -> bool:
+        """Crea una bonificación para un grupo."""
+        try:
+            datos_bonif["grupo_id"] = grupo_id
+            datos_bonif["created_at"] = datetime.utcnow().isoformat()
+            _self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
+            _self.get_grupo_bonificaciones.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear bonificación: {e}")
+            return False
+
+    def update_grupo_bonificacion(_self, bonificacion_id: str, datos_editados: Dict[str, Any]) -> bool:
+        """Actualiza una bonificación existente."""
+        try:
+            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+            _self.supabase.table("grupo_bonificaciones").update(datos_editados).eq("id", bonificacion_id).execute()
+            _self.get_grupo_bonificaciones.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar bonificación: {e}")
+            return False
+
+    def delete_grupo_bonificacion(_self, bonificacion_id: str) -> bool:
+        """Elimina una bonificación de un grupo."""
+        try:
+            _self.supabase.table("grupo_bonificaciones").delete().eq("id", bonificacion_id).execute()
+            _self.get_grupo_bonificaciones.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar bonificación: {e}")
+            return False
 
     # =========================
     # GRUPOS - OPERACIONES CRUD
