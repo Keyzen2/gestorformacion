@@ -1,8 +1,3 @@
-"""
-Servicios centralizados para consultas de datos optimizadas.
-Unifica las consultas y aplica filtros por rol de forma consistente.
-"""
-
 import streamlit as st
 import pandas as pd
 from typing import Optional, List, Dict, Any, Tuple
@@ -51,7 +46,167 @@ class DataService:
         """Obtiene diccionario nombre -> id de empresas."""
         df = _self.get_empresas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
-
+# =========================
+    # MÉTODOS DE JERARQUÍA DE EMPRESAS
+    # =========================
+    
+    @st.cache_data(ttl=300)
+    def get_empresas_con_jerarquia(_self) -> pd.DataFrame:
+        """Obtiene empresas con información jerárquica completa."""
+        try:
+            query = _self.supabase.table("empresas").select("""
+                id, nombre, cif, direccion, telefono, email, ciudad, provincia,
+                tipo_empresa, empresa_matriz_id, nivel_jerarquico,
+                fecha_alta, created_at,
+                empresa_matriz:empresas!empresa_matriz_id(id, nombre, cif),
+                empresas_hijas:empresas!empresa_matriz_id(id, nombre, cif)
+            """)
+            
+            # Aplicar filtro según rol
+            if _self.rol == "gestor":
+                # Gestor ve su empresa y sus clientes
+                query = query.or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}")
+            
+            res = query.order("nivel_jerarquico", "nombre").execute()
+            df = pd.DataFrame(res.data or [])
+            
+            if not df.empty:
+                # Aplanar datos de empresa matriz
+                if "empresa_matriz" in df.columns:
+                    df["matriz_nombre"] = df["empresa_matriz"].apply(
+                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                    )
+                
+                # Contar empresas hijas
+                if "empresas_hijas" in df.columns:
+                    df["num_clientes"] = df["empresas_hijas"].apply(
+                        lambda x: len(x) if isinstance(x, list) else 0
+                    )
+                else:
+                    df["num_clientes"] = 0
+                    
+                # Agregar indicador visual para jerarquía
+                df["nombre_jerarquico"] = df.apply(lambda row: 
+                    f"{'  └─ ' if row.get('nivel_jerarquico') == 2 else ''}{row['nombre']}", 
+                    axis=1
+                )
+            
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar empresas con jerarquía", e)
+    
+    def get_empresas_gestoras(_self) -> Dict[str, str]:
+        """Obtiene empresas que pueden ser gestoras."""
+        try:
+            # Solo admin puede ver todas las gestoras
+            if _self.rol != "admin":
+                return {}
+                
+            res = _self.supabase.table("empresas").select("id, nombre").eq(
+                "tipo_empresa", "GESTORA"
+            ).execute()
+            
+            return {emp["nombre"]: emp["id"] for emp in (res.data or [])}
+        except Exception as e:
+            st.error(f"Error al cargar empresas gestoras: {e}")
+            return {}
+    
+    def get_empresas_clientes_gestor(_self, gestor_id: str = None) -> pd.DataFrame:
+        """Obtiene empresas clientes de un gestor específico."""
+        try:
+            if not gestor_id:
+                gestor_id = _self.empresa_id
+                
+            if not gestor_id:
+                return pd.DataFrame()
+            
+            res = _self.supabase.table("empresas").select("*").eq(
+                "empresa_matriz_id", gestor_id
+            ).execute()
+            
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar empresas clientes", e)
+    
+    def create_empresa_con_jerarquia(_self, datos_empresa: Dict[str, Any]) -> bool:
+        """Crea empresa respetando jerarquía según rol."""
+        try:
+            # Preparar datos según rol
+            if _self.rol == "admin":
+                # Admin puede especificar tipo y matriz
+                tipo = datos_empresa.get("tipo_empresa", "CLIENTE_SAAS")
+                
+                if tipo == "CLIENTE_GESTOR":
+                    if not datos_empresa.get("empresa_matriz_id"):
+                        st.error("Empresa matriz requerida para CLIENTE_GESTOR")
+                        return False
+                    datos_empresa["nivel_jerarquico"] = 2
+                elif tipo == "GESTORA":
+                    datos_empresa["nivel_jerarquico"] = 1
+                    datos_empresa["empresa_matriz_id"] = None
+                else:  # CLIENTE_SAAS
+                    datos_empresa["nivel_jerarquico"] = 1
+                    datos_empresa["empresa_matriz_id"] = None
+                    
+            elif _self.rol == "gestor":
+                # Gestor solo puede crear CLIENTE_GESTOR bajo su empresa
+                datos_empresa.update({
+                    "empresa_matriz_id": _self.empresa_id,
+                    "tipo_empresa": "CLIENTE_GESTOR", 
+                    "nivel_jerarquico": 2
+                })
+            else:
+                st.error("Sin permisos para crear empresas")
+                return False
+            
+            # Validaciones
+            if not datos_empresa.get("nombre") or not datos_empresa.get("cif"):
+                st.error("Nombre y CIF son obligatorios")
+                return False
+            
+            if not validar_dni_cif(datos_empresa["cif"]):
+                st.error("CIF inválido")
+                return False
+            
+            # Verificar CIF único en el ámbito correspondiente
+            if not _self._validar_cif_unico_jerarquico(datos_empresa["cif"]):
+                st.error("Ya existe una empresa con ese CIF")
+                return False
+            
+            # Crear empresa
+            datos_empresa["fecha_alta"] = datetime.utcnow().isoformat()
+            result = _self.supabase.table("empresas").insert(datos_empresa).execute()
+            
+            if result.data:
+                _self.get_empresas_con_jerarquia.clear()
+                _self.get_empresas_con_modulos.clear()
+                return True
+            else:
+                st.error("Error al crear la empresa")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error al crear empresa: {e}")
+            return False
+    
+    def _validar_cif_unico_jerarquico(_self, cif: str, empresa_id: str = None) -> bool:
+        """Valida CIF único respetando jerarquía."""
+        try:
+            query = _self.supabase.table("empresas").select("id").eq("cif", cif)
+            
+            if empresa_id:
+                query = query.neq("id", empresa_id)
+            
+            # Para gestores, verificar solo en su ámbito jerárquico
+            if _self.rol == "gestor":
+                query = query.or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}")
+            
+            res = query.execute()
+            return len(res.data or []) == 0
+            
+        except Exception as e:
+            st.error(f"Error validando CIF: {e}")
+            return False
     # =========================
     # ACCIONES FORMATIVAS
     # =========================
