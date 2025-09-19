@@ -279,344 +279,344 @@ class DataService:
             st.error(f"Error al filtrar empresas: {e}")
             return df_empresas
     # =========================
-# MÉTODOS DE JERARQUÍA DE EMPRESAS
-# =========================
-
-@st.cache_data(ttl=300)
-def get_empresas_con_jerarquia(_self) -> pd.DataFrame:
-    """Obtiene empresas usando la vista v_empresas_jerarquia."""
-    try:
-        if _self.rol == "admin":
-            # Admin ve todas las empresas con jerarquía completa
-            query = _self.supabase.table("v_empresas_jerarquia").select("*")
-            
-        elif _self.rol == "gestor" and _self.empresa_id:
-            # Gestor ve su empresa y sus clientes
-            query = _self.supabase.table("v_empresas_jerarquia").select("*").or_(
-                f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
-            )
-        else:
-            return pd.DataFrame()
-        
-        res = query.order("nivel_jerarquico", "nombre").execute()
-        df = pd.DataFrame(res.data or [])
-        
-        if not df.empty:
-            # Agregar indicadores visuales para la jerarquía
-            df["nombre_display"] = df.apply(lambda row: 
-                f"{'  └─ ' if row.get('nivel_jerarquico') == 2 else ''}{row['nombre']}", 
-                axis=1
-            )
-            
-            # Agregar contexto tipo empresa
-            df["tipo_display"] = df["tipo_empresa"].map({
-                "CLIENTE_SAAS": "Cliente SaaS",
-                "GESTORA": "Gestora",
-                "CLIENTE_GESTOR": "Cliente de Gestora"
-            })
-        
-        return df
-    except Exception as e:
-        return _self._handle_query_error("cargar empresas con jerarquía", e)
-
-def get_empresas_gestoras_disponibles(_self) -> Dict[str, str]:
-    """Obtiene empresas que pueden ser gestoras (tipo GESTORA)."""
-    try:
-        if _self.rol != "admin":
-            return {}
-            
-        res = _self.supabase.table("empresas").select("id, nombre").eq(
-            "tipo_empresa", "GESTORA"
-        ).order("nombre").execute()
-        
-        return {emp["nombre"]: emp["id"] for emp in (res.data or [])}
-    except Exception as e:
-        st.error(f"Error al cargar empresas gestoras: {e}")
-        return {}
-
-def get_empresas_clientes_gestor(_self, gestor_id: str = None) -> pd.DataFrame:
-    """Obtiene empresas clientes de un gestor específico."""
-    try:
-        if not gestor_id:
-            gestor_id = _self.empresa_id
-            
-        if not gestor_id:
-            return pd.DataFrame()
-        
-        res = _self.supabase.table("empresas").select("*").eq(
-            "empresa_matriz_id", gestor_id
-        ).order("nombre").execute()
-        
-        return pd.DataFrame(res.data or [])
-    except Exception as e:
-        return _self._handle_query_error("cargar empresas clientes", e)
-
-def get_empresas_para_asignacion(_self) -> Dict[str, str]:
-    """Obtiene empresas que pueden asignarse a grupos/participantes según rol."""
-    try:
-        if _self.rol == "admin":
-            # Admin puede asignar cualquier empresa
-            res = _self.supabase.table("empresas").select("id, nombre").order("nombre").execute()
-            
-        elif _self.rol == "gestor" and _self.empresa_id:
-            # Gestor puede asignar su empresa y sus clientes
-            res = _self.supabase.table("empresas").select("id, nombre").or_(
-                f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
-            ).order("nombre").execute()
-        else:
-            return {}
-        
-        if res.data:
-            return {emp["nombre"]: emp["id"] for emp in res.data}
-        return {}
-        
-    except Exception as e:
-        st.error(f"Error al cargar empresas para asignación: {e}")
-        return {}
-
-def create_empresa_con_jerarquia(_self, datos_empresa: Dict[str, Any]) -> bool:
-    """Crea empresa respetando jerarquía y roles."""
-    try:
-        # Preparar datos según rol
-        if _self.rol == "admin":
-            # Admin puede especificar tipo y matriz
-            tipo = datos_empresa.get("tipo_empresa", "CLIENTE_SAAS")
-            
-            # Validar coherencia según tipo
-            if tipo == "CLIENTE_GESTOR":
-                if not datos_empresa.get("empresa_matriz_id"):
-                    st.error("Empresa matriz requerida para CLIENTE_GESTOR")
-                    return False
-                # El trigger se encarga de establecer nivel_jerarquico = 2
-                    
-            elif tipo == "GESTORA":
-                # Gestora debe ser nivel 1 sin matriz
-                datos_empresa["nivel_jerarquico"] = 1
-                datos_empresa["empresa_matriz_id"] = None
-                
-            elif tipo == "CLIENTE_SAAS":
-                # Cliente SaaS es nivel 1 sin matriz
-                datos_empresa["nivel_jerarquico"] = 1
-                datos_empresa["empresa_matriz_id"] = None
-                
-        elif _self.rol == "gestor" and _self.empresa_id:
-            # Gestor solo puede crear CLIENTE_GESTOR bajo su empresa
-            datos_empresa.update({
-                "empresa_matriz_id": _self.empresa_id,
-                "tipo_empresa": "CLIENTE_GESTOR"
-                # nivel_jerarquico lo establece el trigger automáticamente
-            })
-        else:
-            st.error("Sin permisos para crear empresas")
-            return False
-        
-        # Validaciones básicas
-        if not datos_empresa.get("nombre") or not datos_empresa.get("cif"):
-            st.error("Nombre y CIF son obligatorios")
-            return False
-        
-        if not validar_dni_cif(datos_empresa["cif"]):
-            st.error("CIF inválido")
-            return False
-        
-        # Verificar CIF único
-        if not _self._validar_cif_unico_jerarquico(datos_empresa["cif"]):
-            st.error("Ya existe una empresa con ese CIF")
-            return False
-        
-        # Agregar metadatos
-        datos_empresa.update({
-            "creado_por_usuario_id": _self.user_id,
-            "fecha_creacion": datetime.utcnow().isoformat()
-        })
-        
-        # Crear empresa (triggers automáticos manejan jerarquía)
-        result = _self.supabase.table("empresas").insert(datos_empresa).execute()
-        
-        if result.data:
-            # Limpiar caches
-            _self.get_empresas_con_jerarquia.clear()
-            _self.get_empresas_con_modulos.clear()
-            _self.get_empresas_para_asignacion.clear()
-            return True
-        else:
-            st.error("Error al crear la empresa")
-            return False
-            
-    except Exception as e:
-        st.error(f"Error al crear empresa: {e}")
-        return False
-
-def _validar_cif_unico_jerarquico(_self, cif: str, empresa_id: str = None) -> bool:
-    """Valida CIF único en el ámbito jerárquico apropiado."""
-    try:
-        query = _self.supabase.table("empresas").select("id").eq("cif", cif)
-        
-        if empresa_id:
-            query = query.neq("id", empresa_id)
-        
-        # Para gestores, verificar solo en su ámbito
-        if _self.rol == "gestor" and _self.empresa_id:
-            query = query.or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}")
-        
-        res = query.execute()
-        return len(res.data or []) == 0
-        
-    except Exception as e:
-        st.error(f"Error validando CIF: {e}")
-        return False
-
-def update_empresa_con_jerarquia(_self, empresa_id: str, datos_editados: Dict[str, Any]) -> bool:
-    """Actualiza empresa respetando permisos jerárquicos."""
-    try:
-        # Verificar permisos
-        if not _self._puede_editar_empresa_jerarquica(empresa_id):
-            st.error("No tienes permisos para editar esta empresa")
-            return False
-        
-        # Filtrar campos protegidos (los triggers manejan la jerarquía)
-        campos_protegidos = [
-            "id", "empresa_matriz_id", "tipo_empresa", "nivel_jerarquico",
-            "creado_por_usuario_id", "fecha_creacion"
-        ]
-        
-        datos_filtrados = {
-            k: v for k, v in datos_editados.items() 
-            if k not in campos_protegidos
-        }
-        
-        # Solo admin puede cambiar tipo_empresa
-        if _self.rol == "admin" and "tipo_empresa" in datos_editados:
-            datos_filtrados["tipo_empresa"] = datos_editados["tipo_empresa"]
-            
-            # Si cambia a GESTORA, limpiar matriz
-            if datos_editados["tipo_empresa"] == "GESTORA":
-                datos_filtrados["empresa_matriz_id"] = None
-        
-        # Validar CIF si se está cambiando
-        if "cif" in datos_filtrados:
-            if not _self._validar_cif_unico_jerarquico(datos_filtrados["cif"], empresa_id):
-                st.error("Ya existe otra empresa con ese CIF")
-                return False
-        
-        res = _self.supabase.table("empresas").update(datos_filtrados).eq("id", empresa_id).execute()
-        
-        if res.data:
-            # Limpiar caches
-            _self.get_empresas_con_jerarquia.clear()
-            _self.get_empresas_con_modulos.clear()
-            _self.get_empresas_para_asignacion.clear()
-            return True
-        return False
-        
-    except Exception as e:
-        st.error(f"Error al actualizar empresa: {e}")
-        return False
-
-def _puede_editar_empresa_jerarquica(_self, empresa_id: str) -> bool:
-    """Verifica permisos para editar empresa según jerarquía."""
-    if _self.rol == "admin":
-        return True
+    # MÉTODOS DE JERARQUÍA DE EMPRESAS
+    # =========================
     
-    elif _self.rol == "gestor" and _self.empresa_id:
-        # Gestor puede editar su empresa y sus clientes
+    @st.cache_data(ttl=300)
+    def get_empresas_con_jerarquia(_self) -> pd.DataFrame:
+        """Obtiene empresas usando la vista v_empresas_jerarquia."""
         try:
-            empresa = _self.supabase.table("empresas").select("id, empresa_matriz_id").eq("id", empresa_id).execute()
-            if not empresa.data:
+            if _self.rol == "admin":
+                # Admin ve todas las empresas con jerarquía completa
+                query = _self.supabase.table("v_empresas_jerarquia").select("*")
+                
+            elif _self.rol == "gestor" and _self.empresa_id:
+                # Gestor ve su empresa y sus clientes
+                query = _self.supabase.table("v_empresas_jerarquia").select("*").or_(
+                    f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
+                )
+            else:
+                return pd.DataFrame()
+            
+            res = query.order("nivel_jerarquico", "nombre").execute()
+            df = pd.DataFrame(res.data or [])
+            
+            if not df.empty:
+                # Agregar indicadores visuales para la jerarquía
+                df["nombre_display"] = df.apply(lambda row: 
+                    f"{'  └─ ' if row.get('nivel_jerarquico') == 2 else ''}{row['nombre']}", 
+                    axis=1
+                )
+                
+                # Agregar contexto tipo empresa
+                df["tipo_display"] = df["tipo_empresa"].map({
+                    "CLIENTE_SAAS": "Cliente SaaS",
+                    "GESTORA": "Gestora",
+                    "CLIENTE_GESTOR": "Cliente de Gestora"
+                })
+            
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar empresas con jerarquía", e)
+    
+    def get_empresas_gestoras_disponibles(_self) -> Dict[str, str]:
+        """Obtiene empresas que pueden ser gestoras (tipo GESTORA)."""
+        try:
+            if _self.rol != "admin":
+                return {}
+                
+            res = _self.supabase.table("empresas").select("id, nombre").eq(
+                "tipo_empresa", "GESTORA"
+            ).order("nombre").execute()
+            
+            return {emp["nombre"]: emp["id"] for emp in (res.data or [])}
+        except Exception as e:
+            st.error(f"Error al cargar empresas gestoras: {e}")
+            return {}
+    
+    def get_empresas_clientes_gestor(_self, gestor_id: str = None) -> pd.DataFrame:
+        """Obtiene empresas clientes de un gestor específico."""
+        try:
+            if not gestor_id:
+                gestor_id = _self.empresa_id
+                
+            if not gestor_id:
+                return pd.DataFrame()
+            
+            res = _self.supabase.table("empresas").select("*").eq(
+                "empresa_matriz_id", gestor_id
+            ).order("nombre").execute()
+            
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar empresas clientes", e)
+    
+    def get_empresas_para_asignacion(_self) -> Dict[str, str]:
+        """Obtiene empresas que pueden asignarse a grupos/participantes según rol."""
+        try:
+            if _self.rol == "admin":
+                # Admin puede asignar cualquier empresa
+                res = _self.supabase.table("empresas").select("id, nombre").order("nombre").execute()
+                
+            elif _self.rol == "gestor" and _self.empresa_id:
+                # Gestor puede asignar su empresa y sus clientes
+                res = _self.supabase.table("empresas").select("id, nombre").or_(
+                    f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
+                ).order("nombre").execute()
+            else:
+                return {}
+            
+            if res.data:
+                return {emp["nombre"]: emp["id"] for emp in res.data}
+            return {}
+            
+        except Exception as e:
+            st.error(f"Error al cargar empresas para asignación: {e}")
+            return {}
+    
+    def create_empresa_con_jerarquia(_self, datos_empresa: Dict[str, Any]) -> bool:
+        """Crea empresa respetando jerarquía y roles."""
+        try:
+            # Preparar datos según rol
+            if _self.rol == "admin":
+                # Admin puede especificar tipo y matriz
+                tipo = datos_empresa.get("tipo_empresa", "CLIENTE_SAAS")
+                
+                # Validar coherencia según tipo
+                if tipo == "CLIENTE_GESTOR":
+                    if not datos_empresa.get("empresa_matriz_id"):
+                        st.error("Empresa matriz requerida para CLIENTE_GESTOR")
+                        return False
+                    # El trigger se encarga de establecer nivel_jerarquico = 2
+                        
+                elif tipo == "GESTORA":
+                    # Gestora debe ser nivel 1 sin matriz
+                    datos_empresa["nivel_jerarquico"] = 1
+                    datos_empresa["empresa_matriz_id"] = None
+                    
+                elif tipo == "CLIENTE_SAAS":
+                    # Cliente SaaS es nivel 1 sin matriz
+                    datos_empresa["nivel_jerarquico"] = 1
+                    datos_empresa["empresa_matriz_id"] = None
+                    
+            elif _self.rol == "gestor" and _self.empresa_id:
+                # Gestor solo puede crear CLIENTE_GESTOR bajo su empresa
+                datos_empresa.update({
+                    "empresa_matriz_id": _self.empresa_id,
+                    "tipo_empresa": "CLIENTE_GESTOR"
+                    # nivel_jerarquico lo establece el trigger automáticamente
+                })
+            else:
+                st.error("Sin permisos para crear empresas")
                 return False
             
-            empresa_data = empresa.data[0]
+            # Validaciones básicas
+            if not datos_empresa.get("nombre") or not datos_empresa.get("cif"):
+                st.error("Nombre y CIF son obligatorios")
+                return False
             
-            # Puede editar su propia empresa
-            if empresa_data["id"] == _self.empresa_id:
+            if not validar_dni_cif(datos_empresa["cif"]):
+                st.error("CIF inválido")
+                return False
+            
+            # Verificar CIF único
+            if not _self._validar_cif_unico_jerarquico(datos_empresa["cif"]):
+                st.error("Ya existe una empresa con ese CIF")
+                return False
+            
+            # Agregar metadatos
+            datos_empresa.update({
+                "creado_por_usuario_id": _self.user_id,
+                "fecha_creacion": datetime.utcnow().isoformat()
+            })
+            
+            # Crear empresa (triggers automáticos manejan jerarquía)
+            result = _self.supabase.table("empresas").insert(datos_empresa).execute()
+            
+            if result.data:
+                # Limpiar caches
+                _self.get_empresas_con_jerarquia.clear()
+                _self.get_empresas_con_modulos.clear()
+                _self.get_empresas_para_asignacion.clear()
                 return True
-            
-            # Puede editar sus empresas clientes
-            if empresa_data.get("empresa_matriz_id") == _self.empresa_id:
-                return True
-            
-            return False
-        except:
+            else:
+                st.error("Error al crear la empresa")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error al crear empresa: {e}")
             return False
     
-    return False
-
-def delete_empresa_con_jerarquia(_self, empresa_id: str) -> bool:
-    """Elimina empresa respetando jerarquía."""
-    try:
-        # Verificar permisos
-        if not _self._puede_editar_empresa_jerarquica(empresa_id):
-            st.error("No tienes permisos para eliminar esta empresa")
-            return False
-        
-        # Verificar dependencias - empresas hijas
-        hijas = _self.supabase.table("empresas").select("id").eq("empresa_matriz_id", empresa_id).execute()
-        if hijas.data:
-            st.error("No se puede eliminar. La empresa tiene empresas clientes asociadas.")
-            return False
-        
-        # Verificar dependencias - participantes
-        participantes = _self.supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute()
-        if participantes.data:
-            st.error("No se puede eliminar. La empresa tiene participantes asociados.")
-            return False
-        
-        # Verificar dependencias - grupos
-        grupos = _self.supabase.table("grupos").select("id").eq("empresa_id", empresa_id).execute()
-        if grupos.data:
-            st.error("No se puede eliminar. La empresa tiene grupos asociados.")
-            return False
-        
-        # Eliminar empresa (CASCADE eliminará relaciones automáticamente)
-        res = _self.supabase.table("empresas").delete().eq("id", empresa_id).execute()
-        
-        if res.data:
-            # Limpiar caches
-            _self.get_empresas_con_jerarquia.clear()
-            _self.get_empresas_con_modulos.clear()
-            _self.get_empresas_para_asignacion.clear()
-            return True
-        return False
-        
-    except Exception as e:
-        st.error(f"Error al eliminar empresa: {e}")
-        return False
-
-def get_estadisticas_jerarquia(_self) -> Dict[str, Any]:
-    """Obtiene estadísticas usando la función SQL."""
-    try:
-        if _self.rol == "admin":
-            # Admin ve estadísticas globales
-            res = _self.supabase.rpc('get_estadisticas_jerarquia').execute()
-            if res.data:
-                return res.data
-            return {}
-        elif _self.rol == "gestor" and _self.empresa_id:
-            # Gestor ve sus estadísticas
-            clientes = _self.get_empresas_clientes_gestor()
-            empresa_info = _self.supabase.table("empresas").select("nombre").eq("id", _self.empresa_id).execute()
+    def _validar_cif_unico_jerarquico(_self, cif: str, empresa_id: str = None) -> bool:
+        """Valida CIF único en el ámbito jerárquico apropiado."""
+        try:
+            query = _self.supabase.table("empresas").select("id").eq("cif", cif)
             
-            return {
-                "empresa_gestora": empresa_info.data[0]["nombre"] if empresa_info.data else "",
-                "total_clientes": len(clientes),
-                "tipo_empresa": "GESTORA"
+            if empresa_id:
+                query = query.neq("id", empresa_id)
+            
+            # Para gestores, verificar solo en su ámbito
+            if _self.rol == "gestor" and _self.empresa_id:
+                query = query.or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}")
+            
+            res = query.execute()
+            return len(res.data or []) == 0
+            
+        except Exception as e:
+            st.error(f"Error validando CIF: {e}")
+            return False
+    
+    def update_empresa_con_jerarquia(_self, empresa_id: str, datos_editados: Dict[str, Any]) -> bool:
+        """Actualiza empresa respetando permisos jerárquicos."""
+        try:
+            # Verificar permisos
+            if not _self._puede_editar_empresa_jerarquica(empresa_id):
+                st.error("No tienes permisos para editar esta empresa")
+                return False
+            
+            # Filtrar campos protegidos (los triggers manejan la jerarquía)
+            campos_protegidos = [
+                "id", "empresa_matriz_id", "tipo_empresa", "nivel_jerarquico",
+                "creado_por_usuario_id", "fecha_creacion"
+            ]
+            
+            datos_filtrados = {
+                k: v for k, v in datos_editados.items() 
+                if k not in campos_protegidos
             }
-        return {}
-    except Exception as e:
-        st.error(f"Error al obtener estadísticas: {e}")
-        return {}
-
-def get_arbol_empresas(_self, empresa_raiz_id: str = None) -> pd.DataFrame:
-    """Obtiene árbol jerárquico usando función SQL."""
-    try:
-        if empresa_raiz_id:
-            res = _self.supabase.rpc('get_arbol_empresas', {'empresa_raiz_id': empresa_raiz_id}).execute()
-        else:
-            res = _self.supabase.rpc('get_arbol_empresas').execute()
+            
+            # Solo admin puede cambiar tipo_empresa
+            if _self.rol == "admin" and "tipo_empresa" in datos_editados:
+                datos_filtrados["tipo_empresa"] = datos_editados["tipo_empresa"]
+                
+                # Si cambia a GESTORA, limpiar matriz
+                if datos_editados["tipo_empresa"] == "GESTORA":
+                    datos_filtrados["empresa_matriz_id"] = None
+            
+            # Validar CIF si se está cambiando
+            if "cif" in datos_filtrados:
+                if not _self._validar_cif_unico_jerarquico(datos_filtrados["cif"], empresa_id):
+                    st.error("Ya existe otra empresa con ese CIF")
+                    return False
+            
+            res = _self.supabase.table("empresas").update(datos_filtrados).eq("id", empresa_id).execute()
+            
+            if res.data:
+                # Limpiar caches
+                _self.get_empresas_con_jerarquia.clear()
+                _self.get_empresas_con_modulos.clear()
+                _self.get_empresas_para_asignacion.clear()
+                return True
+            return False
+            
+        except Exception as e:
+            st.error(f"Error al actualizar empresa: {e}")
+            return False
+    
+    def _puede_editar_empresa_jerarquica(_self, empresa_id: str) -> bool:
+        """Verifica permisos para editar empresa según jerarquía."""
+        if _self.rol == "admin":
+            return True
         
-        return pd.DataFrame(res.data or [])
-    except Exception as e:
-        return _self._handle_query_error("cargar árbol de empresas", e)
+        elif _self.rol == "gestor" and _self.empresa_id:
+            # Gestor puede editar su empresa y sus clientes
+            try:
+                empresa = _self.supabase.table("empresas").select("id, empresa_matriz_id").eq("id", empresa_id).execute()
+                if not empresa.data:
+                    return False
+                
+                empresa_data = empresa.data[0]
+                
+                # Puede editar su propia empresa
+                if empresa_data["id"] == _self.empresa_id:
+                    return True
+                
+                # Puede editar sus empresas clientes
+                if empresa_data.get("empresa_matriz_id") == _self.empresa_id:
+                    return True
+                
+                return False
+            except:
+                return False
+        
+        return False
+    
+    def delete_empresa_con_jerarquia(_self, empresa_id: str) -> bool:
+        """Elimina empresa respetando jerarquía."""
+        try:
+            # Verificar permisos
+            if not _self._puede_editar_empresa_jerarquica(empresa_id):
+                st.error("No tienes permisos para eliminar esta empresa")
+                return False
+            
+            # Verificar dependencias - empresas hijas
+            hijas = _self.supabase.table("empresas").select("id").eq("empresa_matriz_id", empresa_id).execute()
+            if hijas.data:
+                st.error("No se puede eliminar. La empresa tiene empresas clientes asociadas.")
+                return False
+            
+            # Verificar dependencias - participantes
+            participantes = _self.supabase.table("participantes").select("id").eq("empresa_id", empresa_id).execute()
+            if participantes.data:
+                st.error("No se puede eliminar. La empresa tiene participantes asociados.")
+                return False
+            
+            # Verificar dependencias - grupos
+            grupos = _self.supabase.table("grupos").select("id").eq("empresa_id", empresa_id).execute()
+            if grupos.data:
+                st.error("No se puede eliminar. La empresa tiene grupos asociados.")
+                return False
+            
+            # Eliminar empresa (CASCADE eliminará relaciones automáticamente)
+            res = _self.supabase.table("empresas").delete().eq("id", empresa_id).execute()
+            
+            if res.data:
+                # Limpiar caches
+                _self.get_empresas_con_jerarquia.clear()
+                _self.get_empresas_con_modulos.clear()
+                _self.get_empresas_para_asignacion.clear()
+                return True
+            return False
+            
+        except Exception as e:
+            st.error(f"Error al eliminar empresa: {e}")
+            return False
+    
+    def get_estadisticas_jerarquia(_self) -> Dict[str, Any]:
+        """Obtiene estadísticas usando la función SQL."""
+        try:
+            if _self.rol == "admin":
+                # Admin ve estadísticas globales
+                res = _self.supabase.rpc('get_estadisticas_jerarquia').execute()
+                if res.data:
+                    return res.data
+                return {}
+            elif _self.rol == "gestor" and _self.empresa_id:
+                # Gestor ve sus estadísticas
+                clientes = _self.get_empresas_clientes_gestor()
+                empresa_info = _self.supabase.table("empresas").select("nombre").eq("id", _self.empresa_id).execute()
+                
+                return {
+                    "empresa_gestora": empresa_info.data[0]["nombre"] if empresa_info.data else "",
+                    "total_clientes": len(clientes),
+                    "tipo_empresa": "GESTORA"
+                }
+            return {}
+        except Exception as e:
+            st.error(f"Error al obtener estadísticas: {e}")
+            return {}
+    
+    def get_arbol_empresas(_self, empresa_raiz_id: str = None) -> pd.DataFrame:
+        """Obtiene árbol jerárquico usando función SQL."""
+        try:
+            if empresa_raiz_id:
+                res = _self.supabase.rpc('get_arbol_empresas', {'empresa_raiz_id': empresa_raiz_id}).execute()
+            else:
+                res = _self.supabase.rpc('get_arbol_empresas').execute()
+            
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar árbol de empresas", e)
     # =========================
     # OPERACIONES CRUD PARA EMPRESAS
     # =========================
