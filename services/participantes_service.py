@@ -70,7 +70,99 @@ class ParticipantesService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
-        
+    @st.cache_data(ttl=300)
+    def get_participantes_con_empresa_jerarquica(_self) -> pd.DataFrame:
+        """Obtiene participantes con información jerárquica de empresa."""
+        try:
+            query = _self.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, 
+                fecha_nacimiento, sexo, created_at, grupo_id, empresa_id,
+                grupo:grupos(id, codigo_grupo),
+                empresa:empresas!participantes_empresa_id_fkey(
+                    id, nombre, tipo_empresa, nivel_jerarquico,
+                    empresa_matriz:empresas!empresa_matriz_id(nombre)
+                )
+            """)
+            
+            # Aplicar filtro jerárquico
+            if _self.rol == "gestor":
+                # Gestor ve participantes de su empresa y empresas clientes
+                empresas_permitidas = _self._get_empresas_permitidas_gestor()
+                if empresas_permitidas:
+                    query = query.in_("empresa_id", empresas_permitidas)
+                else:
+                    return pd.DataFrame()
+            
+            res = query.order("created_at", desc=True).execute()
+            df = pd.DataFrame(res.data or [])
+            
+            if not df.empty:
+                # Procesar información de empresa
+                if "empresa" in df.columns:
+                    df["empresa_nombre"] = df["empresa"].apply(
+                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                    )
+                    df["empresa_tipo"] = df["empresa"].apply(
+                        lambda x: x.get("tipo_empresa") if isinstance(x, dict) else ""
+                    )
+                    df["empresa_matriz_nombre"] = df["empresa"].apply(
+                        lambda x: x.get("empresa_matriz", {}).get("nombre") if isinstance(x, dict) else ""
+                    )
+                
+                # Procesar información de grupo
+                if "grupo" in df.columns:
+                    df["grupo_codigo"] = df["grupo"].apply(
+                        lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
+                    )
+            
+            return df
+        except Exception as e:
+            return _self._handle_query_error("cargar participantes con jerarquía", e)
+    
+    def _get_empresas_permitidas_gestor(_self) -> List[str]:
+        """Obtiene IDs de empresas que puede gestionar el gestor."""
+        try:
+            # Incluir empresa propia + empresas clientes
+            empresas = [_self.empresa_id] if _self.empresa_id else []
+            
+            clientes_res = _self.supabase.table("empresas").select("id").eq(
+                "empresa_matriz_id", _self.empresa_id
+            ).execute()
+            
+            if clientes_res.data:
+                empresas.extend([cliente["id"] for cliente in clientes_res.data])
+            
+            return empresas
+        except Exception as e:
+            st.error(f"Error obteniendo empresas permitidas: {e}")
+            return []
+    
+    def get_empresas_para_participantes(_self) -> Dict[str, str]:
+        """Obtiene empresas donde se pueden crear participantes."""
+        try:
+            if _self.rol == "admin":
+                # Admin puede asignar a cualquier empresa
+                res = _self.supabase.table("empresas").select("id, nombre").execute()
+                
+            elif _self.rol == "gestor":
+                # Gestor puede asignar a su empresa y clientes
+                empresas_ids = _self._get_empresas_permitidas_gestor()
+                if empresas_ids:
+                    res = _self.supabase.table("empresas").select("id, nombre").in_(
+                        "id", empresas_ids
+                    ).execute()
+                else:
+                    return {}
+            else:
+                return {}
+            
+            if res.data:
+                return {emp["nombre"]: emp["id"] for emp in res.data}
+            return {}
+            
+        except Exception as e:
+            st.error(f"Error al cargar empresas para participantes: {e}")
+            return {}    
     # =========================
     # OPERACIONES CRUD
     # =========================
