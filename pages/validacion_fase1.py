@@ -382,7 +382,11 @@ if __name__ == "__main__":
         stats = supabase.rpc('get_estadisticas_jerarquia').execute()
         if stats.data:
             st.success("✅ Función get_estadisticas_jerarquia disponible")
-            st.json(stats.data[0] if isinstance(stats.data, list) else stats.data)
+            # La función ahora devuelve JSON directo
+            if isinstance(stats.data, dict):
+                st.json(stats.data)
+            else:
+                st.write("Estadísticas:", stats.data)
             resultados.append("✅ Funciones SQL OK")
         else:
             st.warning("⚠️ Función get_estadisticas_jerarquia sin datos")
