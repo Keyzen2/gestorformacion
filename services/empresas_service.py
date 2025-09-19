@@ -376,19 +376,24 @@ class EmpresasService:
                 try:
                     response = self.supabase.rpc('get_estadisticas_jerarquia').execute()
                     if response.data:
-                        return response.data[0] if isinstance(response.data, list) else response.data
-                except:
-                    # Fallback si la función no existe
-                    pass
+                        # La función ahora devuelve JSON, no una tabla
+                        return response.data if isinstance(response.data, dict) else {}
+                except Exception as sql_error:
+                    # Fallback si la función SQL no funciona
+                    st.warning(f"Función SQL no disponible: {sql_error}")
                 
-                # Estadísticas básicas
-                empresas = self.supabase.table("empresas").select("*", count="exact").execute()
-                return {
-                    "total_empresas": empresas.count or 0,
-                    "nuevas_mes": 0,  # Calcular según fecha_creacion
-                    "con_formacion": 0,  # Calcular según formacion_activo
-                    "porcentaje_activas": 0
-                }
+                # Estadísticas básicas como fallback
+                try:
+                    empresas = self.supabase.table("empresas").select("tipo_empresa", count="exact").execute()
+                    return {
+                        "total_empresas": empresas.count or 0,
+                        "nuevas_mes": 0,
+                        "con_formacion": 0,
+                        "porcentaje_activas": 0
+                    }
+                except Exception as basic_error:
+                    st.error(f"Error cargando estadísticas básicas: {basic_error}")
+                    return {}
             
             elif self.rol == "gestor":
                 # Gestor ve estadísticas de sus clientes
