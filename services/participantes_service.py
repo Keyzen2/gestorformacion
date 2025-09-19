@@ -70,6 +70,7 @@ class ParticipantesService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
+            
     @st.cache_data(ttl=300)
     def get_participantes_con_empresa_jerarquica(_self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica de empresa."""
