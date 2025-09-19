@@ -188,7 +188,7 @@ def gestionar_cuentas_cotizacion(cuentas_existentes, key_prefix=""):
     
     return cuentas_actuales
 
-def mostrar_formulario_empresa_interactivo(empresa_data, empresas_service, session_state, es_creacion=False):
+def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False):
     """Formulario FUNDAE interactivo con validaciones en tiempo real."""
     
     if es_creacion:
