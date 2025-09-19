@@ -314,6 +314,37 @@ class GruposService:
             if self.create_participante(data):
                 count += 1
         return count
+
+    @st.cache_data(ttl=3600)
+    def get_provincias(_self) -> list:
+        """Devuelve listado de provincias ordenadas alfabéticamente."""
+        try:
+            res = _self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"Error al cargar provincias: {e}")
+            return []
+
+    @st.cache_data(ttl=3600) 
+    def get_localidades_por_provincia(_self, provincia_id: int) -> list:
+        """Devuelve listado de localidades de una provincia."""
+        try:
+            res = _self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"Error al cargar localidades: {e}")
+            return []
+
+    def get_accion_modalidad(self, accion_id: str) -> str:
+        """Devuelve la modalidad de una acción formativa concreta."""
+        try:
+            res = self.supabase.table("acciones_formativas").select("modalidad").eq("id", accion_id).execute()
+            if res.data:
+                return res.data[0].get("modalidad", "")
+            return ""
+        except Exception as e:
+            st.error(f"Error al obtener modalidad de acción formativa: {e}")
+            return ""
     # =========================
     # ACCIONES FORMATIVAS
     # =========================
