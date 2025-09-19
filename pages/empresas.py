@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from utils import validar_dni_cif, export_csv, format_percentage, get_ajustes_app
-from services.empresas_service_jerarquia import get_empresas_service
+from services.empresas_service import get_empresas_service  # ✅ Importación corregida
 from components.listado_con_ficha import listado_con_ficha
 
 # Configuración de jerarquía
