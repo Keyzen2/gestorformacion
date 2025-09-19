@@ -1,9 +1,3 @@
-"""
-Script de validación para FASE 1: Empresas con Jerarquía
-Archivo: pages/validacion_fase1.py
-Acceso: tu-url.com/validacion_fase1 o desde menú admin
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime
