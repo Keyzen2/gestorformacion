@@ -366,7 +366,34 @@ class EmpresasService:
     def validar_cif_unico(self, cif: str, empresa_id: Optional[str] = None) -> bool:
         """Valida que el CIF sea único en el ámbito correspondiente."""
         return self._validar_cif_unico_jerarquico(cif, empresa_id)
+
+    # === ALIASES DE COMPATIBILIDAD (para no romper páginas antiguas) ===
+    @st.cache_data(ttl=300)
+    def get_empresas_completas(_self) -> pd.DataFrame:
+        """
+        Alias de compatibilidad.
+        Devuelve lo mismo que get_empresas_con_jerarquia().
+        """
+        return _self.get_empresas_con_jerarquia()
     
+    @st.cache_data(ttl=300)
+    def get_empresas(_self) -> pd.DataFrame:
+        """
+        Alias fino para listados simples.
+        Usa la misma fuente jerárquica.
+        """
+        return _self.get_empresas_con_jerarquia()
+    
+    def get_empresas_para_gestor(_self) -> Dict[str, str]:
+        """
+        Alias de compatibilidad para páginas que aún esperan este nombre.
+        Devuelve {nombre -> id} de la empresa del gestor + sus clientes.
+        """
+        df = _self.get_empresas_con_jerarquia()
+        if _self.rol == "gestor" and _self.empresa_id and not df.empty:
+            df = df[(df["id"] == _self.empresa_id) | (df["empresa_matriz_id"] == _self.empresa_id)]
+        return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
+
     # =========================
     # MÉTODOS DE ESTADÍSTICAS
     # =========================
