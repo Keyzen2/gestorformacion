@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from services.empresas_service_jerarquia import get_empresas_service
+from services.empresas_service import get_empresas_service  # ✅ Importación corregida
 
 def test_fase1_empresas(supabase, session_state):
     """Ejecuta pruebas de validación para la FASE 1."""
