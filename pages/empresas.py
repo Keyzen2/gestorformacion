@@ -108,7 +108,8 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         st.subheader(f"✏️ Editar {empresa_data['nombre']}")
         datos = empresa_data.copy()
     
-    with st.form("form_empresa", clear_on_submit=es_creacion):
+    form_key = f"form_empresa_{'crear' if es_creacion else 'editar'}_{datos.get('id', 'nuevo')}"
+    with st.form(form_key, clear_on_submit=es_creacion):
         # Campos básicos en dos columnas
         col1, col2 = st.columns(2)
         
