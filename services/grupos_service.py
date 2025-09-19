@@ -458,7 +458,61 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al eliminar grupo: {e}")
             return False
+            
+    def get_empresas_para_grupos(_self) -> Dict[str, str]:
+        """Obtiene empresas que pueden asignarse a grupos según jerarquía."""
+        try:
+            if _self.rol == "admin":
+                # Admin ve todas las empresas
+                res = _self.supabase.table("empresas").select("id, nombre").execute()
+                
+            elif _self.rol == "gestor":
+                # Gestor ve su empresa y sus clientes
+                res = _self.supabase.table("empresas").select("id, nombre").or_(
+                    f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
+                ).execute()
+            else:
+                return {}
+            
+            if res.data:
+                return {emp["nombre"]: emp["id"] for emp in res.data}
+            return {}
+            
+        except Exception as e:
+            st.error(f"Error al cargar empresas para grupos: {e}")
+            return {}
     
+    def create_grupo_con_jerarquia(_self, datos_grupo: Dict[str, Any]) -> Tuple[bool, str]:
+        """Crea grupo respetando jerarquía de empresas."""
+        try:
+            # Asignar empresa propietaria según rol
+            if _self.rol == "gestor":
+                datos_grupo["empresa_id"] = _self.empresa_id
+            elif _self.rol == "admin":
+                # Admin debe especificar empresa
+                if not datos_grupo.get("empresa_id"):
+                    st.error("Debe especificar empresa propietaria del grupo")
+                    return False, ""
+            
+            # Crear grupo
+            datos_grupo["created_at"] = datetime.utcnow().isoformat()
+            res = _self.supabase.table("grupos").insert(datos_grupo).execute()
+            
+            if not res.data:
+                return False, ""
+            
+            grupo_id = res.data[0]["id"]
+            
+            # Auto-asignar empresa propietaria como participante
+            _self.create_empresa_grupo(grupo_id, datos_grupo["empresa_id"])
+            
+            _self.limpiar_cache_grupos()
+            return True, grupo_id
+            
+        except Exception as e:
+            st.error(f"Error al crear grupo: {e}")
+            return False, ""
+
     # =========================
     # TUTORES
     # =========================
