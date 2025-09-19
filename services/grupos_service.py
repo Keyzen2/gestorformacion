@@ -378,7 +378,51 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al eliminar acción formativa: {e}")
             return False
-    
+    # =========================
+    # COSTES FUNDAE DE GRUPO
+    # =========================
+    @st.cache_data(ttl=300)
+    def get_grupo_costes(_self, grupo_id: str) -> pd.DataFrame:
+        """Obtiene los costes asociados a un grupo."""
+        try:
+            res = _self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar costes de grupo", e)
+
+    def create_grupo_coste(_self, grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
+        """Crea un coste asociado a un grupo."""
+        try:
+            datos_coste["grupo_id"] = grupo_id
+            datos_coste["created_at"] = datetime.utcnow().isoformat()
+            _self.supabase.table("grupo_costes").insert(datos_coste).execute()
+            _self.get_grupo_costes.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear coste de grupo: {e}")
+            return False
+
+    def update_grupo_coste(_self, coste_id: str, datos_editados: Dict[str, Any]) -> bool:
+        """Actualiza un coste de grupo existente."""
+        try:
+            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+            _self.supabase.table("grupo_costes").update(datos_editados).eq("id", coste_id).execute()
+            _self.get_grupo_costes.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar coste de grupo: {e}")
+            return False
+
+    def delete_grupo_coste(_self, coste_id: str) -> bool:
+        """Elimina un coste de grupo."""
+        try:
+            _self.supabase.table("grupo_costes").delete().eq("id", coste_id).execute()
+            _self.get_grupo_costes.clear()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar coste de grupo: {e}")
+            return False
+
     # =========================
     # GRUPOS - OPERACIONES CRUD
     # =========================
