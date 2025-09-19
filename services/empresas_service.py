@@ -53,7 +53,7 @@ class EmpresasService:
             else:
                 return pd.DataFrame()
             
-            res = query.order("nivel_jerarquico", "nombre").execute()
+            res = query.order("nivel_jerarquico").order("nombre").execute()
             df = pd.DataFrame(res.data or [])
             
             if not df.empty:
