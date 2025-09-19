@@ -34,8 +34,10 @@ class EmpresasService:
                 query = _self.supabase.table("empresas").select("""
                     id, nombre, cif, direccion, telefono, email, ciudad, provincia,
                     codigo_postal, tipo_empresa, nivel_jerarquico, empresa_matriz_id,
-                    fecha_creacion, formacion_activo, iso_activo, rgpd_activo, 
-                    crm_activo, docu_avanzada_activo,
+                    fecha_creacion, formacion_activo, formacion_inicio, formacion_fin,
+                    iso_activo, iso_inicio, iso_fin,
+                    rgpd_activo, rgpd_inicio, rgpd_fin,
+                    docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
                 """)
                 
@@ -44,11 +46,12 @@ class EmpresasService:
                 query = _self.supabase.table("empresas").select("""
                     id, nombre, cif, direccion, telefono, email, ciudad, provincia,
                     codigo_postal, tipo_empresa, nivel_jerarquico, empresa_matriz_id,
-                    fecha_creacion, formacion_activo, iso_activo, rgpd_activo, 
-                    crm_activo, docu_avanzada_activo,
+                    fecha_creacion, formacion_activo, formacion_inicio, formacion_fin,
+                    iso_activo, iso_inicio, iso_fin,
+                    rgpd_activo, rgpd_inicio, rgpd_fin,
+                    docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
-                """).or_(
-                    f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
+                """).or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
                 )
             else:
                 return pd.DataFrame()
