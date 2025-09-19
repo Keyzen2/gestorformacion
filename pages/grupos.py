@@ -1376,52 +1376,49 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
 # =========================
 def main(supabase, session_state):
     """Página principal de gestión de grupos con jerarquía."""
-    st.markdown("## 👨‍🏫 Grupos de Formación")
-    st.caption("Gestión de grupos, jerarquía de empresas y FUNDAE")
-
-    grupos_service = get_grupos_service(supabase, session_state)
-
-    # Cargar grupos
     try:
+        st.markdown("## 👨‍🏫 Grupos de Formación")
+        st.caption("Gestión de grupos, jerarquía de empresas y FUNDAE")
+
+        grupos_service = get_grupos_service(supabase, session_state)
+
+        # Cargar grupos
         df_grupos = grupos_service.get_grupos_completos()
+
+        mostrar_metricas_grupos(df_grupos, session_state)
+        pendientes = get_grupos_pendientes_finalizacion(df_grupos)
+        mostrar_avisos_grupos(pendientes)
+
+        st.divider()
+
+        if not df_grupos.empty:
+            st.markdown("### 📋 Listado de Grupos")
+            evento = st.dataframe(
+                df_grupos,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
+            if evento.selection.rows:
+                st.session_state.grupo_seleccionado = df_grupos.iloc[evento.selection.rows[0]].to_dict()
+        else:
+            st.info("No hay grupos disponibles")
+
+        if st.button("➕ Crear Nuevo Grupo", type="primary"):
+            st.session_state.grupo_seleccionado = {"_nuevo": True}
+            st.rerun()
+
+        if st.session_state.get("grupo_seleccionado"):
+            grupo_sel = st.session_state.grupo_seleccionado
+            es_creacion = grupo_sel.get("_nuevo", False)
+            grupo_id = mostrar_formulario_grupo(
+                grupos_service,
+                grupo_seleccionado=None if es_creacion else grupo_sel,
+                es_creacion=es_creacion
+            )
+            if grupo_id and not es_creacion:
+                mostrar_secciones_adicionales(grupos_service, grupo_id)
+
     except Exception as e:
-        st.error(f"❌ Error al cargar grupos: {e}")
-        return
-
-    mostrar_metricas_grupos(df_grupos, session_state)
-    pendientes = get_grupos_pendientes_finalizacion(df_grupos)
-    mostrar_avisos_grupos(pendientes)
-
-    st.divider()
-
-    if not df_grupos.empty:
-        st.markdown("### 📋 Listado de Grupos")
-        evento = st.dataframe(
-            df_grupos,
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row"
-        )
-        if evento.selection.rows:
-            st.session_state.grupo_seleccionado = df_grupos.iloc[evento.selection.rows[0]].to_dict()
-    else:
-        st.info("No hay grupos disponibles")
-
-    if st.button("➕ Crear Nuevo Grupo", type="primary"):
-        st.session_state.grupo_seleccionado = {"_nuevo": True}
-        st.rerun()
-
-    if st.session_state.get("grupo_seleccionado"):
-        grupo_sel = st.session_state.grupo_seleccionado
-        es_creacion = grupo_sel.get("_nuevo", False)
-        grupo_id = mostrar_formulario_grupo(
-            grupos_service,
-            grupo_seleccionado=None if es_creacion else grupo_sel,
-            es_creacion=es_creacion
-        )
-        if grupo_id and not es_creacion:
-            mostrar_secciones_adicionales(grupos_service, grupo_id)
-            
-except Exception as e:
         st.error(f"❌ Error inesperado en la página de grupos: {e}")
