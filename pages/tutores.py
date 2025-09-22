@@ -1,392 +1,406 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from services.grupos_service import GruposService
 from typing import Optional, List, Dict, Any
-from utils import validar_dni_cif, safe_int_conversion
 import uuid
 
+# Servicios
+from services.grupos_service import GruposService
+from services.data_service import DataService
+
+# Utils del proyecto
+from utils import validar_dni_cif, safe_int_conversion
+
 # =========================
-# CARGA INICIAL Y CONFIG
+# ENTRADA PRINCIPAL
 # =========================
 
 def main(supabase, session_state):
-    """Página principal para la gestión de tutores."""
     st.markdown("## 👨‍🏫 Gestión de Tutores")
 
-    grupos_service = GruposService(supabase, session_state)
+    # Instancias de servicios
+    ds = DataService(supabase, session_state)          # Para CRUD de tutores (usa data_service)
+    gs = GruposService(supabase, session_state)        # Para asignaciones con grupos
 
-    # Control de edición (similar a grupos.py)
-    if "tutor_editando" not in st.session_state:
-        st.session_state.tutor_editando = None  # None = listado, "nuevo" = creación, id = edición
+    # Estado de navegación
+    if "tutor_view" not in st.session_state:
+        # "list" | "new" | <tutor_id>
+        st.session_state.tutor_view = "list"
 
-    # Vista principal
-    if st.session_state.tutor_editando is None:
-        mostrar_listado_tutores(grupos_service)
-    elif st.session_state.tutor_editando == "nuevo":
-        mostrar_formulario_tutor(grupos_service, es_creacion=True)
+    if st.session_state.tutor_view == "list":
+        vista_listado_tutores(ds, gs)
+    elif st.session_state.tutor_view == "new":
+        vista_form_tutor(ds, gs, tutor_id=None, es_creacion=True)
     else:
-        tutor_id = st.session_state.tutor_editando
-        tutor = grupos_service.get_tutor_por_id(tutor_id)
-        if tutor:
-            mostrar_formulario_tutor(grupos_service, tutor, es_creacion=False)
-        else:
-            st.error("❌ No se encontró el tutor seleccionado")
-            st.session_state.tutor_editando = None
+        # Edición
+        vista_form_tutor(ds, gs, tutor_id=st.session_state.tutor_view, es_creacion=False)
+
 # =========================
-# LISTADO DE TUTORES
+# LISTADO + FILTROS + CSV
 # =========================
 
-def mostrar_listado_tutores(grupos_service: GruposService):
-    """Muestra el listado de tutores en tabla editable."""
-
+def vista_listado_tutores(ds: DataService, gs: GruposService):
     st.markdown("### 📋 Listado de Tutores")
 
+    # Carga
     try:
-        df = grupos_service.get_tutores()
+        df = ds.get_tutores_completos()
     except Exception as e:
-        st.error(f"❌ Error en cargar tutores: {e}")
+        st.error(f"❌ Error al cargar tutores: {e}")
         return
 
-    if df.empty:
+    # Si no hay datos
+    if df is None or df.empty:
         st.info("ℹ️ No hay tutores registrados todavía.")
-    else:
-        # Mostrar tabla en formato Streamlit 1.49
-        st.dataframe(
-            df[["nombre", "apellidos", "dni", "email", "telefono", "empresa_nombre"]],
-            hide_index=True,
+        st.divider()
+        if st.button("➕ Crear Tutor", type="primary"):
+            st.session_state.tutor_view = "new"
+            st.rerun()
+        return
+
+    # Asegurar columnas base
+    for col in ["id","nombre","apellidos","dni","email","telefono","empresa_nombre","especialidad"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    # ---- Filtros ----
+    with st.container(border=True):
+        st.markdown("#### 🔎 Filtros")
+        c1, c2, c3, c4 = st.columns([2,2,2,1])
+
+        with c1:
+            filtro_texto = st.text_input("Texto (nombre, apellidos, email, DNI)", "")
+
+        with c2:
+            empresas = sorted([e for e in df["empresa_nombre"].dropna().unique().tolist() if e])
+            empresa_sel = st.multiselect("Empresa", empresas)
+
+        with c3:
+            esp_opts = sorted([e for e in df["especialidad"].dropna().unique().tolist() if e])
+            especialidad_sel = st.multiselect("Especialidad", esp_opts)
+
+        with c4:
+            page_size = st.selectbox("Tamaño pág.", [10, 25, 50, 100], index=1)
+
+        # Aplicar filtros en cliente
+        df_filtrado = df.copy()
+
+        if filtro_texto:
+            t = filtro_texto.strip().lower()
+            mask = (
+                df_filtrado["nombre"].astype(str).str.lower().str.contains(t)
+                | df_filtrado["apellidos"].astype(str).str.lower().str.contains(t)
+                | df_filtrado["email"].astype(str).str.lower().str.contains(t)
+                | df_filtrado["dni"].astype(str).str.lower().str.contains(t)
+            )
+            df_filtrado = df_filtrado[mask]
+
+        if empresa_sel:
+            df_filtrado = df_filtrado[df_filtrado["empresa_nombre"].isin(empresa_sel)]
+
+        if especialidad_sel:
+            df_filtrado = df_filtrado[df_filtrado["especialidad"].isin(especialidad_sel)]
+
+        # Paginación sencilla
+        total = len(df_filtrado)
+        total_pages = max(1, (total + page_size - 1) // page_size)
+        c5, c6, c7 = st.columns([1,2,1])
+        with c5:
+            current_page = st.number_input("Página", min_value=1, max_value=total_pages, value=1, step=1)
+        with c7:
+            st.write(f"Total: **{total}**")
+
+        start = (current_page - 1) * page_size
+        end = start + page_size
+        df_page = df_filtrado.iloc[start:end].copy()
+
+    # ---- Tabla ----
+    col_config = {
+        "dni": st.column_config.TextColumn("🪪 DNI", width="small"),
+        "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
+        "apellidos": st.column_config.TextColumn("👤 Apellidos", width="medium"),
+        "email": st.column_config.TextColumn("📧 Email", width="large"),
+        "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
+        "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium"),
+        "especialidad": st.column_config.TextColumn("🎓 Especialidad", width="medium"),
+    }
+
+    st.dataframe(
+        df_page[["dni","nombre","apellidos","email","telefono","empresa_nombre","especialidad"]],
+        use_container_width=True,
+        hide_index=True,
+        column_config=col_config
+    )
+
+    # ---- Exportar CSV ----
+    csv_bytes = df_filtrado[["dni","nombre","apellidos","email","telefono","empresa_nombre","especialidad"]].to_csv(index=False).encode("utf-8")
+    c1, c2, c3, c4 = st.columns([1.5,1.5,1,2])
+    with c1:
+        st.download_button(
+            "⬇️ Exportar CSV (filtrado)",
+            data=csv_bytes,
+            file_name=f"tutores_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
             use_container_width=True
         )
 
-        # Acción: seleccionar tutor
-        tutor_ids = df["id"].tolist()
-        selected = st.selectbox(
-            "✏️ Seleccione un tutor para editar",
-            options=[""] + tutor_ids,
-            format_func=lambda x: "Seleccione..." if x == "" else f"Tutor {x}",
-            key="tutor_select"
-        )
+    # ---- Selección para acciones ----
+    with c2:
+        # Mostramos selector por nombre + apellidos para UX
+        opciones = [""] + (df_page["nombre"].astype(str) + " " + df_page["apellidos"].astype(str)).tolist()
+        elegido = st.selectbox("Seleccionar", opciones, index=0)
+    elegido_id = None
+    if elegido:
+        fila = df_page[(df_page["nombre"].astype(str) + " " + df_page["apellidos"].astype(str)) == elegido]
+        if not fila.empty:
+            elegido_id = fila.iloc[0]["id"]
 
-        if selected:
-            st.session_state.tutor_editando = selected
-            st.rerun()
-
-    # Botones de acción
+    # ---- Botones ----
     st.divider()
-    col1, col2 = st.columns(2)
+    b1, b2, b3, b4 = st.columns([1.3,1.8,1.7,1.2])
 
-    with col1:
-        if st.button("➕ Nuevo Tutor", type="primary", use_container_width=True):
-            st.session_state.tutor_editando = "nuevo"
+    with b1:
+        if st.button("➕ Crear Tutor", type="primary", use_container_width=True):
+            st.session_state.tutor_view = "new"
             st.rerun()
 
-    with col2:
-        if not df.empty:
-            if st.button("🗑️ Eliminar Tutor Seleccionado", use_container_width=True):
-                if selected:
-                    exito = grupos_service.delete_tutor(selected)
-                    if exito:
-                        st.success("✅ Tutor eliminado correctamente")
-                        st.session_state.tutor_editando = None
-                        st.rerun()
-                    else:
-                        st.error("❌ No se pudo eliminar el tutor")
+    with b2:
+        if st.button("✏️ Editar Tutor Seleccionado", use_container_width=True, disabled=not bool(elegido_id)):
+            st.session_state.tutor_view = elegido_id
+            st.rerun()
+
+    with b3:
+        if st.button("👥 Asignar a Grupos", use_container_width=True, disabled=not bool(elegido_id)):
+            with st.expander("Asignación de grupos", expanded=True):
+                gestionar_asignacion_tutores(gs, elegido_id)
+
+    with b4:
+        if st.button("🗑️ Eliminar", use_container_width=True, disabled=not bool(elegido_id)):
+            try:
+                ok = ds.delete_tutor(elegido_id)
+                if ok:
+                    st.success("✅ Tutor eliminado")
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo eliminar el tutor")
+            except Exception as e:
+                st.error(f"❌ Error al eliminar: {e}")
+
 # =========================
-# FORMULARIO DE CREACIÓN/EDICIÓN DE TUTOR
+# FORMULARIO CREAR/EDITAR
 # =========================
 
-def mostrar_formulario_tutor(grupos_service: GruposService, tutor_id: Optional[str] = None):
-    """Formulario para crear o editar un tutor."""
+def vista_form_tutor(ds: DataService, gs: GruposService, tutor_id: Optional[str], es_creacion: bool):
+    if es_creacion:
+        st.markdown("### ➕ Crear Tutor")
+        datos = {}
+    else:
+        st.markdown("### ✏️ Editar Tutor")
+        datos = _cargar_tutor_por_id(ds, tutor_id)
 
-    es_creacion = tutor_id == "nuevo" or tutor_id is None
-    datos_tutor = {}
-
-    if not es_creacion:
-        try:
-            datos_tutor = grupos_service.get_tutor_by_id(tutor_id)
-        except Exception as e:
-            st.error(f"❌ Error al cargar tutor: {e}")
+        if not datos:
+            st.error("❌ No se encontró el tutor")
+            st.session_state.tutor_view = "list"
+            st.rerun()
             return
 
-    # Título
-    if es_creacion:
-        st.markdown("### ➕ Crear Nuevo Tutor")
-    else:
-        nombre = datos_tutor.get("nombre", "")
-        apellidos = datos_tutor.get("apellidos", "")
-        st.markdown(f"### ✏️ Editar Tutor: {nombre} {apellidos}")
-
-    # Formulario
     with st.form(f"form_tutor_{tutor_id or 'nuevo'}", clear_on_submit=es_creacion):
-        col1, col2 = st.columns(2)
+        c1, c2 = st.columns(2)
+        with c1:
+            nombre = st.text_input("👤 Nombre *", value=datos.get("nombre", ""))
+            apellidos = st.text_input("👤 Apellidos *", value=datos.get("apellidos", ""))
+            dni = st.text_input("🪪 DNI *", value=datos.get("dni", ""))
+            email = st.text_input("📧 Email *", value=datos.get("email", ""))
 
-        with col1:
-            nombre = st.text_input(
-                "👤 Nombre *",
-                value=datos_tutor.get("nombre", "")
-            )
-            apellidos = st.text_input(
-                "👤 Apellidos *",
-                value=datos_tutor.get("apellidos", "")
-            )
-            dni = st.text_input(
-                "🪪 DNI *",
-                value=datos_tutor.get("dni", "")
-            )
-            email = st.text_input(
-                "📧 Email *",
-                value=datos_tutor.get("email", "")
-            )
-
-        with col2:
-            telefono = st.text_input(
-                "📞 Teléfono",
-                value=datos_tutor.get("telefono", "")
-            )
-            especialidad = st.text_input(
-                "🎓 Especialidad",
-                value=datos_tutor.get("especialidad", "")
-            )
-            experiencia = st.text_area(
-                "💼 Experiencia",
-                value=datos_tutor.get("experiencia", ""),
-                height=80
-            )
-
-            # Subida de currículum (PDF u otro formato)
-            st.markdown("📄 **Currículum del Tutor**")
-            archivo_cv = st.file_uploader(
-                "Subir archivo",
-                type=["pdf", "docx"],
-                key=f"cv_{tutor_id or 'nuevo'}"
-            )
+        with c2:
+            telefono = st.text_input("📞 Teléfono", value=datos.get("telefono", ""))
+            especialidad = st.text_input("🎓 Especialidad", value=datos.get("especialidad", ""))
+            experiencia = st.text_area("💼 Experiencia", value=datos.get("experiencia", ""), height=80)
 
         # Validaciones mínimas
         errores = []
-        if not nombre:
-            errores.append("Nombre requerido")
-        if not apellidos:
-            errores.append("Apellidos requeridos")
-        if not dni:
-            errores.append("DNI requerido")
-        if not email:
-            errores.append("Email requerido")
+        if not nombre: errores.append("Nombre requerido")
+        if not apellidos: errores.append("Apellidos requeridos")
+        if not dni: errores.append("DNI requerido")
+        if not email: errores.append("Email requerido")
 
-        # Botones
         st.divider()
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            submitted = st.form_submit_button(
-                "💾 Guardar Tutor",
+        b1, b2, b3 = st.columns([1.3,1.3,1])
+        with b1:
+            submit = st.form_submit_button(
+                "💾 Guardar",
                 type="primary",
                 use_container_width=True,
                 disabled=len(errores) > 0
             )
-        with col2:
+        with b2:
             cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
+        with b3:
+            volver = st.form_submit_button("⬅️ Volver al listado", use_container_width=True)
 
-        # Procesar
-        if submitted and not errores:
+        if submit and not errores:
             datos_guardar = {
-                "nombre": nombre,
-                "apellidos": apellidos,
-                "dni": dni,
-                "email": email,
-                "telefono": telefono,
-                "especialidad": especialidad,
-                "experiencia": experiencia,
-                "empresa_id": grupos_service.empresa_id
+                "nombre": nombre.strip(),
+                "apellidos": apellidos.strip(),
+                "dni": dni.strip(),
+                "email": email.strip(),
+                "telefono": telefono.strip(),
+                "especialidad": especialidad.strip(),
+                "experiencia": experiencia.strip(),
             }
 
-            # Subir currículum si se seleccionó
-            if archivo_cv:
-                try:
-                    import uuid
-                    extension = archivo_cv.name.split(".")[-1]
-                    cv_path = f"tutores/{grupos_service.empresa_id}/{uuid.uuid4()}.{extension}"
+            # Asignar empresa si es gestor
+            if ds.rol == "gestor" and ds.empresa_id and es_creacion:
+                datos_guardar["empresa_id"] = ds.empresa_id
 
-                    res = grupos_service.supabase.storage.from_("documentos").upload(
-                        cv_path,
-                        archivo_cv,
-                        {"content-type": archivo_cv.type}
-                    )
-
-                    if res.get("error"):
-                        st.error(f"❌ Error al subir CV: {res['error']['message']}")
-                    else:
-                        datos_guardar["curriculum_url"] = cv_path
-                        st.success("📄 Currículum subido correctamente")
-
-                except Exception as e:
-                    st.error(f"❌ Error en subida de CV: {e}")
-
-            # Guardar tutor
             try:
                 if es_creacion:
-                    exito = grupos_service.create_tutor(datos_guardar)
-                    if exito:
+                    ok = ds.create_tutor(datos_guardar)
+                    if ok:
                         st.success("✅ Tutor creado correctamente")
-                        st.session_state.tutor_editando = None
+                        st.session_state.tutor_view = "list"
                         st.rerun()
                 else:
-                    exito = grupos_service.update_tutor(tutor_id, datos_guardar)
-                    if exito:
-                        st.success("✅ Tutor actualizado correctamente")
-                        st.session_state.tutor_editando = None
+                    ok = ds.update_tutor(tutor_id, datos_guardar)
+                    if ok:
+                        st.success("✅ Tutor actualizado")
+                        st.session_state.tutor_view = "list"
                         st.rerun()
             except Exception as e:
-                st.error(f"❌ Error al guardar tutor: {e}")
+                st.error(f"❌ Error al guardar: {e}")
 
-        elif cancelar:
-            st.session_state.tutor_editando = None
+        if cancelar or volver:
+            st.session_state.tutor_view = "list"
             st.rerun()
 
-        # Mostrar CV actual si ya existe
-        if not es_creacion and datos_tutor.get("curriculum_url"):
-            url_cv = datos_tutor["curriculum_url"]
-            st.markdown(f"📎 [Ver CV Actual]({url_cv})")
+    # Bloques adicionales solo en edición
+    if not es_creacion:
+        st.divider()
+        with st.expander("📂 Currículum (CV)", expanded=False):
+            gestionar_curriculum_tutor(ds, tutor_id, datos)
+
+        with st.expander("👥 Asignación a Grupos", expanded=False):
+            gestionar_asignacion_tutores(gs, tutor_id)
+
 # =========================
-# ASIGNACIÓN DE TUTORES A GRUPOS (N:N)
-# =========================
-
-def gestionar_asignacion_tutores(grupos_service: GruposService, tutor_id: str):
-    """Permite asignar un tutor a uno o varios grupos (N:N)."""
-
-    st.markdown("### 👥 Asignar Tutor a Grupos")
-
-    try:
-        # Cargar datos
-        grupos = grupos_service.get_grupos_completos()
-        asignaciones = grupos_service.get_asignaciones_tutor(tutor_id)
-
-        grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos}
-        asignados_ids = [a["grupo_id"] for a in asignaciones]
-
-        # Selector múltiple
-        seleccionados = st.multiselect(
-            "Seleccionar grupos",
-            options=list(grupos_dict.keys()),
-            default=[codigo for codigo, gid in grupos_dict.items() if gid in asignados_ids],
-            help="Seleccione los grupos donde impartirá este tutor"
-        )
-
-        # Botón guardar
-        if st.button("💾 Guardar Asignaciones", type="primary", use_container_width=True):
-            try:
-                nuevos_ids = [grupos_dict[c] for c in seleccionados]
-                exito = grupos_service.update_asignaciones_tutor(tutor_id, nuevos_ids)
-
-                if exito:
-                    st.success("✅ Asignaciones actualizadas correctamente")
-                    st.rerun()
-                else:
-                    st.error("❌ Error al actualizar asignaciones")
-            except Exception as e:
-                st.error(f"❌ Error al guardar asignaciones: {e}")
-
-    except Exception as e:
-        st.error(f"❌ Error al cargar asignaciones: {e}")
-# =========================
-# VISTA PRINCIPAL DE TUTORES
+# CURRÍCULUM (STORAGE)
 # =========================
 
-def mostrar_listado_tutores(grupos_service: GruposService):
-    """Muestra tabla de tutores con opciones de edición y asignación."""
-
-    st.markdown("### 📋 Listado de Tutores")
-
-    try:
-        tutores = grupos_service.get_tutores_completos()
-
-        if tutores.empty:
-            st.info("ℹ️ No hay tutores registrados todavía")
-        else:
-            # Tabla con selección de filas
-            st.dataframe(
-                tutores[["nombre", "apellidos", "dni", "email", "telefono", "empresa_nombre"]],
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # Selección de fila
-            selected_row = st.selectbox(
-                "Selecciona un tutor para editar o gestionar asignaciones:",
-                options=[""] + tutores["nombre"].astype(str).tolist(),
-                index=0
-            )
-
-            if selected_row:
-                tutor = tutores[tutores["nombre"] == selected_row].iloc[0].to_dict()
-
-                col1, col2, col3 = st.columns(3)
-
-                with col1:
-                    if st.button("✏️ Editar", use_container_width=True):
-                        st.session_state.tutor_editando = tutor["id"]
-                        st.rerun()
-
-                with col2:
-                    if st.button("📂 Asignar a Grupos", use_container_width=True):
-                        gestionar_asignacion_tutores(grupos_service, tutor["id"])
-
-                with col3:
-                    if st.button("🗑️ Eliminar", use_container_width=True):
-                        if grupos_service.delete_tutor(tutor["id"]):
-                            st.success("✅ Tutor eliminado correctamente")
-                            st.rerun()
-                        else:
-                            st.error("❌ No se pudo eliminar el tutor")
-
-    except Exception as e:
-        st.error(f"❌ Error al cargar tutores: {e}")
-
-    st.divider()
-
-    # Botón para crear nuevo tutor
-    if st.button("➕ Crear Nuevo Tutor", type="primary", use_container_width=True):
-        st.session_state.tutor_editando = "nuevo"
-        st.rerun()
-# =========================
-# 📂 CURRÍCULUM DEL TUTOR
-# =========================
-def gestionar_curriculum_tutor(grupos_service, tutor: dict):
-    st.markdown("### 📂 Currículum del Tutor")
-
-    empresa_id = tutor.get("empresa_id")
-    tutor_id = tutor.get("id")
-    bucket = "curriculums"  # Nombre del bucket en Supabase
-
-    if not empresa_id or not tutor_id:
-        st.warning("⚠️ No se puede gestionar el CV sin empresa y tutor asociados.")
+def gestionar_curriculum_tutor(ds: DataService, tutor_id: str, tutor_datos: Dict[str, Any]):
+    """Gestión de CV en bucket 'documentos' con ruta empresa/{empresa_id}/tutores/{tutor_id}/cv.pdf"""
+    empresa_id = tutor_datos.get("empresa_id") or ds.empresa_id
+    if not empresa_id:
+        st.warning("⚠️ Este tutor no tiene empresa asociada; no se puede gestionar CV.")
         return
 
-    # Ruta única: tutores/{empresa_id}/{tutor_id}/cv.pdf
-    path = f"tutores/{empresa_id}/{tutor_id}/cv.pdf"
+    bucket = "documentos"
+    # Permitimos PDF por defecto; puedes ampliar si lo necesitas
+    file_key = f"empresa/{empresa_id}/tutores/{tutor_id}/cv.pdf"
 
-    # Ver si ya existe un CV en Supabase
+    # Ver si ya hay CV
     try:
-        public_url = grupos_service.supabase.storage.from_(bucket).get_public_url(path)
-        if public_url:
-            st.success(f"📄 CV actual disponible: [Ver aquí]({public_url})")
-            if st.button("🗑️ Eliminar CV", key=f"delete_cv_{tutor_id}"):
-                grupos_service.supabase.storage.from_(bucket).remove([path])
-                st.success("✅ CV eliminado correctamente")
-                st.rerun()
+        public = ds.supabase.storage.from_(bucket).get_public_url(file_key)
+        if public:
+            st.success(f"CV actual: [Abrir]({public})")
+            if st.button("🗑️ Eliminar CV", key=f"del_cv_{tutor_id}"):
+                try:
+                    ds.supabase.storage.from_(bucket).remove([file_key])
+                    # Limpiamos el campo en BD si lo usas
+                    try:
+                        ds.update_tutor(tutor_id, {"cv_url": None})
+                    except Exception:
+                        pass
+                    st.success("✅ CV eliminado")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error eliminando CV: {e}")
     except Exception:
-        st.info("ℹ️ No hay currículum subido todavía.")
+        st.info("ℹ️ No hay CV subido todavía.")
 
-    # Subir nuevo CV
-    uploaded_file = st.file_uploader(
-        "Subir nuevo currículum (PDF)",
-        type=["pdf"],
-        key=f"upload_cv_{tutor_id}"
-    )
-    if uploaded_file is not None:
+    # Subida
+    up = st.file_uploader("Subir CV (PDF)", type=["pdf"], key=f"up_cv_{tutor_id}")
+    if up is not None:
         try:
-            # Subida directa (reemplaza si ya existe)
-            grupos_service.supabase.storage.from_(bucket).upload(path, uploaded_file.getvalue(), {"upsert": True})
+            # Subida con upsert
+            ds.supabase.storage.from_(bucket).upload(file_key, up.getvalue(), {"content-type": "application/pdf", "upsert": "true"})
+            # Guardar URL en tabla (si usas cv_url)
+            try:
+                public = ds.supabase.storage.from_(bucket).get_public_url(file_key)
+                ds.update_tutor(tutor_id, {"cv_url": public or file_key})
+            except Exception:
+                # Si falla, al menos guardamos la ruta
+                ds.update_tutor(tutor_id, {"cv_url": file_key})
             st.success("✅ CV subido correctamente")
             st.rerun()
         except Exception as e:
             st.error(f"❌ Error al subir CV: {e}")
+
+# =========================
+# ASIGNACIÓN N:N CON GRUPOS
+# =========================
+
+def gestionar_asignacion_tutores(gs: GruposService, tutor_id: str):
+    """Asignar/desasignar tutor en múltiples grupos."""
+    try:
+        # Cargar grupos (usa el método que tengas disponible en tu GruposService)
+        # Esperamos algo tipo lista/dict con id & codigo_grupo
+        grupos = gs.supabase.table("grupos").select("id,codigo_grupo").order("created_at").execute()
+        lista_grupos = grupos.data or []
+        if not lista_grupos:
+            st.info("ℹ️ No hay grupos disponibles.")
+            return
+
+        # Asignaciones actuales del tutor
+        asign = gs.supabase.table("tutores_grupos").select("grupo_id").eq("tutor_id", tutor_id).execute()
+        asignados_ids = {r["grupo_id"] for r in (asign.data or [])}
+
+        mapa = {g["codigo_grupo"]: g["id"] for g in lista_grupos if g.get("codigo_grupo") and g.get("id")}
+        preseleccion = [cod for cod, gid in mapa.items() if gid in asignados_ids]
+
+        seleccion = st.multiselect(
+            "Seleccionar grupos",
+            options=list(mapa.keys()),
+            default=preseleccion,
+            help="El tutor quedará asignado a los grupos seleccionados"
+        )
+
+        if st.button("💾 Guardar asignaciones", type="primary"):
+            nuevos_ids = {mapa[cod] for cod in seleccion}
+
+            # Borrar las que sobran
+            a_quitar = asignados_ids - nuevos_ids
+            for gid in a_quitar:
+                try:
+                    gs.supabase.table("tutores_grupos").delete().eq("tutor_id", tutor_id).eq("grupo_id", gid).execute()
+                except Exception as e:
+                    st.error(f"Error quitando del grupo {gid}: {e}")
+
+            # Insertar nuevas
+            a_insertar = nuevos_ids - asignados_ids
+            if a_insertar:
+                payload = [{"tutor_id": tutor_id, "grupo_id": gid, "created_at": datetime.utcnow().isoformat()} for gid in a_insertar]
+                try:
+                    gs.supabase.table("tutores_grupos").insert(payload).execute()
+                except Exception as e:
+                    st.error(f"Error asignando grupos: {e}")
+
+            st.success("✅ Asignaciones actualizadas")
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"❌ Error en asignación: {e}")
+
+# =========================
+# HELPERS
+# =========================
+
+def _cargar_tutor_por_id(ds: DataService, tutor_id: str) -> Dict[str, Any]:
+    """Carga un tutor por ID directo desde Supabase (independiente de data_service)."""
+    try:
+        res = ds.supabase.table("tutores").select("*").eq("id", tutor_id).limit(1).execute()
+        if res.data:
+            return res.data[0]
+        return {}
+    except Exception as e:
+        st.error(f"Error al cargar tutor: {e}")
+        return {}
