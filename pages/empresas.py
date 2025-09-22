@@ -399,7 +399,7 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
 
 def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False, key_suffix="", solo_datos_basicos=False):
     """CORREGIDO: Formulario FUNDAE completo con validaciones que no bloquean el botón."""
-    
+
     if es_creacion:
         st.subheader("➕ Nueva Empresa Cliente")
         datos = {}
@@ -407,7 +407,10 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         if not key_suffix:
             st.subheader(f"✏️ Editar {empresa_data['nombre']}")
         datos = empresa_data.copy()
-    
+
+    # ID único para el formulario
+    form_id = f"empresa_{datos.get('id', 'nueva')}_{'crear' if es_creacion else 'editar'}{key_suffix}"
+
     # CAMPOS CONECTADOS FUERA DEL FORMULARIO (solo si no es solo_datos_basicos)
     if not solo_datos_basicos:
         st.markdown("#### 🏠 Domicilio Social (Seleccione provincia y localidad)")
@@ -415,23 +418,26 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             empresas_service, datos, key_suffix=form_id
         )
         st.divider()
-    
+    else:
+        provincia_sel, localidad_sel, provincia_id, localidad_id = None, None, None, None
+
     # Cargar datos auxiliares
     sectores_list = cargar_sectores(empresas_service.supabase)
     cnae_dict = cargar_cnae(empresas_service.supabase)
-    
+
     # Cargar datos CRM si es necesario
     crm_data = {}
     if not es_creacion and datos.get("id") and not solo_datos_basicos:
         crm_data = cargar_crm_datos(empresas_service.supabase, datos["id"])
-    
-    # ID único para el formulario
-    form_id = f"empresa_{datos.get('id', 'nueva')}_{'crear' if es_creacion else 'editar'}{key_suffix}"
-    
+
     # CORREGIDO: Inicializar cuentas sin resetear formulario
     if not solo_datos_basicos:
-        cuentas_key = inicializar_cuentas_cotizacion(form_id, empresas_service, datos.get("id") if not es_creacion else None)
-    
+        cuentas_key = inicializar_cuentas_cotizacion(
+            form_id,
+            empresas_service,
+            datos.get("id") if not es_creacion else None
+        )
+
     with st.form(form_id, clear_on_submit=es_creacion):
         
         # =========================
