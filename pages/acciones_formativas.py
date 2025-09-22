@@ -22,7 +22,7 @@ def main(supabase, session_state):
     # =========================
     with st.spinner("Cargando datos..."):
         df_acciones = grupos_service.get_acciones_formativas()
-        areas_dict = grupos_service.get_areas_dict()
+        areas_dict = data_service.get_areas_dict()
         grupos_acciones_df = grupos_service.get_grupos_acciones()
 
     # Filtrar acciones por rol
