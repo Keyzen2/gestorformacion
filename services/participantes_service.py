@@ -782,7 +782,8 @@ def delete_participante(_self, participante_id: str) -> bool:
     # ESTADÍSTICAS
     # =========================
     def get_estadisticas_participantes(_self) -> Dict[str, Any]:
-        """Obtiene estadísticas de participantes (usado en pestaña Métricas)."""
+        """Alias para compatibilidad: usa la versión jerárquica por defecto."""
+        return _self.get_estadisticas_participantes_jerarquia()
         try:
             df = _self.get_participantes_completos()
             
