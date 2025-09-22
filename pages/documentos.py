@@ -297,7 +297,7 @@ def main(supabase, session_state):
         try:
             # Usar servicios con jerarquía
             df_acciones = data_service.get_acciones_formativas()
-            df_grupos = data_service.get_grupos_completos()
+            df_grupos = grupos_service.get_grupos_completos()
             
         except Exception as e:
             st.error(f"❌ Error al cargar datos: {e}")
