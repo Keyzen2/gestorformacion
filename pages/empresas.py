@@ -804,22 +804,19 @@ def main(supabase, session_state):
     
     st.title("🏢 Gestión de Empresas")
     
-    # Tabs según rol
     if session_state.role == "admin":
         tab1, tab2, tab3 = st.tabs(["📊 Métricas", "🏢 Empresas", "➕ Nueva Empresa"])
     else:
-        tab1, tab2 = st.tabs(["📊 Mi Empresa", "👥 Empresas Cliente"])
+        tab1, tab2, tab3 = st.tabs(["📊 Mi Empresa", "👥 Empresas Cliente", "➕ Nueva Empresa"])
     
     if session_state.role == "admin":
         with tab1:
             mostrar_metricas_empresas(empresas_service, session_state)
-        
         with tab2:
             df_empresas = empresas_service.get_empresas_con_jerarquia()
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state)
             if empresa_sel is not None:
                 mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
-        
         with tab3:
             mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
     
@@ -828,11 +825,13 @@ def main(supabase, session_state):
             mostrar_mi_empresa(empresas_service, session_state)
         with tab2:
             df_empresas = empresas_service.get_empresas_con_jerarquia()
+            df_empresas = df_empresas[df_empresas["id"] != session_state.user.get("empresa_id")]  # excluir su propia empresa
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state, "👥 Mis Clientes")
             if empresa_sel is not None:
                 mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
+        with tab3:
+            mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
     
-    # Expander de ayuda
     with st.expander("ℹ️ Ayuda sobre FUNDAE y Jerarquía"):
         st.markdown("""
         - **FUNDAE**: Los campos corresponden a la información necesaria para bonificar formación.
