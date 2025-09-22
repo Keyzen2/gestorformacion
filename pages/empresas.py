@@ -277,55 +277,47 @@ def mostrar_mi_empresa(empresas_service, session_state):
 
 def mostrar_campos_conectados_provincia_localidad(empresas_service, datos, key_suffix="", disabled=False):
     """
-    Campos conectados provincia-localidad FUERA del formulario
-    para que funcionen dinámicamente
+    Campos conectados provincia-localidad usando IDs reales,
+    pero manteniendo provincia/ciudad como texto para compatibilidad.
     """
-    # Cargar datos auxiliares
-    provincias_dict = cargar_provincias(empresas_service.supabase)
-    
-    # Inicializar session_state para provincia
-    provincia_key = f"provincia_sel_{key_suffix}"
-    if provincia_key not in st.session_state:
-        st.session_state[provincia_key] = datos.get("provincia", "")
-    
-    # Selectbox de provincia
+    # Cargar provincias
+    provincias_dict = cargar_provincias(empresas_service.supabase)  # {nombre: id}
+    provincias_inv = {v: k for k, v in provincias_dict.items()}     # {id: nombre}
+
+    # Provincia inicial (preferir provincia_id si existe)
+    provincia_id = datos.get("provincia_id")
+    provincia_sel = provincias_inv.get(provincia_id, datos.get("provincia", ""))
+
     provincia_sel = st.selectbox(
-        "🗺️ Provincia", 
+        "🗺️ Provincia",
         options=[""] + list(provincias_dict.keys()),
-        index=list(provincias_dict.keys()).index(st.session_state[provincia_key]) + 1 if st.session_state[provincia_key] in provincias_dict else 0,
+        index=list(provincias_dict.keys()).index(provincia_sel) + 1 if provincia_sel in provincias_dict else 0,
         key=f"prov_select_{key_suffix}",
         disabled=disabled
     )
-    
-    # Actualizar session_state si cambió
-    if provincia_sel != st.session_state[provincia_key]:
-        st.session_state[provincia_key] = provincia_sel
-        st.rerun()  # Forzar actualización para cargar localidades
-    
-    # Selectbox de localidad (se actualiza automáticamente)
-    localidad_sel = ""
-    localidad_id = None
+
     provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
-    
+
+    # Localidades según provincia
+    localidad_sel, localidad_id = "", None
     if provincia_id:
-        localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)
-        if localidades_dict:
-            localidad_actual = datos.get("ciudad", "") if not st.session_state.get(f"localidad_sel_{key_suffix}") else st.session_state.get(f"localidad_sel_{key_suffix}")
-            
-            localidad_sel = st.selectbox(
-                "🏘️ Población",
-                options=[""] + list(localidades_dict.keys()),
-                index=list(localidades_dict.keys()).index(localidad_actual) + 1 if localidad_actual in localidades_dict else 0,
-                key=f"loc_select_{key_suffix}",
-                disabled=disabled
-            )
-            localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
-            st.session_state[f"localidad_sel_{key_suffix}"] = localidad_sel
-        else:
-            st.selectbox("🏘️ Población", options=["Sin localidades"], disabled=True, key=f"loc_empty_{key_suffix}")
+        localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)  # {nombre: id}
+        localidades_inv = {v: k for k, v in localidades_dict.items()}
+
+        localidad_id = datos.get("localidad_id")
+        localidad_sel = localidades_inv.get(localidad_id, datos.get("ciudad", ""))
+
+        localidad_sel = st.selectbox(
+            "🏘️ Población",
+            options=[""] + list(localidades_dict.keys()),
+            index=list(localidades_dict.keys()).index(localidad_sel) + 1 if localidad_sel in localidades_dict else 0,
+            key=f"loc_select_{key_suffix}",
+            disabled=disabled
+        )
+        localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
     else:
         st.selectbox("🏘️ Población", options=["Seleccione provincia"], disabled=True, key=f"loc_disabled_{key_suffix}")
-    
+
     return provincia_sel, localidad_sel, provincia_id, localidad_id
 
 def inicializar_cuentas_cotizacion(form_id, empresas_service, empresa_id=None):
@@ -469,15 +461,14 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         # Código CNAE
         if cnae_dict:
             cnae_actual = datos.get("codigo_cnae", "")
-            cnae_display = next((k for k, v in cnae_dict.items() if v == cnae_actual), "")
+            cnae_display = next((f"{k} - {v}" for k, v in cnae_dict.items() if k == cnae_actual), "")
             codigo_cnae_sel = st.selectbox(
-                "🔢 Código CNAE", 
-                options=[""] + list(cnae_dict.keys()),
-                index=list(cnae_dict.keys()).index(cnae_display) + 1 if cnae_display else 0,
-                help="Busque escribiendo el código o descripción",
+                "🔢 Código CNAE",
+                options=[""] + [f"{k} - {v}" for k, v in cnae_dict.items()],
+                index=[f"{k} - {v}" for k, v in cnae_dict.items()].index(cnae_display) + 1 if cnae_display else 0,
                 key=f"{form_id}_cnae"
             )
-            codigo_cnae = cnae_dict.get(codigo_cnae_sel, "") if codigo_cnae_sel else ""
+            codigo_cnae = codigo_cnae_sel.split(" - ")[0] if codigo_cnae_sel else ""
         else:
             codigo_cnae = st.text_input("🔢 Código CNAE", value=datos.get("codigo_cnae", ""), key=f"{form_id}_cnae_input")
         
@@ -502,20 +493,28 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             # Representante Legal
             st.markdown("#### 👤 Representante Legal")
             col1, col2, col3 = st.columns(3)
-            
+    
             with col1:
                 representante_tipo_documento = st.selectbox(
-                    "📄 Tipo Documento", 
+                    "📄 Tipo Documento",
                     options=["", "NIF", "NIE", "PASAPORTE"],
                     index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", "")) if datos.get("representante_tipo_documento") in ["", "NIF", "NIE", "PASAPORTE"] else 0,
                     key=f"{form_id}_tipo_doc"
                 )
-            
+    
             with col2:
-                representante_numero_documento = st.text_input("🆔 Nº Documento", value=datos.get("representante_numero_documento", ""), key=f"{form_id}_num_doc")
-            
+                representante_numero_documento = st.text_input(
+                    "🆔 Nº Documento",
+                    value=datos.get("representante_numero_documento", ""),
+                    key=f"{form_id}_num_doc"
+                )
+    
             with col3:
-                representante_nombre_apellidos = st.text_input("👤 Nombre y Apellidos", value=datos.get("representante_nombre_apellidos", ""), key=f"{form_id}_nombre_apellidos")
+                representante_nombre_apellidos = st.text_input(
+                    "👤 Nombre y Apellidos",
+                    value=datos.get("representante_nombre_apellidos", ""),
+                    key=f"{form_id}_nombre_apellidos"
+                )
             
             # Notificaciones
             st.markdown("#### 📧 Notificaciones")
