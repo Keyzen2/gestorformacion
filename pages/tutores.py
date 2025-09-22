@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from services.grupos_service import GruposService
+from typing import Optional, List, Dict, Any
 from utils import validar_dni_cif, safe_int_conversion
 import uuid
 
