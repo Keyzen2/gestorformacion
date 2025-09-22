@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import io
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils import validar_dni_cif, export_csv
@@ -56,20 +57,24 @@ def cargar_grupos(grupos_service, session_state):
 # MÉTRICAS DE PARTICIPANTES
 # =========================
 def mostrar_metricas_participantes(participantes_service, session_state):
-    """Muestra métricas rápidas de participantes."""
+    """Muestra métricas generales de los participantes."""
     try:
         metricas = participantes_service.get_estadisticas_participantes()
-        col1, col2, col3, col4 = st.columns(4)
+
+        col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("👥 Total", metricas.get("total", 0))
+            st.metric("👥 Total Participantes", metricas.get("total", 0))
         with col2:
-            st.metric("🆕 Últimos 30 días", metricas.get("nuevos_mes", 0))
+            st.metric("🆕 Nuevos (30 días)", metricas.get("nuevos_mes", 0))
         with col3:
-            st.metric("🎓 En formación", metricas.get("en_curso", 0))
+            st.metric("🎓 En curso", metricas.get("en_curso", 0))
         with col4:
+            st.metric("✅ Finalizados", metricas.get("finalizados", 0))
+        with col5:
             st.metric("📜 Con diploma", metricas.get("con_diploma", 0))
+
     except Exception as e:
-        st.error(f"❌ Error cargando métricas: {e}")
+        st.error(f"❌ Error cargando métricas de participantes: {e}")
 
 # =========================
 # TABLA GENERAL
@@ -330,6 +335,7 @@ def importar_participantes(participantes_service, empresas_service, session_stat
         "apellidos": "Pérez Gómez",
         "dni": "12345678A",
         "nif": "12345678A",
+        "niss": "12345678901",
         "email": "juan.perez@correo.com",
         "telefono": "600123456",
         "fecha_nacimiento": "1985-06-15",
@@ -338,9 +344,14 @@ def importar_participantes(participantes_service, empresas_service, session_stat
         "grupo_id": ""     # Opcional
     }])
 
+    # ⚠️ Guardar plantilla en memoria correctamente
+    buffer = io.BytesIO()
+    ejemplo_df.to_excel(buffer, index=False, engine="openpyxl")
+    buffer.seek(0)
+
     st.download_button(
         "📑 Descargar plantilla XLSX",
-        data=ejemplo_df.to_excel(index=False, engine="openpyxl"),
+        data=buffer,
         file_name="plantilla_participantes.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
@@ -370,6 +381,10 @@ def importar_participantes(participantes_service, empresas_service, session_stat
                     if dni and not validar_dni_cif(dni):
                         raise ValueError(f"DNI/NIF inválido: {dni}")
 
+                    niss = fila.get("niss")
+                    if niss and not validar_niss(niss):
+                        raise ValueError(f"NISS inválido: {niss}")
+
                     email = fila.get("email")
                     if email and ("@" not in email or "." not in email.split("@")[-1]):
                         raise ValueError(f"Email inválido: {email}")
@@ -383,15 +398,8 @@ def importar_participantes(participantes_service, empresas_service, session_stat
                         empresa_id = session_state.user.get("empresa_id")
                     else:  # admin
                         empresa_id = fila.get("empresa_id") or None
-                        if empresa_id and not empresas_service.get_empresa_por_id(empresa_id):
-                            raise ValueError(f"Empresa no encontrada: {empresa_id}")
 
                     grupo_id = fila.get("grupo_id") or None
-                    if grupo_id:
-                        try:
-                            _ = participantes_service.get_grupo_por_id(grupo_id)
-                        except Exception:
-                            raise ValueError(f"Grupo no encontrado: {grupo_id}")
 
                     # === Construcción de datos ===
                     datos = {
@@ -399,6 +407,7 @@ def importar_participantes(participantes_service, empresas_service, session_stat
                         "apellidos": fila.get("apellidos"),
                         "dni": dni,
                         "nif": fila.get("nif"),
+                        "niss": niss,
                         "email": email,
                         "telefono": telefono,
                         "fecha_nacimiento": fila.get("fecha_nacimiento"),
@@ -442,16 +451,17 @@ def main(supabase, session_state):
         st.header("📋 Listado de Participantes")
         try:
             df_participantes = participantes_service.get_participantes_completos()
+    
             if session_state.role == "gestor":
-                empresa_id = session_state.user.get("empresa_id")
-                df_participantes = df_participantes[
-                    (df_participantes["empresa_id"] == empresa_id) |
-                    (df_participantes["empresa_matriz_id"] == empresa_id)
-                ]
-
+                empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
+                empresas_ids = empresas_df["id"].tolist()
+                df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
+    
             seleccionado = mostrar_tabla_participantes(df_participantes, session_state)
             if seleccionado is not None:
-                mostrar_formulario_participante(seleccionado, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False)
+                mostrar_formulario_participante(
+                    seleccionado, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False
+                )
         except Exception as e:
             st.error(f"❌ Error cargando participantes: {e}")
 
@@ -479,27 +489,6 @@ def main(supabase, session_state):
         - Usa **Importar/Exportar** para gestión masiva.
         - Usa **Métricas** para ver el estado general.
         """)
-# =========================
-# MÉTRICAS DE PARTICIPANTES
-# =========================
-def mostrar_metricas_participantes(participantes_service, session_state):
-    """Muestra métricas generales de los participantes."""
-    try:
-        metricas = participantes_service.get_estadisticas_participantes()
-
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("👥 Total Participantes", metricas.get("total", 0))
-        with col2:
-            st.metric("🆕 Nuevos (30 días)", metricas.get("nuevos_mes", 0))
-        with col3:
-            st.metric("🎓 En curso", metricas.get("en_curso", 0))
-        with col4:
-            st.metric("✅ Finalizados", metricas.get("finalizados", 0))
-
-    except Exception as e:
-        st.error(f"❌ Error cargando métricas de participantes: {e}")
-
 
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
