@@ -619,114 +619,122 @@ class ParticipantesService:
     # OPERACIONES CRUD
     # =========================
     def create_participante(_self, datos: Dict[str, Any]) -> bool:
-        """Crea un nuevo participante con validaciones."""
-        try:
-            # Validaciones básicas
-            if not datos.get("email"):
-                st.error("⚠️ El email es obligatorio.")
-                return False
-                
-            if not datos.get("nombre") or not datos.get("apellidos"):
-                st.error("⚠️ Nombre y apellidos son obligatorios.")
-                return False
-                
-            if datos.get("dni") and not validar_dni_cif(datos["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
-                return False
+    """Crea un nuevo participante y su usuario en Auth automáticamente."""
+    try:
+        from services.alumnos import AlumnosService
+        alumnos_service = AlumnosService(_self.supabase)
 
-            # Verificar email único
-            email_existe = _self.supabase.table("participantes").select("id").eq("email", datos["email"]).execute()
-            if email_existe.data:
-                st.error("⚠️ Ya existe un participante con ese email.")
-                return False
-
-            # Aplicar filtro de empresa si es gestor
-            if _self.rol == "gestor":
-                datos["empresa_id"] = _self.empresa_id
-
-            # Añadir timestamps
-            datos["created_at"] = datetime.utcnow().isoformat()
-            datos["updated_at"] = datetime.utcnow().isoformat()
-
-            # Crear participante
-            result = _self.supabase.table("participantes").insert(datos).execute()
-
-            if result.data:
-                # Limpiar cache
-                _self.get_participantes_completos.clear()
-                return True
-            else:
-                st.error("⚠️ Error al crear el participante.")
-                return False
-
-        except Exception as e:
-            st.error(f"⚠️ Error al crear participante: {e}")
+        # Validaciones básicas
+        if not datos.get("email") or not datos.get("password"):
+            st.error("⚠️ Email y contraseña son obligatorios.")
+            return False
+        if not datos.get("nombre") or not datos.get("apellidos"):
+            st.error("⚠️ Nombre y apellidos son obligatorios.")
+            return False
+        if datos.get("dni") and not validar_dni_cif(datos["dni"]):
+            st.error("⚠️ DNI/CIF no válido.")
             return False
 
-    def update_participante(_self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
-        """Actualiza un participante con validaciones."""
-        try:
-            # Validaciones
-            if not datos_editados.get("email"):
-                st.error("⚠️ El email es obligatorio.")
-                return False
-                
-            if datos_editados.get("dni") and not validar_dni_cif(datos_editados["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
-                return False
+        # Ajustar empresa si es gestor
+        if _self.rol == "gestor":
+            datos["empresa_id"] = _self.empresa_id
 
-            # Verificar email único (excluyendo el actual)
+        # Crear alumno en Auth + Participantes
+        participante_id = alumnos_service.crear_alumno(datos)
+        if participante_id:
+            _self.get_participantes_completos.clear()
+            return True
+        else:
+            return False
+
+    except Exception as e:
+        st.error(f"⚠️ Error al crear participante con Auth: {e}")
+        return False
+
+    def update_participante(_self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
+    """Actualiza un participante y sincroniza datos con Auth."""
+    try:
+        from services.alumnos import AlumnosService
+        alumnos_service = AlumnosService(_self.supabase)
+
+        # Verificar existencia del participante
+        participante = _self.supabase.table("participantes").select("auth_id, email").eq("id", participante_id).execute()
+        if not participante.data:
+            st.error("⚠️ Participante no encontrado.")
+            return False
+
+        auth_id = participante.data[0].get("auth_id")
+        email_actual = participante.data[0].get("email")
+
+        # Validaciones
+        if not datos_editados.get("email"):
+            st.error("⚠️ El email es obligatorio.")
+            return False
+        if datos_editados.get("dni") and not validar_dni_cif(datos_editados["dni"]):
+            st.error("⚠️ DNI/CIF no válido.")
+            return False
+
+        # Verificar email único (excluyendo el actual)
+        if datos_editados["email"] != email_actual:
             email_existe = _self.supabase.table("participantes").select("id").eq("email", datos_editados["email"]).neq("id", participante_id).execute()
             if email_existe.data:
                 st.error("⚠️ Ya existe otro participante con ese email.")
                 return False
 
-            # Verificar permisos
-            if _self.rol == "gestor":
-                participante = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
-                if not participante.data or participante.data[0].get("empresa_id") != _self.empresa_id:
-                    st.error("⚠️ No tienes permisos para editar este participante.")
-                    return False
+        # Control de permisos para gestor
+        if _self.rol == "gestor":
+            participante_check = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
+            if not participante_check.data or participante_check.data[0].get("empresa_id") != _self.empresa_id:
+                st.error("⚠️ No tienes permisos para editar este participante.")
+                return False
 
-            # Añadir timestamp de actualización
-            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+        # --- Actualizar tabla participantes ---
+        datos_editados["updated_at"] = datetime.utcnow().isoformat()
+        _self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
 
-            # Actualizar participante
-            _self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+        # --- Sincronizar con Auth ---
+        if auth_id:
+            try:
+                update_data = {}
+                if "email" in datos_editados:
+                    update_data["email"] = datos_editados["email"]
+                update_data["user_metadata"] = {
+                    "rol": "alumno",
+                    "nombre": datos_editados.get("nombre"),
+                    "apellidos": datos_editados.get("apellidos"),
+                }
+                _self.supabase.auth.admin.update_user(auth_id, update_data)
+            except Exception as e:
+                st.warning(f"⚠️ Participante actualizado pero no se pudo sincronizar con Auth: {e}")
 
-            # Limpiar cache
-            _self.get_participantes_completos.clear()
+        # Limpiar caché
+        _self.get_participantes_completos.clear()
 
-            return True
+        return True
 
-        except Exception as e:
-            st.error(f"⚠️ Error al actualizar participante: {e}")
-            return False
+    except Exception as e:
+        st.error(f"⚠️ Error al actualizar participante: {e}")
+        return False
 
     def delete_participante(_self, participante_id: str) -> bool:
-        """Elimina un participante con validaciones."""
-        try:
-            # Verificar permisos
-            if _self.rol == "gestor":
-                participante = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
-                if not participante.data or participante.data[0].get("empresa_id") != _self.empresa_id:
-                    st.error("⚠️ No tienes permisos para eliminar este participante.")
-                    return False
+    """Elimina un participante y su usuario en Auth automáticamente."""
+    try:
+        from services.alumnos import AlumnosService
+        alumnos_service = AlumnosService(_self.supabase)
 
-            # Eliminar asignaciones a grupos primero
-            _self.supabase.table("participantes_grupos").delete().eq("participante_id", participante_id).execute()
-            
-            # Eliminar participante
-            _self.supabase.table("participantes").delete().eq("id", participante_id).execute()
+        # Buscar auth_id
+        res = _self.supabase.table("participantes").select("auth_id").eq("id", participante_id).execute()
+        auth_id = res.data[0]["auth_id"] if res.data else None
 
-            # Limpiar cache
+        # Eliminar
+        ok = alumnos_service.borrar_alumno(participante_id, auth_id)
+        if ok:
             _self.get_participantes_completos.clear()
-
             return True
-
-        except Exception as e:
-            st.error(f"⚠️ Error al eliminar participante: {e}")
-            return False
+        return False
+    except Exception as e:
+        st.error(f"⚠️ Error al eliminar participante: {e}")
+        return False
 
     # =========================
     # BÚSQUEDAS Y FILTROS
