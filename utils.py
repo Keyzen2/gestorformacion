@@ -20,6 +20,7 @@ import requests
 def validar_dni_cif(documento: str) -> bool:
     """
     Valida DNI, NIE o CIF.
+    CORREGIDO: Algoritmo CIF mejorado para empresas A, B, etc.
     
     Args:
         documento: String con el documento a validar
@@ -49,39 +50,71 @@ def validar_dni_cif(documento: str) -> bool:
         letra = documento[8]
         return letras[numero % 23] == letra
         
-    # Validar CIF (letra + 7 números + dígito control/letra)
-    elif re.match(r'^[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
-        letra_ini = documento[0]
+    # CORREGIDO: Validar CIF (letra + 7 números + dígito control/letra)
+    elif re.match(r'^[ABCDEFGHJKLMNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
+        letra_inicial = documento[0]
         numeros = documento[1:8]
         control = documento[8]
         
-        # Algoritmo de validación de CIF
-        suma_a = 0
-        for i in [1, 3, 5, 7]:
-            if i < len(numeros):
-                suma_a += int(numeros[i-1])
-                
-        suma_b = 0
-        for i in [2, 4, 6, 8]:
-            if i-1 < len(numeros):
-                digit = 2 * int(numeros[i-1])
-                if digit > 9:
-                    digit = digit - 9
-                suma_b += digit
-                
-        suma = suma_a + suma_b
-        unidad = 10 - (suma % 10)
-        if unidad == 10:
-            unidad = 0
+        # =======================================
+        # ALGORITMO CIF CORREGIDO
+        # =======================================
+        
+        # Paso 1: Suma de posiciones pares (2ª, 4ª, 6ª, 8ª)
+        suma_pares = 0
+        for i in range(1, 7, 2):  # posiciones 1, 3, 5 (índices de posiciones pares)
+            suma_pares += int(numeros[i])
+        
+        # Paso 2: Suma de posiciones impares multiplicadas por 2 (1ª, 3ª, 5ª, 7ª)
+        suma_impares = 0
+        for i in range(0, 7, 2):  # posiciones 0, 2, 4, 6 (índices de posiciones impares)
+            doble = int(numeros[i]) * 2
+            if doble > 9:
+                doble = doble // 10 + doble % 10  # Sumar los dígitos
+            suma_impares += doble
+        
+        # Paso 3: Suma total
+        suma_total = suma_pares + suma_impares
+        
+        # Paso 4: Calcular dígito de control
+        unidad = suma_total % 10
+        if unidad != 0:
+            unidad = 10 - unidad
             
-        # Para CIFs que deben tener letra de control
+        # =======================================
+        # VERIFICACIÓN SEGÚN TIPO DE ORGANIZACIÓN
+        # =======================================
+        
+        # Organizaciones que SIEMPRE usan LETRA de control
+        letras_obligatorias = ['K', 'P', 'Q', 'S', 'N', 'W']
+        
+        # Organizaciones que SIEMPRE usan NÚMERO de control  
+        numeros_obligatorios = ['A', 'B', 'E', 'H']
+        
+        # Organizaciones que pueden usar NÚMERO o LETRA
+        mixtos = ['C', 'D', 'F', 'G', 'J', 'R', 'U', 'V']
+        
+        # Tabla de conversión número → letra
         letras_control = 'JABCDEFGHI'
-        if letra_ini in 'KPQRSNW':
-            return letras_control[unidad] == control
+        letra_control = letras_control[unidad]
+        
+        if letra_inicial in letras_obligatorias:
+            # DEBE ser letra
+            return control == letra_control
+            
+        elif letra_inicial in numeros_obligatorios:
+            # DEBE ser número
+            return control == str(unidad)
+            
+        elif letra_inicial in mixtos:
+            # Puede ser número O letra
+            return control == str(unidad) or control == letra_control
+            
         else:
-            # Para CIFs que pueden tener número o letra
-            return str(unidad) == control or letras_control[unidad] == control
-
+            # Letra inicial no reconocida (no debería pasar por el regex)
+            return False
+    
+    # Si no coincide con ningún patrón
     return False
 
 def validar_email(email: str) -> bool:
