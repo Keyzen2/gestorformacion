@@ -568,59 +568,59 @@ def main(supabase, session_state):
     # Tabs principales (simplificado)
     tabs = st.tabs(["📋 Listado", "➕ Crear", "📊 Métricas"])
 
-# =========================
-# TAB LISTADO
-# =========================
-with tabs[0]:
-    st.header("📋 Listado de Participantes")
-    try:
-        df_participantes = participantes_service.get_participantes_completos()
+    # =========================
+    # TAB LISTADO
+    # =========================
+    with tabs[0]:
+        st.header("📋 Listado de Participantes")
+        try:
+            df_participantes = participantes_service.get_participantes_completos()
 
-        # 🔒 Filtrado por rol gestor
-        if session_state.role == "gestor":
-            empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
-            empresas_ids = empresas_df["id"].tolist()
-            df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
+            # 🔒 Filtrado por rol gestor
+            if session_state.role == "gestor":
+                empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
+                empresas_ids = empresas_df["id"].tolist()
+                df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
 
-        # Mostrar tabla (con filtros + paginación ya integrados)
-        seleccionado, df_paged = mostrar_tabla_participantes(df_participantes, session_state)
+            # Mostrar tabla (con filtros + paginación ya integrados)
+            seleccionado, df_paged = mostrar_tabla_participantes(df_participantes, session_state)
 
-        # Exportación, importación y ayuda
-        st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
-        with col2:
-            importar_participantes(participantes_service, empresas_service, session_state)
+            # Exportación, importación y ayuda
+            st.divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
+            with col2:
+                importar_participantes(participantes_service, empresas_service, session_state)
 
-        with st.expander("ℹ️ Ayuda sobre Participantes"):
-            st.markdown("""
-            - Usa los filtros para buscar rápidamente.
-            - Haz clic en una fila para **editar un participante**.
-            - Usa exportar/importar para gestión en bloque.
-            - Los gestores solo verán sus empresas y grupos.
-            """)
+            with st.expander("ℹ️ Ayuda sobre Participantes"):
+                st.markdown("""
+                - Usa los filtros para buscar rápidamente.
+                - Haz clic en una fila para **editar un participante**.
+                - Usa exportar/importar para gestión en bloque.
+                - Los gestores solo verán sus empresas y grupos.
+                """)
 
-        if seleccionado is not None:
-            mostrar_formulario_participante(
-                seleccionado, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False
-            )
-    except Exception as e:
-        st.error(f"❌ Error cargando participantes: {e}")
+            if seleccionado is not None:
+                mostrar_formulario_participante(
+                    seleccionado, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False
+                )
+        except Exception as e:
+            st.error(f"❌ Error cargando participantes: {e}")
 
-# =========================
-# TAB CREAR
-# =========================
-with tabs[1]:
-    st.header("➕ Crear Nuevo Participante")
-    mostrar_formulario_participante({}, participantes_service, empresas_service, grupos_service, session_state, es_creacion=True)
+    # =========================
+    # TAB CREAR
+    # =========================
+    with tabs[1]:
+        st.header("➕ Crear Nuevo Participante")
+        mostrar_formulario_participante({}, participantes_service, empresas_service, grupos_service, session_state, es_creacion=True)
 
-# =========================
-# TAB MÉTRICAS
-# =========================
-with tabs[2]:
-    st.header("📊 Métricas de Participantes")
-    mostrar_metricas_participantes(participantes_service, session_state)
+    # =========================
+    # TAB MÉTRICAS
+    # =========================
+    with tabs[2]:
+        st.header("📊 Métricas de Participantes")
+        mostrar_metricas_participantes(participantes_service, session_state)
 
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
