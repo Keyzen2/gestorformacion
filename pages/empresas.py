@@ -997,7 +997,11 @@ def procesar_guardado_empresa(
                         "crm_fin": crm_fin,
                         "created_at": datetime.utcnow().isoformat()
                     }).execute()
-
+        # 🔄 Limpiar session_state tras creación
+                st.session_state.pop("cuentas_empresa_nueva", None)
+                st.session_state.pop("prov_select_empresa_nueva", None)
+                st.session_state.pop("loc_select_empresa_nueva", None)
+                
                 st.rerun()
 
         else:
@@ -1030,7 +1034,12 @@ def procesar_guardado_empresa(
                     # Si desmarcan CRM → desactivar
                     if existing.data:
                         crm_table.update({"crm_activo": False, "updated_at": datetime.utcnow().isoformat()}).eq("empresa_id", datos["id"]).execute()
-
+                        
+                # 🔄 Limpiar session_state tras creación
+                st.session_state.pop("cuentas_empresa_nueva", None)
+                st.session_state.pop("prov_select_empresa_nueva", None)
+                st.session_state.pop("loc_select_empresa_nueva", None)
+                
                 st.rerun()
 
     except Exception as e:
