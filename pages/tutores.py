@@ -4,9 +4,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from utils import (
     validar_dni_cif,
-    safe_int_conversion,
-    subir_archivo_supabase,
-    exportar_dataframe_csv
+    safe_int_conversion
 )
 from data_service import DataService
 
