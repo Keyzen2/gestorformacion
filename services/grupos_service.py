@@ -200,66 +200,66 @@ class GruposService:
         except:
             return 0, 0
             
-    def validar_codigo_grupo_unico_fundae(grupos_service, codigo_grupo, accion_formativa_id, grupo_id=None):
-    """
-    Valida unicidad de código de grupo según normativa FUNDAE:
-    - Único por acción formativa, empresa gestora y año
-    - Permite reutilizar códigos en años diferentes
-    """
-    try:
-        # Obtener información de la acción formativa
-        accion_res = grupos_service.supabase.table("acciones_formativas").select(
-            "codigo_accion, empresa_id, fecha_inicio"
-        ).eq("id", accion_formativa_id).execute()
-        
-        if not accion_res.data:
-            return False, "Acción formativa no encontrada"
-        
-        accion_data = accion_res.data[0]
-        empresa_gestora_id = accion_data["empresa_id"]
-        fecha_accion = accion_data["fecha_inicio"]
-        
-        # Determinar año de la acción
-        if fecha_accion:
-            try:
-                ano_accion = datetime.fromisoformat(str(fecha_accion).replace('Z', '+00:00')).year
-            except:
+    def validar_codigo_grupo_unico_fundae(self, codigo_grupo, accion_formativa_id, grupo_id=None):
+        """
+        Valida unicidad de código de grupo según normativa FUNDAE:
+        - Único por acción formativa, empresa gestora y año
+        - Permite reutilizar códigos en años diferentes
+        """
+        try:
+            # Obtener información de la acción formativa
+            accion_res = self.supabase.table("acciones_formativas").select(
+                "codigo_accion, empresa_id, fecha_inicio"
+            ).eq("id", accion_formativa_id).execute()
+            
+            if not accion_res.data:
+                return False, "Acción formativa no encontrada"
+            
+            accion_data = accion_res.data[0]
+            empresa_gestora_id = accion_data["empresa_id"]
+            fecha_accion = accion_data["fecha_inicio"]
+            
+            # Determinar año de la acción
+            if fecha_accion:
+                try:
+                    ano_accion = datetime.fromisoformat(str(fecha_accion).replace('Z', '+00:00')).year
+                except:
+                    ano_accion = datetime.now().year
+            else:
                 ano_accion = datetime.now().year
-        else:
-            ano_accion = datetime.now().year
-        
-        # Buscar códigos duplicados en el mismo año y empresa gestora
-        query = grupos_service.supabase.table("grupos").select(
-            "id, codigo_grupo, fecha_inicio"
-        ).eq("codigo_grupo", codigo_grupo)
-        
-        # Filtrar por año
-        if ano_accion:
-            query = query.gte("fecha_inicio", f"{ano_accion}-01-01").lt("fecha_inicio", f"{ano_accion + 1}-01-01")
-        
-        # Excluir grupo actual si estamos editando
-        if grupo_id:
-            query = query.neq("id", grupo_id)
-        
-        res = query.execute()
-        
-        if res.data:
-            # Verificar si alguno pertenece a la misma empresa gestora
-            for grupo_existente in res.data:
-                # Obtener empresa gestora del grupo existente
-                grupo_accion_res = grupos_service.supabase.table("grupos").select("""
-                    accion_formativa:acciones_formativas(empresa_id)
-                """).eq("id", grupo_existente["id"]).execute()
-                
-                if grupo_accion_res.data:
-                    empresa_existente = grupo_accion_res.data[0].get("accion_formativa", {}).get("empresa_id")
-                    if empresa_existente == empresa_gestora_id:
-                        return False, f"Ya existe un grupo con código '{codigo_grupo}' en {ano_accion} para esta empresa gestora"
-        
-        return True, ""
-        
-    except Exception as e:
-        return False, f"Error al validar código: {e}"
+            
+            # Buscar códigos duplicados en el mismo año y empresa gestora
+            query = self.supabase.table("grupos").select(
+                "id, codigo_grupo, fecha_inicio"
+            ).eq("codigo_grupo", codigo_grupo)
+            
+            # Filtrar por año
+            if ano_accion:
+                query = query.gte("fecha_inicio", f"{ano_accion}-01-01").lt("fecha_inicio", f"{ano_accion + 1}-01-01")
+            
+            # Excluir grupo actual si estamos editando
+            if grupo_id:
+                query = query.neq("id", grupo_id)
+            
+            res = query.execute()
+            
+            if res.data:
+                # Verificar si alguno pertenece a la misma empresa gestora
+                for grupo_existente in res.data:
+                    # Obtener empresa gestora del grupo existente
+                    grupo_accion_res = self.supabase.table("grupos").select("""
+                        accion_formativa:acciones_formativas(empresa_id)
+                    """).eq("id", grupo_existente["id"]).execute()
+                    
+                    if grupo_accion_res.data:
+                        empresa_existente = grupo_accion_res.data[0].get("accion_formativa", {}).get("empresa_id")
+                        if empresa_existente == empresa_gestora_id:
+                            return False, f"Ya existe un grupo con código '{codigo_grupo}' en {ano_accion} para esta empresa gestora"
+            
+            return True, ""
+            
+        except Exception as e:
+            return False, f"Error al validar código: {e}"
 
 def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, empresa_propietaria_id):
     """
