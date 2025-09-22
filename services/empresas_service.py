@@ -291,7 +291,30 @@ class EmpresasService:
         except Exception as e:
             st.error(f"Error al actualizar empresa: {e}")
             return False
-    
+            
+    def get_crm_empresa(self, empresa_id: str) -> dict:
+        """Obtiene datos CRM de la empresa si existen en la tabla crm_empresas."""
+        try:
+            res = self.supabase.table("crm_empresas").select("*").eq("empresa_id", empresa_id).limit(1).execute()
+            if res.data:
+                # Normalizamos fechas si son strings
+                row = res.data[0]
+                if isinstance(row.get("crm_inicio"), str):
+                    try:
+                        row["crm_inicio"] = datetime.fromisoformat(row["crm_inicio"]).date()
+                    except Exception:
+                        pass
+                if isinstance(row.get("crm_fin"), str) and row["crm_fin"]:
+                    try:
+                        row["crm_fin"] = datetime.fromisoformat(row["crm_fin"]).date()
+                    except Exception:
+                        pass
+                return row
+            return {}
+        except Exception as e:
+            st.error(f"❌ Error cargando CRM de empresa: {e}")
+            return {}
+
     # =========================
     # MÉTODOS DE ELIMINACIÓN
     # =========================
