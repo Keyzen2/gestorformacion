@@ -780,42 +780,65 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         # =========================
         if session_state.role == "admin" and not solo_datos_basicos:
             st.markdown("### 🔧 Configuración de Módulos")
-            
-            # --- Módulos básicos (directos en empresas) ---
-            st.markdown("#### 📦 Módulos Básicos")
-            col1, col2 = st.columns(2)
-            with col1:
-                formacion_activo = st.checkbox("📚 Formación", value=datos.get("formacion_activo", True), key=f"{form_id}_formacion")
-                iso_activo = st.checkbox("📋 ISO 9001", value=datos.get("iso_activo", False), key=f"{form_id}_iso")
-            with col2:
-                rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False), key=f"{form_id}_rgpd")
-                docu_avanzada_activo = st.checkbox("📁 Doc. Avanzada", value=datos.get("docu_avanzada_activo", False), key=f"{form_id}_docu")
         
-            # --- Módulo CRM (tabla aparte) ---
-            st.markdown("#### 📈 Módulo CRM")
-            crm_activo = st.checkbox("Activar CRM", value=crm_data.get("crm_activo", False), key=f"{form_id}_crm")
-            if crm_activo:
-                crm_inicio = st.date_input(
-                    "📅 CRM Inicio",
-                    value=crm_data.get("crm_inicio", date.today()),
-                    key=f"{form_id}_crm_inicio"
+            col1, col2 = st.columns(2)
+        
+            with col1:
+                formacion_activo = st.checkbox(
+                    "📚 Formación",
+                    value=datos.get("formacion_activo", True),
+                    key=f"{form_id}_formacion"
                 )
-                crm_fin = st.date_input(
-                    "📅 CRM Fin",
-                    value=crm_data.get("crm_fin"),
-                    key=f"{form_id}_crm_fin",
-                    help="Dejar vacío si no tiene fecha fin"
+                iso_activo = st.checkbox(
+                    "📋 ISO 9001",
+                    value=datos.get("iso_activo", False),
+                    key=f"{form_id}_iso"
                 )
-            else:
-                crm_inicio, crm_fin = None, None
+                rgpd_activo = st.checkbox(
+                    "🛡️ RGPD",
+                    value=datos.get("rgpd_activo", False),
+                    key=f"{form_id}_rgpd"
+                )
+        
+            with col2:
+                docu_avanzada_activo = st.checkbox(
+                    "📁 Doc. Avanzada",
+                    value=datos.get("docu_avanzada_activo", False),
+                    key=f"{form_id}_docu"
+                )
+        
+                # CRM: solo carga fechas si ya existe en BD
+                crm_data = empresas_service.get_crm_empresa(datos.get("id")) if not es_creacion else {}
+                crm_activo = st.checkbox(
+                    "📈 CRM",
+                    value=crm_data.get("crm_activo", False),
+                    key=f"{form_id}_crm"
+                )
+        
+                if crm_activo:
+                    crm_inicio = st.date_input(
+                        "📅 CRM Inicio",
+                        value=crm_data.get("crm_inicio") or date.today(),
+                        key=f"{form_id}_crm_inicio"
+                    )
+                    crm_fin = st.date_input(
+                        "📅 CRM Fin",
+                        value=crm_data.get("crm_fin"),
+                        key=f"{form_id}_crm_fin",
+                        help="Dejar vacío si no tiene fecha fin"
+                    )
+                else:
+                    crm_inicio, crm_fin = None, None
+        
         else:
-            # Valores por defecto para no-admin o solo_datos_basicos
             formacion_activo = datos.get("formacion_activo", True)
             iso_activo = datos.get("iso_activo", False)
             rgpd_activo = datos.get("rgpd_activo", False)
             docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
+        
+            crm_data = empresas_service.get_crm_empresa(datos.get("id")) if not es_creacion else {}
             crm_activo = crm_data.get("crm_activo", False)
-            crm_inicio, crm_fin = None, None
+            crm_inicio, crm_fin = crm_data.get("crm_inicio"), crm_data.get("crm_fin")
 
         
         # =========================
