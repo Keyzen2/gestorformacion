@@ -210,6 +210,8 @@ def vista_form_tutor(ds: DataService, gs: GruposService, tutor_id: Optional[str]
             nombre = st.text_input("👤 Nombre *", value=datos.get("nombre", ""))
             apellidos = st.text_input("👤 Apellidos *", value=datos.get("apellidos", ""))
             dni = st.text_input("🪪 DNI *", value=datos.get("dni", ""))
+            if dni and not validar_dni_cif(dni):
+                errores.append("DNI no válido")
             email = st.text_input("📧 Email *", value=datos.get("email", ""))
 
         with c2:
