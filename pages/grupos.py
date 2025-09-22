@@ -334,10 +334,6 @@ def crear_selector_horario_fundae(prefix=""):
     return horario_final
 
 # =========================
-# FORMULARIO PRINCIPAL CON JERARQUÍA
-# =========================
-
-# =========================
 # FORMULARIO PRINCIPAL CON VALIDACIONES FUNDAE INTEGRADAS
 # =========================
 
