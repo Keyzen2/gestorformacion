@@ -140,6 +140,26 @@ class GruposService:
         
         return True, ""
    
+    def construir_horario_fundae(self, manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados):
+        """Construye string de horario en formato FUNDAE."""
+        if not dias_seleccionados:
+            return ""
+    
+        dias_str = "".join(dias_seleccionados)
+        horarios = []
+    
+        if manana_inicio and manana_fin:
+            horarios.append(f"{manana_inicio} - {manana_fin}")
+    
+        if tarde_inicio and tarde_fin:
+            horarios.append(f"{tarde_inicio} - {tarde_fin}")
+    
+        if not horarios:
+            return ""
+    
+        horarios_str = " y ".join(horarios)
+        return f"Días: {dias_str} | Horario: {horarios_str}"
+
     def normalizar_modalidad_fundae(self, modalidad_input: str, aula_virtual: bool = None) -> str:
         """Convierte modalidad de acciones a formato FUNDAE."""
         if not modalidad_input:
