@@ -778,7 +778,7 @@ class DataService:
                 id, nombre, apellidos, email, telefono, nif, tipo_tutor,
                 direccion, ciudad, provincia, codigo_postal, cv_url, 
                 especialidad, created_at, empresa_id,
-                empresa:empresas!fk_empresa(id, nombre)
+                empresa:empresas!tutores_empresa_id_fkey(id, nombre)
             """)
             query = _self._apply_empresa_filter(query, "tutores")
             
@@ -807,7 +807,7 @@ class DataService:
                 id, nombre, apellidos, email, telefono, nif, tipo_tutor,
                 direccion, ciudad, provincia, codigo_postal, cv_url, 
                 especialidad, created_at, empresa_id,
-                empresa:empresas!fk_empresa(id, nombre)
+                empresa:empresas!tutores_empresa_id_fkey(id, nombre)
             """)
     
             # Aplicar filtro de empresa
