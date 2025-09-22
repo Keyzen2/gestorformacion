@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import io
+import secrets
+import string
+from services.alumnos import AlumnosService
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils import validar_dni_cif, export_csv
@@ -147,8 +150,15 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
 # =========================
 # FORMULARIO DE PARTICIPANTE
 # =========================
-def mostrar_formulario_participante(participante_data, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False):
-    """Formulario para crear o editar un participante."""
+def mostrar_formulario_participante(
+    participante_data,
+    participantes_service,
+    empresas_service,
+    grupos_service,
+    session_state,
+    es_creacion=False
+):
+    """Formulario para crear o editar un participante con integración a Auth Supabase."""
 
     if es_creacion:
         st.subheader("➕ Crear Participante")
@@ -157,7 +167,6 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
         st.subheader(f"✏️ Editar Participante: {participante_data['nombre']} {participante_data.get('apellidos','')}")
         datos = participante_data.copy()
 
-    # form_id único
     form_id = f"participante_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
 
     with st.form(form_id, clear_on_submit=es_creacion):
@@ -192,6 +201,13 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
             )
             telefono = st.text_input("Teléfono", value=datos.get("telefono",""), key=f"{form_id}_tel")
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
+
+        # 🔑 Solo en creación → credenciales Auth
+        if es_creacion:
+            st.markdown("### 🔑 Credenciales de acceso")
+            password = st.text_input("Contraseña", type="password", key=f"{form_id}_password")
+        else:
+            password = None  # no editable en edición
 
         # =========================
         # DATOS EMPRESA
@@ -241,6 +257,8 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
             errores.append("Documento inválido")
         if not empresa_id:
             errores.append("Debe seleccionar una empresa")
+        if es_creacion and (not email or not password):
+            errores.append("Email y contraseña son obligatorios")
 
         if errores:
             st.error("⚠️ Errores: " + ", ".join(errores))
@@ -266,12 +284,38 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
         # =========================
         # PROCESAMIENTO
         # =========================
-        if submitted:
-            procesar_guardado_participante(
-                datos, nombre, apellidos, tipo_documento, dni, nif, niss,
-                fecha_nacimiento, sexo, telefono, email, empresa_id, grupo_id,
-                participantes_service, es_creacion
-            )
+        if submitted and not errores:
+            datos_payload = {
+                "nombre": nombre,
+                "apellidos": apellidos,
+                "tipo_documento": tipo_documento or None,
+                "dni": dni or None,
+                "nif": nif or None,
+                "niss": niss or None,
+                "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+                "sexo": sexo or None,
+                "telefono": telefono or None,
+                "email": email or None,
+                "empresa_id": empresa_id,
+                "grupo_id": grupo_id or None,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+
+            if es_creacion:
+                datos_payload["password"] = password  # necesario para Auth
+                ok, _ = participantes_service.crear_participante_con_auth(datos_payload)
+                if ok:
+                    st.success("✅ Participante creado correctamente con acceso al portal")
+                    st.rerun()
+                else:
+                    st.error("❌ Error al crear participante")
+            else:
+                ok = participantes_service.update_participante(datos["id"], datos_payload)
+                if ok:
+                    st.success("✅ Cambios guardados correctamente")
+                    st.rerun()
+                else:
+                    st.error("❌ Error al actualizar participante")
 
         if eliminar:
             if st.session_state.get("confirmar_eliminar_participante"):
@@ -290,43 +334,77 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
 # =========================
 # PROCESAR GUARDADO
 # =========================
-def procesar_guardado_participante(datos, nombre, apellidos, tipo_documento, dni, nif, niss,
-                                   fecha_nacimiento, sexo, telefono, email, empresa_id, grupo_id,
-                                   participantes_service, es_creacion=False):
-    """Procesa creación o actualización de un participante."""
-    try:
-        payload = {
-            "nombre": nombre,
-            "apellidos": apellidos,
-            "tipo_documento": tipo_documento or None,
-            "dni": dni or None,
-            "nif": nif or None,
-            "niss": niss or None,
-            "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
-            "sexo": sexo or None,
-            "telefono": telefono or None,
-            "email": email or None,
-            "empresa_id": empresa_id,
-            "grupo_id": grupo_id or None,
-            "updated_at": datetime.utcnow().isoformat()
-        }
+def procesar_guardado_participante(
+    datos,
+    nombre,
+    apellidos,
+    tipo_documento,
+    dni,
+    nif,
+    niss,
+    fecha_nacimiento,
+    sexo,
+    telefono,
+    email,
+    password,
+    empresa_id,
+    grupo_id,
+    alumnos_service,
+    es_creacion=False
+):
+    """Procesa creación o actualización de alumno/participante con Auth."""
 
+    try:
         if es_creacion:
-            ok, _ = participantes_service.crear_participante(payload)
-            if ok:
-                st.success("✅ Participante creado correctamente")
+            nuevo = {
+                "nombre": nombre,
+                "apellidos": apellidos,
+                "tipo_documento": tipo_documento or None,
+                "dni": dni or None,
+                "nif": nif or None,
+                "niss": niss or None,
+                "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+                "sexo": sexo or None,
+                "telefono": telefono,
+                "email": email,
+                "password": password,  # Necesario para Auth
+                "empresa_id": empresa_id,
+                "grupo_id": grupo_id,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            participante_id = alumnos_service.crear_alumno(nuevo)
+            if participante_id:
+                st.success("✅ Alumno creado correctamente con acceso al portal")
                 st.rerun()
             else:
-                st.error("❌ Error al crear participante")
+                st.error("❌ Error al crear alumno")
+
         else:
-            ok = participantes_service.update_participante(datos["id"], payload)
-            if ok:
+            cambios = {
+                "nombre": nombre,
+                "apellidos": apellidos,
+                "tipo_documento": tipo_documento or None,
+                "dni": dni or None,
+                "nif": nif or None,
+                "niss": niss or None,
+                "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+                "sexo": sexo or None,
+                "telefono": telefono,
+                "email": email,
+                "empresa_id": empresa_id,
+                "grupo_id": grupo_id,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            res = alumnos_service.supabase.table("participantes").update(cambios).eq("id", datos["id"]).execute()
+            if res.data:
                 st.success("✅ Cambios guardados correctamente")
                 st.rerun()
             else:
-                st.error("❌ Error al actualizar participante")
+                st.error("❌ Error al actualizar alumno")
+
     except Exception as e:
-        st.error(f"❌ Error procesando participante: {e}")
+        st.error(f"❌ Error procesando alumno: {e}")
 
 
 # =========================
@@ -379,26 +457,27 @@ def exportar_participantes(participantes_service, session_state, df_filtrado=Non
 # =========================
 # IMPORTACIÓN DE PARTICIPANTES (con validaciones extendidas)
 # =========================
-def importar_participantes(participantes_service, empresas_service, session_state):
-    """Importa participantes desde un archivo CSV/XLSX, con validaciones de datos y control de rol."""
+def generar_password_aleatoria(longitud: int = 10) -> str:
+    """Genera una contraseña aleatoria segura."""
+    caracteres = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(caracteres) for _ in range(longitud))
+
+def importar_participantes(alumnos_service: AlumnosService, empresas_service, session_state):
+    """Importa alumnos desde un CSV/XLSX creando también usuarios en Auth."""
     uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
 
-    # 📑 Plantilla ejemplo
+    # 📑 Plantilla de ejemplo
     ejemplo_df = pd.DataFrame([{
         "nombre": "Juan",
         "apellidos": "Pérez Gómez",
         "dni": "12345678A",
-        "nif": "12345678A",
-        "niss": "12345678901",
         "email": "juan.perez@correo.com",
         "telefono": "600123456",
-        "fecha_nacimiento": "1985-06-15",
-        "sexo": "M",
-        "empresa_id": "",  # Solo lo usa admin
-        "grupo_id": ""     # Opcional
+        "empresa_id": "",
+        "grupo_id": "",
+        "password": ""   # opcional → si está vacío se genera aleatorio
     }])
 
-    # ⚠️ Guardar plantilla en memoria correctamente
     buffer = io.BytesIO()
     ejemplo_df.to_excel(buffer, index=False, engine="openpyxl")
     buffer.seek(0)
@@ -406,7 +485,7 @@ def importar_participantes(participantes_service, empresas_service, session_stat
     st.download_button(
         "📑 Descargar plantilla XLSX",
         data=buffer,
-        file_name="plantilla_participantes.xlsx",
+        file_name="plantilla_alumnos.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True
     )
@@ -416,78 +495,65 @@ def importar_participantes(participantes_service, empresas_service, session_stat
 
     try:
         if uploaded.name.endswith(".csv"):
-            df = pd.read_csv(uploaded, dtype=str)
+            df = pd.read_csv(uploaded, dtype=str).fillna("")
         else:
-            df = pd.read_excel(uploaded, dtype=str)
+            df = pd.read_excel(uploaded, dtype=str).fillna("")
 
         st.success(f"✅ {len(df)} filas cargadas desde {uploaded.name}")
         st.dataframe(df.head(10), use_container_width=True)
 
-        if st.button("🚀 Importar participantes", type="primary", use_container_width=True):
-            errores = []
+        if st.button("🚀 Importar alumnos", type="primary", use_container_width=True):
+            errores, creados = [], 0
             for idx, fila in df.iterrows():
                 try:
-                    # === Validaciones básicas ===
-                    if not fila.get("nombre") or not fila.get("apellidos"):
-                        raise ValueError("Nombre y apellidos son obligatorios")
+                    # === Validaciones mínimas ===
+                    if not fila.get("nombre") or not fila.get("apellidos") or not fila.get("email"):
+                        raise ValueError("Nombre, apellidos y email son obligatorios")
 
-                    dni = fila.get("dni")
-                    if dni and not validar_dni_cif(dni):
-                        raise ValueError(f"DNI/NIF inválido: {dni}")
+                    if "@" not in fila["email"]:
+                        raise ValueError(f"Email inválido: {fila['email']}")
 
-                    niss = fila.get("niss")
-                    if niss and not validar_niss(niss):
-                        raise ValueError(f"NISS inválido: {niss}")
-
-                    email = fila.get("email")
-                    if email and ("@" not in email or "." not in email.split("@")[-1]):
-                        raise ValueError(f"Email inválido: {email}")
-
-                    telefono = fila.get("telefono")
-                    if telefono and not telefono.isdigit():
-                        raise ValueError(f"Teléfono inválido: {telefono}")
-
-                    # === Empresa y Grupo según rol ===
+                    # Empresa según rol
                     if session_state.role == "gestor":
                         empresa_id = session_state.user.get("empresa_id")
-                    else:  # admin
+                    else:
                         empresa_id = fila.get("empresa_id") or None
 
                     grupo_id = fila.get("grupo_id") or None
+                    password = fila.get("password") or generar_password_aleatoria()
 
-                    # === Construcción de datos ===
                     datos = {
                         "nombre": fila.get("nombre"),
                         "apellidos": fila.get("apellidos"),
-                        "dni": dni,
-                        "nif": fila.get("nif"),
-                        "niss": niss,
-                        "email": email,
-                        "telefono": telefono,
-                        "fecha_nacimiento": fila.get("fecha_nacimiento"),
-                        "sexo": fila.get("sexo"),
+                        "dni": fila.get("dni"),
+                        "email": fila.get("email"),
+                        "telefono": fila.get("telefono"),
                         "empresa_id": empresa_id,
                         "grupo_id": grupo_id,
+                        "password": password,
                         "created_at": datetime.utcnow().isoformat(),
-                        "updated_at": datetime.utcnow().isoformat()
+                        "updated_at": datetime.utcnow().isoformat(),
                     }
 
-                    # Guardar en BD
-                    participantes_service.crear_participante(datos)
+                    participante_id = alumnos_service.crear_alumno(datos)
+                    if participante_id:
+                        creados += 1
+                    else:
+                        raise ValueError("Error al crear alumno en BD/Auth")
 
                 except Exception as ex:
                     errores.append(f"Fila {idx+1}: {ex}")
 
             if errores:
-                st.error("⚠️ Errores detectados durante la importación:")
+                st.error("⚠️ Errores durante la importación:")
                 for e in errores:
                     st.text(e)
-            else:
-                st.success("✅ Importación completada sin errores")
+            if creados:
+                st.success(f"✅ {creados} alumnos importados correctamente")
                 st.rerun()
 
     except Exception as e:
-        st.error(f"❌ Error importando participantes: {e}")
+        st.error(f"❌ Error importando alumnos: {e}")
         
 # =========================
 # MAIN PARTICIPANTES
