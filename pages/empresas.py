@@ -82,8 +82,35 @@ def exportar_empresas(empresas_service, session_state):
         st.error(f"❌ Error exportando empresas: {e}")
         
 def importar_empresas(empresas_service, session_state):
-    """Importa empresas desde un archivo CSV/XLSX."""
+    """Importa empresas desde un archivo CSV/XLSX con plantilla descargable."""
     uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
+    
+    # 📑 Botón para descargar plantilla de ejemplo
+    ejemplo_df = pd.DataFrame([{
+        "nombre": "Ejemplo S.L.",
+        "cif": "B12345678",
+        "telefono": "950123456",
+        "email": "ejemplo@empresa.com",
+        "direccion": "Calle Mayor 1",
+        "ciudad": "Almería",
+        "provincia": "Almería",
+        "codigo_postal": "04001",
+        "sector": "Servicios",
+        "convenio_referencia": "Convenio Oficinas",
+        "codigo_cnae": "6201",
+        "empresa_matriz_id": "",
+        "tipo_empresa": "CLIENTE_SAAS",
+        "nivel_jerarquico": 1
+    }])
+
+    st.download_button(
+        "📑 Descargar plantilla XLSX",
+        data=ejemplo_df.to_excel(index=False, engine="openpyxl"),
+        file_name="plantilla_empresas.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
     if not uploaded:
         return
     
@@ -112,7 +139,7 @@ def importar_empresas(empresas_service, session_state):
                         "sector": fila.get("sector"),
                         "convenio_referencia": fila.get("convenio_referencia"),
                         "codigo_cnae": fila.get("codigo_cnae"),
-                        "empresa_matriz_id": fila.get("empresa_matriz_id"),
+                        "empresa_matriz_id": fila.get("empresa_matriz_id") or None,
                         "tipo_empresa": fila.get("tipo_empresa") or "CLIENTE_SAAS",
                         "nivel_jerarquico": int(fila.get("nivel_jerarquico") or 1),
                         "created_at": datetime.utcnow().isoformat(),
