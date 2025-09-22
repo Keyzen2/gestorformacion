@@ -1312,6 +1312,7 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
             return limite, tarifa
         except:
         return 0, 0
+        
     @st.cache_data(ttl=300)
     def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene costes de un grupo específico."""
