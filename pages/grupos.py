@@ -632,19 +632,19 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             )
         
         # =====================
-        # SECCIÓN 2: HORARIOS FUNDAE (mantener igual)
+        # SECCIÓN 2: HORARIOS FUNDAE
         # =====================
         with st.container(border=True):
             st.markdown("### ⏰ Horarios de Impartición")
-            
+        
             # Cargar horario actual si existe
             horario_actual = datos_grupo.get("horario", "")
-            
-           if horario_actual and not es_creacion:
+        
+            if horario_actual and not es_creacion:
                 st.info(f"**Horario actual**: {horario_actual}")
-                
+        
                 cambiar_horario = st.checkbox("Modificar horario")
-                
+        
                 if cambiar_horario:
                     horario_nuevo = crear_selector_horario_fundae(grupos_service, "edit")
                 else:
