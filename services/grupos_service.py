@@ -261,7 +261,7 @@ class GruposService:
         except Exception as e:
             return False, f"Error al validar código: {e}"
 
-def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, empresa_propietaria_id):
+def determinar_empresa_gestora_responsable(self, accion_formativa_id, empresa_propietaria_id):
     """
     Determina qué empresa es responsable ante FUNDAE según jerarquía:
     1. Si la acción es de una gestora, la gestora es responsable
@@ -269,7 +269,7 @@ def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, 
     """
     try:
         # Obtener empresa de la acción formativa
-        accion_res = grupos_service.supabase.table("acciones_formativas").select(
+        accion_res = self.supabase.table("acciones_formativas").select(
             "empresa_id"
         ).eq("id", accion_formativa_id).execute()
         
@@ -279,7 +279,7 @@ def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, 
         empresa_accion_id = accion_res.data[0]["empresa_id"]
         
         # Obtener información de la empresa de la acción
-        empresa_res = grupos_service.supabase.table("empresas").select(
+        empresa_res = self.supabase.table("empresas").select(
             "id, nombre, tipo_empresa, empresa_matriz_id"
         ).eq("id", empresa_accion_id).execute()
         
@@ -296,7 +296,7 @@ def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, 
         elif empresa_accion["tipo_empresa"] == "CLIENTE_GESTOR":
             gestora_id = empresa_accion["empresa_matriz_id"]
             if gestora_id:
-                gestora_res = grupos_service.supabase.table("empresas").select("*").eq("id", gestora_id).execute()
+                gestora_res = self.supabase.table("empresas").select("*").eq("id", gestora_id).execute()
                 if gestora_res.data:
                     return gestora_res.data[0], ""
                 else:
@@ -308,7 +308,7 @@ def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, 
         elif empresa_accion["tipo_empresa"] == "CLIENTE_SAAS":
             # Para clientes SaaS, la responsable es la empresa propietaria del grupo
             if empresa_propietaria_id:
-                propietaria_res = grupos_service.supabase.table("empresas").select("*").eq("id", empresa_propietaria_id).execute()
+                propietaria_res = self.supabase.table("empresas").select("*").eq("id", empresa_propietaria_id).execute()
                 if propietaria_res.data:
                     return propietaria_res.data[0], ""
             return empresa_accion, ""  # Fallback a la empresa de la acción
@@ -318,7 +318,7 @@ def determinar_empresa_gestora_responsable(grupos_service, accion_formativa_id, 
     except Exception as e:
         return None, f"Error al determinar empresa responsable: {e}"
 
-def generar_codigo_grupo_sugerido(grupos_service, accion_formativa_id, ano=None):
+def generar_codigo_grupo_sugerido(self, accion_formativa_id, ano=None):
     """
     Genera un código de grupo sugerido basado en la secuencia existente para el año.
     Formato sugerido: [CODIGO_ACCION]-G[NUMERO] (ej: FORM001-G1, FORM001-G2)
@@ -328,7 +328,7 @@ def generar_codigo_grupo_sugerido(grupos_service, accion_formativa_id, ano=None)
             ano = datetime.now().year
         
         # Obtener información de la acción
-        accion_res = grupos_service.supabase.table("acciones_formativas").select(
+        accion_res = self.supabase.table("acciones_formativas").select(
             "codigo_accion, empresa_id"
         ).eq("id", accion_formativa_id).execute()
         
@@ -339,7 +339,7 @@ def generar_codigo_grupo_sugerido(grupos_service, accion_formativa_id, ano=None)
         empresa_gestora_id = accion_res.data[0]["empresa_id"]
         
         # Buscar grupos existentes para esta acción en el año actual
-        grupos_existentes = grupos_service.supabase.table("grupos").select("""
+        grupos_existentes = self.supabase.table("grupos").select("""
             codigo_grupo,
             accion_formativa:acciones_formativas(empresa_id)
         """).eq("accion_formativa_id", accion_formativa_id).gte(
@@ -428,7 +428,7 @@ def verificar_codigos_duplicados_por_ano(self, df_grupos: pd.DataFrame) -> List[
         for _, grupo in df_grupos.iterrows():
             accion_id = grupo.get('accion_formativa_id')
             if accion_id:
-                empresa_resp, _ = self.determinar_empresa_gestora_responsable(accion_id)
+                empresa_resp, _ = self.determinar_empresa_gestora_responsable(accion_id, grupo.get('empresa_id'))
                 if empresa_resp:
                     grupos_enriquecidos.append({
                         'codigo_grupo': grupo.get('codigo_grupo'),
@@ -484,7 +484,7 @@ def get_avisos_fundae(self, df_grupos: pd.DataFrame) -> List[Dict[str, Any]]:
     for _, grupo in df_grupos.iterrows():
         accion_id = grupo.get('accion_formativa_id')
         if accion_id:
-            empresa_resp, error = self.determinar_empresa_gestora_responsable(accion_id)
+            empresa_resp, error = self.determinar_empresa_gestora_responsable(accion_id, grupo.get('empresa_id'))
             if error or not empresa_resp:
                 codigo_grupo = grupo.get('codigo_grupo', 'Sin código')
                 grupos_problematicos.append(f"Grupo '{codigo_grupo}': {error or 'Sin empresa responsable'}")
@@ -593,6 +593,7 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
     except Exception as e:
         st.error(f"Error al crear grupo con validaciones FUNDAE: {e}")
         return False, ""
+        
     # =========================
     # GRUPOS - CONSULTAS PRINCIPALES
     # =========================
@@ -1283,7 +1284,34 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
     # =========================
     # COSTES FUNDAE
     # =========================
-
+    @st.cache_data(ttl=3600)
+    def get_provincias(_self) -> list:
+        """Devuelve listado de provincias ordenadas alfabéticamente."""
+        try:
+            res = _self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"Error al cargar provincias: {e}")
+            return []
+    
+    @st.cache_data(ttl=3600) 
+    def get_localidades_por_provincia(_self, provincia_id: int) -> list:
+        """Devuelve listado de localidades de una provincia."""
+        try:
+            res = _self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            return res.data or []
+        except Exception as e:
+            st.error(f"Error al cargar localidades: {e}")
+            return []
+    
+    def calcular_limite_fundae(self, modalidad: str, horas: int, participantes: int) -> Tuple[float, float]:
+        """Calcula límite máximo FUNDAE según modalidad."""
+        try:
+            tarifa = 7.5 if modalidad in ["Teleformación", "TELEFORMACION"] else 13.0
+            limite = tarifa * horas * participantes
+            return limite, tarifa
+        except:
+        return 0, 0
     @st.cache_data(ttl=300)
     def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene costes de un grupo específico."""
@@ -1422,51 +1450,6 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
                     st.write(f"• {detalle}")
                 if len(aviso["detalles"]) > 5:
                     st.caption(f"... y {len(aviso['detalles']) - 5} más")
-    
-    def verificar_codigos_duplicados_por_ano(df_grupos):
-        """
-        Verifica códigos de grupo duplicados en el mismo año.
-        """
-        duplicados = []
-        
-        if df_grupos.empty:
-            return duplicados
-        
-        # Agrupar por año
-        df_grupos['ano'] = pd.to_datetime(df_grupos['fecha_inicio'], errors='coerce').dt.year
-        
-        for ano in df_grupos['ano'].dropna().unique():
-            grupos_ano = df_grupos[df_grupos['ano'] == ano]
-            
-            # Buscar duplicados
-            duplicados_ano = grupos_ano.groupby('codigo_grupo').size()
-            duplicados_ano = duplicados_ano[duplicados_ano > 1]
-            
-            for codigo, count in duplicados_ano.items():
-                duplicados.append(f"Código '{codigo}' repetido {count} veces en {int(ano)}")
-        
-        return duplicados
-    
-    def verificar_grupos_sin_empresa_responsable(df_grupos, grupos_service):
-        """
-        Verifica grupos que no tienen empresa responsable clara ante FUNDAE.
-        """
-        problemas = []
-        
-        for _, grupo in df_grupos.iterrows():
-            accion_id = grupo.get('accion_formativa_id')
-            empresa_id = grupo.get('empresa_id')
-            
-            if accion_id and empresa_id:
-                empresa_responsable, error = determinar_empresa_gestora_responsable(
-                    grupos_service, accion_id, empresa_id
-                )
-                
-                if error or not empresa_responsable:
-                    codigo_grupo = grupo.get('codigo_grupo', 'Sin código')
-                    problemas.append(f"Grupo '{codigo_grupo}': {error or 'Sin empresa responsable'}")
-        
-        return problemas
         
     # =========================
     # MÉTODOS DE ESTADÍSTICAS Y REPORTES
