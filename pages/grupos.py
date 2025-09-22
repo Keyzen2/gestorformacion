@@ -337,8 +337,12 @@ def crear_selector_horario_fundae(prefix=""):
 # FORMULARIO PRINCIPAL CON JERARQUÍA
 # =========================
 
+# =========================
+# FORMULARIO PRINCIPAL CON VALIDACIONES FUNDAE INTEGRADAS
+# =========================
+
 def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacion=False):
-    """Formulario unificado para crear/editar grupos con soporte jerárquico."""
+    """Formulario unificado para crear/editar grupos con validaciones FUNDAE completas."""
     
     # Obtener datos necesarios
     acciones_dict = grupos_service.get_acciones_dict()
@@ -374,7 +378,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     with st.form(form_key, clear_on_submit=es_creacion):
         
         # =====================
-        # SECCIÓN 1: DATOS BÁSICOS FUNDAE
+        # SECCIÓN 1: DATOS BÁSICOS FUNDAE CON VALIDACIONES
         # =====================
         with st.container(border=True):
             st.markdown("### 🆔 Datos Básicos FUNDAE")
@@ -383,24 +387,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             col1, col2 = st.columns(2)
             
             with col1:
-                # Código del grupo
-                if es_creacion:
-                    codigo_grupo = st.text_input(
-                        "🏷️ Código del Grupo *",
-                        value=datos_grupo.get("codigo_grupo", ""),
-                        max_chars=50,
-                        help="Código único identificativo del grupo (máximo 50 caracteres)"
-                    )
-                else:
-                    codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                    st.text_input(
-                        "🏷️ Código del Grupo",
-                        value=codigo_grupo,
-                        disabled=True,
-                        help="No se puede modificar después de la creación"
-                    )
-                
-                # Acción formativa
+                # Acción formativa PRIMERO (necesaria para validaciones)
                 acciones_nombres = list(acciones_dict.keys())
                 if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
                     accion_actual = None
@@ -416,11 +403,73 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     "📚 Acción Formativa *",
                     acciones_nombres,
                     index=indice_actual,
-                    help="Selecciona la acción formativa asociada"
+                    help="Selecciona la acción formativa asociada",
+                    key="accion_formativa_select"
                 )
+                
+                accion_id = acciones_dict[accion_formativa]
+                
+                # CÓDIGO DEL GRUPO CON VALIDACIONES FUNDAE
+                if es_creacion:
+                    # Generar código sugerido automáticamente
+                    codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido(accion_id)
+                    
+                    if codigo_sugerido and not error_sugerido:
+                        st.info(f"💡 Código sugerido: **{codigo_sugerido}**")
+                        # Usar el código sugerido como valor por defecto
+                        codigo_default = datos_grupo.get("codigo_grupo", codigo_sugerido)
+                    else:
+                        codigo_default = datos_grupo.get("codigo_grupo", "")
+                        if error_sugerido:
+                            st.warning(f"⚠️ No se pudo generar código sugerido: {error_sugerido}")
+                    
+                    codigo_grupo = st.text_input(
+                        "🏷️ Código del Grupo *",
+                        value=codigo_default,
+                        max_chars=50,
+                        help="Código único por acción formativa, empresa gestora y año",
+                        key="codigo_grupo_input"
+                    )
+                    
+                    # VALIDACIÓN EN TIEMPO REAL DEL CÓDIGO
+                    if codigo_grupo and accion_id:
+                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_unico_fundae(
+                            codigo_grupo, accion_id
+                        )
+                        
+                        if es_valido:
+                            st.success(f"✅ Código '{codigo_grupo}' disponible")
+                        else:
+                            st.error(f"❌ {mensaje_error}")
+                            
+                            # Botón para usar código sugerido como alternativa
+                            if codigo_sugerido and codigo_grupo != codigo_sugerido:
+                                if st.button(f"Usar código sugerido: {codigo_sugerido}", key="usar_sugerido"):
+                                    st.session_state.codigo_grupo_input = codigo_sugerido
+                                    st.rerun()
+                
+                else:
+                    # Modo edición - código no editable
+                    codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                    st.text_input(
+                        "🏷️ Código del Grupo",
+                        value=codigo_grupo,
+                        disabled=True,
+                        help="No se puede modificar después de la creación"
+                    )
+                    
+                    # Mostrar validación del código existente
+                    if codigo_grupo and accion_id:
+                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_unico_fundae(
+                            codigo_grupo, accion_id, datos_grupo.get("id")
+                        )
+                        
+                        if es_valido:
+                            st.success(f"✅ Código válido")
+                        else:
+                            st.error(f"❌ {mensaje_error}")
         
                 # Calcular modalidad automáticamente
-                accion_id = acciones_dict[accion_formativa]
                 accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
                 modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
         
@@ -446,6 +495,19 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     value=fecha_fin_prevista_value,
                     help="Fecha prevista de finalización"
                 )
+                
+                # VALIDACIÓN TEMPORAL EN TIEMPO REAL
+                if fecha_inicio and fecha_fin_prevista and accion_id:
+                    errores_temporales = grupos_service.validar_coherencia_temporal_grupo(
+                        fecha_inicio, fecha_fin_prevista, accion_id
+                    )
+                    
+                    if errores_temporales:
+                        st.error("❌ Errores de coherencia temporal:")
+                        for error in errores_temporales:
+                            st.error(f"• {error}")
+                    else:
+                        st.success("✅ Fechas coherentes con la acción formativa")
             
             with col2:
                 # Empresa propietaria (solo admin)
@@ -476,6 +538,26 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     # Para gestores, se usa su empresa automáticamente
                     empresa_id = grupos_service.empresa_id
                     st.info(f"🏢 Tu empresa será la propietaria del grupo")
+                
+                # MOSTRAR EMPRESA RESPONSABLE ANTE FUNDAE
+                if accion_id and empresa_id:
+                    empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
+                        accion_id, empresa_id
+                    )
+                    
+                    if empresa_responsable and not error_empresa:
+                        with st.container(border=True):
+                            st.markdown("#### 🏢 Empresa Responsable ante FUNDAE")
+                            st.write(f"**Nombre:** {empresa_responsable['nombre']}")
+                            st.write(f"**CIF:** {empresa_responsable.get('cif', 'N/A')}")
+                            st.write(f"**Tipo:** {empresa_responsable['tipo_empresa']}")
+                            
+                            if empresa_responsable['tipo_empresa'] == "GESTORA":
+                                st.success("✅ Gestora - Responsable directa ante FUNDAE")
+                            else:
+                                st.info("ℹ️ Los XMLs se generarán bajo la gestora correspondiente")
+                    elif error_empresa:
+                        st.warning(f"⚠️ {error_empresa}")
                 
                 # Localidad y Provincia con selectores jerárquicos
                 try:
@@ -567,7 +649,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             )
         
         # =====================
-        # SECCIÓN 2: HORARIOS FUNDAE
+        # SECCIÓN 2: HORARIOS FUNDAE (mantener igual)
         # =====================
         with st.container(border=True):
             st.markdown("### ⏰ Horarios de Impartición")
@@ -651,7 +733,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                         help="Número de participantes no aptos"
                     )
                 
-                # Validación en tiempo real
+                # VALIDACIÓN DE COHERENCIA EN TIEMPO REAL
                 if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
                     st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
                 elif n_finalizados > 0:
@@ -665,10 +747,10 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 }
         
         # =====================
-        # VALIDACIONES Y BOTONES
+        # VALIDACIONES FINALES Y BOTONES
         # =====================
         
-        # Validaciones FUNDAE
+        # Validaciones FUNDAE completas
         errores = []
         if not codigo_grupo:
             errores.append("Código del grupo requerido")
@@ -688,6 +770,14 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             errores.append("Empresa propietaria requerida")
         if not horario_nuevo:
             errores.append("Horario requerido")
+        
+        # Validar código único si estamos creando
+        if es_creacion and codigo_grupo and accion_id:
+            es_valido_codigo, error_codigo = grupos_service.validar_codigo_grupo_unico_fundae(
+                codigo_grupo, accion_id
+            )
+            if not es_valido_codigo:
+                errores.append(f"Código no válido: {error_codigo}")
         
         # Validar datos de finalización si aplica
         if datos_finalizacion:
@@ -759,9 +849,10 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             
             try:
                 if es_creacion:
-                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia(datos_para_guardar)
+                    # Usar método mejorado con validaciones FUNDAE
+                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
                     if exito:
-                        st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente")
+                        st.success(f"✅ Grupo '{codigo_grupo}' creado correctamente con validaciones FUNDAE")
                         # Cargar el grupo recién creado para edición
                         grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
                         if grupo_creado.data:
