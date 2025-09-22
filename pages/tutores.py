@@ -6,7 +6,7 @@ from utils import (
     validar_dni_cif,
     safe_int_conversion
 )
-from data_service import DataService
+from services.data_service import DataService
 
 
 # =========================
