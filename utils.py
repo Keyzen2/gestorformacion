@@ -50,7 +50,7 @@ def validar_dni_cif(documento: str) -> bool:
         return letras[numero % 23] == letra
         
     # Validar CIF (letra + 7 números + dígito control/letra)
-    elif re.match(r'^[ABCDEFGHJKLMNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
+    elif re.match(r'^[ABCDEFGHJNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
         letra_ini = documento[0]
         numeros = documento[1:8]
         control = documento[8]
@@ -81,7 +81,7 @@ def validar_dni_cif(documento: str) -> bool:
         else:
             # Para CIFs que pueden tener número o letra
             return str(unidad) == control or letras_control[unidad] == control
-    
+
     return False
 
 def validar_email(email: str) -> bool:
