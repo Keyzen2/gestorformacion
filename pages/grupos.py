@@ -228,24 +228,38 @@ def mostrar_avisos_grupos(grupos_pendientes):
                         st.session_state.grupo_seleccionado = grupo_copy
                         st.rerun()
 
-def crear_selector_horario_fundae(key_suffix="", horario_inicial=""):
+def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial=""):
     """Crea selector de horarios con formato FUNDAE."""
-    
+
     # Franja horaria con key única
     franja = st.selectbox(
         "Franja horaria",
         ["Mañanas", "Tardes", "Mañanas y Tardes"],
         key=f"franja_{key_suffix}"
     )
-    
+
     # Definir rangos según franja SELECCIONADA
     if franja == "Mañanas":
-        horas_disponibles = ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30", "13:45", "14:00"]
+        horas_disponibles = [
+            "09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45",
+            "11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45",
+            "13:00","13:15","13:30","13:45","14:00"
+        ]
     elif franja == "Tardes":
-        horas_disponibles = ["14:00", "14:15", "14:30", "14:45", "15:00", "15:15", "15:30", "15:45", "16:00", "16:15", "16:30", "16:45", "17:00", "17:15", "17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00"]
+        horas_disponibles = [
+            "14:00","14:15","14:30","14:45","15:00","15:15","15:30","15:45",
+            "16:00","16:15","16:30","16:45","17:00","17:15","17:30","17:45",
+            "18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00"
+        ]
     else:  # Mañanas y Tardes
-        horas_disponibles = ["09:00", "09:15", "09:30", "09:45", "10:00", "10:15", "10:30", "10:45", "11:00", "11:15", "11:30", "11:45", "12:00", "12:15", "12:30", "12:45", "13:00", "13:15", "13:30", "13:45", "14:00", "14:15", "14:30", "14:45", "15:00", "15:15", "15:30", "15:45", "16:00", "16:15", "16:30", "16:45", "17:00", "17:15", "17:30", "17:45", "18:00", "18:15", "18:30", "18:45", "19:00", "19:15", "19:30", "19:45", "20:00"]
-    
+        horas_disponibles = [
+            "09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45",
+            "11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45","13:00",
+            "13:15","13:30","13:45","14:00","14:15","14:30","14:45","15:00","15:15",
+            "15:30","15:45","16:00","16:15","16:30","16:45","17:00","17:15","17:30",
+            "17:45","18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00"
+        ]
+
     # Selector de horas
     col1, col2 = st.columns(2)
     with col1:
@@ -254,69 +268,57 @@ def crear_selector_horario_fundae(key_suffix="", horario_inicial=""):
             horas_disponibles[:-1],  # Excluir última hora para inicio
             key=f"hora_inicio_{key_suffix}_{franja}"
         )
-    
+
     with col2:
-        # Filtrar horas de fin posteriores a inicio
         idx_inicio = horas_disponibles.index(hora_inicio)
         horas_fin_disponibles = horas_disponibles[idx_inicio + 1:]
-        
+
         hora_fin = st.selectbox(
             "Hora fin",
             horas_fin_disponibles,
             key=f"hora_fin_{key_suffix}_{franja}"
         )
-    
-    # Definir constantes para días (si no están definidas globalmente)
-    DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
-    NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-    
+
     # Días de la semana
+    DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
+    NOMBRES_DIAS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+
     st.markdown("**📅 Días de Impartición**")
     with st.container(border=True):
         cols = st.columns(7)
         dias_seleccionados = []
-        
+
         for i, (dia_corto, dia_largo) in enumerate(zip(DIAS_SEMANA, NOMBRES_DIAS)):
             with cols[i]:
                 if st.checkbox(
                     dia_largo,
-                    value=dia_corto in ["L", "M", "X", "J", "V"],  # L-V por defecto
-                    key=f"{key_suffix}_dia_{dia_corto}_{franja}"  # Key única con franja
+                    value=dia_corto in ["L","M","X","J","V"],  # L-V por defecto
+                    key=f"{key_suffix}_dia_{dia_corto}_{franja}"
                 ):
                     dias_seleccionados.append(dia_corto)
-    
+
     # Construir horario según franja seleccionada
     if franja == "Mañanas":
-        horario_final = construir_horario_fundae(
+        horario_final = grupos_service.construir_horario_fundae(
             hora_inicio, hora_fin, None, None, dias_seleccionados
         )
     elif franja == "Tardes":
-        horario_final = construir_horario_fundae(
+        horario_final = grupos_service.construir_horario_fundae(
             None, None, hora_inicio, hora_fin, dias_seleccionados
         )
     else:  # Mañanas y Tardes
-        # Para mañanas y tardes, usar el rango completo
-        horario_final = construir_horario_fundae(
+        horario_final = grupos_service.construir_horario_fundae(
             "09:00", "14:00", "15:00", hora_fin, dias_seleccionados
         )
-    
+
     # Mostrar resultado
     if horario_final:
         st.success(f"✅ Horario FUNDAE: {horario_final}")
-        
-        # Validar formato (si tienes esta función)
-        try:
-            from services.grupos_service import GruposService
-            # O usar la función de validación directamente si está disponible
-            es_valido = True  # Simplificado por ahora
-            if not es_valido:
-                st.error("❌ Error en formato de horario")
-        except:
-            pass  # Validación opcional
     else:
         st.warning("⚠️ Configure al menos un tramo horario y días")
-    
+
     return horario_final
+
 # =========================
 # FORMULARIO PRINCIPAL CON VALIDACIONES FUNDAE INTEGRADAS
 # =========================
