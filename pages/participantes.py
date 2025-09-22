@@ -293,60 +293,142 @@ def procesar_guardado_participante(datos, nombre, apellidos, tipo_documento, dni
 
 
 # =========================
-# EXPORTACIÓN MASIVA
+# EXPORTACIÓN DE PARTICIPANTES
 # =========================
 def exportar_participantes(participantes_service, session_state):
-    """Exporta participantes filtrados por rol a CSV."""
+    """Exporta participantes a CSV/XLSX respetando filtros y rol."""
     try:
         df = participantes_service.get_participantes_completos()
-        if df.empty:
-            st.warning("⚠️ No hay participantes para exportar")
-            return
 
-        # Filtro rol gestor
+        # 🔒 Filtrado por rol
         if session_state.role == "gestor":
             empresa_id = session_state.user.get("empresa_id")
-            df = df[
-                (df["empresa_id"] == empresa_id) |
-                (df["empresa_matriz_id"] == empresa_id)
-            ]
+            df = df[df["empresa_id"] == empresa_id]
 
-        if not df.empty:
-            export_csv(df, "participantes_export.csv")
-        else:
-            st.warning("⚠️ No hay registros para exportar con tus permisos")
+        if df.empty:
+            st.warning("⚠️ No hay participantes para exportar.")
+            return
+
+        st.download_button(
+            "📥 Exportar participantes a CSV",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name="participantes.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
     except Exception as e:
         st.error(f"❌ Error exportando participantes: {e}")
 
-
 # =========================
-# IMPORTACIÓN MASIVA
+# IMPORTACIÓN DE PARTICIPANTES (con validaciones extendidas)
 # =========================
 def importar_participantes(participantes_service, empresas_service, session_state):
-    """Importa participantes masivamente desde CSV o Excel."""
-    st.markdown("### 📥 Importar Participantes")
-    archivo = st.file_uploader("Sube un archivo CSV o Excel", type=["csv", "xlsx"], key="import_participantes")
+    """Importa participantes desde un archivo CSV/XLSX, con validaciones de datos y control de rol."""
+    uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
 
-    if archivo is not None:
-        try:
-            if archivo.name.endswith(".csv"):
-                df = pd.read_csv(archivo)
+    # 📑 Plantilla ejemplo
+    ejemplo_df = pd.DataFrame([{
+        "nombre": "Juan",
+        "apellidos": "Pérez Gómez",
+        "dni": "12345678A",
+        "nif": "12345678A",
+        "email": "juan.perez@correo.com",
+        "telefono": "600123456",
+        "fecha_nacimiento": "1985-06-15",
+        "sexo": "M",
+        "empresa_id": "",  # Solo lo usa admin
+        "grupo_id": ""     # Opcional
+    }])
+
+    st.download_button(
+        "📑 Descargar plantilla XLSX",
+        data=ejemplo_df.to_excel(index=False, engine="openpyxl"),
+        file_name="plantilla_participantes.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+
+    if not uploaded:
+        return
+
+    try:
+        if uploaded.name.endswith(".csv"):
+            df = pd.read_csv(uploaded, dtype=str)
+        else:
+            df = pd.read_excel(uploaded, dtype=str)
+
+        st.success(f"✅ {len(df)} filas cargadas desde {uploaded.name}")
+        st.dataframe(df.head(10), use_container_width=True)
+
+        if st.button("🚀 Importar participantes", type="primary", use_container_width=True):
+            errores = []
+            for idx, fila in df.iterrows():
+                try:
+                    # === Validaciones básicas ===
+                    if not fila.get("nombre") or not fila.get("apellidos"):
+                        raise ValueError("Nombre y apellidos son obligatorios")
+
+                    dni = fila.get("dni")
+                    if dni and not validar_dni_cif(dni):
+                        raise ValueError(f"DNI/NIF inválido: {dni}")
+
+                    email = fila.get("email")
+                    if email and ("@" not in email or "." not in email.split("@")[-1]):
+                        raise ValueError(f"Email inválido: {email}")
+
+                    telefono = fila.get("telefono")
+                    if telefono and not telefono.isdigit():
+                        raise ValueError(f"Teléfono inválido: {telefono}")
+
+                    # === Empresa y Grupo según rol ===
+                    if session_state.role == "gestor":
+                        empresa_id = session_state.user.get("empresa_id")
+                    else:  # admin
+                        empresa_id = fila.get("empresa_id") or None
+                        if empresa_id and not empresas_service.get_empresa_por_id(empresa_id):
+                            raise ValueError(f"Empresa no encontrada: {empresa_id}")
+
+                    grupo_id = fila.get("grupo_id") or None
+                    if grupo_id:
+                        try:
+                            _ = participantes_service.get_grupo_por_id(grupo_id)
+                        except Exception:
+                            raise ValueError(f"Grupo no encontrado: {grupo_id}")
+
+                    # === Construcción de datos ===
+                    datos = {
+                        "nombre": fila.get("nombre"),
+                        "apellidos": fila.get("apellidos"),
+                        "dni": dni,
+                        "nif": fila.get("nif"),
+                        "email": email,
+                        "telefono": telefono,
+                        "fecha_nacimiento": fila.get("fecha_nacimiento"),
+                        "sexo": fila.get("sexo"),
+                        "empresa_id": empresa_id,
+                        "grupo_id": grupo_id,
+                        "created_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+
+                    # Guardar en BD
+                    participantes_service.crear_participante(datos)
+
+                except Exception as ex:
+                    errores.append(f"Fila {idx+1}: {ex}")
+
+            if errores:
+                st.error("⚠️ Errores detectados durante la importación:")
+                for e in errores:
+                    st.text(e)
             else:
-                df = pd.read_excel(archivo)
+                st.success("✅ Importación completada sin errores")
+                st.rerun()
 
-            st.write("📊 Vista previa de los datos importados:")
-            st.dataframe(df.head(10), use_container_width=True)
-
-            if st.button("🚀 Importar ahora", key="btn_importar_participantes"):
-                registros = df.to_dict(orient="records")
-                ok, errores = participantes_service.importar_participantes_masivo(registros, session_state)
-                if ok:
-                    st.success("✅ Participantes importados correctamente")
-                    st.rerun()
-                else:
-                    st.error(f"❌ Errores al importar: {errores}")
-        except Exception as e:
-            st.error(f"❌ Error procesando archivo: {e}")
+    except Exception as e:
+        st.error(f"❌ Error importando participantes: {e}")
+        
 # =========================
 # MAIN PARTICIPANTES
 # =========================
@@ -384,8 +466,7 @@ def main(supabase, session_state):
         st.header("📥 Importar / Exportar Participantes")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📤 Exportar Participantes", use_container_width=True):
-                exportar_participantes(participantes_service, session_state)
+            exportar_participantes(participantes_service, session_state)
         with col2:
             importar_participantes(participantes_service, empresas_service, session_state)
 
@@ -440,84 +521,3 @@ def formatear_estado_participante(fila: dict) -> str:
 def validar_niss(niss: str) -> bool:
     """Valida un número de NISS básico (solo dígitos y longitud >= 10)."""
     return bool(niss and niss.isdigit() and len(niss) >= 10)
-
-
-# =========================
-# EXPORTACIÓN DE PARTICIPANTES
-# =========================
-def exportar_participantes(participantes_service, session_state):
-    """Exporta todos los participantes visibles a CSV descargable."""
-    try:
-        df = participantes_service.get_participantes_completos()
-        if session_state.role == "gestor":
-            empresa_id = session_state.user.get("empresa_id")
-            df = df[(df["empresa_id"] == empresa_id) | (df["empresa_matriz_id"] == empresa_id)]
-
-        if df.empty:
-            st.warning("⚠️ No hay participantes para exportar")
-            return
-
-        csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "📥 Descargar CSV",
-            data=csv,
-            file_name=f"participantes_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-    except Exception as e:
-        st.error(f"❌ Error exportando participantes: {e}")
-
-
-# =========================
-# IMPORTACIÓN DE PARTICIPANTES
-# =========================
-def importar_participantes(participantes_service, empresas_service, session_state):
-    """Importa participantes desde un CSV/XLSX subido."""
-    uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
-    if not uploaded:
-        return
-
-    try:
-        if uploaded.name.endswith(".csv"):
-            df = pd.read_csv(uploaded, dtype=str)
-        else:
-            df = pd.read_excel(uploaded, dtype=str)
-
-        st.success(f"✅ {len(df)} filas cargadas desde {uploaded.name}")
-
-        # Vista previa
-        st.dataframe(df.head(10), use_container_width=True)
-
-        if st.button("🚀 Importar participantes", type="primary", use_container_width=True):
-            errores = []
-            for _, fila in df.iterrows():
-                try:
-                    datos = {
-                        "nif": fila.get("nif") or None,
-                        "dni": fila.get("dni") or None,
-                        "nombre": fila.get("nombre"),
-                        "apellidos": fila.get("apellidos"),
-                        "email": fila.get("email"),
-                        "telefono": fila.get("telefono"),
-                        "fecha_nacimiento": fila.get("fecha_nacimiento"),
-                        "sexo": fila.get("sexo"),
-                        "tipo_documento": fila.get("tipo_documento"),
-                        "niss": fila.get("niss"),
-                        "empresa_id": fila.get("empresa_id") or session_state.user.get("empresa_id"),
-                        "grupo_id": fila.get("grupo_id") or None,
-                        "created_at": datetime.utcnow().isoformat(),
-                        "updated_at": datetime.utcnow().isoformat()
-                    }
-                    participantes_service.crear_participante(datos)
-                except Exception as ex:
-                    errores.append(str(ex))
-
-            if errores:
-                st.error(f"⚠️ Algunos registros no pudieron importarse:\n{errores}")
-            else:
-                st.success("✅ Importación completada")
-                st.rerun()
-
-    except Exception as e:
-        st.error(f"❌ Error procesando archivo: {e}")
