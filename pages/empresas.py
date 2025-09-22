@@ -58,6 +58,57 @@ def cargar_crm_datos(supabase, empresa_id):
     except:
         return {"crm_activo": False, "crm_inicio": None, "crm_fin": None}
         
+# =========================
+# GUARDAR MÓDULOS
+# =========================
+def guardar_modulos(empresas_service, empresa_id,
+                    formacion_activo, iso_activo, rgpd_activo, docu_avanzada_activo,
+                    crm_activo, crm_inicio, crm_fin):
+    """Actualiza los módulos básicos (tabla empresas) y CRM (tabla crm_empresas)."""
+    try:
+        # 1. Actualizar tabla empresas (booleans)
+        empresas_service.supabase.table("empresas").update({
+            "formacion_activo": formacion_activo,
+            "iso_activo": iso_activo,
+            "rgpd_activo": rgpd_activo,
+            "docu_avanzada_activo": docu_avanzada_activo,
+            "updated_at": datetime.utcnow().isoformat()
+        }).eq("id", empresa_id).execute()
+
+        # 2. Actualizar / insertar en crm_empresas
+        if crm_activo:
+            registro = empresas_service.supabase.table("crm_empresas").select("id").eq("empresa_id", empresa_id).execute()
+            if registro.data:
+                # update
+                empresas_service.supabase.table("crm_empresas").update({
+                    "crm_activo": True,
+                    "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
+                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("empresa_id", empresa_id).execute()
+            else:
+                # insert
+                empresas_service.supabase.table("crm_empresas").insert({
+                    "empresa_id": empresa_id,
+                    "crm_activo": True,
+                    "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
+                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
+                    "created_at": datetime.utcnow().isoformat()
+                }).execute()
+        else:
+            # si lo desactiva → update a false (mantiene el registro)
+            empresas_service.supabase.table("crm_empresas").update({
+                "crm_activo": False,
+                "crm_inicio": None,
+                "crm_fin": None,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("empresa_id", empresa_id).execute()
+
+        return True
+    except Exception as e:
+        st.error(f"❌ Error guardando módulos: {e}")
+        return False
+        
 def exportar_empresas(empresas_service, session_state):
     """Exporta empresas visibles a CSV."""
     try:
@@ -730,26 +781,42 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         if session_state.role == "admin" and not solo_datos_basicos:
             st.markdown("### 🔧 Configuración de Módulos")
             
+            # --- Módulos básicos (directos en empresas) ---
+            st.markdown("#### 📦 Módulos Básicos")
             col1, col2 = st.columns(2)
             with col1:
                 formacion_activo = st.checkbox("📚 Formación", value=datos.get("formacion_activo", True), key=f"{form_id}_formacion")
                 iso_activo = st.checkbox("📋 ISO 9001", value=datos.get("iso_activo", False), key=f"{form_id}_iso")
-                rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False), key=f"{form_id}_rgpd")
             with col2:
+                rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False), key=f"{form_id}_rgpd")
                 docu_avanzada_activo = st.checkbox("📁 Doc. Avanzada", value=datos.get("docu_avanzada_activo", False), key=f"{form_id}_docu")
-                crm_activo = st.checkbox("📈 CRM", value=crm_data.get("crm_activo", False), key=f"{form_id}_crm")
-                if crm_activo:
-                    crm_inicio = st.date_input("📅 CRM Inicio", value=crm_data.get("crm_inicio", date.today()), key=f"{form_id}_crm_inicio")
-                    crm_fin = st.date_input("📅 CRM Fin", value=crm_data.get("crm_fin"), key=f"{form_id}_crm_fin", help="Dejar vacío si no tiene fecha fin")
-                else:
-                    crm_inicio, crm_fin = None, None
+        
+            # --- Módulo CRM (tabla aparte) ---
+            st.markdown("#### 📈 Módulo CRM")
+            crm_activo = st.checkbox("Activar CRM", value=crm_data.get("crm_activo", False), key=f"{form_id}_crm")
+            if crm_activo:
+                crm_inicio = st.date_input(
+                    "📅 CRM Inicio",
+                    value=crm_data.get("crm_inicio", date.today()),
+                    key=f"{form_id}_crm_inicio"
+                )
+                crm_fin = st.date_input(
+                    "📅 CRM Fin",
+                    value=crm_data.get("crm_fin"),
+                    key=f"{form_id}_crm_fin",
+                    help="Dejar vacío si no tiene fecha fin"
+                )
+            else:
+                crm_inicio, crm_fin = None, None
         else:
+            # Valores por defecto para no-admin o solo_datos_basicos
             formacion_activo = datos.get("formacion_activo", True)
             iso_activo = datos.get("iso_activo", False)
             rgpd_activo = datos.get("rgpd_activo", False)
             docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
             crm_activo = crm_data.get("crm_activo", False)
             crm_inicio, crm_fin = None, None
+
         
         # =========================
         # VALIDACIONES
@@ -888,13 +955,25 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                 st.success("✅ Empresa creada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
-                st.rerun()
+                    guardar_modulos(
+                        empresas_service, empresa_id,
+                        formacion_activo, iso_activo, rgpd_activo, docu_avanzada_activo,
+                        crm_activo, crm_inicio, crm_fin
+                    )
+
+                    st.rerun()
+                    
         else:
             ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
             if ok:
                 st.success("✅ Empresa actualizada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
+                    guardar_modulos(
+                        empresas_service, empresa_id,
+                        formacion_activo, iso_activo, rgpd_activo, docu_avanzada_activo,
+                        crm_activo, crm_inicio, crm_fin
+                    )
                 st.rerun()
 
     except Exception as e:
