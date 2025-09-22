@@ -1478,8 +1478,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 "tarifa_hora": tarifa_hora,
                 "modalidad": modalidad,
                 "total_costes_formacion": total_costes,
-                "limite_maximo_bonificacion": limite_calculado,
-                "observaciones": observaciones_costes
+                "limite_maximo_bonificacion": limite_calculado
             }
             
             # Validar antes de guardar
@@ -1517,8 +1516,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                 hide_index=True,
                 column_config={
                     "mes": st.column_config.NumberColumn("📅 Mes", width="small"),
-                    "importe": st.column_config.NumberColumn("💰 Importe €", width="medium", format="%.2f"),
-                    "observaciones": st.column_config.TextColumn("📝 Observaciones", width="large")
+                    "importe": st.column_config.NumberColumn("💰 Importe €", width="medium", format="%.2f")
                 }
             )
             
