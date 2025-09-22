@@ -412,7 +412,7 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
     if not solo_datos_basicos:
         st.markdown("#### 🏠 Domicilio Social (Seleccione provincia y localidad)")
         provincia_sel, localidad_sel, provincia_id, localidad_id = mostrar_campos_conectados_provincia_localidad(
-            empresas_service, datos, key_suffix
+            empresas_service, datos, key_suffix=form_id
         )
         st.divider()
     
@@ -744,8 +744,11 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                 st.success("✅ Empresa creada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
-                if crm_activo:
-                    guardar_crm_datos(empresas_service.supabase, empresa_id, crm_activo, crm_inicio, crm_fin)
+                # 🔑 limpiar cuentas en session_state después de crear
+                cuentas_key = f"cuentas_empresa_{empresa_id}_crear"
+                for key in list(st.session_state.keys()):
+                    if key.startswith("cuentas_") or key.startswith("nueva_cuenta_") or key.startswith("es_principal_"):
+                        del st.session_state[key]
                 st.rerun()
         else:
             ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
