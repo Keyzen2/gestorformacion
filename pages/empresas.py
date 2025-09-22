@@ -570,10 +570,17 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 cif = st.text_input("📄 CIF", value=datos.get("cif", ""), key=f"{form_id}_cif")
         
         with col2:
-            sector = st.selectbox("🏭 Sector", options=[""] + sectores_list, 
-                                index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0,
-                                key=f"{form_id}_sector")
-            convenio_referencia = st.text_input("📋 Convenio de Referencia", value=datos.get("convenio_referencia", ""), key=f"{form_id}_convenio")
+            sector = st.selectbox(
+                "🏭 Sector",
+                options=[""] + sectores_list,
+                index=sectores_list.index(datos.get("sector", "")) + 1 if datos.get("sector") in sectores_list else 0,
+                key=f"{form_id}_sector"
+            )
+            convenio_referencia = st.text_input(
+                "📋 Convenio de Referencia",
+                value=datos.get("convenio_referencia", ""),
+                key=f"{form_id}_convenio"
+            )
         
         # Código CNAE
         if cnae_dict:
@@ -610,7 +617,7 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             # Representante Legal
             st.markdown("#### 👤 Representante Legal")
             col1, col2, col3 = st.columns(3)
-    
+        
             with col1:
                 representante_tipo_documento = st.selectbox(
                     "📄 Tipo Documento",
@@ -618,14 +625,14 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                     index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("representante_tipo_documento", "")) if datos.get("representante_tipo_documento") in ["", "NIF", "NIE", "PASAPORTE"] else 0,
                     key=f"{form_id}_tipo_doc"
                 )
-    
+        
             with col2:
                 representante_numero_documento = st.text_input(
                     "🆔 Nº Documento",
                     value=datos.get("representante_numero_documento", ""),
                     key=f"{form_id}_num_doc"
                 )
-    
+        
             with col3:
                 representante_nombre_apellidos = st.text_input(
                     "👤 Nombre y Apellidos",
@@ -635,15 +642,20 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             
             # Notificaciones
             st.markdown("#### 📧 Notificaciones")
-            email_notificaciones = st.text_input("📧 Email", value=datos.get("email_notificaciones", datos.get("email", "")), key=f"{form_id}_email")
+            email_notificaciones = st.text_input(
+                "📧 Email",
+                value=datos.get("email_notificaciones", datos.get("email", "")),
+                key=f"{form_id}_email_notif"
+            )
             
             # Contrato de Encomienda
             st.markdown("#### 📋 Contrato de Encomienda")
             fecha_contrato_encomienda = st.date_input(
                 "📅 Fecha Contrato Encomienda", 
-                value=datos.get("fecha_contrato_encomienda") if datos.get("fecha_contrato_encomienda") else date.today(),
+                value=datos.get("fecha_contrato_encomienda") or None,
                 key=f"{form_id}_fecha_contrato"
             )
+
             
             # =========================
             # BLOQUE CARACTERÍSTICAS
