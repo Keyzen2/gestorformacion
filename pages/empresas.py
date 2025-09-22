@@ -343,7 +343,7 @@ def inicializar_cuentas_cotizacion(form_id, empresas_service, empresa_id=None):
     return cuentas_key
 
 def mostrar_gestion_cuentas_en_formulario(cuentas_key):
-    """CORREGIDO: Gestión de cuentas que NO resetea el formulario"""
+    """CORREGIDO: Gestión de cuentas que NO resetea el formulario ni da error en Streamlit 1.49"""
     cuentas = st.session_state[cuentas_key]
     
     st.markdown("#### 🏦 Cuentas de Cotización")
@@ -362,13 +362,13 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
                            help="Marcar como principal"):
                     for j, c in enumerate(cuentas):
                         c["es_principal"] = (j == i)
-                    # NO st.rerun() aquí - mantiene el formulario
+                    st.experimental_rerun()
             with col3:
                 if st.button("🗑️", key=f"eliminar_{cuentas_key}_{i}",
                            help="Eliminar cuenta"):
                     cuentas.pop(i)
-                    # NO st.rerun() aquí - mantiene el formulario
-                    break  # Salir del bucle para evitar errores de índice
+                    st.experimental_rerun()
+                    break
     else:
         st.info("📝 No hay cuentas de cotización configuradas")
     
@@ -385,20 +385,18 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
     with col3:
         if st.button("➕ Añadir", key=f"añadir_{cuentas_key}"):
             if nueva_cuenta.strip():
-                # Si se marca como principal, quitar de otras
                 if es_principal:
                     for cuenta in cuentas:
                         cuenta["es_principal"] = False
                 
-                # Añadir nueva cuenta
                 cuentas.append({
                     "numero_cuenta": nueva_cuenta.strip(),
                     "es_principal": es_principal
                 })
                 
-                # Limpiar campos sin hacer rerun
-                st.session_state[f"nueva_cuenta_{cuentas_key}"] = ""
-                st.session_state[f"es_principal_{cuentas_key}"] = False
+                st.success("✅ Cuenta añadida correctamente")
+                # 🔄 refrescar en vez de modificar session_state directamente
+                st.experimental_rerun()
             else:
                 st.error("⚠️ Introduce un número de cuenta")
 
