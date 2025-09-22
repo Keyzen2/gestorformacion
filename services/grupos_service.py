@@ -599,10 +599,10 @@ class GruposService:
     # =========================
 
     @st.cache_data(ttl=300)
-    def get_grupos_completos(self) -> pd.DataFrame:
+    def get_grupos_completos(_self) -> pd.DataFrame:
         """Obtiene grupos con información completa."""
         try:
-            query = self.supabase.table("grupos").select("""
+            query = _self.supabase.table("grupos").select("""
                 id, codigo_grupo, fecha_inicio, fecha_fin, fecha_fin_prevista,
                 modalidad, horario, localidad, provincia, cp, lugar_imparticion,
                 n_participantes_previstos, n_participantes_finalizados,
@@ -610,7 +610,7 @@ class GruposService:
                 empresa:empresas!fk_grupo_empresa (id, nombre, cif),
                 accion_formativa:acciones_formativas!fk_grupo_accion (id, nombre, modalidad, num_horas, codigo_accion)
             """)
-            query = self._apply_empresa_filter(query, "grupos")
+            query = _self._apply_empresa_filter(query, "grupos")
 
             res = query.order("fecha_inicio", desc=True).execute()
             df = pd.DataFrame(res.data or [])
@@ -636,23 +636,23 @@ class GruposService:
 
             return df
         except Exception as e:
-            return self._handle_query_error("cargar grupos completos", e)
+            return _self._handle_query_error("cargar grupos completos", e)
 
     @st.cache_data(ttl=600)
-    def get_grupos_dict(self) -> Dict[str, str]:
+    def get_grupos_dict(_self) -> Dict[str, str]:
         """Devuelve diccionario de grupos: código -> id."""
         try:
-            df = self.get_grupos_completos()
+            df = _self.get_grupos_completos()
             return {row["codigo_grupo"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
         except Exception as e:
             st.error(f"Error al cargar grupos dict: {e}")
             return {}
         
     @st.cache_data(ttl=600)
-    def get_grupos_dict_por_empresa(self, empresa_id: str) -> Dict[str, str]:
+    def get_grupos_dict_por_empresa(_self, empresa_id: str) -> Dict[str, str]:
         """Devuelve grupos de una empresa específica: código -> id."""
         try:
-            df = self.get_grupos_completos()
+            df = _self.get_grupos_completos()
             if df.empty:
                 return {}
     
@@ -665,19 +665,19 @@ class GruposService:
             return {}
     
     @st.cache_data(ttl=600)
-    def get_grupos_acciones(self) -> pd.DataFrame:
+    def get_grupos_acciones(_self) -> pd.DataFrame:
         """Obtiene listado de grupos de acciones (catálogo auxiliar)."""
         try:
-            res = self.supabase.table("grupos_acciones").select("id, nombre, codigo, cod_area_profesional").execute()
+            res = _self.supabase.table("grupos_acciones").select("id, nombre, codigo, cod_area_profesional").execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return self._handle_query_error("cargar grupos de acciones", e)
+            return _self._handle_query_error("cargar grupos de acciones", e)
         
     @st.cache_data(ttl=600)
-    def get_empresas_dict(self) -> Dict[str, str]:
+    def get_empresas_dict(_self) -> Dict[str, str]:
         """Obtiene diccionario de empresas: nombre -> id."""
         try:
-            result = self.supabase.table("empresas").select("id, nombre").execute()
+            result = _self.supabase.table("empresas").select("id, nombre").execute()
         
             if result.data:
                 return {item["nombre"]: item["id"] for item in result.data}
@@ -738,16 +738,16 @@ class GruposService:
     # ACCIONES FORMATIVAS
     # =========================
     @st.cache_data(ttl=300)
-    def get_acciones_formativas(self) -> pd.DataFrame:
+    def get_acciones_formativas(_self) -> pd.DataFrame:
         """Obtiene acciones formativas según el rol."""
         try:
-            query = self.supabase.table("acciones_formativas").select("*")
-            query = self._apply_empresa_filter(query, "acciones_formativas")
+            query = _self.supabase.table("acciones_formativas").select("*")
+            query = _self._apply_empresa_filter(query, "acciones_formativas")
         
             res = query.order("nombre").execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return self._handle_query_error("cargar acciones formativas", e)
+            return _self._handle_query_error("cargar acciones formativas", e)
 
     def get_acciones_dict(self) -> Dict[str, str]:
         """Obtiene diccionario nombre -> id de acciones."""
@@ -755,20 +755,20 @@ class GruposService:
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
     @st.cache_data(ttl=3600)
-    def get_provincias(self) -> list:
+    def get_provincias(_self) -> list:
         """Devuelve listado de provincias ordenadas alfabéticamente."""
         try:
-            res = self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
+            res = _self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
             return res.data or []
         except Exception as e:
             st.error(f"Error al cargar provincias: {e}")
             return []
 
     @st.cache_data(ttl=3600) 
-    def get_localidades_por_provincia(self, provincia_id: int) -> list:
+    def get_localidades_por_provincia(_self, provincia_id: int) -> list:
         """Devuelve listado de localidades de una provincia."""
         try:
-            res = self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            res = _self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
             return res.data or []
         except Exception as e:
             st.error(f"Error al cargar localidades: {e}")
@@ -923,17 +923,17 @@ class GruposService:
             return {}
 
     @st.cache_data(ttl=300)
-    def get_empresas_grupo(self, grupo_id: str) -> pd.DataFrame:
+    def get_empresas_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene empresas participantes de un grupo."""
         try:
-            res = self.supabase.table("empresas_grupos").select("""
+            res = _self.supabase.table("empresas_grupos").select("""
                 id, fecha_asignacion,
                 empresa:empresas(id, nombre, cif)
             """).eq("grupo_id", grupo_id).order("fecha_asignacion").execute()
         
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return self._handle_query_error("cargar empresas de grupo", e)
+            return _self._handle_query_error("cargar empresas de grupo", e)
 
     def create_empresa_grupo(self, grupo_id: str, empresa_id: str) -> bool:
         """Asigna una empresa como participante de un grupo."""
@@ -974,17 +974,17 @@ class GruposService:
     # =========================
 
     @st.cache_data(ttl=300)
-    def get_tutores_grupo(self, grupo_id: str) -> pd.DataFrame:
+    def get_tutores_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene tutores asignados a un grupo."""
         try:
-            res = self.supabase.table("tutores_grupos").select("""
+            res = _self.supabase.table("tutores_grupos").select("""
                 id, fecha_asignacion,
                 tutor:tutores(id, nombre, apellidos, email, telefono, especialidad, empresa_id)
             """).eq("grupo_id", grupo_id).order("fecha_asignacion").execute()
         
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return self._handle_query_error("cargar tutores de grupo", e)
+            return _self._handle_query_error("cargar tutores de grupo", e)
 
     def get_tutores_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene tutores disponibles según jerarquía empresarial."""
@@ -1073,10 +1073,10 @@ class GruposService:
     # =========================
 
     @st.cache_data(ttl=300)
-    def get_participantes_grupo(self, grupo_id: str) -> pd.DataFrame:
+    def get_participantes_grupo(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes asignados a un grupo."""
         try:
-            res = self.supabase.table("participantes_grupos").select("""
+            res = _self.supabase.table("participantes_grupos").select("""
                 id as relacion_id, fecha_asignacion,
                 participante:participantes(id, nif, nombre, apellidos, email, telefono, empresa_id)
             """).eq("grupo_id", grupo_id).order("fecha_asignacion").execute()
@@ -1105,7 +1105,7 @@ class GruposService:
         
             return pd.DataFrame()
         except Exception as e:
-            return self._handle_query_error("cargar participantes de grupo", e)
+            return _self._handle_query_error("cargar participantes de grupo", e)
 
     def get_participantes_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes disponibles según jerarquía empresarial."""
@@ -1197,10 +1197,10 @@ class GruposService:
     # =========================
 
     @st.cache_data(ttl=600)
-    def get_centro_gestor_grupo(self, grupo_id: str) -> Dict[str, Any]:
+    def get_centro_gestor_grupo(_self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene el centro gestor asignado a un grupo."""
         try:
-            res = self.supabase.table("centros_gestores_grupos").select("""
+            res = _self.supabase.table("centros_gestores_grupos").select("""
                 id, grupo_id, centro_id, created_at,
                 centro:centros_gestores(*)
             """).eq("grupo_id", grupo_id).execute()
@@ -1284,22 +1284,12 @@ class GruposService:
     # =========================
     # COSTES FUNDAE
     # =========================
-     
-    @st.cache_data(ttl=3600) 
-    def get_localidades_por_provincia(self, provincia_id: int) -> list:
-        """Devuelve listado de localidades de una provincia."""
-        try:
-            res = self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
-            return res.data or []
-        except Exception as e:
-            st.error(f"Error al cargar localidades: {e}")
-            return []
-           
+            
     @st.cache_data(ttl=300)
-    def get_grupo_costes(self, grupo_id: str) -> Dict[str, Any]:
+    def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene costes de un grupo específico."""
         try:
-            res = self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
+            res = _self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
             return res.data[0] if res.data else {}
         except Exception as e:
             st.error(f"Error al cargar costes de grupo: {e}")
@@ -1336,13 +1326,13 @@ class GruposService:
             return False
 
     @st.cache_data(ttl=300)
-    def get_grupo_bonificaciones(self, grupo_id: str) -> pd.DataFrame:
+    def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
         """Obtiene bonificaciones de un grupo."""
         try:
-            res = self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
+            res = _self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return self._handle_query_error("cargar bonificaciones de grupo", e)
+            return _self._handle_query_error("cargar bonificaciones de grupo", e)
 
     def create_grupo_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
         """Crea una bonificación mensual para un grupo."""
