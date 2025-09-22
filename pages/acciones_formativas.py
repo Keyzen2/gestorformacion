@@ -4,6 +4,7 @@ from datetime import datetime
 from utils import export_csv
 from components.listado_con_ficha import listado_con_ficha
 from services.grupos_service import get_grupos_service
+from services.data_service import get_data_service
 
 def main(supabase, session_state):
     st.title("📚 Gestión de Acciones Formativas")
@@ -13,6 +14,7 @@ def main(supabase, session_state):
         st.warning("🔒 No tienes permisos para acceder a esta sección.")
         return
 
+    data_service = get_data_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
 
     # =========================
