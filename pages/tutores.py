@@ -5,6 +5,27 @@ import uuid
 from utils import export_csv, validar_dni_cif
 from services.data_service import get_data_service
 
+# =========================
+# FUNCIONES DE CACHE OPTIMIZADO
+# =========================
+@st.cache_data(ttl=300)
+def cargar_provincias_optimizado(_supabase):
+    """Carga lista de provincias con cache optimizado."""
+    try:
+        result = _supabase.table("provincias").select("id, nombre").order("nombre").execute()
+        return {prov["nombre"]: prov["id"] for prov in result.data or []}
+    except:
+        return {}
+
+@st.cache_data(ttl=300) 
+def cargar_localidades_optimizado(_supabase, provincia_id):
+    """Carga localidades de una provincia con cache optimizado."""
+    try:
+        result = _supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+        return {loc["nombre"]: loc["id"] for loc in result.data or []}
+    except:
+        return {}
+
 def main(supabase, session_state):
     st.title("👨‍🏫 Gestión de Tutores")
     st.caption("Gestión de tutores internos y externos vinculados a grupos formativos")
@@ -23,7 +44,7 @@ def main(supabase, session_state):
         return
 
     # =========================
-    # CARGAR DATOS
+    # CARGAR DATOS BÁSICOS
     # =========================
     with st.spinner("Cargando datos..."):
         try:
@@ -36,6 +57,11 @@ def main(supabase, session_state):
                     empresas_dict = data_service.get_empresas_dict()
                 except Exception as e:
                     st.warning(f"⚠️ Error al cargar empresas: {e}")
+            
+            # Cargar provincias para campos conectados
+            provincias_dict = cargar_provincias_optimizado(supabase)
+            provincias_opciones = [""] + sorted(provincias_dict.keys())
+            
         except Exception as e:
             st.error(f"❌ Error al cargar tutores: {e}")
             return
@@ -44,7 +70,6 @@ def main(supabase, session_state):
     # MÉTRICAS UNIFICADAS
     # =========================
     if not df_tutores.empty:
-        # Calcular métricas principales
         total_tutores = len(df_tutores)
         internos = len(df_tutores[df_tutores["tipo_tutor"] == "interno"])
         externos = len(df_tutores[df_tutores["tipo_tutor"] == "externo"])
@@ -82,24 +107,8 @@ def main(supabase, session_state):
         "Industrias Agroalimentarias", "Agraria", "Seguridad y Medio Ambiente"
     ]
 
-    # Campos select
-    campos_select = {
-        "tipo_tutor": ["", "interno", "externo"],
-        "especialidad": especialidades_opciones,
-        "tipo_documento": [
-            ("", "Seleccionar tipo"),
-            (10, "NIF"),           # Código 10 para NIF
-            (20, "Pasaporte"),     # Código 20 para Pasaporte  
-            (60, "NIE")            # Código 60 para NIE
-        ]
-    }
-
-    if session_state.role == "admin" and empresas_dict:
-        empresas_opciones = [""] + sorted(empresas_dict.keys())
-        campos_select["empresa_sel"] = empresas_opciones
-
     # =========================
-    # FILTROS DE BÚSQUEDA UNIFICADOS
+    # FILTROS DE BÚSQUEDA
     # =========================
     st.markdown("### 🔍 Filtros de Búsqueda")
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -113,8 +122,8 @@ def main(supabase, session_state):
     
     with col2:
         if session_state.role == "admin" and empresas_dict:
-            empresas_opciones = ["Todas"] + sorted(empresas_dict.keys())
-            empresa_filtro = st.selectbox("Filtrar por empresa", empresas_opciones, key="filtro_empresa")
+            empresas_opciones_filtro = ["Todas"] + sorted(empresas_dict.keys())
+            empresa_filtro = st.selectbox("Filtrar por empresa", empresas_opciones_filtro, key="filtro_empresa")
         else:
             empresa_filtro = "Todas"
     
@@ -167,7 +176,38 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # FUNCIONES CRUD OPTIMIZADAS
+    # FUNCIONES AUXILIARES
+    # =========================
+    def get_localidades_por_provincia_optimizado(provincia_nombre):
+        """Obtiene localidades filtradas por provincia usando cache optimizado."""
+        if not provincia_nombre or provincia_nombre not in provincias_dict:
+            return {}
+        
+        provincia_id = provincias_dict[provincia_nombre]
+        return cargar_localidades_optimizado(supabase, provincia_id)
+
+    def validar_documento_completo(documento: str) -> tuple:
+        """Validación mejorada que reconoce DNI, NIE y CIF."""
+        if not documento:
+            return True, "", ""
+            
+        documento = documento.upper().replace('-', '').replace(' ', '')
+        
+        if validar_dni_cif(documento):
+            import re
+            if re.match(r'^[0-9]{8}[A-Z]$', documento):
+                return True, "DNI válido", "DNI"
+            elif re.match(r'^[XYZ][0-9]{7}[A-Z]$', documento):
+                return True, "NIE válido", "NIE" 
+            elif re.match(r'^[ABCDEFGHJKLMNPQRSUVW][0-9]{7}[0-9A-J]$', documento):
+                return True, "CIF válido", "CIF"
+            else:
+                return True, "Documento válido", "OTROS"
+        else:
+            return False, "Documento inválido. Debe ser DNI, NIE o CIF válido.", ""
+
+    # =========================
+    # FUNCIONES CRUD
     # =========================
     def guardar_tutor(tutor_id, datos_editados):
         """Actualiza un tutor existente usando data_service."""
@@ -187,11 +227,15 @@ def main(supabase, session_state):
                 st.error("⚠️ Email no válido.")
                 return False
                 
-            # Validar NIF usando utilidad corregida
+            # Validar documento
             nif = datos_editados.get("nif")
-            if nif and not validar_dni_cif(nif):
-                st.error("⚠️ NIF/DNI no válido.")
-                return False
+            if nif:
+                es_valido, mensaje, tipo_det = validar_documento_completo(nif)
+                if not es_valido:
+                    st.error(f"⚠️ {mensaje}")
+                    return False
+                else:
+                    st.success(f"✅ {mensaje}")
 
             # Procesar empresa según rol
             if session_state.role == "admin":
@@ -199,7 +243,6 @@ def main(supabase, session_state):
                 if empresa_sel and empresa_sel in empresas_dict:
                     datos_editados["empresa_id"] = empresas_dict[empresa_sel]
                 else:
-                    # Mantener empresa actual si no se selecciona nueva
                     tutor_actual = df_tutores[df_tutores["id"] == tutor_id].iloc[0] if not df_tutores.empty else None
                     if tutor_actual is not None:
                         datos_editados["empresa_id"] = tutor_actual.get("empresa_id")
@@ -210,12 +253,8 @@ def main(supabase, session_state):
                 st.error("⚠️ Los tutores deben tener una empresa asignada.")
                 return False
 
-            # Limpiar solo campos auxiliares, mantener todos los valores editados
-            datos_limpios = {}
-            for k, v in datos_editados.items():
-                if not k.endswith("_sel"):  # Solo remover campos auxiliares
-                    datos_limpios[k] = v  # Mantener todos los valores, incluso vacíos
-            
+            # Limpiar campos auxiliares
+            datos_limpios = {k: v for k, v in datos_editados.items() if not k.endswith("_sel")}
             datos_limpios["updated_at"] = datetime.utcnow().isoformat()
 
             # Usar data_service para actualizar
@@ -249,11 +288,13 @@ def main(supabase, session_state):
                 st.error("⚠️ Email no válido.")
                 return False
                 
-            # Validar NIF
+            # Validar documento
             nif = datos_nuevos.get("nif")
-            if nif and not validar_dni_cif(nif):
-                st.error("⚠️ NIF/DNI no válido.")
-                return False
+            if nif:
+                es_valido, mensaje, tipo_det = validar_documento_completo(nif)
+                if not es_valido:
+                    st.error(f"⚠️ {mensaje}")
+                    return False
 
             # Procesar empresa según rol
             if session_state.role == "admin":
@@ -269,11 +310,8 @@ def main(supabase, session_state):
                 st.error("⚠️ Los tutores deben tener una empresa asignada.")
                 return False
 
-            # NO filtrar valores vacíos aquí - dejar que el usuario pueda limpiar campos
-            datos_limpios = {k: v for k, v in datos_nuevos.items() 
-                           if not k.endswith("_sel")}
-            
-            # Añadir timestamp
+            # Limpiar campos auxiliares
+            datos_limpios = {k: v for k, v in datos_nuevos.items() if not k.endswith("_sel")}
             datos_limpios["created_at"] = datetime.utcnow().isoformat()
 
             # Usar data_service para crear
@@ -293,7 +331,7 @@ def main(supabase, session_state):
     # PREPARAR DATOS PARA DISPLAY
     # =========================
     def preparar_datos_display(df_orig):
-        """Prepara datos para mostrar en formularios con valores compatibles."""
+        """Prepara datos para mostrar en formularios."""
         df_display = df_orig.copy()
         
         # Convertir empresa_id a nombre para admin
@@ -302,28 +340,26 @@ def main(supabase, session_state):
                 {v: k for k, v in empresas_dict.items()}
             ).fillna("")
 
-        # Asegurar que tipo_tutor tenga valores válidos
+        # Normalizar tipo_tutor
         if "tipo_tutor" in df_display.columns:
             df_display["tipo_tutor"] = df_display["tipo_tutor"].fillna("").astype(str)
-            # Normalizar valores
             df_display["tipo_tutor"] = df_display["tipo_tutor"].replace({
                 "Interno": "interno",
                 "Externo": "externo"
             })
 
-        # Asegurar que especialidad esté en las opciones
+        # Validar especialidad
         if "especialidad" in df_display.columns:
             df_display["especialidad"] = df_display["especialidad"].fillna("")
-            # Solo mantener especialidades válidas
             mask_validas = df_display["especialidad"].isin(especialidades_opciones)
             df_display.loc[~mask_validas, "especialidad"] = ""
 
-        # Mapear códigos de tipo_documento a texto para display
+        # Mapear tipo_documento
         if "tipo_documento" in df_display.columns:
             tipo_doc_map = {10: "NIF", 20: "Pasaporte", 60: "NIE", "": "", None: ""}
             df_display["tipo_documento_texto"] = df_display["tipo_documento"].map(tipo_doc_map).fillna("")
 
-        # Añadir columna de estado del CV
+        # Estado del CV
         df_display["cv_status"] = df_display["cv_url"].apply(
             lambda x: "✅ Con CV" if pd.notna(x) and x != "" else "⏳ Sin CV"
         )
@@ -341,10 +377,10 @@ def main(supabase, session_state):
             if st.button("🔄 Limpiar filtros"):
                 st.rerun()
     else:
-        # Preparar datos para display con valores compatibles
+        # Preparar datos para display
         df_display = preparar_datos_display(df_filtrado)
         
-        # Columnas visibles en la tabla + gestión CV
+        # Columnas visibles en la tabla
         columnas_visibles = [
             "nombre", "apellidos", "email", "telefono",
             "tipo_tutor", "especialidad", "cv_status"
@@ -354,7 +390,7 @@ def main(supabase, session_state):
             columnas_visibles.insert(-1, "empresa_nombre")
 
         # =========================
-        # TABLA PRINCIPAL - ESTILO GRUPOS.PY
+        # TABLA PRINCIPAL
         # =========================
         st.markdown("### Selecciona un tutor para editarlo:")
 
@@ -378,12 +414,11 @@ def main(supabase, session_state):
                 if selected_idx < len(df_display):
                     tutor_seleccionado = df_display.iloc[selected_idx]
                     
-                    # Mostrar formulario de edición manual
+                    # Mostrar formulario de edición
                     st.markdown("---")
                     st.markdown("### ✏️ Editar Tutor Seleccionado")
                     st.caption(f"Editando: {tutor_seleccionado['nombre']} {tutor_seleccionado.get('apellidos', '')}")
                     
-                    # Usar key único para evitar conflictos
                     form_key = f"form_editar_tutor_{tutor_seleccionado['id']}_{selected_idx}"
                     
                     with st.form(form_key, clear_on_submit=False):
@@ -395,17 +430,8 @@ def main(supabase, session_state):
                             tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], 
                                                     index=["", "interno", "externo"].index(tutor_seleccionado.get('tipo_tutor', '')) if tutor_seleccionado.get('tipo_tutor') in ["", "interno", "externo"] else 0,
                                                     key=f"edit_tipo_{selected_idx}")
-                            nif = st.text_input("NIF/DNI", value=tutor_seleccionado.get('nif', ''), key=f"edit_nif_{selected_idx}")
-                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key=f"edit_direccion_{selected_idx}")
-                        
-                        with col2:
-                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key=f"edit_apellidos_{selected_idx}")
-                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key=f"edit_telefono_{selected_idx}")
-                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
-                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
-                                                      key=f"edit_especialidad_{selected_idx}")
                             
-                            # Crear selectbox para tipo_documento con códigos
+                            # ORDEN CORREGIDO: Tipo documento ANTES que NIF
                             opciones_tipo_doc = [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")]
                             valor_actual = tutor_seleccionado.get('tipo_documento')
                             if pd.isna(valor_actual) or valor_actual == "":
@@ -421,20 +447,52 @@ def main(supabase, session_state):
                                 "Tipo documento", 
                                 opciones_tipo_doc,
                                 index=indice_tipo_doc,
-                                format_func=lambda x: x[1],  # Mostrar solo el texto
+                                format_func=lambda x: x[1],
                                 key=f"edit_tipo_doc_{selected_idx}"
                             )
-                            ciudad = st.text_input("Ciudad", value=tutor_seleccionado.get('ciudad', ''), key=f"edit_ciudad_{selected_idx}")
+                            
+                            nif = st.text_input("NIF/DNI/NIE/CIF", value=tutor_seleccionado.get('nif', ''), key=f"edit_nif_{selected_idx}")
+                            direccion = st.text_input("Dirección", value=tutor_seleccionado.get('direccion', ''), key=f"edit_direccion_{selected_idx}")
+                        
+                        with col2:
+                            apellidos = st.text_input("Apellidos *", value=tutor_seleccionado.get('apellidos', ''), key=f"edit_apellidos_{selected_idx}")
+                            telefono = st.text_input("Teléfono", value=tutor_seleccionado.get('telefono', ''), key=f"edit_telefono_{selected_idx}")
+                            especialidad = st.selectbox("Especialidad", especialidades_opciones, 
+                                                      index=especialidades_opciones.index(tutor_seleccionado.get('especialidad', '')) if tutor_seleccionado.get('especialidad') in especialidades_opciones else 0,
+                                                      key=f"edit_especialidad_{selected_idx}")
+                            
+                            # CAMPOS CONECTADOS: Provincia → Localidad
+                            provincia_actual = tutor_seleccionado.get('provincia', '')
+                            indice_prov = provincias_opciones.index(provincia_actual) if provincia_actual in provincias_opciones else 0
+                            
+                            provincia = st.selectbox("Provincia", provincias_opciones, 
+                                                   index=indice_prov,
+                                                   key=f"edit_provincia_{selected_idx}")
+                            
+                            # Localidad conectada a provincia
+                            if provincia:
+                                localidades_dict = get_localidades_por_provincia_optimizado(provincia)
+                                if localidades_dict:
+                                    localidad_actual = tutor_seleccionado.get('ciudad', '')
+                                    localidades_opciones = [""] + list(localidades_dict.keys())
+                                    indice_loc = localidades_opciones.index(localidad_actual) if localidad_actual in localidades_opciones else 0
+                                    
+                                    ciudad = st.selectbox("Localidad", localidades_opciones,
+                                                        index=indice_loc,
+                                                        key=f"edit_ciudad_{selected_idx}")
+                                else:
+                                    st.selectbox("Localidad", options=["Sin localidades"], disabled=True, key=f"edit_ciudad_empty_{selected_idx}")
+                                    ciudad = ""
+                            else:
+                                st.selectbox("Localidad", options=["Seleccione provincia"], disabled=True, key=f"edit_ciudad_disabled_{selected_idx}")
+                                ciudad = ""
                         
                         col3, col4 = st.columns(2)
                         with col3:
-                            provincia = st.text_input("Provincia", value=tutor_seleccionado.get('provincia', ''), key=f"edit_provincia_{selected_idx}")
-                            # Verificar si titulacion existe en BD antes de mostrar
-                            titulacion = None
+                            codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key=f"edit_cp_{selected_idx}")
                             if "titulacion" in df_tutores.columns:
                                 titulacion = st.text_area("Titulación", value=tutor_seleccionado.get('titulacion', ''), key=f"edit_titulacion_{selected_idx}")
                         with col4:
-                            codigo_postal = st.text_input("Código postal", value=tutor_seleccionado.get('codigo_postal', ''), key=f"edit_cp_{selected_idx}")
                             if session_state.role == "admin" and empresas_dict:
                                 empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), 
                                                          index=([""] + sorted(empresas_dict.keys())).index(tutor_seleccionado.get('empresa_sel', '')) if tutor_seleccionado.get('empresa_sel') in ([""] + sorted(empresas_dict.keys())) else 0,
@@ -456,8 +514,7 @@ def main(supabase, session_state):
                                 "codigo_postal": codigo_postal
                             }
                             
-                            # Solo añadir titulacion si existe en BD
-                            if titulacion is not None and "titulacion" in df_tutores.columns:
+                            if "titulacion" in df_tutores.columns:
                                 datos_editados["titulacion"] = titulacion
                             
                             if session_state.role == "admin" and empresas_dict:
@@ -472,11 +529,10 @@ def main(supabase, session_state):
         st.divider()
 
         # =========================
-        # CREAR NUEVO TUTOR (DEBAJO DE LA TABLA)
+        # CREAR NUEVO TUTOR
         # =========================
         if puede_modificar:
             with st.expander("➕ Crear Nuevo Tutor", expanded=False):
-                # Formulario manual completamente sin componentes externos
                 with st.form("crear_tutor_form", clear_on_submit=True):
                     st.markdown("**Datos del nuevo tutor**")
                     
@@ -485,27 +541,42 @@ def main(supabase, session_state):
                         nombre = st.text_input("Nombre *", key="nuevo_nombre")
                         email = st.text_input("Email", key="nuevo_email")
                         tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], key="nuevo_tipo")
-                        nif = st.text_input("NIF/DNI", key="nuevo_nif")
+                        
+                        # ORDEN CORREGIDO: Tipo documento ANTES que NIF
+                        tipo_documento = st.selectbox(
+                            "Tipo documento", 
+                            [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")],
+                            format_func=lambda x: x[1],
+                            key="nuevo_tipo_doc"
+                        )
+                        nif = st.text_input("NIF/DNI/NIE/CIF", key="nuevo_nif")
                         direccion = st.text_input("Dirección", key="nuevo_direccion")
                     
                     with col2:
                         apellidos = st.text_input("Apellidos *", key="nuevo_apellidos")
                         telefono = st.text_input("Teléfono", key="nuevo_telefono")
                         especialidad = st.selectbox("Especialidad", especialidades_opciones, key="nuevo_especialidad")
-                        tipo_documento = st.selectbox(
-                            "Tipo documento", 
-                            [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")],
-                            format_func=lambda x: x[1],  # Mostrar solo el texto
-                            key="nuevo_tipo_doc"
-                        )
-                        ciudad = st.text_input("Ciudad", key="nuevo_ciudad")
+                        
+                        # CAMPOS CONECTADOS: Provincia → Localidad
+                        provincia = st.selectbox("Provincia", provincias_opciones, key="nueva_provincia_select")
+                        
+                        if provincia:
+                            localidades_dict = get_localidades_por_provincia_optimizado(provincia)
+                            if localidades_dict:
+                                localidades_opciones = [""] + list(localidades_dict.keys())
+                                ciudad = st.selectbox("Localidad", localidades_opciones, key="nueva_ciudad")
+                            else:
+                                st.selectbox("Localidad", options=["Sin localidades"], disabled=True, key="nueva_ciudad_empty")
+                                ciudad = ""
+                        else:
+                            st.selectbox("Localidad", options=["Seleccione provincia"], disabled=True, key="nueva_ciudad_disabled")  
+                            ciudad = ""
                     
                     col3, col4 = st.columns(2)
                     with col3:
-                        provincia = st.text_input("Provincia", key="nuevo_provincia")
+                        codigo_postal = st.text_input("Código postal", key="nuevo_cp")
                         titulacion = st.text_area("Titulación", key="nuevo_titulacion")
                     with col4:
-                        codigo_postal = st.text_input("Código postal", key="nuevo_cp")
                         if session_state.role == "admin" and empresas_dict:
                             empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), key="nuevo_empresa")
                     
@@ -535,15 +606,12 @@ def main(supabase, session_state):
         st.divider()
 
         # =========================
-        # GESTIÓN DE CURRÍCULUMS (RESPETA FILTROS)
+        # GESTIÓN DE CURRÍCULUMS
         # =========================
         st.markdown("### 📄 Gestión de Currículums")
         st.caption("Subir y gestionar currículums (filtros aplicados)")
         
-        # Aplicar los mismos filtros que la tabla principal
         tutores_cv_filtrados = df_display.copy()
-        
-        # Separar tutores con y sin CV de los datos YA filtrados
         tutores_sin_cv = tutores_cv_filtrados[~(tutores_cv_filtrados["cv_url"].notna() & (tutores_cv_filtrados["cv_url"] != ""))].copy()
         tutores_con_cv = tutores_cv_filtrados[tutores_cv_filtrados["cv_url"].notna() & (tutores_cv_filtrados["cv_url"] != "")].copy()
         
@@ -595,7 +663,6 @@ def main(supabase, session_state):
                         
                         with col_btn2:
                             if st.button("🔄", key=f"update_cv_{tutor['id']}", help="Actualizar CV"):
-                                # Formulario inline para actualizar
                                 with st.form(f"update_form_{tutor['id']}"):
                                     cv_file = st.file_uploader(
                                         "Nuevo CV",
@@ -654,6 +721,11 @@ def main(supabase, session_state):
         - CV actualizado obligatorio para validación
         - Especialidad según catálogo oficial de familias profesionales
         - Experiencia mínima en el área de especialización
+        
+        **Validación de documentos:**
+        - **DNI**: 8 dígitos + letra (españoles)
+        - **NIE**: X/Y/Z + 7 dígitos + letra (extranjeros residentes)
+        - **CIF**: Letra + 7 dígitos + control (empresas/organizaciones)
         
         **Flujo recomendado:**
         1. Registrar tutor con datos completos
@@ -757,10 +829,7 @@ def subir_cv_tutor(supabase, data_service, tutor, cv_file):
                 if success:
                     st.success("✅ CV subido correctamente!")
                     st.balloons()
-                    
-                    # Mostrar link directo
                     st.markdown(f"🔗 [Ver CV subido]({public_url})")
-                    
                     return True
                 else:
                     st.error("❌ Error al actualizar registro en base de datos")
@@ -768,7 +837,6 @@ def subir_cv_tutor(supabase, data_service, tutor, cv_file):
                 
             except Exception as upload_error:
                 st.error(f"❌ Error al subir archivo: {upload_error}")
-                
                 st.info("""
                 🔧 **Soluciones:**
                 - Verifica que el bucket 'curriculums' existe en Supabase
@@ -790,28 +858,23 @@ def eliminar_cv_tutor(supabase, data_service, tutor_id):
         if st.session_state.get(confirmar_key, False):
             # Eliminar archivo del storage también
             try:
-                # Obtener la URL actual para extraer el path del archivo
                 tutor_actual = supabase.table("tutores").select("cv_url").eq("id", tutor_id).execute()
                 if tutor_actual.data and tutor_actual.data[0].get("cv_url"):
                     cv_url = tutor_actual.data[0]["cv_url"]
-                    # Extraer el path del archivo de la URL
                     if "curriculums/" in cv_url:
                         file_path = cv_url.split("curriculums/")[-1].split("?")[0]
-                        # Intentar eliminar del storage
                         try:
                             supabase.storage.from_("curriculums").remove([file_path])
                         except Exception:
-                            pass  # Si no se puede eliminar del storage, continuar
-            
+                            pass
             except Exception:
-                pass  # Si hay error obteniendo la URL, continuar
+                pass
             
-            # Eliminar referencia de la base de datos usando data_service
+            # Eliminar referencia de la base de datos
             success = data_service.update_tutor(tutor_id, {"cv_url": None})
             
             if success:
                 st.success("✅ CV eliminado.")
-                # Limpiar el estado de confirmación
                 st.session_state[confirmar_key] = False
                 return True
             else:
