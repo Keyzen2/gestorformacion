@@ -1546,3 +1546,10 @@ def limpiar_cache_fundae(self):
 def get_grupos_service(supabase, session_state) -> GruposService:
     """Factory function para obtener instancia del servicio de grupos."""
     return GruposService(supabase, session_state)
+
+# TEMPORAL - para debug
+if __name__ == "__main__":
+    print("Métodos disponibles en GruposService:")
+    for attr in dir(GruposService):
+        if not attr.startswith('_'):
+            print(f"  - {attr}")
