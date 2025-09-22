@@ -804,7 +804,34 @@ class GruposService:
         except Exception as e:
             st.error(f"Error al obtener modalidad de acción formativa: {e}")
             return ""
+    # =========================
+    # ÁREAS PROFESIONALES Y GRUPOS DE ACCIONES
+    # =========================
+    @st.cache_data(ttl=3600)
+    def get_areas_profesionales(_self) -> pd.DataFrame:
+        """Obtiene áreas profesionales."""
+        try:
+            res = _self.supabase.table("areas_profesionales").select("*").order("familia").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar áreas profesionales", e)
 
+    def get_areas_dict(_self) -> Dict[str, str]:
+        """Obtiene diccionario de áreas profesionales."""
+        df = _self.get_areas_profesionales()
+        return {
+            f"{row['codigo']} - {row['nombre']}": row['codigo'] 
+            for _, row in df.iterrows()
+        } if not df.empty else {}
+
+    @st.cache_data(ttl=3600)
+    def get_grupos_acciones(_self) -> pd.DataFrame:
+        """Obtiene grupos de acciones."""
+        try:
+            res = _self.supabase.table("grupos_acciones").select("*").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar grupos de acciones", e)
     # =========================
     # MÉTODOS DE EMPRESAS CON JERARQUÍA
     # =========================
