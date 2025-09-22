@@ -999,7 +999,545 @@ class DataService:
             return df
         except Exception as e:
             return _self._handle_query_error("cargar documentos", e)
-
+    # =========================
+    # NUEVOS MÉTODOS PARA VALIDACIONES FUNDAE EN data_service.py
+    # =========================
+    
+    def validar_codigo_accion_fundae(self, codigo_accion: str, empresa_id: str, ano: int, accion_id: str = None) -> Tuple[bool, str]:
+        """
+        Valida que el código de acción sea único para la empresa gestora en el año especificado.
+        FUNDAE: Los códigos de acción deben ser únicos por empresa gestora y año.
+        """
+        if not codigo_accion or not ano or not empresa_id:
+            return False, "Código de acción, empresa y año requeridos"
+        
+        try:
+            # Buscar acciones con mismo código en el mismo año y empresa gestora
+            query = self.supabase.table("acciones_formativas").select("id, codigo_accion").eq(
+                "codigo_accion", codigo_accion
+            ).eq("empresa_id", empresa_id).gte(
+                "fecha_inicio", f"{ano}-01-01"
+            ).lt("fecha_inicio", f"{ano + 1}-01-01")
+            
+            # Excluir la acción actual si estamos editando
+            if accion_id:
+                query = query.neq("id", accion_id)
+            
+            res = query.execute()
+            
+            if res.data:
+                return False, f"Ya existe una acción con código '{codigo_accion}' en {ano} para esta empresa gestora"
+            
+            return True, ""
+            
+        except Exception as e:
+            return False, f"Error al validar código: {e}"
+    
+    def generar_codigo_accion_sugerido(self, empresa_id: str, ano: int = None) -> Tuple[str, str]:
+        """
+        Genera un código de acción sugerido para una empresa y año.
+        Formato: [PREFIJO_EMPRESA][ANO][NUMERO_SECUENCIAL]
+        """
+        try:
+            if not ano:
+                ano = datetime.now().year
+            
+            # Obtener información de la empresa
+            empresa_res = self.supabase.table("empresas").select("nombre, cif").eq("id", empresa_id).execute()
+            if not empresa_res.data:
+                return "", "Empresa no encontrada"
+            
+            empresa_data = empresa_res.data[0]
+            empresa_nombre = empresa_data.get("nombre", "")
+            
+            # Generar prefijo basado en el nombre de la empresa (primeras 3 letras)
+            prefijo = "".join([c.upper() for c in empresa_nombre if c.isalpha()])[:3]
+            if len(prefijo) < 3:
+                prefijo = prefijo.ljust(3, 'X')
+            
+            # Obtener acciones existentes para esta empresa en el año
+            acciones_existentes = self.supabase.table("acciones_formativas").select(
+                "codigo_accion"
+            ).eq("empresa_id", empresa_id).gte(
+                "fecha_inicio", f"{ano}-01-01"
+            ).lt("fecha_inicio", f"{ano + 1}-01-01").execute()
+            
+            # Extraer números secuenciales usados
+            patron_base = f"{prefijo}{str(ano)[-2:]}"  # Últimos 2 dígitos del año
+            numeros_usados = []
+            
+            for accion in acciones_existentes.data or []:
+                codigo = accion["codigo_accion"]
+                if codigo.startswith(patron_base):
+                    try:
+                        numero_str = codigo[len(patron_base):]
+                        numero = int(numero_str)
+                        numeros_usados.append(numero)
+                    except ValueError:
+                        continue
+            
+            # Encontrar siguiente número
+            siguiente_numero = 1
+            while siguiente_numero in numeros_usados:
+                siguiente_numero += 1
+            
+            codigo_sugerido = f"{patron_base}{siguiente_numero:03d}"  # 3 dígitos con padding
+            return codigo_sugerido, ""
+            
+        except Exception as e:
+            return "", f"Error al generar código sugerido: {e}"
+    
+    def create_accion_formativa_con_validaciones_fundae(self, data: Dict[str, Any]) -> bool:
+        """
+        Crea acción formativa con validaciones FUNDAE completas.
+        """
+        try:
+            # Asignar empresa según rol
+            if self.rol == "gestor":
+                data["empresa_id"] = self.empresa_id
+            elif self.rol == "admin":
+                if not data.get("empresa_id"):
+                    st.error("Debe especificar empresa para la acción formativa")
+                    return False
+            else:
+                st.error("Sin permisos para crear acciones formativas")
+                return False
+            
+            # Validar campos obligatorios FUNDAE
+            campos_obligatorios = ["nombre", "codigo_accion", "modalidad", "num_horas", "fecha_inicio"]
+            for campo in campos_obligatorios:
+                if not data.get(campo):
+                    st.error(f"Campo '{campo}' es obligatorio para FUNDAE")
+                    return False
+            
+            # Validar código único FUNDAE
+            codigo_accion = data["codigo_accion"]
+            empresa_id = data["empresa_id"]
+            fecha_inicio = data["fecha_inicio"]
+            
+            try:
+                ano = datetime.fromisoformat(str(fecha_inicio).replace('Z', '+00:00')).year
+            except:
+                ano = datetime.now().year
+            
+            es_valido, error_codigo = self.validar_codigo_accion_fundae(
+                codigo_accion, empresa_id, ano
+            )
+            
+            if not es_valido:
+                st.error(f"Código FUNDAE inválido: {error_codigo}")
+                return False
+            
+            # Validar modalidad FUNDAE
+            modalidades_validas = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
+            if data["modalidad"] not in modalidades_validas:
+                st.error(f"Modalidad debe ser una de: {', '.join(modalidades_validas)}")
+                return False
+            
+            # Validar horas
+            try:
+                horas = int(data["num_horas"])
+                if horas <= 0 or horas > 9999:
+                    st.error("Las horas deben estar entre 1 y 9999")
+                    return False
+            except (ValueError, TypeError):
+                st.error("Las horas deben ser un número entero")
+                return False
+            
+            # Agregar metadatos
+            data.update({
+                "created_at": datetime.utcnow().isoformat(),
+                "validada_fundae": True,
+                "ano_fundae": ano
+            })
+            
+            # Crear acción formativa
+            res = self.supabase.table("acciones_formativas").insert(data).execute()
+            
+            if res.data:
+                self.get_acciones_formativas.clear()
+                return True
+            else:
+                st.error("Error al crear la acción formativa")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error al crear acción formativa: {e}")
+            return False
+    
+    def update_accion_formativa_con_validaciones_fundae(self, accion_id: str, data: Dict[str, Any]) -> bool:
+        """
+        Actualiza acción formativa con validaciones FUNDAE.
+        """
+        try:
+            # Validar que podemos editar esta acción
+            accion_actual = self.supabase.table("acciones_formativas").select("*").eq("id", accion_id).execute()
+            if not accion_actual.data:
+                st.error("Acción formativa no encontrada")
+                return False
+            
+            accion_data = accion_actual.data[0]
+            
+            # Verificar permisos según rol
+            if self.rol == "gestor" and accion_data.get("empresa_id") != self.empresa_id:
+                st.error("No tienes permisos para editar esta acción formativa")
+                return False
+            
+            # Si se está cambiando el código, validar unicidad
+            if "codigo_accion" in data:
+                codigo_nuevo = data["codigo_accion"]
+                fecha_inicio = data.get("fecha_inicio", accion_data.get("fecha_inicio"))
+                empresa_id = accion_data["empresa_id"]  # No se puede cambiar empresa en edición
+                
+                try:
+                    ano = datetime.fromisoformat(str(fecha_inicio).replace('Z', '+00:00')).year
+                except:
+                    ano = datetime.now().year
+                
+                es_valido, error_codigo = self.validar_codigo_accion_fundae(
+                    codigo_nuevo, empresa_id, ano, accion_id
+                )
+                
+                if not es_valido:
+                    st.error(f"Código FUNDAE inválido: {error_codigo}")
+                    return False
+            
+            # Validar modalidad si se está cambiando
+            if "modalidad" in data:
+                modalidades_validas = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
+                if data["modalidad"] not in modalidades_validas:
+                    st.error(f"Modalidad debe ser una de: {', '.join(modalidades_validas)}")
+                    return False
+            
+            # Validar horas si se están cambiando
+            if "num_horas" in data:
+                try:
+                    horas = int(data["num_horas"])
+                    if horas <= 0 or horas > 9999:
+                        st.error("Las horas deben estar entre 1 y 9999")
+                        return False
+                except (ValueError, TypeError):
+                    st.error("Las horas deben ser un número entero")
+                    return False
+            
+            # Agregar timestamp de actualización
+            data["updated_at"] = datetime.utcnow().isoformat()
+            
+            # Actualizar
+            res = self.supabase.table("acciones_formativas").update(data).eq("id", accion_id).execute()
+            
+            if res.data:
+                self.get_acciones_formativas.clear()
+                return True
+            else:
+                st.error("Error al actualizar la acción formativa")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error al actualizar acción formativa: {e}")
+            return False
+    
+    def get_estadisticas_codigos_fundae(self) -> Dict[str, Any]:
+        """
+        Obtiene estadísticas sobre códigos FUNDAE para detectar problemas.
+        """
+        try:
+            # Obtener todas las acciones formativas
+            df_acciones = self.get_acciones_formativas()
+            
+            if df_acciones.empty:
+                return {
+                    "total_acciones": 0,
+                    "codigos_duplicados": 0,
+                    "empresas_con_conflictos": 0,
+                    "anos_con_problemas": []
+                }
+            
+            estadisticas = {
+                "total_acciones": len(df_acciones),
+                "codigos_duplicados": 0,
+                "empresas_con_conflictos": 0,
+                "anos_con_problemas": []
+            }
+            
+            # Detectar códigos duplicados por empresa y año
+            duplicados_detectados = set()
+            empresas_con_problemas = set()
+            
+            # Agrupar por empresa_id
+            for empresa_id in df_acciones['empresa_id'].unique():
+                if pd.isna(empresa_id):
+                    continue
+                    
+                acciones_empresa = df_acciones[df_acciones['empresa_id'] == empresa_id]
+                
+                # Agrupar por año
+                acciones_empresa['ano'] = pd.to_datetime(acciones_empresa['fecha_inicio'], errors='coerce').dt.year
+                
+                for ano in acciones_empresa['ano'].unique():
+                    if pd.isna(ano):
+                        continue
+                        
+                    acciones_ano = acciones_empresa[acciones_empresa['ano'] == ano]
+                    
+                    # Detectar duplicados en código_accion
+                    duplicados_ano = acciones_ano.groupby('codigo_accion').size()
+                    duplicados_ano = duplicados_ano[duplicados_ano > 1]
+                    
+                    if not duplicados_ano.empty:
+                        estadisticas["codigos_duplicados"] += len(duplicados_ano)
+                        empresas_con_problemas.add(empresa_id)
+                        if int(ano) not in estadisticas["anos_con_problemas"]:
+                            estadisticas["anos_con_problemas"].append(int(ano))
+            
+            estadisticas["empresas_con_conflictos"] = len(empresas_con_problemas)
+            
+            return estadisticas
+            
+        except Exception as e:
+            st.error(f"Error al calcular estadísticas FUNDAE: {e}")
+            return {}
+    
+    def get_reporte_conflictos_fundae(self) -> List[Dict[str, Any]]:
+        """
+        Genera reporte detallado de conflictos en códigos FUNDAE.
+        """
+        try:
+            df_acciones = self.get_acciones_formativas()
+            
+            if df_acciones.empty:
+                return []
+            
+            conflictos = []
+            
+            # Obtener información de empresas para nombres legibles
+            empresas_info = {}
+            if not df_acciones.empty:
+                empresas_ids = df_acciones['empresa_id'].dropna().unique()
+                for empresa_id in empresas_ids:
+                    empresa_res = self.supabase.table("empresas").select("id, nombre").eq("id", empresa_id).execute()
+                    if empresa_res.data:
+                        empresas_info[empresa_id] = empresa_res.data[0]["nombre"]
+            
+            # Agrupar por empresa
+            for empresa_id in df_acciones['empresa_id'].unique():
+                if pd.isna(empresa_id):
+                    continue
+                    
+                empresa_nombre = empresas_info.get(empresa_id, f"Empresa {empresa_id}")
+                acciones_empresa = df_acciones[df_acciones['empresa_id'] == empresa_id]
+                
+                # Añadir columna de año
+                acciones_empresa = acciones_empresa.copy()
+                acciones_empresa['ano'] = pd.to_datetime(acciones_empresa['fecha_inicio'], errors='coerce').dt.year
+                
+                # Agrupar por año
+                for ano in acciones_empresa['ano'].unique():
+                    if pd.isna(ano):
+                        continue
+                        
+                    acciones_ano = acciones_empresa[acciones_empresa['ano'] == ano]
+                    
+                    # Detectar duplicados
+                    for codigo in acciones_ano['codigo_accion'].unique():
+                        acciones_codigo = acciones_ano[acciones_ano['codigo_accion'] == codigo]
+                        
+                        if len(acciones_codigo) > 1:
+                            conflictos.append({
+                                "tipo": "codigo_duplicado",
+                                "empresa_id": empresa_id,
+                                "empresa_nombre": empresa_nombre,
+                                "ano": int(ano),
+                                "codigo_accion": codigo,
+                                "cantidad_duplicados": len(acciones_codigo),
+                                "acciones_afectadas": [
+                                    {
+                                        "id": row["id"],
+                                        "nombre": row["nombre"],
+                                        "fecha_inicio": row["fecha_inicio"]
+                                    }
+                                    for _, row in acciones_codigo.iterrows()
+                                ]
+                            })
+            
+            return conflictos
+            
+        except Exception as e:
+            st.error(f"Error al generar reporte de conflictos: {e}")
+            return []
+    
+    def resolver_conflicto_codigo_fundae(self, conflicto: Dict[str, Any], accion_id: str, nuevo_codigo: str) -> bool:
+        """
+        Resuelve un conflicto de código FUNDAE asignando un nuevo código a una acción específica.
+        """
+        try:
+            # Validar que el nuevo código no genere otro conflicto
+            empresa_id = conflicto["empresa_id"]
+            ano = conflicto["ano"]
+            
+            es_valido, error = self.validar_codigo_accion_fundae(
+                nuevo_codigo, empresa_id, ano, accion_id
+            )
+            
+            if not es_valido:
+                st.error(f"El nuevo código también genera conflicto: {error}")
+                return False
+            
+            # Actualizar la acción con el nuevo código
+            datos_actualizacion = {
+                "codigo_accion": nuevo_codigo,
+                "updated_at": datetime.utcnow().isoformat(),
+                "conflicto_resuelto": True
+            }
+            
+            res = self.supabase.table("acciones_formativas").update(datos_actualizacion).eq("id", accion_id).execute()
+            
+            if res.data:
+                # Limpiar cache
+                self.get_acciones_formativas.clear()
+                return True
+            else:
+                st.error("Error al actualizar la acción formativa")
+                return False
+                
+        except Exception as e:
+            st.error(f"Error al resolver conflicto: {e}")
+            return False
+    
+    def auto_resolver_conflictos_fundae(self, empresa_id: str = None) -> Dict[str, int]:
+        """
+        Intenta resolver automáticamente conflictos de códigos FUNDAE generando códigos alternativos.
+        """
+        try:
+            conflictos = self.get_reporte_conflictos_fundae()
+            
+            # Filtrar por empresa si se especifica
+            if empresa_id:
+                conflictos = [c for c in conflictos if c["empresa_id"] == empresa_id]
+            
+            resueltos = 0
+            errores = 0
+            
+            for conflicto in conflictos:
+                if conflicto["tipo"] != "codigo_duplicado":
+                    continue
+                
+                # Para cada acción duplicada excepto la primera, generar nuevo código
+                acciones_afectadas = conflicto["acciones_afectadas"]
+                
+                for i, accion in enumerate(acciones_afectadas[1:], 1):  # Empezar desde la segunda
+                    accion_id = accion["id"]
+                    empresa_id_conflicto = conflicto["empresa_id"]
+                    ano_conflicto = conflicto["ano"]
+                    
+                    # Generar código alternativo
+                    nuevo_codigo, error = self.generar_codigo_accion_sugerido(empresa_id_conflicto, ano_conflicto)
+                    
+                    if error:
+                        errores += 1
+                        continue
+                    
+                    # Intentar resolver
+                    if self.resolver_conflicto_codigo_fundae(conflicto, accion_id, nuevo_codigo):
+                        resueltos += 1
+                    else:
+                        errores += 1
+            
+            return {
+                "conflictos_procesados": len(conflictos),
+                "resueltos": resueltos,
+                "errores": errores
+            }
+            
+        except Exception as e:
+            st.error(f"Error en resolución automática: {e}")
+            return {"conflictos_procesados": 0, "resueltos": 0, "errores": 1}
+    
+    # =========================
+    # MÉTODOS PARA MIGRACIÓN DE DATOS LEGACY
+    # =========================
+    
+    def migrar_codigos_fundae_legacy(self) -> Dict[str, int]:
+        """
+        Migra acciones formativas existentes que no tienen códigos FUNDAE válidos.
+        """
+        try:
+            # Obtener acciones sin código o con códigos problemáticos
+            df_acciones = self.get_acciones_formativas()
+            
+            if df_acciones.empty:
+                return {"procesadas": 0, "migradas": 0, "errores": 0}
+            
+            procesadas = 0
+            migradas = 0
+            errores = 0
+            
+            for _, accion in df_acciones.iterrows():
+                procesadas += 1
+                
+                codigo_actual = accion.get("codigo_accion", "")
+                empresa_id = accion.get("empresa_id")
+                fecha_inicio = accion.get("fecha_inicio")
+                
+                # Determinar si necesita migración
+                necesita_migracion = False
+                
+                # Sin código
+                if not codigo_actual:
+                    necesita_migracion = True
+                
+                # Código muy corto o muy largo
+                elif len(codigo_actual) < 3 or len(codigo_actual) > 20:
+                    necesita_migracion = True
+                
+                # Contiene caracteres no válidos para FUNDAE
+                elif not re.match(r'^[A-Z0-9\-_]+, codigo_actual.upper()):
+                    necesita_migracion = True
+                
+                if necesita_migracion and empresa_id and fecha_inicio:
+                    try:
+                        ano = datetime.fromisoformat(str(fecha_inicio).replace('Z', '+00:00')).year
+                        
+                        # Generar nuevo código
+                        nuevo_codigo, error = self.generar_codigo_accion_sugerido(empresa_id, ano)
+                        
+                        if error:
+                            errores += 1
+                            continue
+                        
+                        # Actualizar acción
+                        datos_migracion = {
+                            "codigo_accion": nuevo_codigo,
+                            "updated_at": datetime.utcnow().isoformat(),
+                            "migrado_fundae": True,
+                            "codigo_anterior": codigo_actual
+                        }
+                        
+                        res = self.supabase.table("acciones_formativas").update(datos_migracion).eq("id", accion["id"]).execute()
+                        
+                        if res.data:
+                            migradas += 1
+                        else:
+                            errores += 1
+                            
+                    except Exception as e:
+                        errores += 1
+                        continue
+            
+            # Limpiar cache al final
+            if migradas > 0:
+                self.get_acciones_formativas.clear()
+            
+            return {
+                "procesadas": procesadas,
+                "migradas": migradas,
+                "errores": errores
+            }
+            
+        except Exception as e:
+            st.error(f"Error en migración de códigos legacy: {e}")
+            return {"procesadas": 0, "migradas": 0, "errores": 1}
+        
     # =========================
     # MÉTRICAS Y ESTADÍSTICAS GLOBALES
     # =========================
