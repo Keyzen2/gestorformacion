@@ -1285,20 +1285,20 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
     # COSTES FUNDAE
     # =========================
     @st.cache_data(ttl=3600)
-    def get_provincias(_self) -> list:
+    def get_provincias(self) -> list:
         """Devuelve listado de provincias ordenadas alfabéticamente."""
         try:
-            res = _self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
+            res = self.supabase.table("provincias").select("id, nombre").order("nombre").execute()
             return res.data or []
         except Exception as e:
             st.error(f"Error al cargar provincias: {e}")
             return []
     
     @st.cache_data(ttl=3600) 
-    def get_localidades_por_provincia(_self, provincia_id: int) -> list:
+    def get_localidades_por_provincia(self, provincia_id: int) -> list:
         """Devuelve listado de localidades de una provincia."""
         try:
-            res = _self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            res = self.supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
             return res.data or []
         except Exception as e:
             st.error(f"Error al cargar localidades: {e}")
@@ -1311,18 +1311,18 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
             limite = tarifa * horas * participantes
             return limite, tarifa
         except:
-        return 0, 0
-        
+            return 0, 0
+            
     @st.cache_data(ttl=300)
-    def get_grupo_costes(_self, grupo_id: str) -> Dict[str, Any]:
+    def get_grupo_costes(self, grupo_id: str) -> Dict[str, Any]:
         """Obtiene costes de un grupo específico."""
         try:
-            res = _self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
+            res = self.supabase.table("grupo_costes").select("*").eq("grupo_id", grupo_id).execute()
             return res.data[0] if res.data else {}
         except Exception as e:
             st.error(f"Error al cargar costes de grupo: {e}")
             return {}
-
+    
     def create_grupo_coste(self, datos_coste: Dict[str, Any]) -> bool:
         """Crea registro de costes para un grupo."""
         try:
@@ -1337,7 +1337,7 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
         except Exception as e:
             st.error(f"Error al crear costes de grupo: {e}")
             return False
-
+    
     def update_grupo_coste(self, grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
         """Actualiza costes de un grupo."""
         try:
@@ -1352,16 +1352,16 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
         except Exception as e:
             st.error(f"Error al actualizar costes de grupo: {e}")
             return False
-
+    
     @st.cache_data(ttl=300)
-    def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
+    def get_grupo_bonificaciones(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene bonificaciones de un grupo."""
         try:
-            res = _self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
+            res = self.supabase.table("grupo_bonificaciones").select("*").eq("grupo_id", grupo_id).order("mes").execute()
             return pd.DataFrame(res.data or [])
         except Exception as e:
-            return _self._handle_query_error("cargar bonificaciones de grupo", e)
-
+            return self._handle_query_error("cargar bonificaciones de grupo", e)
+    
     def create_grupo_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
         """Crea una bonificación mensual para un grupo."""
         try:
@@ -1376,7 +1376,7 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
         except Exception as e:
             st.error(f"Error al crear bonificación de grupo: {e}")
             return False
-
+    
     def delete_grupo_bonificacion(self, bonificacion_id: str) -> bool:
         """Elimina una bonificación de un grupo."""
         try:
@@ -1390,6 +1390,7 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
         except Exception as e:
             st.error(f"Error al eliminar bonificación: {e}")
             return False
+
 
     # =========================
     # MÉTODOS ADICIONALES PARA RESPONSABLE Y TELEFONO
