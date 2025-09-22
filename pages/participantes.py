@@ -20,22 +20,19 @@ st.set_page_config(
 # HELPERS CACHEADOS
 # =========================
 @st.cache_data(ttl=300)
-def cargar_empresas_disponibles(empresas_service, session_state):
-    """Empresas disponibles según rol:
-    - admin: todas
-    - gestor: su empresa y sus empresas cliente hijas
-    """
+def cargar_empresas_disponibles(_empresas_service, session_state):
+    """Devuelve las empresas disponibles según rol."""
     try:
-        df_empresas = empresas_service.get_empresas_con_jerarquia()
-        if session_state.role == "admin":
-            return df_empresas
-        elif session_state.role == "gestor":
+        df = _empresas_service.get_empresas_con_jerarquia()
+        if df.empty:
+            return df
+
+        if session_state.role == "gestor":
             empresa_id = session_state.user.get("empresa_id")
-            return df_empresas[
-                (df_empresas["id"] == empresa_id) |
-                (df_empresas["empresa_matriz_id"] == empresa_id)
-            ]
-        return pd.DataFrame()
+            # Solo su propia empresa y las que dependen de ella
+            df = df[(df["id"] == empresa_id) | (df["empresa_matriz_id"] == empresa_id)]
+
+        return df
     except Exception as e:
         st.error(f"❌ Error cargando empresas disponibles: {e}")
         return pd.DataFrame()
