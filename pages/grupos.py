@@ -494,16 +494,16 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 
                 # VALIDACIÓN TEMPORAL EN TIEMPO REAL
                 if fecha_inicio and fecha_fin_prevista and accion_id:
-                    errores_temporales = grupos_service.validar_coherencia_temporal_grupo(
-                        fecha_inicio, fecha_fin_prevista, accion_id
-                    )
-                    
-                    if errores_temporales:
-                        st.error("❌ Errores de coherencia temporal:")
-                        for error in errores_temporales:
-                            st.error(f"• {error}")
-                    else:
-                        st.success("✅ Fechas coherentes con la acción formativa")
+                    try:
+                        fecha_inicio_dt = fecha_inicio if isinstance(fecha_inicio, date) else datetime.fromisoformat(str(fecha_inicio)).date()
+                        fecha_fin_dt = fecha_fin_prevista if isinstance(fecha_fin_prevista, date) else datetime.fromisoformat(str(fecha_fin_prevista)).date()
+                        
+                        errores_temporales = grupos_service.validar_coherencia_temporal_grupo(
+                            fecha_inicio_dt, fecha_fin_dt, accion_id
+                        )
+                        errores.extend(errores_temporales)
+                    except Exception as e:
+                        st.warning(f"No se pudo validar coherencia temporal: {e}")
             
             with col2:
                 # Empresa propietaria (solo admin)
@@ -769,11 +769,14 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         
         # Validar código único si estamos creando
         if es_creacion and codigo_grupo and accion_id:
-            es_valido_codigo, error_codigo = grupos_service.validar_codigo_grupo_unico_fundae(
-                codigo_grupo, accion_id
-            )
-            if not es_valido_codigo:
-                errores.append(f"Código no válido: {error_codigo}")
+            try:
+                es_valido_codigo, error_codigo = grupos_service.validar_codigo_grupo_unico_fundae(
+                    codigo_grupo, accion_id
+                )
+                if not es_valido_codigo:
+                    errores.append(f"Código no válido: {error_codigo}")
+            except Exception as e:
+                errores.append(f"Error al validar código: {e}")
         
         # Validar datos de finalización si aplica
         if datos_finalizacion:
