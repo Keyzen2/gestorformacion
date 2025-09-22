@@ -1436,7 +1436,33 @@ def create_grupo_con_jerarquia_mejorado(self, datos_grupo: Dict[str, Any]) -> Tu
             return self.validar_grupo_fundae(grupo, tipo_xml)
         except Exception as e:
             return False, [f"Error al validar grupo: {e}"]
+# =========================
+# CONFIGURACIÓN ADICIONAL PARA GRUPOS_SERVICE
+# =========================
 
+def inicializar_configuracion_fundae(self):
+    """
+    Configuración adicional para validaciones FUNDAE en grupos_service.
+    Añadir al método __init__ de GruposService.
+    """
+    self.modalidades_fundae = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
+    self.max_participantes_grupo = 30
+    self.min_participantes_grupo = 1
+    self.cache_empresas_responsables = {}
+
+def limpiar_cache_fundae(self):
+    """
+    Limpieza específica de caches FUNDAE.
+    Integrar en limpiar_cache_grupos existente.
+    """
+    self.cache_empresas_responsables = {}
+    
+    # Limpiar caches adicionales si existen
+    if hasattr(self, 'get_avisos_fundae'):
+        try:
+            self.get_avisos_fundae.clear()
+        except:
+            pass
 
 # =========================
 # FACTORY FUNCTION
