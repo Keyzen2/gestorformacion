@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import uuid
-from utils.utils import export_csv, validar_dni_cif  # Importación corregida
+from utils import export_csv, validar_dni_cif
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
