@@ -572,7 +572,6 @@ def main(supabase, session_state):
     # TAB LISTADO
     # =========================
     with tabs[0]:
-        st.header("📋 Listado de Participantes")
         try:
             df_participantes = participantes_service.get_participantes_completos()
 
@@ -612,14 +611,13 @@ def main(supabase, session_state):
     # TAB CREAR
     # =========================
     with tabs[1]:
-        st.header("➕ Crear Nuevo Participante")
+        st.subheader("➕ Crear Nuevo Participante")
         mostrar_formulario_participante({}, participantes_service, empresas_service, grupos_service, session_state, es_creacion=True)
 
     # =========================
     # TAB MÉTRICAS
     # =========================
     with tabs[2]:
-        st.header("📊 Métricas de Participantes")
         mostrar_metricas_participantes(participantes_service, session_state)
 
 # =========================
