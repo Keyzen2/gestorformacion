@@ -81,14 +81,45 @@ def mostrar_metricas_participantes(participantes_service, session_state):
 # TABLA GENERAL
 # =========================
 def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="📋 Lista de Participantes"):
-    """Muestra tabla de participantes con selección de fila."""
+    """Muestra tabla de participantes con filtros, paginación y selección de fila."""
     if df_participantes.empty:
         st.info("📋 No hay participantes para mostrar")
         return None
-    
-    st.markdown(f"### {titulo_tabla}")
-    df_display = df_participantes.copy()
 
+    st.markdown(f"### {titulo_tabla}")
+
+    # 🔎 Filtros avanzados (fijos arriba)
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        filtro_nombre = st.text_input("👤 Nombre/Apellidos contiene")
+    with col2:
+        filtro_dni = st.text_input("🆔 Documento contiene")
+    with col3:
+        filtro_empresa = st.text_input("🏢 Empresa contiene")
+
+    if filtro_nombre:
+        df_participantes = df_participantes[
+            df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False) |
+            df_participantes["apellidos"].str.contains(filtro_nombre, case=False, na=False)
+        ]
+    if filtro_dni:
+        df_participantes = df_participantes[df_participantes["dni"].str.contains(filtro_dni, case=False, na=False)]
+    if filtro_empresa:
+        df_participantes = df_participantes[df_participantes["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
+
+    # 🔢 Selector de registros por página
+    page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1)
+
+    # 📄 Paginación
+    total_rows = len(df_participantes)
+    total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
+    page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
+
+    start_idx = (page_number - 1) * page_size
+    end_idx = start_idx + page_size
+    df_paged = df_participantes.iloc[start_idx:end_idx]
+
+    # Configuración columnas
     columnas = ["nombre", "apellidos", "dni", "email", "telefono", "empresa_nombre"]
     column_config = {
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
@@ -99,8 +130,9 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large")
     }
 
+    # Mostrar tabla
     evento = st.dataframe(
-        df_display[columnas],
+        df_paged[columnas],
         column_config=column_config,
         use_container_width=True,
         hide_index=True,
@@ -109,7 +141,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     )
 
     if evento.selection.rows:
-        return df_display.iloc[evento.selection.rows[0]]
+        return df_paged.iloc[evento.selection.rows[0]]
     return None
 # =========================
 # FORMULARIO DE PARTICIPANTE
