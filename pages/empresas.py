@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import uuid
 from datetime import datetime, date
 from utils import validar_dni_cif, export_csv
 from services.empresas_service import get_empresas_service
@@ -66,6 +67,10 @@ def guardar_modulos(empresas_service, empresa_id,
                     crm_activo, crm_inicio, crm_fin):
     """Actualiza los módulos básicos (tabla empresas) y CRM (tabla crm_empresas)."""
     try:
+        # Normalizar fechas CRM (a ISO o None)
+        crm_inicio_iso = crm_inicio.isoformat() if isinstance(crm_inicio, date) else (crm_inicio or None)
+        crm_fin_iso = crm_fin.isoformat() if isinstance(crm_fin, date) else (crm_fin or None)
+
         # 1. Actualizar tabla empresas (booleans)
         empresas_service.supabase.table("empresas").update({
             "formacion_activo": formacion_activo,
@@ -82,8 +87,8 @@ def guardar_modulos(empresas_service, empresa_id,
                 # update
                 empresas_service.supabase.table("crm_empresas").update({
                     "crm_activo": True,
-                    "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
+                    "crm_inicio": crm_inicio_iso,
+                    "crm_fin": crm_fin_iso,
                     "updated_at": datetime.utcnow().isoformat()
                 }).eq("empresa_id", empresa_id).execute()
             else:
@@ -91,8 +96,8 @@ def guardar_modulos(empresas_service, empresa_id,
                 empresas_service.supabase.table("crm_empresas").insert({
                     "empresa_id": empresa_id,
                     "crm_activo": True,
-                    "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-                    "crm_fin": crm_fin.isoformat() if crm_fin else None,
+                    "crm_inicio": crm_inicio_iso,
+                    "crm_fin": crm_fin_iso,
                     "created_at": datetime.utcnow().isoformat()
                 }).execute()
         else:
@@ -1090,9 +1095,19 @@ def main(supabase, session_state):
             df_empresas = empresas_service.get_empresas_con_jerarquia()
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state)
             if empresa_sel is not None:
-                mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
+                # 🔄 Limpiar session_state para evitar arrastrar cuentas/CRM de otra empresa
+                st.session_state.pop(f"cuentas_empresa_{empresa_sel['id']}", None)
+                st.session_state.pop(f"crm_empresa_{empresa_sel['id']}", None)
+                mostrar_formulario_empresa(
+                    empresa_sel, empresas_service, session_state, es_creacion=False
+                )
         with tab3:
-            mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
+            # 🔄 Limpiar session_state para nueva empresa
+            st.session_state.pop("cuentas_empresa_nueva", None)
+            st.session_state.pop("crm_empresa_nueva", None)
+            mostrar_formulario_empresa(
+                {}, empresas_service, session_state, es_creacion=True
+            )
     
     elif session_state.role == "gestor":
         with tab1:
@@ -1102,9 +1117,19 @@ def main(supabase, session_state):
             df_empresas = df_empresas[df_empresas["id"] != session_state.user.get("empresa_id")]  # excluir su propia empresa
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state, "👥 Mis Clientes")
             if empresa_sel is not None:
-                mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
+                # 🔄 Limpiar session_state para evitar arrastrar cuentas/CRM de otra empresa
+                st.session_state.pop(f"cuentas_empresa_{empresa_sel['id']}", None)
+                st.session_state.pop(f"crm_empresa_{empresa_sel['id']}", None)
+                mostrar_formulario_empresa(
+                    empresa_sel, empresas_service, session_state, es_creacion=False
+                )
         with tab3:
-            mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
+            # 🔄 Limpiar session_state para nueva empresa
+            st.session_state.pop("cuentas_empresa_nueva", None)
+            st.session_state.pop("crm_empresa_nueva", None)
+            mostrar_formulario_empresa(
+                {}, empresas_service, session_state, es_creacion=True
+            )
     
     with st.expander("ℹ️ Ayuda sobre FUNDAE y Jerarquía"):
         st.markdown("""
@@ -1114,7 +1139,6 @@ def main(supabase, session_state):
             - Gestora → gestiona varias empresas clientes.
             - Cliente de Gestora → empresa asociada a una gestora.
         """)
-
 
 if __name__ == "__main__":
     main()
