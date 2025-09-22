@@ -357,6 +357,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     
     with st.form(form_key, clear_on_submit=es_creacion):
         
+        errores = []
         # =====================
         # SECCIÓN 1: DATOS BÁSICOS FUNDAE CON VALIDACIONES
         # =====================
