@@ -201,62 +201,64 @@ def mostrar_metricas_empresas(empresas_service, session_state):
     except Exception as e:
         st.error(f"❌ Error al cargar métricas: {e}")
 
-def mostrar_tabla_empresas(df_empresas, session_state, titulo_tabla="📋 Lista de Empresas"):
-    """Muestra tabla de empresas con filtros, paginación y exportación."""
+def mostrar_tabla_empresas(df_empresas, session_state, titulo_tabla="📋 Lista de Empresas", empresas_service=None):
+    """Muestra tabla de empresas con filtros fijos, paginación y exportación."""
     if df_empresas.empty:
         st.info("📋 No hay empresas para mostrar")
         return None
 
     st.markdown(f"### {titulo_tabla}")
 
-    # 🔎 Filtros avanzados
-    with st.expander("🔍 Filtros avanzados"):
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            filtro_nombre = st.text_input("🏢 Nombre contiene")
-        with col2:
-            filtro_cif = st.text_input("📄 CIF contiene")
-        with col3:
-            filtro_ciudad = st.text_input("📍 Ciudad contiene")
+    # 🔎 Filtros fijos arriba de la tabla
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        filtro_nombre = st.text_input("🏢 Nombre contiene")
+    with col2:
+        filtro_cif = st.text_input("📄 CIF contiene")
+    with col3:
+        filtro_ciudad = st.text_input("📍 Ciudad contiene")
 
-        if filtro_nombre:
-            df_empresas = df_empresas[df_empresas["nombre"].str.contains(filtro_nombre, case=False, na=False)]
-        if filtro_cif:
-            df_empresas = df_empresas[df_empresas["cif"].str.contains(filtro_cif, case=False, na=False)]
-        if filtro_ciudad:
-            df_empresas = df_empresas[df_empresas["ciudad"].str.contains(filtro_ciudad, case=False, na=False)]
+    if filtro_nombre:
+        df_empresas = df_empresas[df_empresas["nombre"].str.contains(filtro_nombre, case=False, na=False)]
+    if filtro_cif:
+        df_empresas = df_empresas[df_empresas["cif"].str.contains(filtro_cif, case=False, na=False)]
+    if filtro_ciudad:
+        df_empresas = df_empresas[df_empresas["ciudad"].str.contains(filtro_ciudad, case=False, na=False)]
 
-    # 🔢 Selector de registros por página
-    page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1)
-
-    # 📄 Paginación
-    total_rows = len(df_empresas)
-    total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
-    page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
-
-    start_idx = (page_number - 1) * page_size
-    end_idx = start_idx + page_size
-    df_paged = df_empresas.iloc[start_idx:end_idx]
-
-    # Configuración columnas
+    # 📊 Mostrar tabla con selección
     columnas = ["nombre", "cif", "ciudad", "telefono", "email"]
     if session_state.role == "admin":
         columnas.insert(2, "tipo_empresa")
 
     evento = st.dataframe(
-        df_paged[columnas],
+        df_empresas[columnas],
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row"
     )
 
-    # Botones export/import
-    col_exp, col_imp = st.columns([1, 1])
-    with col_exp:
-        exportar_empresas(empresas_service, session_state)
-    with col_imp:
-        importar_empresas(empresas_service, session_state)
+    # 🔢 Controles de paginación y registros por página (debajo de la tabla)
+    st.markdown("### 📑 Navegación")
+    col_pag1, col_pag2 = st.columns([1, 3])
+    with col_pag1:
+        page_size = st.selectbox("Registros por página", [10, 20, 50, 100], index=1)
+    with col_pag2:
+        total_rows = len(df_empresas)
+        total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
+        page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
+
+    start_idx = (page_number - 1) * page_size
+    end_idx = start_idx + page_size
+    df_paged = df_empresas.iloc[start_idx:end_idx]
+
+    # ✅ Botones export/import
+    if empresas_service is not None:
+        col_exp, col_imp = st.columns([1, 1])
+        with col_exp:
+            exportar_empresas(empresas_service, session_state)
+        with col_imp:
+            importar_empresas(empresas_service, session_state)
 
     if evento.selection.rows:
         return df_paged.iloc[evento.selection.rows[0]]
