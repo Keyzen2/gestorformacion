@@ -346,8 +346,6 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
     """CORREGIDO: Gestión de cuentas que NO resetea el formulario y usa st.rerun() en Streamlit 1.49"""
     cuentas = st.session_state[cuentas_key]
     
-    st.markdown("#### 🏦 Cuentas de Cotización")
-    
     # Mostrar cuentas existentes
     if cuentas:
         st.write("**Cuentas configuradas:**")
