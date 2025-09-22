@@ -11,7 +11,7 @@ TIPOS_EMPRESA = {
     "CLIENTE_GESTOR": "👥 Cliente de Gestora"
 }
 
-@st.cache_data(ttl=300)  # REDUCIDO de 3600 a 300 segundos
+@st.cache_data(ttl=300)
 def cargar_provincias(_supabase):
     """Carga lista de provincias."""
     try:
@@ -20,7 +20,7 @@ def cargar_provincias(_supabase):
     except:
         return {}
 
-@st.cache_data(ttl=300)  # REDUCIDO de 3600 a 300 segundos
+@st.cache_data(ttl=300)
 def cargar_localidades(_supabase, provincia_id):
     """Carga localidades de una provincia."""
     try:
@@ -148,7 +148,7 @@ def mostrar_tabla_empresas(df_empresas, session_state, titulo_tabla="📋 Lista 
     return None
 
 def mostrar_mi_empresa(empresas_service, session_state):
-    """Muestra los datos de la empresa del gestor con posibilidad de edición."""
+    """CORREGIDO: Muestra los datos de la empresa del gestor con posibilidad de edición real."""
     st.markdown("### 🏢 Mi Empresa")
     
     try:
@@ -202,19 +202,73 @@ def mostrar_mi_empresa(empresas_service, session_state):
                 st.session_state["editando_mi_empresa"] = True
                 st.rerun()
         
-        # Mostrar formulario de edición si está activado
+        # CORREGIDO: Mostrar formulario de edición real
         if st.session_state.get("editando_mi_empresa"):
             with st.container(border=True):
                 st.markdown("#### ✏️ Editando Mi Empresa")
-                mostrar_formulario_empresa(empresa_info, empresas_service, session_state, es_creacion=False, key_suffix="_mi_empresa", solo_datos_basicos=True)
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💾 Guardar Cambios", type="primary"):
-                        st.session_state["editando_mi_empresa"] = False
-                        st.rerun()
-                with col2:
-                    if st.button("❌ Cancelar"):
+                # Formulario específico para "Mi Empresa"
+                with st.form("editar_mi_empresa", clear_on_submit=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        telefono = st.text_input("📞 Teléfono", value=empresa_info.get("telefono", ""))
+                        email = st.text_input("📧 Email", value=empresa_info.get("email", ""))
+                        direccion = st.text_input("🏠 Dirección", value=empresa_info.get("direccion", ""))
+                    
+                    with col2:
+                        ciudad = st.text_input("📍 Ciudad", value=empresa_info.get("ciudad", ""))
+                        provincia = st.text_input("🗺️ Provincia", value=empresa_info.get("provincia", ""))
+                        codigo_postal = st.text_input("📮 Código Postal", value=empresa_info.get("codigo_postal", ""))
+                    
+                    # Datos del representante (readonly para gestor)
+                    st.markdown("#### 👤 Representante Legal (Solo lectura)")
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        st.text_input("Nombre y Apellidos", value=empresa_info.get("representante_nombre_apellidos", ""), disabled=True)
+                    with col4:
+                        st.text_input("Documento", value=empresa_info.get("representante_numero_documento", ""), disabled=True)
+                    
+                    # Botones
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        submitted = st.form_submit_button("💾 Guardar Cambios", type="primary")
+                    with col_btn2:
+                        cancelled = st.form_submit_button("❌ Cancelar")
+                    
+                    # CORREGIDO: Procesar guardado real
+                    if submitted:
+                        try:
+                            datos_actualizados = {
+                                "telefono": telefono,
+                                "email": email,
+                                "direccion": direccion,
+                                "ciudad": ciudad,
+                                "provincia": provincia,
+                                "codigo_postal": codigo_postal,
+                                "email_notificaciones": email,  # Compatibilidad
+                                "updated_at": datetime.utcnow().isoformat()
+                            }
+                            
+                            # Actualizar en base de datos
+                            result = empresas_service.supabase.table("empresas").update(
+                                datos_actualizados
+                            ).eq("id", empresa_info["id"]).execute()
+                            
+                            if result.data:
+                                st.success("✅ Información actualizada correctamente")
+                                st.session_state["editando_mi_empresa"] = False
+                                # Limpiar cache
+                                empresas_service.get_empresas_con_jerarquia.clear()
+                                cargar_provincias.clear()
+                                cargar_localidades.clear()
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al actualizar la información")
+                        except Exception as e:
+                            st.error(f"❌ Error guardando cambios: {e}")
+                    
+                    if cancelled:
                         st.session_state["editando_mi_empresa"] = False
                         st.rerun()
             
@@ -223,7 +277,7 @@ def mostrar_mi_empresa(empresas_service, session_state):
 
 def mostrar_campos_conectados_provincia_localidad(empresas_service, datos, key_suffix="", disabled=False):
     """
-    NUEVA FUNCIÓN: Campos conectados provincia-localidad FUERA del formulario
+    Campos conectados provincia-localidad FUERA del formulario
     para que funcionen dinámicamente
     """
     # Cargar datos auxiliares
@@ -274,8 +328,82 @@ def mostrar_campos_conectados_provincia_localidad(empresas_service, datos, key_s
     
     return provincia_sel, localidad_sel, provincia_id, localidad_id
 
+def inicializar_cuentas_cotizacion(form_id, empresas_service, empresa_id=None):
+    """NUEVA: Inicializar cuentas en session_state"""
+    cuentas_key = f"cuentas_{form_id}"
+    if cuentas_key not in st.session_state:
+        if empresa_id:
+            try:
+                result = empresas_service.supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", empresa_id).execute()
+                st.session_state[cuentas_key] = result.data or []
+            except:
+                st.session_state[cuentas_key] = []
+        else:
+            st.session_state[cuentas_key] = []
+    return cuentas_key
+
+def mostrar_gestion_cuentas_en_formulario(cuentas_key):
+    """CORREGIDO: Gestión de cuentas que NO resetea el formulario"""
+    cuentas = st.session_state[cuentas_key]
+    
+    st.markdown("#### 🏦 Cuentas de Cotización")
+    
+    # Mostrar cuentas existentes
+    if cuentas:
+        st.write("**Cuentas configuradas:**")
+        for i, cuenta in enumerate(cuentas):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                principal = " 🌟" if cuenta.get("es_principal") else ""
+                st.text(f"• {cuenta['numero_cuenta']}{principal}")
+            with col2:
+                if st.button("🌟", key=f"principal_{cuentas_key}_{i}", 
+                           disabled=cuenta.get("es_principal", False),
+                           help="Marcar como principal"):
+                    for j, c in enumerate(cuentas):
+                        c["es_principal"] = (j == i)
+                    # NO st.rerun() aquí - mantiene el formulario
+            with col3:
+                if st.button("🗑️", key=f"eliminar_{cuentas_key}_{i}",
+                           help="Eliminar cuenta"):
+                    cuentas.pop(i)
+                    # NO st.rerun() aquí - mantiene el formulario
+                    break  # Salir del bucle para evitar errores de índice
+    else:
+        st.info("📝 No hay cuentas de cotización configuradas")
+    
+    # Campos para añadir nueva cuenta (dentro del formulario)
+    st.markdown("**Añadir nueva cuenta:**")
+    col1, col2, col3 = st.columns([3, 1, 1])
+    
+    with col1:
+        nueva_cuenta = st.text_input("Número de cuenta", placeholder="Ej: 281234567890", key=f"nueva_cuenta_{cuentas_key}")
+    
+    with col2:
+        es_principal = st.checkbox("Principal", key=f"es_principal_{cuentas_key}")
+    
+    with col3:
+        if st.button("➕ Añadir", key=f"añadir_{cuentas_key}"):
+            if nueva_cuenta.strip():
+                # Si se marca como principal, quitar de otras
+                if es_principal:
+                    for cuenta in cuentas:
+                        cuenta["es_principal"] = False
+                
+                # Añadir nueva cuenta
+                cuentas.append({
+                    "numero_cuenta": nueva_cuenta.strip(),
+                    "es_principal": es_principal
+                })
+                
+                # Limpiar campos sin hacer rerun
+                st.session_state[f"nueva_cuenta_{cuentas_key}"] = ""
+                st.session_state[f"es_principal_{cuentas_key}"] = False
+            else:
+                st.error("⚠️ Introduce un número de cuenta")
+
 def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False, key_suffix="", solo_datos_basicos=False):
-    """Formulario FUNDAE completo con campos conectados CORREGIDOS."""
+    """CORREGIDO: Formulario FUNDAE completo con validaciones que no bloquean el botón."""
     
     if es_creacion:
         st.subheader("➕ Nueva Empresa Cliente")
@@ -285,7 +413,7 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             st.subheader(f"✏️ Editar {empresa_data['nombre']}")
         datos = empresa_data.copy()
     
-    # CAMPOS CONECTADOS FUERA DEL FORMULARIO
+    # CAMPOS CONECTADOS FUERA DEL FORMULARIO (solo si no es solo_datos_basicos)
     if not solo_datos_basicos:
         st.markdown("#### 🏠 Domicilio Social (Seleccione provincia y localidad)")
         provincia_sel, localidad_sel, provincia_id, localidad_id = mostrar_campos_conectados_provincia_localidad(
@@ -305,17 +433,9 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
     # ID único para el formulario
     form_id = f"empresa_{datos.get('id', 'nueva')}_{'crear' if es_creacion else 'editar'}{key_suffix}"
     
-    # Inicializar cuentas de cotización en session_state
-    cuentas_key = f"cuentas_{form_id}"
-    if cuentas_key not in st.session_state:
-        if not es_creacion and datos.get("id"):
-            try:
-                result = empresas_service.supabase.table("cuentas_cotizacion").select("*").eq("empresa_id", datos["id"]).execute()
-                st.session_state[cuentas_key] = result.data or []
-            except:
-                st.session_state[cuentas_key] = []
-        else:
-            st.session_state[cuentas_key] = []
+    # CORREGIDO: Inicializar cuentas sin resetear formulario
+    if not solo_datos_basicos:
+        cuentas_key = inicializar_cuentas_cotizacion(form_id, empresas_service, datos.get("id") if not es_creacion else None)
     
     with st.form(form_id, clear_on_submit=es_creacion):
         
@@ -416,27 +536,42 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             col1, col2 = st.columns(2)
             
             with col1:
-                nueva_creacion = st.checkbox("🆕 Nueva creación", value=datos.get("nueva_creacion", False), key=f"{form_id}_nueva_creacion")
+                nueva_creacion = st.checkbox(
+                    "🆕 Nueva creación", 
+                    value=datos.get("nueva_creacion", False), 
+                    key=f"{form_id}_nueva_creacion"
+                )
                 representacion_legal_trabajadores = st.checkbox(
                     "👥 ¿Existe Representación Legal de las Personas Trabajadoras?", 
-                    value=datos.get("representacion_legal_trabajadores", False), key=f"{form_id}_repr_legal"
+                    value=datos.get("representacion_legal_trabajadores", False), 
+                    key=f"{form_id}_repr_legal"
                 )
                 plantilla_media_anterior = st.number_input(
                     "👥 Plantilla media del año anterior", 
                     min_value=0, 
-                    value=datos.get("plantilla_media_anterior", 0), key=f"{form_id}_plantilla"
+                    value=datos.get("plantilla_media_anterior", 0), 
+                    key=f"{form_id}_plantilla"
                 )
             
             with col2:
-                es_pyme = st.checkbox("🏢 PYME", value=datos.get("es_pyme", True), key=f"{form_id}_pyme")
+                es_pyme = st.checkbox(
+                    "🏢 PYME", 
+                    value=datos.get("es_pyme", True), 
+                    key=f"{form_id}_pyme"
+                )
                 voluntad_acumular_credito = st.checkbox(
                     "💰 ¿Voluntad de acumular crédito de formación?",
-                    value=datos.get("voluntad_acumular_credito", False), key=f"{form_id}_acumular_credito"
+                    value=datos.get("voluntad_acumular_credito", False), 
+                    key=f"{form_id}_acumular_credito"
                 )
-                tiene_erte = st.checkbox("⚠️ ERTE", value=datos.get("tiene_erte", False), key=f"{form_id}_erte")
+                tiene_erte = st.checkbox(
+                    "⚠️ ERTE", 
+                    value=datos.get("tiene_erte", False), 
+                    key=f"{form_id}_erte"
+                )
         
         else:
-            # Valores por defecto para solo_datos_basicos
+            # Valores por defecto si es solo_datos_basicos (ej: Mi Empresa)
             representante_tipo_documento = datos.get("representante_tipo_documento")
             representante_numero_documento = datos.get("representante_numero_documento", "")
             representante_nombre_apellidos = datos.get("representante_nombre_apellidos", "")
@@ -448,46 +583,41 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             es_pyme = datos.get("es_pyme", True)
             voluntad_acumular_credito = datos.get("voluntad_acumular_credito", False)
             tiene_erte = datos.get("tiene_erte", False)
-            # Para solo_datos_basicos, usar valores existentes de provincia/localidad
             provincia_sel = datos.get("provincia", "")
             localidad_sel = datos.get("ciudad", "")
-            provincia_id = None  # No se actualiza en solo_datos_basicos
+            provincia_id = None
             localidad_id = None
         
-        # Campos de módulos solo para admin y NO solo_datos_basicos
+        # =========================
+        # BLOQUE MÓDULOS
+        # =========================
         if session_state.role == "admin" and not solo_datos_basicos:
             st.markdown("### 🔧 Configuración de Módulos")
             
             col1, col2 = st.columns(2)
-            
             with col1:
                 formacion_activo = st.checkbox("📚 Formación", value=datos.get("formacion_activo", True), key=f"{form_id}_formacion")
                 iso_activo = st.checkbox("📋 ISO 9001", value=datos.get("iso_activo", False), key=f"{form_id}_iso")
                 rgpd_activo = st.checkbox("🛡️ RGPD", value=datos.get("rgpd_activo", False), key=f"{form_id}_rgpd")
-            
             with col2:
                 docu_avanzada_activo = st.checkbox("📁 Doc. Avanzada", value=datos.get("docu_avanzada_activo", False), key=f"{form_id}_docu")
-                
-                # CRM con fechas
                 crm_activo = st.checkbox("📈 CRM", value=crm_data.get("crm_activo", False), key=f"{form_id}_crm")
-                
                 if crm_activo:
                     crm_inicio = st.date_input("📅 CRM Inicio", value=crm_data.get("crm_inicio", date.today()), key=f"{form_id}_crm_inicio")
                     crm_fin = st.date_input("📅 CRM Fin", value=crm_data.get("crm_fin"), key=f"{form_id}_crm_fin", help="Dejar vacío si no tiene fecha fin")
                 else:
-                    crm_inicio = None
-                    crm_fin = None
+                    crm_inicio, crm_fin = None, None
         else:
-            # Mantener valores existentes
             formacion_activo = datos.get("formacion_activo", True)
             iso_activo = datos.get("iso_activo", False)
             rgpd_activo = datos.get("rgpd_activo", False)
             docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
             crm_activo = crm_data.get("crm_activo", False)
-            crm_inicio = None
-            crm_fin = None
+            crm_inicio, crm_fin = None, None
         
-        # Validaciones
+        # =========================
+        # VALIDACIONES
+        # =========================
         errores = []
         if not nombre:
             errores.append("Razón Social requerida")
@@ -499,29 +629,29 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             if len(st.session_state[cuentas_key]) == 0:
                 errores.append("Al menos una cuenta de cotización")
         
-        # Mostrar errores
         if errores:
             st.error(f"⚠️ Faltan campos: {', '.join(errores)}")
         
-        # Botones de acción
+        # =========================
+        # BOTONES
+        # =========================
         st.markdown("---")
         if solo_datos_basicos:
-            # Solo botón guardar para "Mi Empresa"
             submitted = st.form_submit_button("💾 Actualizar", type="primary", use_container_width=True, disabled=len(errores) > 0)
             eliminar = False
         else:
             col_btn1, col_btn2 = st.columns(2)
-            
             with col_btn1:
                 submitted = st.form_submit_button("💾 Guardar", type="primary", use_container_width=True, disabled=len(errores) > 0)
-            
             with col_btn2:
                 if not es_creacion and session_state.role == "admin":
                     eliminar = st.form_submit_button("🗑️ Eliminar", type="secondary", use_container_width=True)
                 else:
                     eliminar = False
         
-        # Procesar formulario
+        # =========================
+        # PROCESAMIENTO
+        # =========================
         if submitted:
             procesar_guardado_empresa(
                 datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
@@ -531,7 +661,8 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
                 voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
                 rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
-                st.session_state[cuentas_key], provincia_sel, localidad_sel, 
+                st.session_state[cuentas_key] if not solo_datos_basicos else [],
+                provincia_sel, localidad_sel, 
                 empresas_service, session_state, es_creacion, solo_datos_basicos
             )
         
@@ -549,59 +680,13 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 st.session_state["confirmar_eliminar"] = True
                 st.warning("⚠️ Presiona 'Eliminar' nuevamente para confirmar")
     
-    # Gestión de cuentas de cotización FUERA del formulario (solo si no es popover ni solo_datos_basicos)
+    # Gestión de cuentas de cotización fuera del form (solo admin/gestor en edición completa)
     if not key_suffix and not solo_datos_basicos:
         st.markdown("#### 🏦 Cuentas de Cotización")
-        mostrar_gestion_cuentas(cuentas_key)
-
-def mostrar_gestion_cuentas(cuentas_key):
-    """Gestión de cuentas de cotización."""
-    
-    cuentas = st.session_state[cuentas_key]
-    
-    # Mostrar cuentas existentes
-    if cuentas:
-        st.write("**Cuentas configuradas:**")
-        for i, cuenta in enumerate(cuentas):
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                principal = " 🌟" if cuenta.get("es_principal") else ""
-                st.text(f"• {cuenta['numero_cuenta']}{principal}")
-            with col2:
-                if st.button("🌟 Principal", key=f"principal_{cuentas_key}_{i}", 
-                           disabled=cuenta.get("es_principal", False)):
-                    for j, c in enumerate(cuentas):
-                        c["es_principal"] = (j == i)
-                    st.rerun()
-            with col3:
-                if st.button("🗑️", key=f"eliminar_{cuentas_key}_{i}"):
-                    cuentas.pop(i)
-                    st.rerun()
-    else:
-        st.info("📝 No hay cuentas de cotización configuradas")
-    
-    # Añadir nueva cuenta usando popover
-    with st.popover("➕ Añadir Cuenta"):
-        nueva_cuenta = st.text_input("Número de cuenta", placeholder="Ej: 281234567890")
-        es_principal = st.checkbox("Marcar como principal")
-        
-        if st.button("✅ Añadir"):
-            if nueva_cuenta:
-                # Si se marca como principal, quitar de otras
-                if es_principal:
-                    for cuenta in cuentas:
-                        cuenta["es_principal"] = False
-                
-                # Añadir nueva cuenta
-                cuentas.append({
-                    "numero_cuenta": nueva_cuenta,
-                    "es_principal": es_principal
-                })
-                st.success("✅ Cuenta añadida")
-                st.rerun()
-            else:
-                st.error("⚠️ Introduce un número de cuenta")
-
+        mostrar_gestion_cuentas_en_formulario(cuentas_key)
+# ==================================================
+# GUARDADO DE EMPRESA Y CUENTAS
+# ==================================================
 def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
                              calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
                              representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
@@ -611,17 +696,14 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                              rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
                              cuentas_cotizacion, provincia_sel, localidad_sel, 
                              empresas_service, session_state, es_creacion, solo_datos_basicos=False):
-    """Procesa el guardado de la empresa - CORREGIDO."""
-    
+    """Procesa creación/actualización de empresa con jerarquía y validaciones."""
     try:
-        # VALIDACIONES ADICIONALES
+        # Validaciones
         if not validar_dni_cif(cif):
-            st.error("❌ El CIF proporcionado no es válido")
+            st.error("❌ CIF inválido")
             return
-        
-        # Si hay representante, validar documento
         if representante_numero_documento and not validar_dni_cif(representante_numero_documento):
-            st.error("❌ El documento del representante no es válido")
+            st.error("❌ Documento de representante inválido")
             return
         
         datos_empresa = {
@@ -651,7 +733,6 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             "iso_activo": iso_activo,
             "rgpd_activo": rgpd_activo,
             "docu_avanzada_activo": docu_avanzada_activo,
-            # Campos de compatibilidad
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
             "ciudad": localidad_sel,
@@ -659,291 +740,108 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             "updated_at": datetime.utcnow().isoformat()
         }
         
-        # Solo añadir created_at si es creación
         if es_creacion:
-            datos_empresa["created_at"] = datetime.utcnow().isoformat()
-            datos_empresa["fecha_alta"] = datetime.utcnow().isoformat()
-        
-        if es_creacion:
-            # CREAR EMPRESA
-            result = empresas_service.supabase.table("empresas").insert(datos_empresa).execute()
-            
-            if result.data and len(result.data) > 0:
-                empresa_id = result.data[0]["id"]
+            ok, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
+            if ok and empresa_id:
                 st.success("✅ Empresa creada correctamente")
-                
-                # Guardar cuentas si no es solo_datos_basicos
-                if not solo_datos_basicos and cuentas_cotizacion:
+                if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
-                
-                # Guardar datos CRM si corresponde
-                if session_state.role == "admin" and crm_activo:
-                    guardar_crm_datos(empresas_service.supabase, empresa_id, crm_activo, crm_inicio, crm_fin)
-                
-                # Limpiar cache y session_state
-                cargar_provincias.clear()
-                cargar_localidades.clear()
                 st.rerun()
-            else:
-                st.error("❌ Error al crear la empresa")
         else:
-            # ACTUALIZAR EMPRESA
-            result = empresas_service.supabase.table("empresas").update(datos_empresa).eq("id", datos["id"]).execute()
-            
-            if result.data:
+            ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
+            if ok:
                 st.success("✅ Empresa actualizada correctamente")
-                
-                # Actualizar cuentas solo si no es solo_datos_basicos
-                if not solo_datos_basicos:
-                    actualizar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
-                
-                # Actualizar datos CRM si corresponde
-                if session_state.role == "admin" and not solo_datos_basicos:
-                    actualizar_crm_datos(empresas_service.supabase, datos["id"], crm_activo, crm_inicio, crm_fin)
-                
-                # Limpiar cache
-                cargar_provincias.clear()
-                cargar_localidades.clear()
+                if cuentas_cotizacion:
+                    guardar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
                 st.rerun()
-            else:
-                st.error("❌ Error al actualizar la empresa")
-                
+    
     except Exception as e:
-        st.error(f"❌ Error procesando empresa: {str(e)}")
-        # Debug info para development
-        st.error(f"Debug - Error details: {e}")
+        st.error(f"❌ Error procesando empresa: {e}")
 
-def guardar_cuentas_cotizacion(supabase, empresa_id, cuentas):
-    """Guarda las cuentas de cotización."""
-    try:
-        for cuenta in cuentas:
-            supabase.table("cuentas_cotizacion").insert({
-                "empresa_id": empresa_id,
-                "numero_cuenta": cuenta["numero_cuenta"],
-                "es_principal": cuenta.get("es_principal", False)
-            }).execute()
-    except Exception as e:
-        st.warning(f"Error guardando cuentas: {e}")
 
-def actualizar_cuentas_cotizacion(supabase, empresa_id, cuentas):
-    """Actualiza las cuentas de cotización."""
+def guardar_cuentas_cotizacion(supabase, empresa_id: str, cuentas: list):
+    """Guarda cuentas de cotización en Supabase, reemplazando las existentes."""
     try:
-        # Eliminar y recrear (simplificado)
         supabase.table("cuentas_cotizacion").delete().eq("empresa_id", empresa_id).execute()
-        guardar_cuentas_cotizacion(supabase, empresa_id, cuentas)
+        if cuentas:
+            cuentas_insert = [
+                {
+                    "empresa_id": empresa_id,
+                    "numero_cuenta": c.get("numero_cuenta"),
+                    "es_principal": c.get("es_principal", False),
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                for c in cuentas if c.get("numero_cuenta")
+            ]
+            if cuentas_insert:
+                supabase.table("cuentas_cotizacion").insert(cuentas_insert).execute()
     except Exception as e:
-        st.warning(f"Error actualizando cuentas: {e}")
+        st.error(f"❌ Error guardando cuentas de cotización: {e}")
 
-def guardar_crm_datos(supabase, empresa_id, crm_activo, crm_inicio, crm_fin):
-    """Guarda datos específicos de CRM."""
+# ==================================================
+# CRM - GUARDADO
+# ==================================================
+def guardar_crm_datos(supabase, empresa_id: str, crm_activo: bool, crm_inicio: date = None, crm_fin: date = None):
+    """Guarda configuración de CRM para una empresa."""
     try:
-        datos_crm = {
+        supabase.table("crm_empresas").delete().eq("empresa_id", empresa_id).execute()
+        supabase.table("crm_empresas").insert({
             "empresa_id": empresa_id,
             "crm_activo": crm_activo,
             "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-            "crm_fin": crm_fin.isoformat() if crm_fin else None
-        }
-        supabase.table("crm_empresas").insert(datos_crm).execute()
+            "crm_fin": crm_fin.isoformat() if crm_fin else None,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
     except Exception as e:
-        st.warning(f"Error guardando datos CRM: {e}")
+        st.error(f"❌ Error guardando datos CRM: {e}")
 
-def actualizar_crm_datos(supabase, empresa_id, crm_activo, crm_inicio, crm_fin):
-    """Actualiza datos específicos de CRM."""
-    try:
-        datos_crm = {
-            "crm_activo": crm_activo,
-            "crm_inicio": crm_inicio.isoformat() if crm_inicio else None,
-            "crm_fin": crm_fin.isoformat() if crm_fin else None
-        }
-        
-        # Verificar si ya existe
-        existing = supabase.table("crm_empresas").select("id").eq("empresa_id", empresa_id).execute()
-        
-        if existing.data:
-            # Actualizar
-            supabase.table("crm_empresas").update(datos_crm).eq("empresa_id", empresa_id).execute()
-        else:
-            # Crear nuevo
-            datos_crm["empresa_id"] = empresa_id
-            supabase.table("crm_empresas").insert(datos_crm).execute()
-    except Exception as e:
-        st.warning(f"Error actualizando datos CRM: {e}")
-
+# ==================================================
+# MAIN
+# ==================================================
 def main(supabase, session_state):
-    st.title("🏢 Gestión de Empresas FUNDAE")
-    
-    if session_state.role == "admin":
-        st.caption("📊 Administración completa de empresas con datos FUNDAE")
-    else:
-        st.caption("👥 Gestión de empresas clientes con formulario FUNDAE completo")
-
-    if session_state.role not in ["admin", "gestor"]:
-        st.warning("⚠️ No tienes permisos para acceder a esta sección")
-        return
-
+    """Vista principal de Empresas con tabs jerárquicas."""
     empresas_service = get_empresas_service(supabase, session_state)
     
-    with st.spinner("⏳ Cargando empresas..."):
-        try:
-            df_empresas = empresas_service.get_empresas_con_jerarquia()
-        except Exception as e:
-            st.error(f"❌ Error al cargar empresas: {e}")
-            return
-
-    # Métricas
-    mostrar_metricas_empresas(empresas_service, session_state)
-    st.divider()
+    st.title("🏢 Gestión de Empresas")
     
-    # Filtros de búsqueda
-    st.markdown("### 🔍 Buscar y Filtrar")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        query = st.text_input("🔍 Buscar por razón social, CIF o ciudad", placeholder="Escribe para buscar...")
-    
-    with col2:
-        if session_state.role == "admin":
-            tipo_filter = st.selectbox("📂 Filtrar por tipo", 
-                                     ["Todos", "CLIENTE_SAAS", "GESTORA", "CLIENTE_GESTOR"])
-        else:
-            tipo_filter = "Todos"
-    
-    # Aplicar filtros
-    df_filtered = df_empresas.copy()
-    if query:
-        q_lower = query.lower()
-        df_filtered = df_filtered[
-            df_filtered["nombre"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["cif"].str.lower().str.contains(q_lower, na=False) |
-            df_filtered["ciudad"].fillna("").str.lower().str.contains(q_lower, na=False)
-        ]
-    
-    if tipo_filter != "Todos":
-        df_filtered = df_filtered[df_filtered["tipo_empresa"] == tipo_filter]
-    
-    # Exportar datos
-    if not df_filtered.empty:
-        st.download_button(
-            label="📥 Exportar CSV",
-            data=df_filtered.to_csv(index=False),
-            file_name=f"empresas_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv"
-        )
-    
-    st.divider()
-    
-    # DIFERENCIACIÓN POR ROL: Admin vs Gestor
+    # Tabs según rol
     if session_state.role == "admin":
-        # Tabs para admin (vista tradicional)
-        tab1, tab2 = st.tabs(["📋 Lista de Empresas", "➕ Nueva Empresa"])
-        
-        with tab1:
-            # Mostrar tabla y manejar selección
-            empresa_seleccionada = mostrar_tabla_empresas(df_filtered, session_state)
-            
-            # Si hay una empresa seleccionada, mostrar formulario de edición
-            if empresa_seleccionada is not None:
-                with st.container(border=True):
-                    mostrar_formulario_empresa(empresa_seleccionada, empresas_service, session_state, es_creacion=False)
-        
-        with tab2:
-            # Formulario de creación
-            if empresas_service.can_modify_data():
-                with st.container(border=True):
-                    mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
-            else:
-                st.info("ℹ️ No tienes permisos para crear empresas")
+        tab1, tab2, tab3 = st.tabs(["📊 Métricas", "🏢 Empresas", "➕ Nueva Empresa"])
+    else:
+        tab1, tab2 = st.tabs(["📊 Mi Empresa", "👥 Empresas Cliente"])
     
-    elif session_state.role == "gestor":
-        # Vista separada para gestores
-        tab1, tab2, tab3 = st.tabs(["🏢 Mi Empresa", "👥 Empresas Clientes", "➕ Nueva Empresa Cliente"])
-        
+    if session_state.role == "admin":
         with tab1:
-            mostrar_mi_empresa(empresas_service, session_state)
+            mostrar_metricas_empresas(empresas_service, session_state)
         
         with tab2:
-            # Filtrar solo empresas clientes (excluir la propia empresa del gestor)
-            df_clientes = df_filtered[df_filtered["empresa_matriz_id"] == session_state.user.get("empresa_id")]
-            
-            empresa_seleccionada = mostrar_tabla_empresas(df_clientes, session_state, "👥 Mis Empresas Clientes")
-            
-            # Si hay una empresa cliente seleccionada, mostrar formulario de edición
-            if empresa_seleccionada is not None:
-                with st.container(border=True):
-                    mostrar_formulario_empresa(empresa_seleccionada, empresas_service, session_state, es_creacion=False)
+            df_empresas = empresas_service.get_empresas_con_jerarquia()
+            empresa_sel = mostrar_tabla_empresas(df_empresas, session_state)
+            if empresa_sel is not None:
+                mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
         
         with tab3:
-            # Formulario de creación de empresa cliente
-            if empresas_service.can_modify_data():
-                with st.container(border=True):
-                    st.info("📋 Las empresas clientes se crearán automáticamente como 'Cliente de Gestora' bajo tu empresa")
-                    mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
-            else:
-                st.info("ℹ️ No tienes permisos para crear empresas")
+            mostrar_formulario_empresa({}, empresas_service, session_state, es_creacion=True)
     
-    # Vista jerárquica para admin
-    if session_state.role == "admin":
-        st.divider()
-        with st.expander("🌳 Vista Jerárquica", expanded=False):
-            try:
-                arbol = empresas_service.get_arbol_empresas()
-                if not arbol.empty:
-                    for _, empresa in arbol.iterrows():
-                        nivel = empresa.get("nivel_jerarquico", 1)
-                        if nivel == 1:
-                            st.markdown(f"🏢 **{empresa['nombre']}** ({empresa.get('tipo_empresa', 'N/A')})")
-                        else:
-                            st.markdown(f"  └── 👥 {empresa['nombre']} ({empresa.get('tipo_empresa', 'N/A')})")
-                else:
-                    st.info("📋 No hay estructura jerárquica para mostrar")
-            except Exception as e:
-                st.error(f"❌ Error cargando vista jerárquica: {e}")
-    
-    # Información adicional
-    st.divider()
-    if session_state.role == "admin":
-        with st.expander("ℹ️ Información sobre FUNDAE y Jerarquía"):
-            st.markdown("""
-            **📋 Campos FUNDAE obligatorios:**
-            - 🆔 Datos de identificación completos (CIF, razón social, sector, CNAE)
-            - 🏠 Domicilio social completo con provincia y localidad
-            - 👤 Representante legal con documentación
-            - ⚙️ Características de la empresa (plantilla, PYME, etc.)
-            - 🏦 Al menos una cuenta de cotización
-            
-            **🌳 Jerarquía Multi-Tenant:**
-            - 🏢 **Cliente SaaS**: Empresas que contratan directamente
-            - 🎯 **Gestora**: Clientes que gestionan otras empresas
-            - 👥 **Cliente Gestor**: Empresas gestionadas por una gestora
-            
-            **🔧 Módulos disponibles:**
-            - 📚 **Formación**: Gestión de cursos y grupos FUNDAE
-            - 📋 **ISO 9001**: Sistema de gestión de calidad
-            - 🛡️ **RGPD**: Gestión de protección de datos
-            - 📁 **Doc. Avanzada**: Gestión documental avanzada
-            - 📈 **CRM**: Gestión comercial (solo con fechas)
-            """)
     elif session_state.role == "gestor":
-        with st.expander("ℹ️ Información para Gestores"):
-            st.markdown("""
-            **🏢 Mi Empresa:**
-            - ✏️ Puedes editar la información básica de tu empresa
-            - 🔒 Los módulos solo los puede activar/desactivar el administrador
-            - 📊 Ves un resumen de los módulos activos
-            
-            **👥 Empresas Clientes:**
-            - ➕ Puedes crear nuevas empresas como "Cliente de Gestora"
-            - ✏️ Puedes editar toda la información FUNDAE de tus clientes
-            - 🔒 Razón Social y CIF son de solo lectura tras la creación
-            - 🏦 Gestión completa de cuentas de cotización
-            
-            **📋 Formulario FUNDAE completo:**
-            - ✅ Todos los campos requeridos por FUNDAE para formación bonificada
-            - 🔄 Selector automático provincia → localidad
-            - 🔢 Códigos CNAE con búsqueda integrada
-            - 🏦 Gestión interactiva de cuentas (usar "➕ Añadir Cuenta")
-            - ⚡ Validación CIF en tiempo real
-            """)
+        with tab1:
+            mostrar_mi_empresa(empresas_service, session_state)
+        with tab2:
+            df_empresas = empresas_service.get_empresas_con_jerarquia()
+            empresa_sel = mostrar_tabla_empresas(df_empresas, session_state, "👥 Mis Clientes")
+            if empresa_sel is not None:
+                mostrar_formulario_empresa(empresa_sel, empresas_service, session_state, es_creacion=False)
+    
+    # Expander de ayuda
+    with st.expander("ℹ️ Ayuda sobre FUNDAE y Jerarquía"):
+        st.markdown("""
+        - **FUNDAE**: Los campos corresponden a la información necesaria para bonificar formación.
+        - **Jerarquía**:
+            - Cliente SaaS Directo → empresa final con acceso al sistema.
+            - Gestora → gestiona varias empresas clientes.
+            - Cliente de Gestora → empresa asociada a una gestora.
+        """)
+
 
 if __name__ == "__main__":
-    pass
+    main()
