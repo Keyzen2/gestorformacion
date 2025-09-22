@@ -57,6 +57,78 @@ def cargar_crm_datos(supabase, empresa_id):
         return {"crm_activo": False, "crm_inicio": None, "crm_fin": None}
     except:
         return {"crm_activo": False, "crm_inicio": None, "crm_fin": None}
+        
+def exportar_empresas(empresas_service, session_state):
+    """Exporta empresas visibles a CSV."""
+    try:
+        df = empresas_service.get_empresas_con_jerarquia()
+        if session_state.role == "gestor":
+            empresa_id = session_state.user.get("empresa_id")
+            df = df[(df["id"] == empresa_id) | (df["empresa_matriz_id"] == empresa_id)]
+        
+        if df.empty:
+            st.warning("⚠️ No hay empresas para exportar")
+            return
+
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📥 Exportar CSV",
+            data=csv,
+            file_name=f"empresas_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.error(f"❌ Error exportando empresas: {e}")
+        
+def importar_empresas(empresas_service, session_state):
+    """Importa empresas desde un archivo CSV/XLSX."""
+    uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
+    if not uploaded:
+        return
+    
+    try:
+        if uploaded.name.endswith(".csv"):
+            df = pd.read_csv(uploaded, dtype=str)
+        else:
+            df = pd.read_excel(uploaded, dtype=str)
+
+        st.success(f"✅ {len(df)} filas cargadas desde {uploaded.name}")
+        st.dataframe(df.head(10), use_container_width=True)
+
+        if st.button("🚀 Importar empresas", type="primary", use_container_width=True):
+            errores = []
+            for _, fila in df.iterrows():
+                try:
+                    datos = {
+                        "nombre": fila.get("nombre"),
+                        "cif": fila.get("cif"),
+                        "telefono": fila.get("telefono"),
+                        "email": fila.get("email"),
+                        "direccion": fila.get("direccion"),
+                        "ciudad": fila.get("ciudad"),
+                        "provincia": fila.get("provincia"),
+                        "codigo_postal": fila.get("codigo_postal"),
+                        "sector": fila.get("sector"),
+                        "convenio_referencia": fila.get("convenio_referencia"),
+                        "codigo_cnae": fila.get("codigo_cnae"),
+                        "empresa_matriz_id": fila.get("empresa_matriz_id"),
+                        "tipo_empresa": fila.get("tipo_empresa") or "CLIENTE_SAAS",
+                        "nivel_jerarquico": int(fila.get("nivel_jerarquico") or 1),
+                        "created_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+                    empresas_service.crear_empresa_con_jerarquia(datos)
+                except Exception as ex:
+                    errores.append(str(ex))
+
+            if errores:
+                st.error(f"⚠️ Errores al importar:\n{errores}")
+            else:
+                st.success("✅ Importación completada")
+                st.rerun()
+    except Exception as e:
+        st.error(f"❌ Error importando empresas: {e}")
 
 def mostrar_metricas_empresas(empresas_service, session_state):
     """Muestra métricas con información jerárquica usando Streamlit 1.49."""
@@ -103,48 +175,64 @@ def mostrar_metricas_empresas(empresas_service, session_state):
         st.error(f"❌ Error al cargar métricas: {e}")
 
 def mostrar_tabla_empresas(df_empresas, session_state, titulo_tabla="📋 Lista de Empresas"):
-    """Muestra tabla de empresas con funcionalidades de Streamlit 1.49."""
+    """Muestra tabla de empresas con filtros, paginación y exportación."""
     if df_empresas.empty:
         st.info("📋 No hay empresas para mostrar")
         return None
-    
+
     st.markdown(f"### {titulo_tabla}")
-    
-    df_display = df_empresas.copy()
-    
-    # Columnas según rol
+
+    # 🔎 Filtros avanzados
+    with st.expander("🔍 Filtros avanzados"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filtro_nombre = st.text_input("🏢 Nombre contiene")
+        with col2:
+            filtro_cif = st.text_input("📄 CIF contiene")
+        with col3:
+            filtro_ciudad = st.text_input("📍 Ciudad contiene")
+
+        if filtro_nombre:
+            df_empresas = df_empresas[df_empresas["nombre"].str.contains(filtro_nombre, case=False, na=False)]
+        if filtro_cif:
+            df_empresas = df_empresas[df_empresas["cif"].str.contains(filtro_cif, case=False, na=False)]
+        if filtro_ciudad:
+            df_empresas = df_empresas[df_empresas["ciudad"].str.contains(filtro_ciudad, case=False, na=False)]
+
+    # 🔢 Selector de registros por página
+    page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1)
+
+    # 📄 Paginación
+    total_rows = len(df_empresas)
+    total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
+    page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
+
+    start_idx = (page_number - 1) * page_size
+    end_idx = start_idx + page_size
+    df_paged = df_empresas.iloc[start_idx:end_idx]
+
+    # Configuración columnas
+    columnas = ["nombre", "cif", "ciudad", "telefono", "email"]
     if session_state.role == "admin":
-        columnas = ["nombre_display", "cif", "tipo_display", "ciudad", "telefono", "email"]
-        column_config = {
-            "nombre_display": st.column_config.TextColumn("🏢 Razón Social", width="large"),
-            "cif": st.column_config.TextColumn("📄 CIF", width="small"),
-            "tipo_display": st.column_config.TextColumn("🏷️ Tipo", width="medium"),
-            "ciudad": st.column_config.TextColumn("📍 Ciudad", width="medium"),
-            "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
-            "email": st.column_config.TextColumn("📧 Email", width="large")
-        }
-    else:
-        columnas = ["nombre_display", "cif", "ciudad", "telefono", "email"]
-        column_config = {
-            "nombre_display": st.column_config.TextColumn("🏢 Razón Social", width="large"),
-            "cif": st.column_config.TextColumn("📄 CIF", width="small"),
-            "ciudad": st.column_config.TextColumn("📍 Ciudad", width="medium"),
-            "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
-            "email": st.column_config.TextColumn("📧 Email", width="large")
-        }
-    
-    # Tabla con selección usando Streamlit 1.49
+        columnas.insert(2, "tipo_empresa")
+
     evento = st.dataframe(
-        df_display[columnas],
-        column_config=column_config,
+        df_paged[columnas],
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row"
     )
-    
+
+    # Botones export/import
+    col_exp, col_imp = st.columns([1, 1])
+    with col_exp:
+        exportar_empresas(empresas_service, session_state)
+    with col_imp:
+        importar_empresas(empresas_service, session_state)
+
     if evento.selection.rows:
-        return df_display.iloc[evento.selection.rows[0]]
+        return df_paged.iloc[evento.selection.rows[0]]
     return None
 
 def mostrar_mi_empresa(empresas_service, session_state):
