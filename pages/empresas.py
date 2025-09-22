@@ -697,9 +697,10 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                              representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
                              voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
                              rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
-                             cuentas_cotizacion, provincia_sel, localidad_sel, 
+                             cuentas_cotizacion, provincia_sel, localidad_sel,
                              empresas_service, session_state, es_creacion, solo_datos_basicos=False):
     """Procesa creación/actualización de empresa con jerarquía y validaciones."""
+
     try:
         # Validaciones
         if not validar_dni_cif(cif):
@@ -708,7 +709,8 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
         if representante_numero_documento and not validar_dni_cif(representante_numero_documento):
             st.error("❌ Documento de representante inválido")
             return
-        
+
+        # Datos normalizados + redundancia para compatibilidad
         datos_empresa = {
             "nombre": nombre,
             "cif": cif,
@@ -718,8 +720,6 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             "calle": calle,
             "numero": numero,
             "codigo_postal": codigo_postal,
-            "provincia_id": provincia_id,
-            "localidad_id": localidad_id,
             "telefono": telefono,
             "representante_tipo_documento": representante_tipo_documento or None,
             "representante_numero_documento": representante_numero_documento,
@@ -738,22 +738,20 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             "docu_avanzada_activo": docu_avanzada_activo,
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
-            "ciudad": localidad_sel,
-            "provincia": provincia_sel,
-            "updated_at": datetime.utcnow().isoformat()
+            "updated_at": datetime.utcnow().isoformat(),
+            # Guardar tanto IDs como nombres
+            "provincia_id": provincia_id,
+            "localidad_id": localidad_id,
+            "provincia": provincia_sel if provincia_sel else None,
+            "ciudad": localidad_sel if localidad_sel else None,
         }
-        
+
         if es_creacion:
             ok, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
             if ok and empresa_id:
                 st.success("✅ Empresa creada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
-                # 🔑 limpiar cuentas en session_state después de crear
-                cuentas_key = f"cuentas_empresa_{empresa_id}_crear"
-                for key in list(st.session_state.keys()):
-                    if key.startswith("cuentas_") or key.startswith("nueva_cuenta_") or key.startswith("es_principal_"):
-                        del st.session_state[key]
                 st.rerun()
         else:
             ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
@@ -761,13 +759,10 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                 st.success("✅ Empresa actualizada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
-                if crm_activo:
-                    guardar_crm_datos(empresas_service.supabase, datos["id"], crm_activo, crm_inicio, crm_fin)
                 st.rerun()
-    
+
     except Exception as e:
         st.error(f"❌ Error procesando empresa: {e}")
-
 
 def guardar_cuentas_cotizacion(supabase, empresa_id: str, cuentas: list):
     """Guarda cuentas de cotización en Supabase, reemplazando las existentes."""
