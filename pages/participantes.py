@@ -156,7 +156,7 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
         st.subheader(f"✏️ Editar Participante: {participante_data['nombre']} {participante_data.get('apellidos','')}")
         datos = participante_data.copy()
 
-    # form_id único para evitar conflictos
+    # form_id único
     form_id = f"participante_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
 
     with st.form(form_id, clear_on_submit=es_creacion):
@@ -285,6 +285,7 @@ def mostrar_formulario_participante(participante_data, participantes_service, em
             else:
                 st.session_state["confirmar_eliminar_participante"] = True
                 st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
+
 # =========================
 # PROCESAR GUARDADO
 # =========================
@@ -497,9 +498,9 @@ def main(supabase, session_state):
     empresas_service = get_empresas_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
 
-    # Tabs principales
-    tabs = st.tabs(["📋 Listado", "➕ Crear", "📥 Importar/Exportar", "📊 Métricas", "ℹ️ Ayuda"])
-    
+    # Tabs principales (simplificado)
+    tabs = st.tabs(["📋 Listado", "➕ Crear", "📊 Métricas"])
+
     # =========================
     # TAB LISTADO
     # =========================
@@ -514,30 +515,33 @@ def main(supabase, session_state):
                 empresas_ids = empresas_df["id"].tolist()
                 df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
 
-            # 🔎 Filtros avanzados
+            # 🔎 Filtros avanzados (con keys únicos)
             st.markdown("#### 🔍 Filtros")
             col1, col2, col3 = st.columns(3)
             with col1:
-                filtro_nombre = st.text_input("👤 Nombre contiene")
+                filtro_nombre = st.text_input("👤 Nombre contiene", key="filtro_listado_nombre")
             with col2:
-                filtro_dni = st.text_input("🆔 Documento contiene")
+                filtro_dni = st.text_input("🆔 Documento contiene", key="filtro_listado_dni")
             with col3:
-                filtro_empresa = st.text_input("🏢 Empresa contiene")
+                filtro_empresa = st.text_input("🏢 Empresa contiene", key="filtro_listado_empresa")
 
             if filtro_nombre:
-                df_participantes = df_participantes[df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False)]
+                df_participantes = df_participantes[
+                    df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False) |
+                    df_participantes["apellidos"].str.contains(filtro_nombre, case=False, na=False)
+                ]
             if filtro_dni:
                 df_participantes = df_participantes[df_participantes["dni"].str.contains(filtro_dni, case=False, na=False)]
             if filtro_empresa:
                 df_participantes = df_participantes[df_participantes["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
             # 🔢 Selector de registros por página
-            page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1)
+            page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1, key="page_size_listado")
 
             # 📄 Paginación
             total_rows = len(df_participantes)
             total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
-            page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
+            page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1, key="page_num_listado")
 
             start_idx = (page_number - 1) * page_size
             end_idx = start_idx + page_size
@@ -546,8 +550,21 @@ def main(supabase, session_state):
             # Mostrar tabla paginada
             seleccionado = mostrar_tabla_participantes(df_paged, session_state)
 
-            # Exportación (filtrados o visibles)
-            exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
+            # Exportación, importación y ayuda integradas
+            st.divider()
+            col1, col2 = st.columns(2)
+            with col1:
+                exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
+            with col2:
+                importar_participantes(participantes_service, empresas_service, session_state)
+
+            with st.expander("ℹ️ Ayuda sobre Participantes"):
+                st.markdown("""
+                - Usa los filtros para buscar rápidamente.
+                - Haz clic en una fila para **editar un participante**.
+                - Usa exportar/importar para gestionar en bloque.
+                - Los gestores solo verán sus empresas y grupos.
+                """)
 
             if seleccionado is not None:
                 mostrar_formulario_participante(
@@ -564,34 +581,11 @@ def main(supabase, session_state):
         mostrar_formulario_participante({}, participantes_service, empresas_service, grupos_service, session_state, es_creacion=True)
 
     # =========================
-    # TAB IMPORTAR/EXPORTAR
-    # =========================
-    with tabs[2]:
-        st.header("📥 Importar / Exportar Participantes")
-        col1, col2 = st.columns(2)
-        with col1:
-            exportar_participantes(participantes_service, session_state)
-        with col2:
-            importar_participantes(participantes_service, empresas_service, session_state)
-
-    # =========================
     # TAB MÉTRICAS
     # =========================
-    with tabs[3]:
+    with tabs[2]:
         st.header("📊 Métricas de Participantes")
         mostrar_metricas_participantes(participantes_service, session_state)
-
-    # =========================
-    # TAB AYUDA
-    # =========================
-    with tabs[4]:
-        st.header("ℹ️ Ayuda sobre Participantes")
-        st.markdown("""
-        - Usa **Listado** para ver, filtrar y editar participantes.
-        - Usa **Crear** para añadir un nuevo participante.
-        - Usa **Importar/Exportar** para gestión masiva.
-        - Usa **Métricas** para ver el estado general.
-        """)
 
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
