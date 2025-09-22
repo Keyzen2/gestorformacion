@@ -744,6 +744,8 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                 st.success("✅ Empresa creada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
+                if crm_activo:
+                    guardar_crm_datos(empresas_service.supabase, empresa_id, crm_activo, crm_inicio, crm_fin)
                 st.rerun()
         else:
             ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
@@ -751,6 +753,8 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                 st.success("✅ Empresa actualizada correctamente")
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
+                if crm_activo:
+                    guardar_crm_datos(empresas_service.supabase, datos["id"], crm_activo, crm_inicio, crm_fin)
                 st.rerun()
     
     except Exception as e:
@@ -776,6 +780,7 @@ def guardar_cuentas_cotizacion(supabase, empresa_id: str, cuentas: list):
     except Exception as e:
         st.error(f"❌ Error guardando cuentas de cotización: {e}")
 
+
 # ==================================================
 # CRM - GUARDADO
 # ==================================================
@@ -792,6 +797,7 @@ def guardar_crm_datos(supabase, empresa_id: str, crm_activo: bool, crm_inicio: d
         }).execute()
     except Exception as e:
         st.error(f"❌ Error guardando datos CRM: {e}")
+
 
 # ==================================================
 # MAIN
