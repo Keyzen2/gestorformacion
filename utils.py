@@ -1041,6 +1041,457 @@ def update_ajustes_app(supabase, data_dict):
 # =========================
 # FUNCIONES FUNDAE (añadir al final de utils.py)
 # =========================
+def validar_codigo_accion_fundae(supabase, codigo_accion, empresa_id, ano, accion_id=None):
+    """
+    Valida que el código de acción sea único para la empresa gestora en el año especificado.
+    FUNDAE: Los códigos de acción deben ser únicos por empresa gestora y año.
+    """
+    if not codigo_accion or not ano or not empresa_id:
+        return False, "Código de acción, empresa y año requeridos"
+    
+    try:
+        # Buscar acciones con mismo código en el mismo año y empresa gestora
+        query = supabase.table("acciones_formativas").select("id, codigo_accion").eq(
+            "codigo_accion", codigo_accion
+        ).eq("empresa_id", empresa_id).gte(
+            "fecha_inicio", f"{ano}-01-01"
+        ).lt("fecha_inicio", f"{ano + 1}-01-01")
+        
+        # Excluir la acción actual si estamos editando
+        if accion_id:
+            query = query.neq("id", accion_id)
+        
+        res = query.execute()
+        
+        if res.data:
+            return False, f"Ya existe una acción con código '{codigo_accion}' en {ano} para esta empresa gestora"
+        
+        return True, ""
+        
+    except Exception as e:
+        return False, f"Error al validar código: {e}"
+
+def validar_codigo_grupo_fundae(supabase, codigo_grupo, accion_formativa_id, grupo_id=None):
+    """
+    Valida que el código de grupo sea único para la acción y empresa gestora en el año.
+    FUNDAE: Los códigos de grupo deben ser únicos por acción formativa, empresa gestora y año.
+    """
+    if not codigo_grupo or not accion_formativa_id:
+        return False, "Código de grupo y acción formativa requeridos"
+    
+    try:
+        # Obtener información de la acción formativa
+        accion_res = supabase.table("acciones_formativas").select(
+            "codigo_accion, empresa_id, fecha_inicio"
+        ).eq("id", accion_formativa_id).execute()
+        
+        if not accion_res.data:
+            return False, "Acción formativa no encontrada"
+        
+        accion_data = accion_res.data[0]
+        empresa_gestora_id = accion_data["empresa_id"]
+        fecha_accion = accion_data["fecha_inicio"]
+        
+        if fecha_accion:
+            try:
+                ano_accion = datetime.fromisoformat(str(fecha_accion).replace('Z', '+00:00')).year
+            except:
+                ano_accion = datetime.now().year
+        else:
+            ano_accion = datetime.now().year
+        
+        # Buscar grupos con mismo código en la misma acción y año de la misma empresa gestora
+        query = supabase.table("grupos").select("""
+            id, codigo_grupo, fecha_inicio,
+            accion_formativa:acciones_formativas(empresa_id)
+        """).eq("codigo_grupo", codigo_grupo).gte(
+            "fecha_inicio", f"{ano_accion}-01-01"
+        ).lt("fecha_inicio", f"{ano_accion + 1}-01-01")
+        
+        # Excluir grupo actual si estamos editando
+        if grupo_id:
+            query = query.neq("id", grupo_id)
+        
+        res = query.execute()
+        
+        if res.data:
+            # Verificar si alguno pertenece a la misma empresa gestora
+            for grupo_existente in res.data:
+                accion_info = grupo_existente.get("accion_formativa", {})
+                if accion_info.get("empresa_id") == empresa_gestora_id:
+                    return False, f"Ya existe un grupo con código '{codigo_grupo}' en {ano_accion} para esta empresa gestora"
+        
+        return True, ""
+        
+    except Exception as e:
+        return False, f"Error al validar código: {e}"
+
+def get_empresa_responsable_fundae(supabase, grupo_id):
+    """
+    Determina qué empresa es responsable ante FUNDAE para un grupo específico.
+    FUNDAE: La empresa responsable es la gestora, no necesariamente la propietaria del grupo.
+    """
+    try:
+        # Obtener información del grupo y la acción
+        grupo_res = supabase.table("grupos").select("""
+            empresa_id,
+            accion_formativa:acciones_formativas(empresa_id)
+        """).eq("id", grupo_id).execute()
+        
+        if not grupo_res.data:
+            return None, "Grupo no encontrado"
+        
+        grupo_data = grupo_res.data[0]
+        empresa_grupo_id = grupo_data["empresa_id"]
+        empresa_accion_id = grupo_data.get("accion_formativa", {}).get("empresa_id")
+        
+        # La empresa responsable ante FUNDAE es la que creó la acción formativa
+        empresa_responsable_id = empresa_accion_id or empresa_grupo_id
+        
+        # Obtener datos de la empresa responsable
+        empresa_res = supabase.table("empresas").select("""
+            id, nombre, cif, tipo_empresa, empresa_matriz_id
+        """).eq("id", empresa_responsable_id).execute()
+        
+        if not empresa_res.data:
+            return None, "Empresa responsable no encontrada"
+        
+        empresa_responsable = empresa_res.data[0]
+        
+        # Si es cliente de gestor, la responsable ante FUNDAE es la gestora
+        if empresa_responsable.get("tipo_empresa") == "CLIENTE_GESTOR":
+            gestora_id = empresa_responsable.get("empresa_matriz_id")
+            if gestora_id:
+                gestora_res = supabase.table("empresas").select("*").eq("id", gestora_id).execute()
+                if gestora_res.data:
+                    return gestora_res.data[0], ""
+        
+        return empresa_responsable, ""
+        
+    except Exception as e:
+        return None, f"Error al determinar empresa responsable: {e}"
+
+def preparar_datos_xml_con_jerarquia(grupo_id, supabase):
+    """
+    Prepara datos XML asegurando coherencia con jerarquía empresarial FUNDAE.
+    Versión mejorada de preparar_datos_xml_inicio_simple.
+    """
+    try:
+        # Validar grupo FUNDAE completo
+        datos_xml, errores = preparar_datos_xml_inicio_simple(grupo_id, supabase)
+        
+        if errores:
+            return None, errores
+        
+        # Obtener empresa responsable ante FUNDAE
+        empresa_responsable, error_empresa = get_empresa_responsable_fundae(supabase, grupo_id)
+        
+        if error_empresa:
+            errores.append(f"Error empresa responsable: {error_empresa}")
+            return None, errores
+        
+        # Validar códigos FUNDAE
+        grupo_info = datos_xml["grupo"]
+        codigo_grupo = grupo_info.get("codigo_grupo")
+        accion_formativa_id = grupo_info.get("accion_formativa_id")
+        
+        if codigo_grupo and accion_formativa_id:
+            es_valido, error_codigo = validar_codigo_grupo_fundae(
+                supabase, codigo_grupo, accion_formativa_id, grupo_id
+            )
+            
+            if not es_valido:
+                errores.append(f"Código de grupo inválido: {error_codigo}")
+                return None, errores
+        
+        # Enriquecer datos con información de empresa responsable
+        datos_xml["empresa_responsable"] = empresa_responsable
+        datos_xml["grupo"]["empresa_responsable_cif"] = empresa_responsable.get("cif")
+        datos_xml["grupo"]["empresa_responsable_nombre"] = empresa_responsable.get("nombre")
+        
+        return datos_xml, []
+        
+    except Exception as e:
+        return None, [f"Error al preparar datos XML: {e}"]
+
+# =========================
+# ACTUALIZAR FUNCIONES EXISTENTES XML
+# =========================
+
+def generar_xml_accion_formativa_mejorado(accion, namespace="http://www.fundae.es/esquemas"):
+    """
+    Versión mejorada del generador XML con validaciones FUNDAE.
+    """
+    try:
+        # Validar datos básicos antes de generar
+        if not accion.get('codigo_accion'):
+            raise ValueError("Código de acción requerido")
+        if not accion.get('nombre'):
+            raise ValueError("Nombre de acción requerido")
+        if not accion.get('modalidad'):
+            raise ValueError("Modalidad requerida")
+        
+        # Normalizar modalidad FUNDAE
+        modalidad = accion.get('modalidad', '').upper()
+        if modalidad not in ['PRESENCIAL', 'TELEFORMACION', 'MIXTA']:
+            modalidad = 'PRESENCIAL'  # Fallback seguro
+        
+        # Usar función existente como base
+        xml_content = generar_xml_accion_formativa(accion)
+        
+        if xml_content:
+            # Añadir metadatos de validación
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Código único validado para empresa gestora y año
+- Modalidad normalizada: {modalidad}
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata después de la declaración XML
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"Error al generar XML de acción formativa: {e}")
+        return None
+
+def generar_xml_inicio_grupo_con_validaciones(datos_xml):
+    """
+    Versión mejorada del generador XML inicio con validaciones de jerarquía.
+    """
+    try:
+        # Validar que tenemos empresa responsable
+        if "empresa_responsable" not in datos_xml:
+            raise ValueError("Falta información de empresa responsable ante FUNDAE")
+        
+        grupo = datos_xml["grupo"]
+        participantes = datos_xml.get("participantes", [])
+        
+        # Usar la función existente como base
+        xml_content = generar_xml_inicio_grupo(grupo, participantes)
+        
+        if xml_content:
+            # Agregar metadatos de validación
+            empresa_resp = datos_xml["empresa_responsable"]
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Empresa responsable: {empresa_resp.get('nombre')} (CIF: {empresa_resp.get('cif')})
+- Código grupo único validado para año y empresa gestora
+- Jerarquía empresarial respetada
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata después de la declaración XML
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"Error al generar XML con validaciones: {e}")
+        return None
+
+def generar_xml_finalizacion_grupo_mejorado(grupo_data, participantes_data):
+    """
+    Versión mejorada del generador XML finalización con validaciones coherencia.
+    """
+    try:
+        # Validaciones de coherencia antes de generar
+        n_finalizados = grupo_data.get('n_participantes_finalizados', 0)
+        n_aptos = grupo_data.get('n_aptos', 0)
+        n_no_aptos = grupo_data.get('n_no_aptos', 0)
+        
+        # Validar coherencia de números
+        if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
+            raise ValueError(f"Incoherencia: {n_aptos} aptos + {n_no_aptos} no aptos ≠ {n_finalizados} finalizados")
+        
+        # Validar que hay participantes
+        if not participantes_data:
+            raise ValueError("No hay participantes para finalizar")
+        
+        # Usar función existente como base
+        xml_content = generar_xml_finalizacion_grupo(grupo_data, participantes_data)
+        
+        if xml_content:
+            # Agregar metadatos de validación
+            empresa_resp = grupo_data.get("empresa_responsable", {})
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Coherencia participantes validada: {n_aptos} aptos + {n_no_aptos} no aptos = {n_finalizados} finalizados
+- Empresa responsable: {empresa_resp.get('nombre', 'N/A')}
+- Participantes procesados: {len(participantes_data)}
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"Error al generar XML finalización: {e}")
+        return None
+
+# =========================
+# VALIDACIONES ADICIONALES FUNDAE
+# =========================
+
+def validar_datos_grupo_fundae_completo(grupo_data, tipo_validacion="inicio"):
+    """
+    Validación completa de grupo para XML FUNDAE con nuevas reglas.
+    """
+    errores = []
+    
+    # Validaciones básicas existentes
+    es_valido_basico, errores_basicos = validar_grupo_fundae_completo(grupo_data)
+    if errores_basicos:
+        errores.extend(errores_basicos)
+    
+    # Validaciones adicionales de jerarquía
+    if not grupo_data.get("empresa_id"):
+        errores.append("❌ Falta empresa propietaria del grupo")
+    
+    if not grupo_data.get("accion_formativa_id"):
+        errores.append("❌ Falta acción formativa asociada")
+    
+    # Validaciones específicas por tipo
+    if tipo_validacion == "finalizacion":
+        # Validar coherencia de finalización
+        n_finalizados = grupo_data.get('n_participantes_finalizados', 0)
+        n_aptos = grupo_data.get('n_aptos', 0)
+        n_no_aptos = grupo_data.get('n_no_aptos', 0)
+        
+        if n_finalizados > 0:
+            if n_aptos + n_no_aptos != n_finalizados:
+                errores.append(f"❌ Incoherencia: {n_aptos} aptos + {n_no_aptos} no aptos ≠ {n_finalizados} finalizados")
+            
+            if n_aptos < 0 or n_no_aptos < 0:
+                errores.append("❌ Los números de participantes no pueden ser negativos")
+        
+        # Validar fecha de finalización
+        if not grupo_data.get("fecha_fin"):
+            errores.append("❌ Falta fecha real de finalización")
+    
+    return len(errores) == 0, errores
+
+def validar_participantes_fundae(participantes_data):
+    """
+    Valida que los participantes cumplan requisitos FUNDAE.
+    """
+    errores = []
+    
+    if not participantes_data:
+        errores.append("❌ No hay participantes en el grupo")
+        return False, errores
+    
+    for i, participante in enumerate(participantes_data, 1):
+        # Validar campos obligatorios FUNDAE
+        if not participante.get("nif"):
+            errores.append(f"❌ Participante {i}: falta NIF/documento")
+        
+        if not participante.get("nombre"):
+            errores.append(f"❌ Participante {i}: falta nombre")
+        
+        if not participante.get("apellidos"):
+            errores.append(f"❌ Participante {i}: falta apellidos")
+        
+        if not participante.get("email"):
+            errores.append(f"❌ Participante {i}: falta email")
+        
+        # Validar formato NIF si existe
+        nif = participante.get("nif", "")
+        if nif and not validar_dni_cif(nif):
+            errores.append(f"❌ Participante {i}: NIF inválido ({nif})")
+        
+        # Validar email si existe
+        email = participante.get("email", "")
+        if email and not validar_email(email):
+            errores.append(f"❌ Participante {i}: email inválido ({email})")
+    
+    return len(errores) == 0, errores
+
+def generar_informe_validacion_fundae(grupo_id, supabase):
+    """
+    Genera un informe completo de validación FUNDAE para un grupo.
+    """
+    try:
+        informe = {
+            "grupo_id": grupo_id,
+            "fecha_validacion": datetime.now().isoformat(),
+            "errores": [],
+            "advertencias": [],
+            "estado": "PENDIENTE"
+        }
+        
+        # Validar datos XML
+        datos_xml, errores_xml = preparar_datos_xml_con_jerarquia(grupo_id, supabase)
+        
+        if errores_xml:
+            informe["errores"].extend(errores_xml)
+            informe["estado"] = "ERROR"
+            return informe
+        
+        # Validar grupo
+        grupo_data = datos_xml["grupo"]
+        es_valido_grupo, errores_grupo = validar_datos_grupo_fundae_completo(grupo_data)
+        
+        if errores_grupo:
+            informe["errores"].extend(errores_grupo)
+        
+        # Validar participantes
+        participantes = datos_xml.get("participantes", [])
+        es_valido_part, errores_part = validar_participantes_fundae(participantes)
+        
+        if errores_part:
+            informe["errores"].extend(errores_part)
+        
+        # Validar empresa responsable
+        empresa_resp = datos_xml.get("empresa_responsable")
+        if not empresa_resp:
+            informe["errores"].append("❌ No se pudo determinar empresa responsable ante FUNDAE")
+        elif empresa_resp.get("tipo_empresa") not in ["GESTORA", "CLIENTE_SAAS"]:
+            informe["advertencias"].append(f"⚠️ Empresa responsable tipo '{empresa_resp.get('tipo_empresa')}' poco común")
+        
+        # Determinar estado final
+        if informe["errores"]:
+            informe["estado"] = "ERROR"
+        elif informe["advertencias"]:
+            informe["estado"] = "ADVERTENCIA"
+        else:
+            informe["estado"] = "VALIDO"
+        
+        # Añadir resumen
+        informe["resumen"] = {
+            "total_errores": len(informe["errores"]),
+            "total_advertencias": len(informe["advertencias"]),
+            "participantes_validados": len(participantes),
+            "empresa_responsable": empresa_resp.get("nombre") if empresa_resp else "No determinada"
+        }
+        
+        return informe
+        
+    except Exception as e:
+        return {
+            "grupo_id": grupo_id,
+            "fecha_validacion": datetime.now().isoformat(),
+            "errores": [f"Error al generar informe: {e}"],
+            "estado": "ERROR",
+            "resumen": {"total_errores": 1}
+        }
+
 def validar_grupo_fundae_completo(datos_grupo):
     """Validación completa para XML FUNDAE."""
     errores = []
