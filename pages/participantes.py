@@ -330,24 +330,43 @@ def procesar_guardado_participante(datos, nombre, apellidos, tipo_documento, dni
 # =========================
 # EXPORTACIÓN DE PARTICIPANTES
 # =========================
-def exportar_participantes(participantes_service, session_state):
-    """Exporta participantes a CSV/XLSX respetando filtros y rol."""
+def exportar_participantes(participantes_service, session_state, df_filtrado=None, solo_visibles=False):
+    """Exporta participantes a CSV respetando filtros, paginación y rol."""
     try:
-        df = participantes_service.get_participantes_completos()
-
-        # 🔒 Filtrado por rol
-        if session_state.role == "gestor":
-            empresa_id = session_state.user.get("empresa_id")
-            df = df[df["empresa_id"] == empresa_id]
+        # Si no se pasa df_filtrado, cargamos todo desde el servicio
+        if df_filtrado is None:
+            df = participantes_service.get_participantes_completos()
+            # 🔒 Filtrado por rol
+            if session_state.role == "gestor":
+                empresa_id = session_state.user.get("empresa_id")
+                df = df[df["empresa_id"] == empresa_id]
+        else:
+            df = df_filtrado.copy()
 
         if df.empty:
             st.warning("⚠️ No hay participantes para exportar.")
             return
 
+        # 🔘 Opción de exportación
+        export_scope = st.radio(
+            "¿Qué quieres exportar?",
+            ["📄 Solo registros visibles en la tabla", "🌍 Todos los registros filtrados"],
+            horizontal=True
+        )
+
+        if export_scope == "📄 Solo registros visibles en la tabla" and solo_visibles:
+            df_export = df
+        else:
+            # Recargamos completo para "Todos los registros filtrados"
+            df_export = participantes_service.get_participantes_completos()
+            if session_state.role == "gestor":
+                empresa_id = session_state.user.get("empresa_id")
+                df_export = df_export[df_export["empresa_id"] == empresa_id]
+
         st.download_button(
             "📥 Exportar participantes a CSV",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name="participantes.csv",
+            data=df_export.to_csv(index=False).encode("utf-8"),
+            file_name=f"participantes_{datetime.today().strftime('%Y%m%d')}.csv",
             mime="text/csv",
             use_container_width=True
         )
@@ -480,17 +499,56 @@ def main(supabase, session_state):
 
     # Tabs principales
     tabs = st.tabs(["📋 Listado", "➕ Crear", "📥 Importar/Exportar", "📊 Métricas", "ℹ️ Ayuda"])
+    
+    # =========================
+    # TAB LISTADO
+    # =========================
     with tabs[0]:
         st.header("📋 Listado de Participantes")
         try:
             df_participantes = participantes_service.get_participantes_completos()
-    
+
+            # 🔒 Filtrado por rol gestor
             if session_state.role == "gestor":
                 empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
                 empresas_ids = empresas_df["id"].tolist()
                 df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
-    
-            seleccionado = mostrar_tabla_participantes(df_participantes, session_state)
+
+            # 🔎 Filtros avanzados
+            st.markdown("#### 🔍 Filtros")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                filtro_nombre = st.text_input("👤 Nombre contiene")
+            with col2:
+                filtro_dni = st.text_input("🆔 Documento contiene")
+            with col3:
+                filtro_empresa = st.text_input("🏢 Empresa contiene")
+
+            if filtro_nombre:
+                df_participantes = df_participantes[df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False)]
+            if filtro_dni:
+                df_participantes = df_participantes[df_participantes["dni"].str.contains(filtro_dni, case=False, na=False)]
+            if filtro_empresa:
+                df_participantes = df_participantes[df_participantes["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
+
+            # 🔢 Selector de registros por página
+            page_size = st.selectbox("📑 Registros por página", [10, 20, 50, 100], index=1)
+
+            # 📄 Paginación
+            total_rows = len(df_participantes)
+            total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
+            page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1)
+
+            start_idx = (page_number - 1) * page_size
+            end_idx = start_idx + page_size
+            df_paged = df_participantes.iloc[start_idx:end_idx]
+
+            # Mostrar tabla paginada
+            seleccionado = mostrar_tabla_participantes(df_paged, session_state)
+
+            # Exportación (filtrados o visibles)
+            exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
+
             if seleccionado is not None:
                 mostrar_formulario_participante(
                     seleccionado, participantes_service, empresas_service, grupos_service, session_state, es_creacion=False
@@ -498,10 +556,16 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error cargando participantes: {e}")
 
+    # =========================
+    # TAB CREAR
+    # =========================
     with tabs[1]:
         st.header("➕ Crear Nuevo Participante")
         mostrar_formulario_participante({}, participantes_service, empresas_service, grupos_service, session_state, es_creacion=True)
 
+    # =========================
+    # TAB IMPORTAR/EXPORTAR
+    # =========================
     with tabs[2]:
         st.header("📥 Importar / Exportar Participantes")
         col1, col2 = st.columns(2)
@@ -510,14 +574,20 @@ def main(supabase, session_state):
         with col2:
             importar_participantes(participantes_service, empresas_service, session_state)
 
+    # =========================
+    # TAB MÉTRICAS
+    # =========================
     with tabs[3]:
         st.header("📊 Métricas de Participantes")
         mostrar_metricas_participantes(participantes_service, session_state)
 
+    # =========================
+    # TAB AYUDA
+    # =========================
     with tabs[4]:
         st.header("ℹ️ Ayuda sobre Participantes")
         st.markdown("""
-        - Usa **Listado** para ver y editar participantes.
+        - Usa **Listado** para ver, filtrar y editar participantes.
         - Usa **Crear** para añadir un nuevo participante.
         - Usa **Importar/Exportar** para gestión masiva.
         - Usa **Métricas** para ver el estado general.
