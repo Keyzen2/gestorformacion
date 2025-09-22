@@ -989,6 +989,13 @@ class GruposService:
     def get_tutores_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene tutores disponibles según jerarquía empresarial."""
         try:
+            # Validar parámetros de entrada
+            if not grupo_id or grupo_id == "None":
+                return pd.DataFrame()
+            
+            # Validar rol y empresa para gestores
+            if self.rol == "gestor" and not self.empresa_id:
+                return pd.DataFrame()  # Gestor sin empresa asignada
             # Obtener tutores ya asignados
             tutores_asignados = self.supabase.table("tutores_grupos").select("tutor_id").eq("grupo_id", grupo_id).execute()
             tutores_asignados_ids = [t["tutor_id"] for t in (tutores_asignados.data or [])]
@@ -1110,6 +1117,13 @@ class GruposService:
     def get_participantes_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes disponibles según jerarquía empresarial."""
         try:
+            # Validar parámetros de entrada
+            if not grupo_id or grupo_id == "None":
+                return pd.DataFrame()
+            
+            # Validar rol y empresa para gestores
+            if self.rol == "gestor" and not self.empresa_id:
+                return pd.DataFrame()  # Gestor sin empresa asignada
             # Obtener participantes ya asignados
             participantes_asignados = self.supabase.table("participantes_grupos").select("participante_id").eq("grupo_id", grupo_id).execute()
             participantes_asignados_ids = [p["participante_id"] for p in (participantes_asignados.data or [])]
