@@ -783,49 +783,59 @@ def delete_participante(_self, participante_id: str) -> bool:
     # ESTADÍSTICAS
     # =========================
     def get_estadisticas_participantes(_self) -> Dict[str, Any]:
-        """Obtiene estadísticas de participantes."""
-        try:
-            df = _self.get_participantes_completos()
-            
-            if df.empty:
-                return {
-                    "total": 0,
-                    "con_grupo": 0,
-                    "sin_grupo": 0,
-                    "este_mes": 0,
-                    "datos_completos": 0
-                }
-
-            total = len(df)
-            con_grupo = len(df[df["grupo_id"].notna()])
-            sin_grupo = total - con_grupo
-            
-            # Participantes de este mes
-            este_mes = 0
-            if "created_at" in df.columns:
-                este_mes_df = df[
-                    pd.to_datetime(df["created_at"], errors="coerce").dt.month == datetime.now().month
-                ]
-                este_mes = len(este_mes_df)
-            
-            # Participantes con datos completos
-            datos_completos = len(df[
-                (df["email"].notna()) & 
-                (df["nombre"].notna()) & 
-                (df["apellidos"].notna())
-            ])
-
+    """Obtiene estadísticas de participantes (usado en pestaña Métricas)."""
+    try:
+        df = _self.get_participantes_completos()
+        
+        if df.empty:
             return {
-                "total": total,
-                "con_grupo": con_grupo,
-                "sin_grupo": sin_grupo,
-                "este_mes": este_mes,
-                "datos_completos": datos_completos
+                "total": 0,
+                "nuevos_mes": 0,
+                "en_curso": 0,
+                "finalizados": 0,
+                "con_diploma": 0
             }
 
-        except Exception as e:
-            st.error(f"⚠️ Error al calcular estadísticas: {e}")
-            return {}
+        total = len(df)
+
+        # Nuevos este mes
+        nuevos_mes = 0
+        if "created_at" in df.columns:
+            este_mes_df = df[
+                pd.to_datetime(df["created_at"], errors="coerce").dt.month == datetime.now().month
+            ]
+            nuevos_mes = len(este_mes_df)
+
+        # Estado formación
+        en_curso = 0
+        finalizados = 0
+        if "grupo_fecha_fin_prevista" in df.columns:
+            hoy = datetime.today().date()
+            en_curso = len(df[df["grupo_fecha_fin_prevista"].notna() & (df["grupo_fecha_fin_prevista"] >= hoy)])
+            finalizados = len(df[df["grupo_fecha_fin_prevista"].notna() & (df["grupo_fecha_fin_prevista"] < hoy)])
+
+        # Con diploma
+        con_diploma = 0
+        if "tiene_diploma" in df.columns:
+            con_diploma = len(df[df["tiene_diploma"] == True])
+
+        return {
+            "total": total,
+            "nuevos_mes": nuevos_mes,
+            "en_curso": en_curso,
+            "finalizados": finalizados,
+            "con_diploma": con_diploma
+        }
+
+    except Exception as e:
+        st.error(f"❌ Error al calcular estadísticas de participantes: {e}")
+        return {
+            "total": 0,
+            "nuevos_mes": 0,
+            "en_curso": 0,
+            "finalizados": 0,
+            "con_diploma": 0
+        }
 
     # =========================
     # PERMISOS
