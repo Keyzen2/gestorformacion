@@ -11,7 +11,7 @@ TIPOS_EMPRESA = {
     "CLIENTE_GESTOR": "👥 Cliente de Gestora"
 }
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)  # REDUCIDO de 3600 a 300 segundos
 def cargar_provincias(_supabase):
     """Carga lista de provincias."""
     try:
@@ -20,7 +20,7 @@ def cargar_provincias(_supabase):
     except:
         return {}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)  # REDUCIDO de 3600 a 300 segundos
 def cargar_localidades(_supabase, provincia_id):
     """Carga localidades de una provincia."""
     try:
@@ -29,7 +29,7 @@ def cargar_localidades(_supabase, provincia_id):
     except:
         return {}
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def cargar_sectores(_supabase):
     """Carga sectores empresariales."""
     try:
@@ -39,7 +39,7 @@ def cargar_sectores(_supabase):
     except:
         return ["🏭 Industria", "🏪 Comercio", "⚙️ Servicios", "🏗️ Construcción", "💻 Tecnología"]
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=300)
 def cargar_cnae(_supabase):
     """Carga códigos CNAE."""
     try:
@@ -221,8 +221,61 @@ def mostrar_mi_empresa(empresas_service, session_state):
     except Exception as e:
         st.error(f"❌ Error cargando información de tu empresa: {e}")
 
+def mostrar_campos_conectados_provincia_localidad(empresas_service, datos, key_suffix="", disabled=False):
+    """
+    NUEVA FUNCIÓN: Campos conectados provincia-localidad FUERA del formulario
+    para que funcionen dinámicamente
+    """
+    # Cargar datos auxiliares
+    provincias_dict = cargar_provincias(empresas_service.supabase)
+    
+    # Inicializar session_state para provincia
+    provincia_key = f"provincia_sel_{key_suffix}"
+    if provincia_key not in st.session_state:
+        st.session_state[provincia_key] = datos.get("provincia", "")
+    
+    # Selectbox de provincia
+    provincia_sel = st.selectbox(
+        "🗺️ Provincia", 
+        options=[""] + list(provincias_dict.keys()),
+        index=list(provincias_dict.keys()).index(st.session_state[provincia_key]) + 1 if st.session_state[provincia_key] in provincias_dict else 0,
+        key=f"prov_select_{key_suffix}",
+        disabled=disabled
+    )
+    
+    # Actualizar session_state si cambió
+    if provincia_sel != st.session_state[provincia_key]:
+        st.session_state[provincia_key] = provincia_sel
+        st.rerun()  # Forzar actualización para cargar localidades
+    
+    # Selectbox de localidad (se actualiza automáticamente)
+    localidad_sel = ""
+    localidad_id = None
+    provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
+    
+    if provincia_id:
+        localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)
+        if localidades_dict:
+            localidad_actual = datos.get("ciudad", "") if not st.session_state.get(f"localidad_sel_{key_suffix}") else st.session_state.get(f"localidad_sel_{key_suffix}")
+            
+            localidad_sel = st.selectbox(
+                "🏘️ Población",
+                options=[""] + list(localidades_dict.keys()),
+                index=list(localidades_dict.keys()).index(localidad_actual) + 1 if localidad_actual in localidades_dict else 0,
+                key=f"loc_select_{key_suffix}",
+                disabled=disabled
+            )
+            localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
+            st.session_state[f"localidad_sel_{key_suffix}"] = localidad_sel
+        else:
+            st.selectbox("🏘️ Población", options=["Sin localidades"], disabled=True, key=f"loc_empty_{key_suffix}")
+    else:
+        st.selectbox("🏘️ Población", options=["Seleccione provincia"], disabled=True, key=f"loc_disabled_{key_suffix}")
+    
+    return provincia_sel, localidad_sel, provincia_id, localidad_id
+
 def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es_creacion=False, key_suffix="", solo_datos_basicos=False):
-    """Formulario FUNDAE completo con funcionalidades de Streamlit 1.49."""
+    """Formulario FUNDAE completo con campos conectados CORREGIDOS."""
     
     if es_creacion:
         st.subheader("➕ Nueva Empresa Cliente")
@@ -232,12 +285,19 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             st.subheader(f"✏️ Editar {empresa_data['nombre']}")
         datos = empresa_data.copy()
     
+    # CAMPOS CONECTADOS FUERA DEL FORMULARIO
+    if not solo_datos_basicos:
+        st.markdown("#### 🏠 Domicilio Social (Seleccione provincia y localidad)")
+        provincia_sel, localidad_sel, provincia_id, localidad_id = mostrar_campos_conectados_provincia_localidad(
+            empresas_service, datos, key_suffix
+        )
+        st.divider()
+    
     # Cargar datos auxiliares
-    provincias_dict = cargar_provincias(empresas_service.supabase)
     sectores_list = cargar_sectores(empresas_service.supabase)
     cnae_dict = cargar_cnae(empresas_service.supabase)
     
-    # Cargar datos CRM si es necesario (solo admin y no solo datos básicos)
+    # Cargar datos CRM si es necesario
     crm_data = {}
     if not es_creacion and datos.get("id") and not solo_datos_basicos:
         crm_data = cargar_crm_datos(empresas_service.supabase, datos["id"])
@@ -300,8 +360,8 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         else:
             codigo_cnae = st.text_input("🔢 Código CNAE", value=datos.get("codigo_cnae", ""), key=f"{form_id}_cnae_input")
         
-        # Domicilio Social
-        st.markdown("#### 🏠 Domicilio Social")
+        # RESTO DE CAMPOS DEL DOMICILIO (no provincia/localidad que ya están fuera)
+        st.markdown("#### 🏠 Resto del Domicilio")
         col1, col2, col3 = st.columns(3)
         
         with col1:
@@ -310,47 +370,11 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         
         with col2:
             codigo_postal = st.text_input("📮 Código Postal", value=datos.get("codigo_postal", ""), key=f"{form_id}_cp")
-            
-            # Selector de provincia
-            provincia_actual = datos.get("provincia_id")
-            if provincia_actual and provincias_dict:
-                provincia_nombre = next((k for k, v in provincias_dict.items() if v == provincia_actual), "")
-            else:
-                provincia_nombre = ""
-            
-            provincia_sel = st.selectbox(
-                "🗺️ Provincia", 
-                options=[""] + list(provincias_dict.keys()),
-                index=list(provincias_dict.keys()).index(provincia_nombre) + 1 if provincia_nombre else 0,
-                key=f"{form_id}_provincia"
-            )
-            provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
+            telefono = st.text_input("📞 Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_telefono")
         
         with col3:
-            # Selector de localidad que se actualiza automáticamente
-            if provincia_id:
-                localidades_dict = cargar_localidades(empresas_service.supabase, provincia_id)
-                if localidades_dict:
-                    localidad_actual = datos.get("localidad_id")
-                    localidad_nombre = next((k for k, v in localidades_dict.items() if v == localidad_actual), "") if localidad_actual else ""
-                    
-                    localidad_sel = st.selectbox(
-                        "🏘️ Población",
-                        options=[""] + list(localidades_dict.keys()),
-                        index=list(localidades_dict.keys()).index(localidad_nombre) + 1 if localidad_nombre else 0,
-                        key=f"{form_id}_localidad"
-                    )
-                    localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
-                else:
-                    st.selectbox("🏘️ Población", options=["Sin localidades"], disabled=True, key=f"{form_id}_localidad_empty")
-                    localidad_id = None
-                    localidad_sel = ""
-            else:
-                st.selectbox("🏘️ Población", options=["Seleccione provincia"], disabled=True, key=f"{form_id}_localidad_disabled")
-                localidad_id = None
-                localidad_sel = ""
-            
-            telefono = st.text_input("📞 Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_telefono")
+            st.info(f"**Provincia:** {provincia_sel if not solo_datos_basicos else datos.get('provincia', 'N/A')}")
+            st.info(f"**Localidad:** {localidad_sel if not solo_datos_basicos else datos.get('ciudad', 'N/A')}")
         
         # Solo mostrar más campos si NO es solo_datos_basicos
         if not solo_datos_basicos:
@@ -424,6 +448,11 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             es_pyme = datos.get("es_pyme", True)
             voluntad_acumular_credito = datos.get("voluntad_acumular_credito", False)
             tiene_erte = datos.get("tiene_erte", False)
+            # Para solo_datos_basicos, usar valores existentes de provincia/localidad
+            provincia_sel = datos.get("provincia", "")
+            localidad_sel = datos.get("ciudad", "")
+            provincia_id = None  # No se actualiza en solo_datos_basicos
+            localidad_id = None
         
         # Campos de módulos solo para admin y NO solo_datos_basicos
         if session_state.role == "admin" and not solo_datos_basicos:
@@ -582,71 +611,107 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
                              rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
                              cuentas_cotizacion, provincia_sel, localidad_sel, 
                              empresas_service, session_state, es_creacion, solo_datos_basicos=False):
-    """Procesa el guardado de la empresa."""
-    
-    datos_empresa = {
-        "nombre": nombre,
-        "cif": cif,
-        "sector": sector,
-        "convenio_referencia": convenio_referencia,
-        "codigo_cnae": codigo_cnae,
-        "calle": calle,
-        "numero": numero,
-        "codigo_postal": codigo_postal,
-        "provincia_id": provincia_id,
-        "localidad_id": localidad_id,
-        "telefono": telefono,
-        "representante_tipo_documento": representante_tipo_documento or None,
-        "representante_numero_documento": representante_numero_documento,
-        "representante_nombre_apellidos": representante_nombre_apellidos,
-        "email_notificaciones": email_notificaciones,
-        "fecha_contrato_encomienda": fecha_contrato_encomienda.isoformat() if fecha_contrato_encomienda else None,
-        "nueva_creacion": nueva_creacion,
-        "representacion_legal_trabajadores": representacion_legal_trabajadores,
-        "plantilla_media_anterior": plantilla_media_anterior,
-        "es_pyme": es_pyme,
-        "voluntad_acumular_credito": voluntad_acumular_credito,
-        "tiene_erte": tiene_erte,
-        "formacion_activo": formacion_activo,
-        "iso_activo": iso_activo,
-        "rgpd_activo": rgpd_activo,
-        "docu_avanzada_activo": docu_avanzada_activo,
-        # Campos de compatibilidad
-        "email": email_notificaciones,
-        "direccion": f"{calle} {numero}" if calle else "",
-        "ciudad": localidad_sel if localidad_sel else "",
-        "provincia": provincia_sel if provincia_sel else ""
-    }
+    """Procesa el guardado de la empresa - CORREGIDO."""
     
     try:
+        # VALIDACIONES ADICIONALES
+        if not validar_dni_cif(cif):
+            st.error("❌ El CIF proporcionado no es válido")
+            return
+        
+        # Si hay representante, validar documento
+        if representante_numero_documento and not validar_dni_cif(representante_numero_documento):
+            st.error("❌ El documento del representante no es válido")
+            return
+        
+        datos_empresa = {
+            "nombre": nombre,
+            "cif": cif,
+            "sector": sector,
+            "convenio_referencia": convenio_referencia,
+            "codigo_cnae": codigo_cnae,
+            "calle": calle,
+            "numero": numero,
+            "codigo_postal": codigo_postal,
+            "provincia_id": provincia_id,
+            "localidad_id": localidad_id,
+            "telefono": telefono,
+            "representante_tipo_documento": representante_tipo_documento or None,
+            "representante_numero_documento": representante_numero_documento,
+            "representante_nombre_apellidos": representante_nombre_apellidos,
+            "email_notificaciones": email_notificaciones,
+            "fecha_contrato_encomienda": fecha_contrato_encomienda.isoformat() if fecha_contrato_encomienda else None,
+            "nueva_creacion": nueva_creacion,
+            "representacion_legal_trabajadores": representacion_legal_trabajadores,
+            "plantilla_media_anterior": plantilla_media_anterior,
+            "es_pyme": es_pyme,
+            "voluntad_acumular_credito": voluntad_acumular_credito,
+            "tiene_erte": tiene_erte,
+            "formacion_activo": formacion_activo,
+            "iso_activo": iso_activo,
+            "rgpd_activo": rgpd_activo,
+            "docu_avanzada_activo": docu_avanzada_activo,
+            # Campos de compatibilidad
+            "email": email_notificaciones,
+            "direccion": f"{calle} {numero}".strip() if calle or numero else "",
+            "ciudad": localidad_sel,
+            "provincia": provincia_sel,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        # Solo añadir created_at si es creación
         if es_creacion:
-            success, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
-            if success:
-                st.success("✅ Empresa cliente creada correctamente")
-                # Guardar cuentas
-                if not solo_datos_basicos:
+            datos_empresa["created_at"] = datetime.utcnow().isoformat()
+            datos_empresa["fecha_alta"] = datetime.utcnow().isoformat()
+        
+        if es_creacion:
+            # CREAR EMPRESA
+            result = empresas_service.supabase.table("empresas").insert(datos_empresa).execute()
+            
+            if result.data and len(result.data) > 0:
+                empresa_id = result.data[0]["id"]
+                st.success("✅ Empresa creada correctamente")
+                
+                # Guardar cuentas si no es solo_datos_basicos
+                if not solo_datos_basicos and cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
+                
                 # Guardar datos CRM si corresponde
                 if session_state.role == "admin" and crm_activo:
                     guardar_crm_datos(empresas_service.supabase, empresa_id, crm_activo, crm_inicio, crm_fin)
+                
+                # Limpiar cache y session_state
+                cargar_provincias.clear()
+                cargar_localidades.clear()
                 st.rerun()
             else:
-                st.error("❌ Error al crear la empresa cliente")
+                st.error("❌ Error al crear la empresa")
         else:
-            success = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
-            if success:
+            # ACTUALIZAR EMPRESA
+            result = empresas_service.supabase.table("empresas").update(datos_empresa).eq("id", datos["id"]).execute()
+            
+            if result.data:
                 st.success("✅ Empresa actualizada correctamente")
+                
                 # Actualizar cuentas solo si no es solo_datos_basicos
                 if not solo_datos_basicos:
                     actualizar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
+                
                 # Actualizar datos CRM si corresponde
                 if session_state.role == "admin" and not solo_datos_basicos:
                     actualizar_crm_datos(empresas_service.supabase, datos["id"], crm_activo, crm_inicio, crm_fin)
+                
+                # Limpiar cache
+                cargar_provincias.clear()
+                cargar_localidades.clear()
                 st.rerun()
             else:
                 st.error("❌ Error al actualizar la empresa")
+                
     except Exception as e:
-        st.error(f"❌ Error procesando empresa: {e}")
+        st.error(f"❌ Error procesando empresa: {str(e)}")
+        # Debug info para development
+        st.error(f"Debug - Error details: {e}")
 
 def guardar_cuentas_cotizacion(supabase, empresa_id, cuentas):
     """Guarda las cuentas de cotización."""
