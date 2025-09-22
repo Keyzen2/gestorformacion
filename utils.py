@@ -1688,6 +1688,18 @@ def generar_xml_inicio_grupo_mejorado(datos_xml):
         print(f"Error al generar XML mejorado: {e}")
         return None
         
+def safe_int_conversion(valor, default=0):
+    """
+    Convierte un valor a int de forma segura.
+    Si no es convertible devuelve el valor por defecto.
+    """
+    try:
+        if valor is None or valor == "":
+            return default
+        return int(valor)
+    except (ValueError, TypeError):
+        return default
+      
 def detectar_tipo_documento_fundae(nif):
     """Detecta automáticamente el tipo de documento para XML FUNDAE."""
     if not nif:
