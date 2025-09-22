@@ -1478,7 +1478,7 @@ class DataService:
                     necesita_migracion = True
                 
                 # Contiene caracteres no válidos para FUNDAE
-                elif not re.match(r'^[A-Z0-9\-_]+, codigo_actual.upper()):
+                elif not re.match(r'^[A-Z0-9\-_]+$', codigo_actual.upper()):
                     necesita_migracion = True
                 
                 if necesita_migracion and empresa_id and fecha_inicio:
@@ -1582,7 +1582,53 @@ class DataService:
         except Exception as e:
             st.error(f"Error al cargar métricas admin: {e}")
             return {}
-
+    # =========================
+    # MÉTODOS DE UTILIDAD ADICIONALES
+    # =========================
+    
+    def get_dashboard_fundae(self) -> Dict[str, Any]:
+        """
+        Genera dashboard específico para estado FUNDAE del sistema.
+        """
+        try:
+            estadisticas = self.get_estadisticas_codigos_fundae()
+            conflictos = self.get_reporte_conflictos_fundae()
+            
+            # Análisis de estado
+            estado_general = "EXCELENTE"
+            alertas = []
+            
+            if estadisticas.get("codigos_duplicados", 0) > 0:
+                estado_general = "CRITICO"
+                alertas.append(f"{estadisticas['codigos_duplicados']} códigos duplicados detectados")
+            
+            if estadisticas.get("empresas_con_conflictos", 0) > 0:
+                if estado_general != "CRITICO":
+                    estado_general = "ADVERTENCIA"
+                alertas.append(f"{estadisticas['empresas_con_conflictos']} empresas con conflictos")
+            
+            return {
+                "estado_general": estado_general,
+                "estadisticas": estadisticas,
+                "conflictos": conflictos[:10],  # Primeros 10 conflictos
+                "alertas": alertas,
+                "total_conflictos": len(conflictos),
+                "acciones_recomendadas": [
+                    "Resolver códigos duplicados automáticamente" if estadisticas.get("codigos_duplicados", 0) > 0 else None,
+                    "Migrar datos legacy sin códigos válidos" if estadisticas.get("total_acciones", 0) > 0 else None,
+                    "Configurar alertas automáticas para prevenir duplicados" if estado_general != "EXCELENTE" else None
+                ]
+            }
+            
+        except Exception as e:
+            return {
+                "estado_general": "ERROR",
+                "error": str(e),
+                "estadisticas": {},
+                "conflictos": [],
+                "alertas": ["Error al generar dashboard FUNDAE"],
+                "acciones_recomendadas": ["Revisar configuración del sistema"]
+            }
     # =========================
     # BÚSQUEDAS OPTIMIZADAS
     # =========================
