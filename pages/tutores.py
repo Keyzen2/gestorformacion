@@ -347,75 +347,45 @@ def mostrar_listado_tutores(grupos_service: GruposService):
         st.session_state.tutor_editando = "nuevo"
         st.rerun()
 # =========================
-# GESTIÓN DE CURRÍCULUM TUTOR
+# 📂 CURRÍCULUM DEL TUTOR
 # =========================
-
-def gestionar_curriculum_tutor(grupos_service: GruposService, tutor: Dict[str, Any]):
-    """Subida y gestión del currículum del tutor en Supabase Storage."""
-
+def gestionar_curriculum_tutor(grupos_service, tutor: dict):
     st.markdown("### 📂 Currículum del Tutor")
 
-    bucket_name = "tutores"
     empresa_id = tutor.get("empresa_id")
     tutor_id = tutor.get("id")
+    bucket = "curriculums"  # Nombre del bucket en Supabase
 
     if not empresa_id or not tutor_id:
-        st.warning("⚠️ No se puede gestionar currículum sin empresa o tutor asociado")
+        st.warning("⚠️ No se puede gestionar el CV sin empresa y tutor asociados.")
         return
 
-    # Path en el bucket: empresa_id/tutor_id/cv_nombre.pdf
-    carpeta_tutor = f"{empresa_id}/{tutor_id}/"
+    # Ruta única: tutores/{empresa_id}/{tutor_id}/cv.pdf
+    path = f"tutores/{empresa_id}/{tutor_id}/cv.pdf"
 
-    # Mostrar CV existente si hay URL guardada
-    cv_url = tutor.get("cv_url")
-    if cv_url:
-        st.success("✅ Currículum ya disponible")
-        st.markdown(f"[📄 Ver CV actual]({cv_url})", unsafe_allow_html=True)
-
-        if st.button("🗑️ Eliminar CV", use_container_width=True):
-            try:
-                # Obtener nombre del archivo desde la URL
-                nombre_archivo = cv_url.split("/")[-1]
-                ruta_storage = f"{carpeta_tutor}{nombre_archivo}"
-
-                grupos_service.supabase.storage.from_(bucket_name).remove([ruta_storage])
-
-                # Actualizar tutor en BD
-                grupos_service.update_tutor(tutor_id, {"cv_url": None})
-
-                st.success("✅ Currículum eliminado correctamente")
+    # Ver si ya existe un CV en Supabase
+    try:
+        public_url = grupos_service.supabase.storage.from_(bucket).get_public_url(path)
+        if public_url:
+            st.success(f"📄 CV actual disponible: [Ver aquí]({public_url})")
+            if st.button("🗑️ Eliminar CV", key=f"delete_cv_{tutor_id}"):
+                grupos_service.supabase.storage.from_(bucket).remove([path])
+                st.success("✅ CV eliminado correctamente")
                 st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al eliminar CV: {e}")
-    else:
-        st.info("ℹ️ No hay currículum cargado")
+    except Exception:
+        st.info("ℹ️ No hay currículum subido todavía.")
 
-    st.divider()
-
-    # Subir nuevo archivo
-    archivo_cv = st.file_uploader(
-        "📤 Subir nuevo Currículum (PDF/DOCX)",
-        type=["pdf", "docx"],
-        key=f"cv_upload_{tutor_id}"
+    # Subir nuevo CV
+    uploaded_file = st.file_uploader(
+        "Subir nuevo currículum (PDF)",
+        type=["pdf"],
+        key=f"upload_cv_{tutor_id}"
     )
-
-    if archivo_cv is not None:
+    if uploaded_file is not None:
         try:
-            nombre_archivo = archivo_cv.name
-            ruta_storage = f"{carpeta_tutor}{nombre_archivo}"
-
-            # Guardar en Supabase Storage
-            grupos_service.supabase.storage.from_(bucket_name).upload(
-                ruta_storage, archivo_cv, {"upsert": True}
-            )
-
-            # Obtener URL pública
-            public_url = grupos_service.supabase.storage.from_(bucket_name).get_public_url(ruta_storage)
-
-            # Actualizar BD
-            grupos_service.update_tutor(tutor_id, {"cv_url": public_url})
-
-            st.success("✅ Currículum subido correctamente")
+            # Subida directa (reemplaza si ya existe)
+            grupos_service.supabase.storage.from_(bucket).upload(path, uploaded_file.getvalue(), {"upsert": True})
+            st.success("✅ CV subido correctamente")
             st.rerun()
         except Exception as e:
             st.error(f"❌ Error al subir CV: {e}")
