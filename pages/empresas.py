@@ -280,7 +280,17 @@ def mostrar_tabla_empresas(df_empresas, session_state, titulo_tabla="📋 Lista 
         df_empresas = df_empresas[df_empresas["cif"].str.contains(filtro_cif, case=False, na=False)]
     if filtro_ciudad:
         df_empresas = df_empresas[df_empresas["ciudad"].str.contains(filtro_ciudad, case=False, na=False)]
-
+    df_empresas = df_empresas.copy()
+        for campo, label in [
+            ("formacion_activo", "📚 Formación"),
+            ("iso_activo", "📋 ISO"),
+            ("rgpd_activo", "🛡️ RGPD"),
+            ("docu_avanzada_activo", "📁 Doc. Avanzada"),
+            ("crm_activo", "📈 CRM"),
+        ]:
+            if campo in df_empresas.columns:
+                df_empresas[label] = df_empresas[campo].apply(lambda x: "✅" if x else "❌")
+                
     # 📊 Mostrar tabla con selección
     columnas = ["nombre", "cif", "ciudad", "telefono", "email"]
     if session_state.role == "admin":
