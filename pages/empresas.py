@@ -343,7 +343,7 @@ def inicializar_cuentas_cotizacion(form_id, empresas_service, empresa_id=None):
     return cuentas_key
 
 def mostrar_gestion_cuentas_en_formulario(cuentas_key):
-    """CORREGIDO: Gestión de cuentas que NO resetea el formulario ni da error en Streamlit 1.49"""
+    """CORREGIDO: Gestión de cuentas que NO resetea el formulario y usa st.rerun() en Streamlit 1.49"""
     cuentas = st.session_state[cuentas_key]
     
     st.markdown("#### 🏦 Cuentas de Cotización")
@@ -362,12 +362,12 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
                            help="Marcar como principal"):
                     for j, c in enumerate(cuentas):
                         c["es_principal"] = (j == i)
-                    st.experimental_rerun()
+                    st.rerun()
             with col3:
                 if st.button("🗑️", key=f"eliminar_{cuentas_key}_{i}",
                            help="Eliminar cuenta"):
                     cuentas.pop(i)
-                    st.experimental_rerun()
+                    st.rerun()
                     break
     else:
         st.info("📝 No hay cuentas de cotización configuradas")
@@ -395,8 +395,7 @@ def mostrar_gestion_cuentas_en_formulario(cuentas_key):
                 })
                 
                 st.success("✅ Cuenta añadida correctamente")
-                # 🔄 refrescar en vez de modificar session_state directamente
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("⚠️ Introduce un número de cuenta")
 
@@ -634,13 +633,13 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         # BOTONES
         # =========================
         st.markdown("---")
-        if solo_datos_basicos:
-            submitted = st.form_submit_button("💾 Actualizar", type="primary", use_container_width=True, disabled=len(errores) > 0)
+        if es_creacion:
+            submitted = st.form_submit_button("➕ Crear Empresa", type="primary", use_container_width=True)
             eliminar = False
         else:
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                submitted = st.form_submit_button("💾 Guardar", type="primary", use_container_width=True, disabled=len(errores) > 0)
+                submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
             with col_btn2:
                 if not es_creacion and session_state.role == "admin":
                     eliminar = st.form_submit_button("🗑️ Eliminar", type="secondary", use_container_width=True)
@@ -651,18 +650,21 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         # PROCESAMIENTO
         # =========================
         if submitted:
-            procesar_guardado_empresa(
-                datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
-                calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
-                representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
-                email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
-                representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
-                voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
-                rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
-                st.session_state[cuentas_key] if not solo_datos_basicos else [],
-                provincia_sel, localidad_sel, 
-                empresas_service, session_state, es_creacion, solo_datos_basicos
-            )
+            if errores:
+                st.error(f"⚠️ Corrige los errores antes de continuar: {', '.join(errores)}")
+            else:
+                procesar_guardado_empresa(
+                    datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
+                    calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
+                    representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
+                    email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
+                    representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
+                    voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
+                    rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
+                    st.session_state[cuentas_key] if not solo_datos_basicos else [],
+                    provincia_sel, localidad_sel, 
+                    empresas_service, session_state, es_creacion, solo_datos_basicos
+                )
         
         if eliminar:
             if st.session_state.get("confirmar_eliminar"):
