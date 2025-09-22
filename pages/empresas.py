@@ -913,20 +913,22 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
     if not key_suffix and not solo_datos_basicos:
         st.markdown("#### 🏦 Cuentas de Cotización")
         mostrar_gestion_cuentas_en_formulario(cuentas_key)
+        
 # ==================================================
 # GUARDADO DE EMPRESA Y CUENTAS
 # ==================================================
-def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
-                             calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
-                             representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
-                             email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
-                             representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
-                             voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
-                             rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
-                             cuentas_cotizacion, provincia_sel, localidad_sel,
-                             empresas_service, session_state, es_creacion, solo_datos_basicos=False):
-    """Procesa creación/actualización de empresa con jerarquía y validaciones."""
-
+def procesar_guardado_empresa(
+    datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
+    calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
+    representante_tipo_documento, representante_numero_documento, representante_nombre_apellidos,
+    email_notificaciones, fecha_contrato_encomienda, nueva_creacion,
+    representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
+    voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
+    rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
+    cuentas_cotizacion, provincia_sel, localidad_sel,
+    empresas_service, session_state, es_creacion, solo_datos_basicos=False
+):
+    """Procesa creación/actualización de empresa con jerarquía, cuentas y CRM."""
     try:
         # Validaciones
         if not validar_dni_cif(cif):
@@ -936,7 +938,7 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             st.error("❌ Documento de representante inválido")
             return
 
-        # Datos normalizados + redundancia para compatibilidad
+        # Datos base de empresa
         datos_empresa = {
             "nombre": nombre,
             "cif": cif,
@@ -965,7 +967,7 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
             "updated_at": datetime.utcnow().isoformat(),
-            # Guardar tanto IDs como nombres
+            # Guardar tanto IDs como nombres de provincia/localidad
             "provincia_id": provincia_id,
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
@@ -976,32 +978,59 @@ def procesar_guardado_empresa(datos, nombre, cif, sector, convenio_referencia, c
             ok, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
             if ok and empresa_id:
                 st.success("✅ Empresa creada correctamente")
+
+                # Guardar cuentas de cotización
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, empresa_id, cuentas_cotizacion)
-                    guardar_modulos(
-                        empresas_service, empresa_id,
-                        formacion_activo, iso_activo, rgpd_activo, docu_avanzada_activo,
-                        crm_activo, crm_inicio, crm_fin
-                    )
 
-                    st.rerun()
-                    
+                # Guardar CRM si está activo
+                if crm_activo:
+                    empresas_service.supabase.table("crm_empresas").insert({
+                        "empresa_id": empresa_id,
+                        "crm_activo": True,
+                        "crm_inicio": crm_inicio,
+                        "crm_fin": crm_fin,
+                        "created_at": datetime.utcnow().isoformat()
+                    }).execute()
+
+                st.rerun()
+
         else:
             ok = empresas_service.update_empresa_con_jerarquia(datos["id"], datos_empresa)
             if ok:
                 st.success("✅ Empresa actualizada correctamente")
+
+                # Actualizar cuentas
                 if cuentas_cotizacion:
                     guardar_cuentas_cotizacion(empresas_service.supabase, datos["id"], cuentas_cotizacion)
-                    guardar_modulos(
-                        empresas_service, empresa_id,
-                        formacion_activo, iso_activo, rgpd_activo, docu_avanzada_activo,
-                        crm_activo, crm_inicio, crm_fin
-                    )
+
+                # Actualizar CRM en su tabla
+                crm_table = empresas_service.supabase.table("crm_empresas")
+                existing = crm_table.select("id").eq("empresa_id", datos["id"]).execute()
+
+                if crm_activo:
+                    payload_crm = {
+                        "empresa_id": datos["id"],
+                        "crm_activo": True,
+                        "crm_inicio": crm_inicio,
+                        "crm_fin": crm_fin,
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+                    if existing.data:
+                        crm_table.update(payload_crm).eq("empresa_id", datos["id"]).execute()
+                    else:
+                        payload_crm["created_at"] = datetime.utcnow().isoformat()
+                        crm_table.insert(payload_crm).execute()
+                else:
+                    # Si desmarcan CRM → desactivar
+                    if existing.data:
+                        crm_table.update({"crm_activo": False, "updated_at": datetime.utcnow().isoformat()}).eq("empresa_id", datos["id"]).execute()
+
                 st.rerun()
 
     except Exception as e:
         st.error(f"❌ Error procesando empresa: {e}")
-
+        
 def guardar_cuentas_cotizacion(supabase, empresa_id: str, cuentas: list):
     """Guarda cuentas de cotización en Supabase, reemplazando las existentes."""
     try:
