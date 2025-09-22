@@ -747,28 +747,15 @@ class DataService:
         df = _self.get_acciones_formativas()
         return {row["nombre"]: row["id"] for _, row in df.iterrows()} if not df.empty else {}
 
-    def create_accion_formativa(_self, data: Dict[str, Any]) -> bool:
-        """Crea una nueva acción formativa."""
-        try:
-            if _self.rol == "gestor":
-                data["empresa_id"] = _self.empresa_id
-            
-            _self.supabase.table("acciones_formativas").insert(data).execute()
-            _self.get_acciones_formativas.clear()
-            return True
-        except Exception as e:
-            st.error(f"Error al crear acción formativa: {e}")
-            return False
+    # Sobrescribir el método create_accion_formativa existente
+    def create_accion_formativa(self, data: Dict[str, Any]) -> bool:
+        """Redirige al método con validaciones FUNDAE."""
+        return self.create_accion_formativa_con_validaciones_fundae(data)
 
-    def update_accion_formativa(_self, accion_id: str, data: Dict[str, Any]) -> bool:
-        """Actualiza una acción formativa."""
-        try:
-            _self.supabase.table("acciones_formativas").update(data).eq("id", accion_id).execute()
-            _self.get_acciones_formativas.clear()
-            return True
-        except Exception as e:
-            st.error(f"Error al actualizar acción formativa: {e}")
-            return False
+    # Sobrescribir el método update_accion_formativa existente  
+    def update_accion_formativa(self, accion_id: str, data: Dict[str, Any]) -> bool:
+        """Redirige al método con validaciones FUNDAE."""
+        return self.update_accion_formativa_con_validaciones_fundae(accion_id, data)
 
     def delete_accion_formativa(_self, accion_id: str) -> bool:
         """Elimina una acción formativa."""
