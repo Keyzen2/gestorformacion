@@ -805,9 +805,10 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         
         # Procesar formulario
         if submitted:
+        # Validaciones manuales
             if not responsable or not telefono_contacto:
                 st.error("❌ Responsable y Teléfono de contacto son obligatorios")
-                return None
+            else:
                 # Preparar datos según operación
                 datos_para_guardar = {
                     "accion_formativa_id": acciones_dict[accion_formativa],
@@ -817,37 +818,44 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                     "provincia": provincia_sel,
                     "localidad": localidad_sel,
                     "cp": cp,
-                    "responsable": responsable.strip() if responsable else "",
-                    "telefono_contacto": telefono_contacto.strip() if telefono_contacto else "",
+                    "responsable": responsable.strip(),
+                    "telefono_contacto": telefono_contacto.strip(),
                     "n_participantes_previstos": n_participantes_previstos,
                     "lugar_imparticion": lugar_imparticion,
                     "observaciones": observaciones,
                     "horario": horario_nuevo if horario_nuevo else None
                 }
-            
-            # Añadir código solo en creación
-            if es_creacion:
-                datos_para_guardar["codigo_grupo"] = datos_grupo.get("codigo_grupo", "")
-                datos_para_guardar["empresa_id"] = datos_grupo.get("empresa_id")
-    
-            try:
+        
+                # Añadir código solo en creación
                 if es_creacion:
-                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
-                    if exito:
-                        st.success("✅ Grupo creado correctamente")
-                        st.session_state.grupo_seleccionado = None
-                        st.rerun()
-                else:
-                    if grupos_service.update_grupo(datos_grupo["id"], datos_para_guardar):
-                        st.success("✅ Cambios guardados correctamente")
-                        st.session_state.grupo_seleccionado = None
-                        st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al procesar grupo: {e}")
-    
+                    datos_para_guardar["codigo_grupo"] = datos_grupo.get("codigo_grupo", "")
+                    datos_para_guardar["empresa_id"] = datos_grupo.get("empresa_id")
+        
+                try:
+                    if es_creacion:
+                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
+                        if exito:
+                            st.success("✅ Grupo creado correctamente")
+                            # Cargar grupo recién creado y mantenerlo seleccionado
+                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                            if grupo_creado.data:
+                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                            st.rerun()
+                    else:
+                        res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
+                        if res.data:
+                            st.success("✅ Cambios guardados correctamente")
+                            st.session_state.grupo_seleccionado = res.data[0]  # mantener actualizado
+                            st.rerun()
+                        else:
+                            st.error("❌ No se guardaron cambios en el grupo")
+                except Exception as e:
+                    st.error(f"❌ Error al procesar grupo: {e}")
+        
         elif cancelar:
             st.session_state.grupo_seleccionado = None
             st.rerun()
+        
         elif recargar:
             try:
                 grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
@@ -856,7 +864,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al recargar: {e}")
-    
+        
         return datos_grupo.get("id") if datos_grupo else None
 
 # =========================
