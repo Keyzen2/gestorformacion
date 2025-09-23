@@ -795,10 +795,9 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             col1, col2, col3 = st.columns(3)
             with col1:
                 submitted = st.form_submit_button(
-                    "💾 Guardar Cambios", 
-                    type="primary", 
-                    use_container_width=True,
-                    disabled=len(errores) > 0
+                    "💾 Guardar Cambios",
+                    type="primary",
+                    use_container_width=True
                 )
             with col2:
                 recargar = st.form_submit_button("🔄 Recargar", use_container_width=True)
@@ -806,23 +805,26 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
         
         # Procesar formulario
-        if submitted and len(errores) == 0:
-            # Preparar datos según operación
-            datos_para_guardar = {
-                "accion_formativa_id": acciones_dict[accion_formativa],
-                "modalidad": modalidad_grupo,
-                "fecha_inicio": fecha_inicio.isoformat(),
-                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                "provincia": provincia_sel,
-                "localidad": localidad_sel,
-                "cp": cp,
-                "responsable": responsable,
-                "telefono_contacto": telefono_contacto,
-                "n_participantes_previstos": n_participantes_previstos,
-                "lugar_imparticion": lugar_imparticion,
-                "observaciones": observaciones,
-                "horario": horario_nuevo if horario_nuevo else None
-            }
+        if submitted:
+            if errores:
+                st.error(f"❌ Corrige estos errores antes de guardar: {', '.join(errores)}")
+            else:
+                # Preparar datos según operación
+                datos_para_guardar = {
+                    "accion_formativa_id": acciones_dict[accion_formativa],
+                    "modalidad": modalidad_grupo,
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                    "provincia": provincia_sel,
+                    "localidad": localidad_sel,
+                    "cp": cp,
+                    "responsable": responsable,
+                    "telefono_contacto": telefono_contacto,
+                    "n_participantes_previstos": n_participantes_previstos,
+                    "lugar_imparticion": lugar_imparticion,
+                    "observaciones": observaciones,
+                    "horario": horario_nuevo if horario_nuevo else None
+                }
             
             # Añadir código solo en creación
             if es_creacion:
