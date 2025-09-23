@@ -22,7 +22,6 @@ st.set_page_config(
 # HELPERS CACHEADOS
 # =========================
 @st.cache_data(ttl=300)
-@st.cache_data(ttl=300)
 def cargar_empresas_disponibles(_empresas_service, _session_state):
     """CORREGIDO: Devuelve las empresas disponibles según rol usando el nuevo sistema de jerarquía."""
     try:
