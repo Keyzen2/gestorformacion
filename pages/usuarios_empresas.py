@@ -365,9 +365,31 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                         # CREAR CON AUTHSERVICE - DEBUG MEJORADO
                         password_final = password.strip() if password and password.strip() != "" else None
                         
-                        # DEBUG: Mostrar datos que se van a enviar
-                        st.write("🔍 **Debug - Datos a insertar:**")
+                        # DEBUG COMPLETO: Mostrar datos que se van a enviar
+                        st.write("🔍 **Debug - Datos a insertar en tabla usuarios:**")
                         st.json(datos_usuario)
+                        
+                        st.write("📋 **Campos requeridos por tabla usuarios:**")
+                        st.write("- `id`: uuid (auto-generado)")
+                        st.write("- `auth_id`: uuid (lo genera AuthService)")
+                        st.write("- `email`: text (NOT NULL)")
+                        st.write("- `rol`: text (default 'usuario')")
+                        st.write("- `empresa_id`: uuid (nullable)")
+                        st.write("- `nif`: varchar (nullable)")
+                        st.write("- `nombre_completo`: text (nullable)")
+                        st.write("- `telefono`: text (nullable)")
+                        st.write("- `nombre`: text (nullable)")
+                        st.write("- `grupo_id`: uuid (nullable, para alumnos)")
+                        st.write("- `created_at`: timestamp (auto-generado)")
+                        
+                        # Validar campos obligatorios antes de enviar
+                        if not datos_usuario.get("email"):
+                            st.error("❌ Email es obligatorio y está vacío")
+                            return
+                            
+                        if not datos_usuario.get("rol"):
+                            st.error("❌ Rol es obligatorio y está vacío") 
+                            return
                         
                         with st.spinner("Creando usuario..."):
                             ok, usuario_id = auth_service.crear_usuario_con_auth(
