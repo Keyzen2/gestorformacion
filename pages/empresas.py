@@ -137,6 +137,50 @@ def exportar_empresas(empresas_service, session_state):
     except Exception as e:
         st.error(f"❌ Error exportando empresas: {e}")
         
+def mostrar_acciones_empresa(empresa_sel, empresas_service, session_state):
+    """Muestra acciones disponibles para la empresa seleccionada."""
+    if not empresa_sel or session_state.role != "admin":
+        return
+    
+    st.markdown("#### ⚙️ Acciones Rápidas")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Botón para convertir a GESTORA
+        if empresas_service.puede_convertir_a_gestora(empresa_sel["id"]):
+            if st.button(
+                "🔄 Convertir a GESTORA", 
+                key=f"convertir_{empresa_sel['id']}", 
+                help="Convierte esta empresa CLIENTE_SAAS en GESTORA para que pueda gestionar otras empresas"
+            ):
+                if st.session_state.get("confirmar_conversion"):
+                    if empresas_service.convertir_a_gestora(empresa_sel["id"]):
+                        del st.session_state["confirmar_conversion"]
+                        st.rerun()
+                else:
+                    st.session_state["confirmar_conversion"] = True
+                    st.warning("⚠️ Presiona nuevamente para confirmar la conversión")
+        else:
+            tipo_actual = empresa_sel.get("tipo_empresa", "")
+            if tipo_actual == "GESTORA":
+                st.success("✅ Ya es GESTORA")
+            elif tipo_actual == "CLIENTE_GESTOR":
+                st.info("ℹ️ Es cliente de gestora")
+            else:
+                st.info("ℹ️ No se puede convertir")
+    
+    with col2:
+        # Información del tipo actual
+        tipo_display = TIPOS_EMPRESA.get(empresa_sel.get("tipo_empresa", ""), "Desconocido")
+        st.info(f"**Tipo Actual:** {tipo_display}")
+    
+    with col3:
+        # Mostrar empresas cliente si es gestora
+        if empresa_sel.get("tipo_empresa") == "GESTORA":
+            clientes = empresas_service.get_empresas_clientes_gestor(empresa_sel["id"])
+            st.metric("Empresas Cliente", len(clientes))
+            
 def importar_empresas(empresas_service, session_state):
     """Importa empresas desde un archivo CSV/XLSX con plantilla descargable."""
     uploaded = st.file_uploader("📤 Subir archivo CSV/XLSX", type=["csv", "xlsx"], accept_multiple_files=False)
@@ -651,7 +695,38 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                 value=datos.get("convenio_referencia") or "",
                 key=f"{form_id}_convenio"
             )
-        
+        # =========================
+        # TIPO DE EMPRESA (Solo Admin en Creación)
+        # =========================
+        if session_state.role == "admin" and es_creacion:
+            st.markdown("#### 🎯 Tipo de Empresa")
+            
+            tipo_empresa = st.selectbox(
+                "Tipo de Empresa",
+                options=["CLIENTE_SAAS", "GESTORA"],
+                index=0,
+                key=f"{form_id}_tipo_empresa",
+                help="""
+                - **CLIENTE_SAAS**: Empresa cliente final que usa directamente el sistema
+                - **GESTORA**: Empresa que gestiona formación para otras empresas cliente
+                """
+            )
+            
+            if tipo_empresa == "GESTORA":
+                st.info("💡 Las empresas GESTORA pueden crear y gestionar empresas cliente")
+            else:
+                st.info("💡 Las empresas CLIENTE_SAAS pueden usar todos los módulos del sistema")
+                
+        else:
+            # Valores por defecto según el contexto
+            if session_state.role == "admin" and not es_creacion:
+                # En edición, mantener el tipo actual
+                tipo_empresa = datos.get("tipo_empresa", "CLIENTE_SAAS")
+            elif session_state.role == "gestor":
+                # Gestores solo pueden crear CLIENTE_GESTOR
+                tipo_empresa = "CLIENTE_GESTOR"
+            else:
+                tipo_empresa = "CLIENTE_SAAS"
         # Código CNAE
         if cnae_dict:
             cnae_actual = datos.get("codigo_cnae") or ""
@@ -908,10 +983,10 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                     voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
                     rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
                     st.session_state[cuentas_key] if not solo_datos_basicos else [],
-                    provincia_sel, localidad_sel, 
-                    empresas_service, session_state, es_creacion, solo_datos_basicos
+                    provincia_sel if provincia_sel else None, localidad_sel if localidad_sel else None, 
+                    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos
                 )
-        
+            
         if eliminar:
             if st.session_state.get("confirmar_eliminar"):
                 try:
@@ -942,8 +1017,8 @@ def procesar_guardado_empresa(
     representacion_legal_trabajadores, plantilla_media_anterior, es_pyme,
     voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
     rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
-    cuentas_cotizacion, provincia_sel, localidad_sel,
-    empresas_service, session_state, es_creacion, solo_datos_basicos=False
+    cuentas_cotizacion, provincia_sel, localidad_sel, 
+    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos=False
 ):
     """Procesa creación/actualización de empresa con jerarquía, cuentas y CRM."""
     try:
@@ -984,12 +1059,15 @@ def procesar_guardado_empresa(
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
             "updated_at": datetime.utcnow().isoformat(),
-            # Guardar tanto IDs como nombres de provincia/localidad
             "provincia_id": provincia_id,
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
             "ciudad": localidad_sel if localidad_sel else None,
         }
+
+        # AGREGAR tipo_empresa solo en creación si es admin
+        if es_creacion and session_state.role == "admin":
+            datos_empresa["tipo_empresa"] = tipo_empresa
 
         if es_creacion:
             ok, empresa_id = empresas_service.crear_empresa_con_jerarquia(datos_empresa)
@@ -1009,7 +1087,8 @@ def procesar_guardado_empresa(
                         "crm_fin": crm_fin,
                         "created_at": datetime.utcnow().isoformat()
                     }).execute()
-        # 🔄 Limpiar session_state tras creación
+
+                # Limpiar session_state tras creación
                 st.session_state.pop("cuentas_empresa_nueva", None)
                 st.session_state.pop("prov_select_empresa_nueva", None)
                 st.session_state.pop("loc_select_empresa_nueva", None)
@@ -1047,7 +1126,7 @@ def procesar_guardado_empresa(
                     if existing.data:
                         crm_table.update({"crm_activo": False, "updated_at": datetime.utcnow().isoformat()}).eq("empresa_id", datos["id"]).execute()
                         
-                # 🔄 Limpiar session_state tras creación
+                # Limpiar session_state tras actualización
                 st.session_state.pop("cuentas_empresa_nueva", None)
                 st.session_state.pop("prov_select_empresa_nueva", None)
                 st.session_state.pop("loc_select_empresa_nueva", None)
@@ -1116,6 +1195,8 @@ def main(supabase, session_state):
             df_empresas = empresas_service.get_empresas_con_jerarquia()
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state)
             if empresa_sel is not None:
+                mostrar_acciones_empresa(empresa_sel, empresas_service, session_state)
+                st.divider()
                 # 🔄 Limpiar session_state para evitar arrastrar cuentas/CRM de otra empresa
                 st.session_state.pop(f"cuentas_empresa_{empresa_sel['id']}", None)
                 st.session_state.pop(f"crm_empresa_{empresa_sel['id']}", None)
@@ -1138,6 +1219,8 @@ def main(supabase, session_state):
             df_empresas = df_empresas[df_empresas["id"] != session_state.user.get("empresa_id")]  # excluir su propia empresa
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state, "👥 Mis Clientes")
             if empresa_sel is not None:
+                mostrar_acciones_empresa(empresa_sel, empresas_service, session_state)
+                st.divider()
                 # 🔄 Limpiar session_state para evitar arrastrar cuentas/CRM de otra empresa
                 st.session_state.pop(f"cuentas_empresa_{empresa_sel['id']}", None)
                 st.session_state.pop(f"crm_empresa_{empresa_sel['id']}", None)
