@@ -695,8 +695,71 @@ def route():
             if st.sidebar.button(label, key=f"formacion_{page_key}_{rol}"):
                 st.session_state.page = page_key
 
-    # Resto de módulos (ISO, RGPD, CRM, etc.) - mantener lógica existente
-    # ... (código de módulos sin cambios)
+    # Resto de módulos (ISO, RGPD, CRM, etc.) - CÓDIGO COMPLETO RESTAURADO
+    
+    # --- Módulo ISO ---
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📋 Gestión ISO 9001")
+        iso_menu = {
+            "No Conformidades": "no_conformidades",
+            "Acciones Correctivas": "acciones_correctivas",
+            "Auditorías": "auditorias",
+            "Indicadores": "indicadores",
+            "Dashboard Calidad": "dashboard_calidad",
+            "Objetivos de Calidad": "objetivos_calidad",
+            "Informe Auditoría": "informe_auditoria"
+        }
+        for label, page_key in iso_menu.items():
+            if st.sidebar.button(label, key=f"iso_{page_key}_{rol}"):
+                st.session_state.page = page_key
+
+    # --- Módulo RGPD ---
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 🛡️ Gestión RGPD")
+        rgpd_menu = {
+            "Panel RGPD": "rgpd_panel",
+            "Tareas RGPD": "rgpd_planner",
+            "Diagnóstico Inicial": "rgpd_inicio",
+            "Tratamientos": "rgpd_tratamientos",
+            "Cláusulas y Consentimientos": "rgpd_consentimientos",
+            "Encargados del Tratamiento": "rgpd_encargados",
+            "Derechos de los Interesados": "rgpd_derechos",
+            "Evaluación de Impacto": "rgpd_evaluacion",
+            "Medidas de Seguridad": "rgpd_medidas",
+            "Incidencias": "rgpd_incidencias"
+        }
+        for label, page_key in rgpd_menu.items():
+            if st.sidebar.button(label, key=f"rgpd_{page_key}_{rol}"):
+                st.session_state.page = page_key
+
+    # --- Módulo CRM ---
+    if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📈 Gestión CRM")
+        crm_menu = {
+            "Panel CRM": "crm_panel",
+            "Clientes": "crm_clientes",
+            "Oportunidades": "crm_oportunidades",
+            "Tareas y Seguimiento": "crm_tareas",
+            "Comunicaciones": "crm_comunicaciones",
+            "Estadísticas": "crm_estadisticas"
+        }
+        for label, page_key in crm_menu.items():
+            if st.sidebar.button(label, key=f"crm_{page_key}_{rol}"):
+                st.session_state.page = page_key
+
+    # --- Módulo Documentación Avanzada ---
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### 📁 Documentación Avanzada")
+        docu_menu = {
+            "Gestión Documental": "documentacion_avanzada"
+        }
+        for label, page_key in docu_menu.items():
+            if st.sidebar.button(label, key=f"docu_{page_key}_{rol}"):
+                st.session_state.page = page_key
 
     # Footer dinámico
     ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
