@@ -28,11 +28,11 @@ class ParticipantesService:
     # =========================
     @st.cache_data(ttl=300)
     def get_participantes_completos(_self) -> pd.DataFrame:
-        """Obtiene participantes con información de grupo y empresa."""
+        """CORREGIDO: Obtiene participantes con información de grupo y empresa."""
         try:
             query = _self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
-                fecha_nacimiento, sexo, created_at, updated_at,
+                fecha_nacimiento, sexo, created_at, updated_at, grupo_id, empresa_id,
                 grupo:grupos!fk_participante_grupo (id, codigo_grupo),
                 empresa:empresas!fk_participante_empresa (id, nombre, cif)
             """)
@@ -41,31 +41,31 @@ class ParticipantesService:
             res = query.order("created_at", desc=True).execute()
             df = pd.DataFrame(res.data or [])
 
-            # Aplanar relaciones
+            # CORRECCIÓN: Aplanar relaciones usando los nombres correctos
             if not df.empty:
-                # Relación con grupos
-                if "grupos" in df.columns:
-                    df["grupo_codigo"] = df["grupos"].apply(
+                # Relación con grupos (ya era correcta)
+                if "grupo" in df.columns:  # ✅ Correcto: es 'grupo' singular
+                    df["grupo_codigo"] = df["grupo"].apply(
                         lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
                     )
-                    df["grupo_id"] = df["grupos"].apply(
-                        lambda x: x.get("id") if isinstance(x, dict) else None
-                    )
+                    # grupo_id ya viene como columna directa
                 else:
                     df["grupo_codigo"] = ""
-                    df["grupo_id"] = None
 
-                # Relación con empresas
-                if "empresas" in df.columns:
-                    df["empresa_nombre"] = df["empresas"].apply(
+                # CORRECCIÓN: Relación con empresas - usar 'empresa' singular
+                if "empresa" in df.columns:  # ✅ CORREGIDO: era 'empresas' -> 'empresa'
+                    df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
-                    df["empresa_id"] = df["empresas"].apply(
-                        lambda x: x.get("id") if isinstance(x, dict) else None
-                    )
+                    # empresa_id ya viene como columna directa, no necesita procesamiento
                 else:
                     df["empresa_nombre"] = ""
+
+                # Verificar que las columnas necesarias existen
+                if "empresa_id" not in df.columns:
                     df["empresa_id"] = None
+                if "grupo_id" not in df.columns:
+                    df["grupo_id"] = None
 
             return df
         except Exception as e:
