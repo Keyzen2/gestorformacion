@@ -89,36 +89,52 @@ class AuthService:
         Crea un usuario en Auth + tabla, con validaciones y rollback.
         Retorna (ok, id_tabla).
         """
+        st.write("🔍 **DEBUG AuthService - Inicio de crear_usuario_con_auth**")
+        st.write(f"📋 Tabla destino: {tabla}")
+        st.write(f"📄 Datos recibidos: {datos}")
+        
         # Validar datos
         error = self._validar_datos_base(datos, tabla)
         if error:
-            st.error(f"⚠️ {error}")
+            st.error(f"❌ Validación falló: {error}")
             return False, None
 
+        st.write("✅ Validación inicial pasada")
+        
         email = datos["email"]
         if not password:
             password = self._generar_password_segura()
+            st.write(f"🔑 Contraseña auto-generada (longitud: {len(password)})")
 
         auth_id = None
         try:
+            st.write("🚀 **PASO 1: Creando usuario en Supabase Auth**")
+            
             # 1. Crear en Auth
-            auth_res = self.supabase.auth.admin.create_user(
-                {
-                    "email": email,
-                    "password": password,
-                    "email_confirm": True,
-                    "user_metadata": self._preparar_metadata(datos, tabla),
-                }
-            )
-
+            auth_payload = {
+                "email": email,
+                "password": password,
+                "email_confirm": True,
+                "user_metadata": self._preparar_metadata(datos, tabla),
+            }
+            st.write(f"📤 Payload para Auth: {auth_payload}")
+            
+            auth_res = self.supabase.auth.admin.create_user(auth_payload)
+            
             if not getattr(auth_res, "user", None):
+                st.error("❌ auth_res.user es None")
                 raise Exception("No se pudo crear el usuario en Auth.")
 
             auth_id = str(auth_res.user.id)
+            st.write(f"✅ Usuario creado en Auth con ID: {auth_id}")
 
+            st.write("🚀 **PASO 2: Insertando en tabla de BD**")
+            
             # 2. Insertar en tabla CON CAMPOS CORRECTOS SEGÚN SCHEMA
             datos_finales = datos.copy()
             schema = self._get_schema_fields(tabla)
+            
+            st.write(f"📋 Schema detectado para {tabla}: {schema}")
             
             # Añadir campos según el schema de cada tabla
             datos_finales["auth_id"] = auth_id
@@ -129,23 +145,37 @@ class AuthService:
             if schema["updated_at"]:
                 datos_finales["updated_at"] = datetime.utcnow().isoformat()
 
+            st.write(f"📤 Datos finales para insertar en {tabla}: {datos_finales}")
+            
             res = self.supabase.table(tabla).insert(datos_finales).execute()
-
+            
+            st.write(f"📥 Respuesta de INSERT: {res}")
+            st.write(f"📄 res.data: {res.data}")
+            
             if res.data and len(res.data) > 0:
+                registro_id = res.data[0]["id"]
+                st.write(f"✅ Usuario insertado correctamente con ID: {registro_id}")
+                
                 if password != datos.get("password"):
                     st.info(f"🔑 Contraseña generada automáticamente: {password}")
-                return True, res.data[0]["id"]
+                return True, registro_id
 
+            st.error(f"❌ INSERT falló - res.data vacío: {res.data}")
             raise Exception(f"No se insertaron datos en la tabla {tabla}.")
 
         except Exception as e:
+            st.error(f"🚨 **EXCEPCIÓN en crear_usuario_con_auth:** {str(e)}")
+            st.write(f"🔍 Tipo de excepción: {type(e).__name__}")
+            
             # Rollback completo
             if auth_id:
                 try:
+                    st.write(f"🔄 Intentando rollback de Auth ID: {auth_id}")
                     self.supabase.auth.admin.delete_user(auth_id)
+                    st.write("✅ Rollback de Auth completado")
                 except Exception as rb:
                     st.warning(f"⚠️ Error en rollback de Auth: {rb}")
-            st.error(f"❌ Error creando usuario: {e}")
+            
             return False, None
 
     # =========================
