@@ -785,8 +785,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 submitted = st.form_submit_button(
                     "➕ Crear Grupo", 
                     type="primary", 
-                    use_container_width=True,
-                    disabled=len(errores) > 0
+                    use_container_width=True
                 )
             with col2:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
