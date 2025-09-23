@@ -730,8 +730,12 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
         # Código CNAE
         if cnae_dict:
             cnae_actual = datos.get("codigo_cnae") or ""
-            cnae_display = next((f"{k} - {v}" for k, v in cnae_dict.items() if k == cnae_actual), "")
-            opciones_cnae = [f"{k} - {v}" for k, v in cnae_dict.items()]
+            # Buscar la entrada completa que comience con el código actual
+            cnae_display = ""
+            if cnae_actual:
+                cnae_display = next((k for k in cnae_dict.keys() if k.startswith(cnae_actual)), "")
+            
+            opciones_cnae = list(cnae_dict.keys())
             cnae_idx = opciones_cnae.index(cnae_display) + 1 if cnae_display in opciones_cnae else 0
             codigo_cnae_sel = st.selectbox(
                 "🔢 Código CNAE",
@@ -1009,6 +1013,22 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
 # ==================================================
 # GUARDADO DE EMPRESA Y CUENTAS
 # ==================================================
+def limpiar_session_state_empresa(form_id):
+    """Limpia session_state específico del formulario de empresa."""
+    keys_to_remove = []
+    
+    # Buscar todas las claves relacionadas con este formulario
+    for key in st.session_state.keys():
+        if form_id in key or key.startswith("cuentas_"):
+            keys_to_remove.append(key)
+    
+    # Remover las claves encontradas
+    for key in keys_to_remove:
+        try:
+            del st.session_state[key]
+        except KeyError:
+            pass
+
 def procesar_guardado_empresa(
     datos, nombre, cif, sector, convenio_referencia, codigo_cnae,
     calle, numero, codigo_postal, provincia_id, localidad_id, telefono,
@@ -1088,10 +1108,9 @@ def procesar_guardado_empresa(
                         "created_at": datetime.utcnow().isoformat()
                     }).execute()
 
-                # Limpiar session_state tras creación
-                st.session_state.pop("cuentas_empresa_nueva", None)
-                st.session_state.pop("prov_select_empresa_nueva", None)
-                st.session_state.pop("loc_select_empresa_nueva", None)
+                # Limpiar session_state tras creación (CORREGIDO)
+                form_id_base = f"empresa_nueva_crear"
+                limpiar_session_state_empresa(form_id_base)
                 
                 st.rerun()
 
@@ -1126,10 +1145,9 @@ def procesar_guardado_empresa(
                     if existing.data:
                         crm_table.update({"crm_activo": False, "updated_at": datetime.utcnow().isoformat()}).eq("empresa_id", datos["id"]).execute()
                         
-                # Limpiar session_state tras actualización
-                st.session_state.pop("cuentas_empresa_nueva", None)
-                st.session_state.pop("prov_select_empresa_nueva", None)
-                st.session_state.pop("loc_select_empresa_nueva", None)
+                # Limpiar session_state tras actualización (CORREGIDO)
+                form_id_edicion = f"empresa_{datos['id']}_editar"
+                limpiar_session_state_empresa(form_id_edicion)
                 
                 st.rerun()
 
