@@ -22,26 +22,53 @@ st.set_page_config(
 # HELPERS CACHEADOS
 # =========================
 @st.cache_data(ttl=300)
+@st.cache_data(ttl=300)
 def cargar_empresas_disponibles(_empresas_service, _session_state):
-    """Devuelve las empresas disponibles según rol."""
+    """CORREGIDO: Devuelve las empresas disponibles según rol usando el nuevo sistema de jerarquía."""
     try:
-        df = _empresas_service.get_empresas_con_jerarquia()
+        # Usar el método corregido que respeta la jerarquía
+        if hasattr(_empresas_service, 'get_empresas_con_jerarquia'):
+            df = _empresas_service.get_empresas_con_jerarquia()
+        else:
+            # Fallback si no existe el método nuevo
+            df = _empresas_service.get_empresas()
+        
         if df.empty:
             return df
 
-        if _session_state.role == "gestor":
+        # Filtrado según rol
+        if _session_state.role == "admin":
+            # Admin ve todas las empresas
+            return df
+            
+        elif _session_state.role == "gestor":
             empresa_id = _session_state.user.get("empresa_id")
-            # Solo su propia empresa y las que dependen de ella
-            df = df[(df["id"] == empresa_id) | (df["empresa_matriz_id"] == empresa_id)]
-
-        return df
+            if not empresa_id:
+                return pd.DataFrame()
+            
+            # CORRECCIÓN: Para gestores, filtrar usando la lógica de jerarquía correcta
+            # Incluir: su empresa + empresas que tienen como matriz
+            df_filtrado = df[
+                (df["id"] == empresa_id) |  # Su propia empresa
+                (df["empresa_matriz_id"] == empresa_id)  # Sus clientes
+            ]
+            return df_filtrado
+        else:
+            # Otros roles no ven empresas
+            return pd.DataFrame()
+            
     except Exception as e:
         st.error(f"❌ Error cargando empresas disponibles: {e}")
+        # Debug mejorado
+        st.write(f"Debug - Role: {_session_state.role}")
+        if hasattr(_session_state, 'user'):
+            st.write(f"Debug - User: {_session_state.user}")
+        st.write(f"Debug - Error details: {str(e)}")
         return pd.DataFrame()
 
 @st.cache_data(ttl=300)
 def cargar_grupos(_grupos_service, _session_state):
-    """Carga grupos disponibles según permisos."""
+    """CORREGIDO: Carga grupos disponibles según permisos con mejor manejo de errores."""
     try:
         df_grupos = _grupos_service.get_grupos_completos()
         
@@ -50,31 +77,57 @@ def cargar_grupos(_grupos_service, _session_state):
             
         if _session_state.role == "admin":
             return df_grupos
+            
         elif _session_state.role == "gestor":
             empresa_id = _session_state.user.get("empresa_id")
             if not empresa_id:
                 return pd.DataFrame()
                 
-            # CORRECCIÓN: Verificar qué campo existe para empresa_id
-            if "empresa_id" in df_grupos.columns:
-                # Si existe el campo directo
-                return df_grupos[df_grupos["empresa_id"] == empresa_id]
-            elif "empresa" in df_grupos.columns:
-                # Si viene como relación anidada, extraer el ID
-                df_grupos["empresa_id_extraido"] = df_grupos["empresa"].apply(
-                    lambda x: x.get("id") if isinstance(x, dict) else None
-                )
-                return df_grupos[df_grupos["empresa_id_extraido"] == empresa_id]
-            else:
-                # Debug: mostrar qué columnas existen
-                st.error(f"Debug - Columnas disponibles en grupos: {df_grupos.columns.tolist()}")
+            # CORRECCIÓN: Manejo robusto de diferentes formatos de datos
+            try:
+                # Opción 1: Si empresa_id existe como columna directa
+                if "empresa_id" in df_grupos.columns:
+                    return df_grupos[df_grupos["empresa_id"] == empresa_id]
+                    
+                # Opción 2: Si viene como relación empresa.id
+                elif "empresa" in df_grupos.columns:
+                    def extraer_empresa_id(empresa_data):
+                        if pd.isna(empresa_data):
+                            return None
+                        if isinstance(empresa_data, dict):
+                            return empresa_data.get("id")
+                        return None
+                    
+                    df_grupos["empresa_id_extraido"] = df_grupos["empresa"].apply(extraer_empresa_id)
+                    return df_grupos[df_grupos["empresa_id_extraido"] == empresa_id]
+                    
+                # Opción 3: Buscar en empresas_grupos (relación N:N)
+                else:
+                    # Obtener grupos donde la empresa participa
+                    try:
+                        empresas_grupos = _grupos_service.supabase.table("empresas_grupos").select("grupo_id").eq("empresa_id", empresa_id).execute()
+                        grupo_ids = [eg["grupo_id"] for eg in (empresas_grupos.data or [])]
+                        
+                        if grupo_ids:
+                            return df_grupos[df_grupos["id"].isin(grupo_ids)]
+                        else:
+                            return pd.DataFrame()
+                    except:
+                        return pd.DataFrame()
+                        
+            except Exception as inner_e:
+                st.error(f"Error procesando grupos: {inner_e}")
                 return pd.DataFrame()
                 
         return pd.DataFrame()
+        
     except Exception as e:
         st.error(f"❌ Error cargando grupos: {e}")
-        # Debug adicional
-        st.write("Error details:", str(e))
+        # Debug adicional mejorado
+        st.write(f"Debug - Role: {_session_state.role}")
+        if hasattr(_session_state, 'user'):
+            st.write(f"Debug - User empresa_id: {_session_state.user.get('empresa_id')}")
+        st.write(f"Debug - Error: {str(e)}")
         return pd.DataFrame()
 
 # =========================
@@ -312,59 +365,133 @@ def mostrar_formulario_participante(
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
 
         # =========================
-        # EMPRESA Y GRUPO (INTEGRADO)
+        # EMPRESA Y GRUPO (INTEGRADO Y CORREGIDO)
         # =========================
         st.markdown("### 🏢 Empresa y Formación")
         col1, col2 = st.columns(2)
         
         with col1:
-            # Empresa
-            empresa_actual_id = datos.get("empresa_id")
-            empresa_actual_nombre = next((k for k, v in empresa_options.items() if v == empresa_actual_id), "")
-        
-            empresa_sel = st.selectbox(
-                "🏢 Empresa",
-                options=[""] + list(empresa_options.keys()),
-                index=list(empresa_options.keys()).index(empresa_actual_nombre) + 1 if empresa_actual_nombre else 0,
-                key=f"{form_id}_empresa",
-                help="Empresa a la que pertenece el participante"
-            )
-            empresa_id = empresa_options.get(empresa_sel) if empresa_sel else None
+            # Empresa - Manejo robusto de opciones
+            try:
+                empresa_actual_id = datos.get("empresa_id")
+                empresa_actual_nombre = ""
+                
+                # Buscar nombre actual de forma segura
+                if empresa_actual_id and empresa_options:
+                    empresa_actual_nombre = next(
+                        (k for k, v in empresa_options.items() if v == empresa_actual_id), 
+                        ""
+                    )
+            
+                empresa_sel = st.selectbox(
+                    "🏢 Empresa",
+                    options=[""] + list(empresa_options.keys()) if empresa_options else ["Sin empresas disponibles"],
+                    index=list(empresa_options.keys()).index(empresa_actual_nombre) + 1 if empresa_actual_nombre and empresa_actual_nombre in empresa_options else 0,
+                    key=f"{form_id}_empresa",
+                    help="Empresa a la que pertenece el participante",
+                    disabled=not empresa_options  # Deshabilitar si no hay opciones
+                )
+                
+                # Obtener empresa_id de forma segura
+                if empresa_sel and empresa_sel != "Sin empresas disponibles":
+                    empresa_id = empresa_options.get(empresa_sel)
+                else:
+                    empresa_id = None
+                    if not empresa_options:
+                        st.warning("⚠️ No hay empresas disponibles para tu rol")
+                        
+            except Exception as e:
+                st.error(f"❌ Error cargando empresas: {e}")
+                empresa_id = None
         
         with col2:
-            # Grupo (filtrado por empresa)
-            if empresa_id:
-                # CORRECCIÓN: Filtrar grupos por empresa usando el campo correcto
-                grupos_empresa = {}
-                for k, v in grupos_completos.items():
-                    for _, row in df_grupos.iterrows():
-                        if row["id"] == v:
-                            # Verificar empresa_id según el formato de datos
-                            if "empresa_id" in row and row["empresa_id"] == empresa_id:
-                                grupos_empresa[k] = v
-                                break
-                            elif "empresa" in row and isinstance(row["empresa"], dict):
-                                if row["empresa"].get("id") == empresa_id:
-                                    grupos_empresa[k] = v
-                                    break
-        
-                grupo_actual_id = datos.get("grupo_id")
-                grupo_actual_nombre = next((k for k, v in grupos_empresa.items() if v == grupo_actual_id), "")
-        
-                grupo_sel = st.selectbox(
-                    "🎓 Grupo de Formación",
-                    options=[""] + list(grupos_empresa.keys()),
-                    index=list(grupos_empresa.keys()).index(grupo_actual_nombre) + 1 if grupo_actual_nombre else 0,
-                    key=f"{form_id}_grupo",
-                    help="Grupo de formación (opcional)"
-                )
-                grupo_id = grupos_empresa.get(grupo_sel) if grupo_sel else None
-            else:
+            # Grupo (filtrado por empresa) - CORREGIDO
+            try:
+                if empresa_id and grupos_completos:
+                    # NUEVA LÓGICA: Filtrar grupos por empresa de forma más robusta
+                    grupos_empresa = {}
+                    
+                    for grupo_nombre, grupo_id_val in grupos_completos.items():
+                        # Buscar el grupo en el DataFrame original
+                        grupo_row = df_grupos[df_grupos["id"] == grupo_id_val]
+                        
+                        if not grupo_row.empty:
+                            grupo_data = grupo_row.iloc[0]
+                            grupo_empresa_id = None
+                            
+                            # Extraer empresa_id de diferentes formatos posibles
+                            if "empresa_id" in grupo_data and pd.notna(grupo_data["empresa_id"]):
+                                grupo_empresa_id = grupo_data["empresa_id"]
+                            elif "empresa" in grupo_data and isinstance(grupo_data["empresa"], dict):
+                                grupo_empresa_id = grupo_data["empresa"].get("id")
+                            elif "empresa" in grupo_data and pd.notna(grupo_data["empresa"]):
+                                # Caso de empresa como string o ID directo
+                                try:
+                                    grupo_empresa_id = str(grupo_data["empresa"])
+                                except:
+                                    pass
+                            
+                            # También verificar en empresas_grupos (relación N:N)
+                            if not grupo_empresa_id:
+                                try:
+                                    empresas_grupo_check = grupos_service.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id_val).execute()
+                                    if empresas_grupo_check.data:
+                                        grupo_empresas_ids = [eg["empresa_id"] for eg in empresas_grupo_check.data]
+                                        if empresa_id in grupo_empresas_ids:
+                                            grupos_empresa[grupo_nombre] = grupo_id_val
+                                except:
+                                    pass
+                            elif str(grupo_empresa_id) == str(empresa_id):
+                                grupos_empresa[grupo_nombre] = grupo_id_val
+                    
+                    # Mostrar selector de grupo
+                    if grupos_empresa:
+                        grupo_actual_id = datos.get("grupo_id")
+                        grupo_actual_nombre = next((k for k, v in grupos_empresa.items() if v == grupo_actual_id), "")
+                
+                        grupo_sel = st.selectbox(
+                            "🎓 Grupo de Formación",
+                            options=[""] + list(grupos_empresa.keys()),
+                            index=list(grupos_empresa.keys()).index(grupo_actual_nombre) + 1 if grupo_actual_nombre else 0,
+                            key=f"{form_id}_grupo",
+                            help="Grupo de formación (opcional)"
+                        )
+                        grupo_id = grupos_empresa.get(grupo_sel) if grupo_sel else None
+                    else:
+                        st.selectbox(
+                            "🎓 Grupo de Formación",
+                            options=["No hay grupos disponibles para esta empresa"],
+                            disabled=True,
+                            key=f"{form_id}_grupo_no_disponible"
+                        )
+                        grupo_id = None
+                        
+                elif empresa_id:
+                    # Tiene empresa pero no hay grupos cargados
+                    st.selectbox(
+                        "🎓 Grupo de Formación", 
+                        options=["Cargando grupos..."],
+                        disabled=True,
+                        key=f"{form_id}_grupo_cargando"
+                    )
+                    grupo_id = None
+                else:
+                    # No tiene empresa seleccionada
+                    st.selectbox(
+                        "🎓 Grupo de Formación",
+                        options=["Seleccione empresa primero"],
+                        disabled=True,
+                        key=f"{form_id}_grupo_disabled"
+                    )
+                    grupo_id = None
+                    
+            except Exception as e:
+                st.error(f"❌ Error procesando grupos: {e}")
                 st.selectbox(
                     "🎓 Grupo de Formación",
-                    options=["Seleccione empresa primero"],
+                    options=["Error cargando grupos"],
                     disabled=True,
-                    key=f"{form_id}_grupo_disabled"
+                    key=f"{form_id}_grupo_error"
                 )
                 grupo_id = None
         
