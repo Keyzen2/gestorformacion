@@ -25,36 +25,18 @@ st.set_page_config(
 def cargar_empresas_disponibles(_empresas_service, _session_state):
     """CORREGIDO: Devuelve las empresas disponibles según rol usando el nuevo sistema de jerarquía."""
     try:
-        # Usar el método corregido que respeta la jerarquía
-        if hasattr(_empresas_service, 'get_empresas_con_jerarquia'):
-            df = _empresas_service.get_empresas_con_jerarquia()
-        else:
-            # Fallback si no existe el método nuevo
-            df = _empresas_service.get_empresas()
+        # Tu EmpresasService ya tiene implementado get_empresas_con_jerarquia() correctamente
+        df = _empresas_service.get_empresas_con_jerarquia()
         
         if df.empty:
             return df
 
-        # Filtrado según rol
-        if _session_state.role == "admin":
-            # Admin ve todas las empresas
-            return df
-            
-        elif _session_state.role == "gestor":
-            empresa_id = _session_state.user.get("empresa_id")
-            if not empresa_id:
-                return pd.DataFrame()
-            
-            # CORRECCIÓN: Para gestores, filtrar usando la lógica de jerarquía correcta
-            # Incluir: su empresa + empresas que tienen como matriz
-            df_filtrado = df[
-                (df["id"] == empresa_id) |  # Su propia empresa
-                (df["empresa_matriz_id"] == empresa_id)  # Sus clientes
-            ]
-            return df_filtrado
-        else:
-            # Otros roles no ven empresas
-            return pd.DataFrame()
+        # El método get_empresas_con_jerarquia() ya maneja el filtrado por rol internamente
+        # Para gestor: devuelve su empresa + sus clientes
+        # Para admin: devuelve todas las empresas
+        # No necesitamos filtrado adicional aquí
+        
+        return df
             
     except Exception as e:
         st.error(f"❌ Error cargando empresas disponibles: {e}")
@@ -67,66 +49,59 @@ def cargar_empresas_disponibles(_empresas_service, _session_state):
 
 @st.cache_data(ttl=300)
 def cargar_grupos(_grupos_service, _session_state):
-    """CORREGIDO: Carga grupos disponibles según permisos con mejor manejo de errores."""
+    """CORREGIDO: Carga grupos disponibles según permisos, simplificado."""
     try:
+        # Usar el método que existe en grupos_service
         df_grupos = _grupos_service.get_grupos_completos()
         
         if df_grupos.empty:
             return df_grupos
             
+        # Para admin: devolver todos los grupos
         if _session_state.role == "admin":
             return df_grupos
             
+        # Para gestor: filtrar por empresa usando empresas_grupos (relación N:N)
         elif _session_state.role == "gestor":
             empresa_id = _session_state.user.get("empresa_id")
             if not empresa_id:
                 return pd.DataFrame()
                 
-            # CORRECCIÓN: Manejo robusto de diferentes formatos de datos
             try:
-                # Opción 1: Si empresa_id existe como columna directa
-                if "empresa_id" in df_grupos.columns:
-                    return df_grupos[df_grupos["empresa_id"] == empresa_id]
-                    
-                # Opción 2: Si viene como relación empresa.id
-                elif "empresa" in df_grupos.columns:
-                    def extraer_empresa_id(empresa_data):
-                        if pd.isna(empresa_data):
-                            return None
-                        if isinstance(empresa_data, dict):
-                            return empresa_data.get("id")
-                        return None
-                    
-                    df_grupos["empresa_id_extraido"] = df_grupos["empresa"].apply(extraer_empresa_id)
-                    return df_grupos[df_grupos["empresa_id_extraido"] == empresa_id]
-                    
-                # Opción 3: Buscar en empresas_grupos (relación N:N)
+                # Obtener todos los grupos donde participa la empresa del gestor
+                # O cualquiera de sus empresas clientes
+                
+                # 1. Obtener empresas gestionables (su empresa + clientes)
+                empresas_gestionables = [empresa_id]
+                
+                # Añadir empresas clientes
+                clientes_res = _grupos_service.supabase.table("empresas").select("id").eq(
+                    "empresa_matriz_id", empresa_id
+                ).execute()
+                
+                if clientes_res.data:
+                    empresas_gestionables.extend([c["id"] for c in clientes_res.data])
+                
+                # 2. Obtener grupos de estas empresas
+                empresas_grupos = _grupos_service.supabase.table("empresas_grupos").select(
+                    "grupo_id"
+                ).in_("empresa_id", empresas_gestionables).execute()
+                
+                grupo_ids = [eg["grupo_id"] for eg in (empresas_grupos.data or [])]
+                
+                if grupo_ids:
+                    return df_grupos[df_grupos["id"].isin(grupo_ids)]
                 else:
-                    # Obtener grupos donde la empresa participa
-                    try:
-                        empresas_grupos = _grupos_service.supabase.table("empresas_grupos").select("grupo_id").eq("empresa_id", empresa_id).execute()
-                        grupo_ids = [eg["grupo_id"] for eg in (empresas_grupos.data or [])]
-                        
-                        if grupo_ids:
-                            return df_grupos[df_grupos["id"].isin(grupo_ids)]
-                        else:
-                            return pd.DataFrame()
-                    except:
-                        return pd.DataFrame()
-                        
-            except Exception as inner_e:
-                st.error(f"Error procesando grupos: {inner_e}")
+                    return pd.DataFrame()
+                    
+            except Exception as e:
+                st.error(f"Error filtrando grupos para gestor: {e}")
                 return pd.DataFrame()
                 
         return pd.DataFrame()
         
     except Exception as e:
         st.error(f"❌ Error cargando grupos: {e}")
-        # Debug adicional mejorado
-        st.write(f"Debug - Role: {_session_state.role}")
-        if hasattr(_session_state, 'user'):
-            st.write(f"Debug - User empresa_id: {_session_state.user.get('empresa_id')}")
-        st.write(f"Debug - Error: {str(e)}")
         return pd.DataFrame()
 
 # =========================
