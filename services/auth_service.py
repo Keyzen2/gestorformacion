@@ -61,6 +61,24 @@ class AuthService:
             }
         return {}
 
+    def _get_schema_fields(self, tabla: str) -> Dict[str, bool]:
+        """Define qué campos existen en cada tabla."""
+        schemas = {
+            "usuarios": {
+                "created_at": True,
+                "updated_at": False  # ❌ usuarios NO tiene updated_at
+            },
+            "participantes": {
+                "created_at": True,
+                "updated_at": True   # ✅ participantes SÍ tiene updated_at
+            },
+            "tutores": {
+                "created_at": True,
+                "updated_at": True   # ✅ tutores SÍ tiene updated_at  
+            }
+        }
+        return schemas.get(tabla, {"created_at": True, "updated_at": True})
+
     # =========================
     # CREAR USUARIO
     # =========================
@@ -98,15 +116,18 @@ class AuthService:
 
             auth_id = str(auth_res.user.id)
 
-            # 2. Insertar en tabla
+            # 2. Insertar en tabla CON CAMPOS CORRECTOS SEGÚN SCHEMA
             datos_finales = datos.copy()
-            datos_finales.update(
-                {
-                    "auth_id": auth_id,
-                    "created_at": datetime.utcnow().isoformat(),
-                    "updated_at": datetime.utcnow().isoformat(),
-                }
-            )
+            schema = self._get_schema_fields(tabla)
+            
+            # Añadir campos según el schema de cada tabla
+            datos_finales["auth_id"] = auth_id
+            
+            if schema["created_at"]:
+                datos_finales["created_at"] = datetime.utcnow().isoformat()
+                
+            if schema["updated_at"]:
+                datos_finales["updated_at"] = datetime.utcnow().isoformat()
 
             res = self.supabase.table(tabla).insert(datos_finales).execute()
 
@@ -134,7 +155,11 @@ class AuthService:
         self, tabla: str, registro_id: str, datos_editados: Dict[str, Any]
     ) -> bool:
         try:
-            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+            # CORREGIDO: Solo añadir updated_at si la tabla lo soporta
+            schema = self._get_schema_fields(tabla)
+            if schema["updated_at"]:
+                datos_editados["updated_at"] = datetime.utcnow().isoformat()
+                
             res = (
                 self.supabase.table(tabla)
                 .update(datos_editados)
