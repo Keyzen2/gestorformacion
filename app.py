@@ -365,20 +365,21 @@ def login_view():
     # Añadir clase CSS para ocultar header
     st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     
-    # Obtener configuración personalizable
+    # Obtener configuración personalizable - USAR SOLO CAMPOS EXISTENTES
     ajustes = get_ajustes_app(supabase_public, campos=[
-        "mensaje_login", "nombre_app", "logo_emoji", "color_principal"
+        "mensaje_login", "nombre_app", "logo_url", "color_primario"
     ])
     
     mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales")
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    logo_emoji = ajustes.get("logo_emoji", "🚀")
+    # Usar emoji por defecto si no hay logo_url
+    logo_display = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="80" height="80" style="border-radius: 20px;">'
     
     # Container principal
     st.markdown(f"""
     <div class="login-container fade-in-up">
         <div class="login-header">
-            <div class="login-logo">{logo_emoji}</div>
+            <div class="login-logo">{logo_display}</div>
             <h1 class="login-title">{nombre_app}</h1>
             <p class="login-subtitle">{mensaje_login}</p>
         </div>
