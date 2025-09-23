@@ -242,7 +242,68 @@ class EmpresasService:
         })
         
         return self.crear_empresa_con_jerarquia(datos_empresa)
+        
+    def convertir_a_gestora(self, empresa_id: str) -> bool:
+        """Convierte una empresa CLIENTE_SAAS a GESTORA."""
+        try:
+            if self.rol != "admin":
+                st.error("Solo administradores pueden cambiar tipos de empresa")
+                return False
+            
+            # Verificar que la empresa existe y es CLIENTE_SAAS
+            empresa = self.get_empresa_by_id(empresa_id)
+            if not empresa:
+                st.error("Empresa no encontrada")
+                return False
+            
+            if empresa["tipo_empresa"] != "CLIENTE_SAAS":
+                st.error("Solo se pueden convertir empresas CLIENTE_SAAS a GESTORA")
+                return False
+                
+            # No debe tener empresa matriz (no puede ser cliente de otra)
+            if empresa.get("empresa_matriz_id"):
+                st.error("No se puede convertir una empresa que tiene empresa matriz")
+                return False
+            
+            # Verificar que no tenga empresas cliente ya asignadas
+            clientes = self.get_empresas_clientes_gestor(empresa_id)
+            if not clientes.empty:
+                st.warning(f"Esta empresa ya tiene {len(clientes)} empresas cliente asignadas")
+            
+            # Actualizar a GESTORA
+            result = self.supabase.table("empresas").update({
+                "tipo_empresa": "GESTORA",
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", empresa_id).execute()
+            
+            if result.data:
+                # Limpiar caches
+                self.get_empresas_con_jerarquia.clear()
+                st.success("Empresa convertida a GESTORA correctamente")
+                return True
+            else:
+                st.error("Error al actualizar la empresa")
+                return False
+            
+        except Exception as e:
+            st.error(f"Error al convertir empresa: {e}")
+            return False
     
+    def puede_convertir_a_gestora(self, empresa_id: str) -> bool:
+        """Verifica si una empresa puede convertirse a GESTORA."""
+        try:
+            if self.rol != "admin":
+                return False
+                
+            empresa = self.get_empresa_by_id(empresa_id)
+            if not empresa:
+                return False
+                
+            # Solo CLIENTE_SAAS sin matriz pueden convertirse
+            return (empresa["tipo_empresa"] == "CLIENTE_SAAS" and 
+                    not empresa.get("empresa_matriz_id"))
+        except:
+            return False
     # =========================
     # MÉTODOS DE ACTUALIZACIÓN
     # =========================
