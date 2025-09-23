@@ -787,7 +787,11 @@ def main(supabase, session_state):
                 df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
 
             # Mostrar tabla (con filtros + paginación ya integrados)
-            seleccionado, df_paged = mostrar_tabla_participantes(df_participantes, session_state)
+            resultado = mostrar_tabla_participantes(df_participantes, session_state)
+            if resultado is not None and len(resultado) == 2:
+                seleccionado, df_paged = resultado
+            else:
+                seleccionado, df_paged = None, pd.DataFrame()
 
             # Exportación e importación en expanders organizados
             st.divider()
