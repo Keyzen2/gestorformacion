@@ -214,257 +214,94 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista 
 # FORMULARIO INTEGRADO CORREGIDO
 # =========================
 def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresas_dict, es_creacion=False):
-    """Formulario completamente integrado con reset correcto."""
+    """Formulario ultra-simplificado copiando el patrón de participantes.py"""
     
     if es_creacion:
-        st.subheader("➕ Crear Usuario del Sistema")
+        st.subheader("Crear Usuario del Sistema")
         datos = {}
-        # CLAVE: Generar ID único para resetear formulario
-        form_key = f"crear_usuario_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     else:
-        st.subheader(f"✏️ Editar Usuario: {usuario_data['nombre_completo']}")
+        st.subheader(f"Editar Usuario: {usuario_data['nombre_completo']}")
         datos = usuario_data.copy()
-        form_key = f"editar_usuario_{datos['id']}"
 
-    with st.form(form_key, clear_on_submit=True):  # IMPORTANTE: clear_on_submit=True
-        
-        # =========================
-        # INFORMACIÓN PERSONAL
-        # =========================
-        st.markdown("### 👤 Información Personal")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            email = st.text_input("Email", value=datos.get("email", ""))
-            nombre_completo = st.text_input("Nombre completo", value=datos.get("nombre_completo", ""))
-            telefono = st.text_input("Teléfono", value=datos.get("telefono", ""))
-        
-        with col2:
-            nif = st.text_input("Documento (DNI/NIE/CIF)", value=datos.get("nif", ""))
-            rol = st.selectbox("Rol", ["", "admin", "gestor", "comercial"], 
-                              index=["", "admin", "gestor", "comercial"].index(datos.get("rol", "")) if datos.get("rol") in ["", "admin", "gestor", "comercial"] else 0,
-                              help="Admin: acceso total, Gestor: empresa específica, Comercial: CRM")
+    # Form key simple y fijo
+    form_key = f"usuario_form_{es_creacion}"
 
-        # =========================
-        # EMPRESA (INTEGRADA)
-        # =========================
-        st.markdown("### 🏢 Asignación de Empresa")
-        col1, col2 = st.columns(2)
+    with st.form(form_key, clear_on_submit=es_creacion):
         
-        with col1:
-            # CORREGIDO: Reset de empresa en formulario de creación
-            if es_creacion and st.session_state.get("usuario_creado_exitosamente"):
-                # Resetear después de creación exitosa
-                empresa_sel = st.selectbox("🏢 Empresa", options=[""] + sorted(empresas_dict.keys()), 
-                                         index=0, help="Solo obligatorio para gestores y comerciales")
-                # Limpiar flag
-                del st.session_state["usuario_creado_exitosamente"]
-            else:
-                empresa_actual_nombre = datos.get("empresa_nombre", "")
-                empresa_opciones = [""] + sorted(empresas_dict.keys())
-                empresa_sel = st.selectbox(
-                    "🏢 Empresa",
-                    options=empresa_opciones,
-                    index=empresa_opciones.index(empresa_actual_nombre) if empresa_actual_nombre in empresa_opciones else 0,
-                    help="Solo obligatorio para gestores y comerciales"
-                )
-            
+        # Campos mínimos obligatorios
+        email = st.text_input("Email", value=datos.get("email", ""))
+        nombre_completo = st.text_input("Nombre completo", value=datos.get("nombre_completo", ""))
+        
+        # Rol
+        roles = ["", "admin", "gestor", "comercial"]
+        rol_index = roles.index(datos.get("rol", "")) if datos.get("rol") in roles else 0
+        rol = st.selectbox("Rol", roles, index=rol_index)
+        
+        # Empresa (solo si es necesaria)
+        empresa_id = None
+        if rol in ["gestor", "comercial"]:
+            empresa_opciones = [""] + list(empresas_dict.keys())
+            empresa_actual = datos.get("empresa_nombre", "")
+            empresa_index = empresa_opciones.index(empresa_actual) if empresa_actual in empresa_opciones else 0
+            empresa_sel = st.selectbox("Empresa", empresa_opciones, index=empresa_index)
             empresa_id = empresas_dict.get(empresa_sel) if empresa_sel else None
         
-        with col2:
-            # Estado de la asignación
-            if empresa_sel:
-                st.success(f"✅ **Empresa asignada:** {empresa_sel}")
-            else:
-                if rol in ["gestor", "comercial"]:
-                    st.warning("⚠️ **Empresa requerida** para este rol")
-                else:
-                    st.info("ℹ️ **Empresa no requerida** para administradores")
-
-        # Credenciales (solo en creación)
-        if es_creacion:
-            st.markdown("### 🔐 Credenciales de acceso")
-            password = st.text_input(
-                "Contraseña (opcional - se genera automáticamente si se deja vacío)", 
-                type="password",
-                help="Deja vacío para generar una contraseña automática segura"
-            )
-        else:
-            password = None
-            # Mostrar opción para resetear contraseña
-            st.markdown("### 🔐 Gestión de contraseña")
-            if st.checkbox("Generar nueva contraseña", help="Marca para generar nueva contraseña automática"):
-                st.info("Se generará una nueva contraseña al guardar los cambios")
-                password = "NUEVA_PASSWORD_AUTO"
-
-        # =========================
-        # VALIDACIONES
-        # =========================
-        datos_validar = {
-            "email": email,
-            "nombre_completo": nombre_completo,
-            "telefono": telefono,
-            "nif": nif,
-            "rol": rol,
-            "empresa_sel": empresa_sel
-        }
+        # Botón
+        submitted = st.form_submit_button(
+            "Crear Usuario" if es_creacion else "Actualizar Usuario",
+            type="primary"
+        )
         
-        errores = []
-        error_validacion = validar_datos_usuario(datos_validar, empresas_dict, es_creacion=es_creacion)
-        if error_validacion:
-            errores.append(error_validacion)
-        
-        if errores:
-            st.warning(f"⚠️ Campos pendientes: {', '.join(errores)}")
-            st.info("💡 Puedes intentar guardar - se validarán al procesar")
-
-        # =========================
-        # BOTONES
-        # =========================
-        st.markdown("---")
-        col1, col2 = st.columns(2)
-        with col1:
-            submitted = st.form_submit_button(
-                "➕ Crear Usuario" if es_creacion else "💾 Guardar Cambios",
-                type="primary",
-                use_container_width=True
-            )
-        with col2:
-            if not es_creacion:
-                eliminar = st.form_submit_button(
-                    "🗑️ Eliminar",
-                    type="secondary",
-                    use_container_width=True
-                )
-            else:
-                eliminar = False
-
-        # =========================
-        # PROCESAMIENTO CORREGIDO CON DEBUG
-        # =========================
         if submitted:
-            # DETENER EJECUCIÓN PARA VER DEBUG
-            st.write("🚀 **FORMULARIO ENVIADO - INICIANDO PROCESAMIENTO**")
-            st.write(f"📝 Errores detectados: {errores}")
-            
-            if errores:
-                st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
-                # NO hacer rerun aquí, mostrar errores
-            else:
-                st.write("✅ **SIN ERRORES - CONTINUANDO CON CREACIÓN**")
+            # Validaciones básicas
+            if not email or not nombre_completo or not rol:
+                st.error("Email, nombre completo y rol son obligatorios")
+                return
                 
-                try:
-                    # DATOS COMPLETOS CORREGIDOS SEGÚN EL SCHEMA
-                    datos_usuario = {
-                        "email": email.strip(),
-                        "nombre_completo": nombre_completo.strip(),
-                        "nombre": nombre_completo.strip(),  # Campo requerido
-                        "telefono": telefono.strip() if telefono else None,
-                        "nif": nif.strip() if nif else None,
-                        "rol": rol,
-                        "empresa_id": empresa_id if rol in ["gestor", "comercial"] else None,
-                    }
-                    
-                    st.write("📄 **DATOS PREPARADOS PARA AUTHSERVICE:**")
-                    st.json(datos_usuario)
-                    
-                    if es_creacion:
-                        password_final = password.strip() if password and password.strip() != "" else None
-                        
-                        st.write("🔐 **CONFIGURACIÓN DE PASSWORD:**")
-                        st.write(f"Password proporcionada: {'Sí' if password_final else 'No (se generará automáticamente)'}")
-                        
-                        # NO usar with st.spinner aquí para ver el debug completo
-                        st.write("🚀 **LLAMANDO A auth_service.crear_usuario_con_auth...**")
-                        
-                        ok, usuario_id = auth_service.crear_usuario_con_auth(
-                            datos_usuario, 
-                            tabla="usuarios", 
-                            password=password_final
-                        )
-                        
-                        st.write(f"📥 **RESULTADO DE AUTHSERVICE:**")
-                        st.write(f"✅ Éxito: {ok}")
-                        st.write(f"🆔 ID devuelto: {usuario_id}")
-                        
-                        if ok:
-                            st.success("✅ Usuario creado correctamente con acceso al sistema")
-                            st.balloons()  # Confirmar éxito visual
-                            
-                            # MARCAR PARA RESET
-                            st.session_state["usuario_creado_exitosamente"] = True
-                            
-                            # LIMPIAR CACHE
-                            if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
-                                data_service.get_usuarios.clear()
-                                st.write("🧹 Cache limpiado")
-                            
-                            # NO HACER RERUN INMEDIATAMENTE - permitir ver el debug
-                            st.write("⏸️ **PROCESO COMPLETADO - Haz clic en 'Crear' de nuevo para ver el formulario reseteado**")
-                            
-                        else:
-                            st.error("❌ AuthService devolvió False. Revisa los logs del servicio.")
-                            st.write("🔍 **EL PROBLEMA ESTÁ EN AUTHSERVICE** - revisa los mensajes de debug anteriores")
-                    else:
-                        # LÓGICA DE ACTUALIZACIÓN (mantener igual)
-                        if password == "NUEVA_PASSWORD_AUTO":
-                            import secrets
-                            import string
-                            caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
-                            nueva_password = ''.join(secrets.choice(caracteres) for _ in range(12))
-                            
-                            try:
-                                auth_id = datos.get("auth_id")
-                                if auth_id:
-                                    auth_service.supabase.auth.admin.update_user_by_id(auth_id, {"password": nueva_password})
-                                    st.success(f"🔑 Nueva contraseña generada: {nueva_password}")
-                            except Exception as e:
-                                st.warning(f"⚠️ Error actualizando contraseña: {e}")
-                        
-                        ok = auth_service.actualizar_usuario_con_auth(
-                            tabla="usuarios",
-                            registro_id=datos["id"],
-                            datos_editados=datos_usuario
-                        )
-                        
-                        if ok:
-                            st.success("✅ Usuario actualizado correctamente")
-                            if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
-                                data_service.get_usuarios.clear()
-                            st.rerun()
-                        else:
-                            st.error("❌ No se pudo actualizar el usuario.")
-                            
-                except Exception as e:
-                    st.error(f"🚨 **EXCEPCIÓN CAPTURADA EN USUARIOS.PY:**")
-                    st.error(f"❌ Error: {str(e)}")
-                    st.error(f"🔍 Tipo: {type(e).__name__}")
-                    
-                    # Información adicional para debug
-                    import traceback
-                    st.code(traceback.format_exc())
-
-        if eliminar:
-            if st.session_state.get("confirmar_eliminar_usuario"):
-                try:
-                    with st.spinner("Eliminando usuario..."):
-                        ok = auth_service.eliminar_usuario_con_auth(
-                            tabla="usuarios",
-                            registro_id=datos["id"]
-                        )
-                    
-                    if ok:
-                        st.success("✅ Usuario eliminado correctamente")
-                        del st.session_state["confirmar_eliminar_usuario"]
-                        # LIMPIAR CACHE
-                        if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
-                            data_service.get_usuarios.clear()
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error eliminando usuario: {e}")
+            if rol in ["gestor", "comercial"] and not empresa_id:
+                st.error("Los gestores y comerciales necesitan empresa asignada")
+                return
+            
+            # DATOS EXACTOS COMO EN PARTICIPANTES.PY
+            datos_usuario = {
+                "email": email,
+                "nombre_completo": nombre_completo,
+                "nombre": nombre_completo,  # Campo que existe en el schema
+                "rol": rol,
+                "empresa_id": empresa_id,  # Puede ser None para admin
+            }
+            
+            if es_creacion:
+                # USAR EXACTAMENTE LA MISMA LLAMADA QUE PARTICIPANTES
+                ok, usuario_id = auth_service.crear_usuario_con_auth(
+                    datos_usuario, 
+                    tabla="usuarios"  # Sin password explícita, igual que participantes
+                )
+                
+                if ok:
+                    st.success("Usuario creado correctamente")
+                    st.balloons()
+                    # Limpiar cache
+                    if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
+                        data_service.get_usuarios.clear()
+                    st.rerun()
+                else:
+                    st.error("Error al crear usuario")
             else:
-                st.session_state["confirmar_eliminar_usuario"] = True
-                st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
+                # Actualización
+                ok = auth_service.actualizar_usuario_con_auth(
+                    tabla="usuarios",
+                    registro_id=datos["id"],
+                    datos_editados=datos_usuario
+                )
+                
+                if ok:
+                    st.success("Usuario actualizado correctamente")
+                    if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
+                        data_service.get_usuarios.clear()
+                    st.rerun()
+                else:
+                    st.error("Error al actualizar usuario")
 
 # =========================
 # MAIN
