@@ -38,6 +38,13 @@ class EmpresasService:
                     iso_activo, iso_inicio, iso_fin,
                     rgpd_activo, rgpd_inicio, rgpd_fin,
                     docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin,
+                    sector, codigo_cnae, calle, numero,
+                    nueva_creacion, es_pyme, voluntad_acumular_credito, tiene_erte,
+                    representacion_legal_trabajadores, plantilla_media_anterior,
+                    representante_tipo_documento, representante_numero_documento,
+                    representante_nombre_apellidos, email_notificaciones,
+                    fecha_contrato_encomienda, convenio_referencia,
+                    provincia_id, localidad_id,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
                 """)
                 
@@ -50,6 +57,13 @@ class EmpresasService:
                     iso_activo, iso_inicio, iso_fin,
                     rgpd_activo, rgpd_inicio, rgpd_fin,
                     docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin,
+                    sector, codigo_cnae, calle, numero,
+                    nueva_creacion, es_pyme, voluntad_acumular_credito, tiene_erte,
+                    representacion_legal_trabajadores, plantilla_media_anterior,
+                    representante_tipo_documento, representante_numero_documento,
+                    representante_nombre_apellidos, email_notificaciones,
+                    fecha_contrato_encomienda, convenio_referencia,
+                    provincia_id, localidad_id,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
                 """).or_(f"id.eq.{_self.empresa_id},empresa_matriz_id.eq.{_self.empresa_id}"
                 )
