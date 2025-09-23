@@ -375,7 +375,7 @@ def login_view():
     # Usar emoji por defecto si no hay logo_url
     logo_display = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="80" height="80" style="border-radius: 20px;">'
     
-    # Container principal
+    # Container principal con logo y título
     st.markdown(f"""
     <div class="login-container fade-in-up">
         <div class="login-header">
@@ -386,33 +386,7 @@ def login_view():
     </div>
     """, unsafe_allow_html=True)
     
-    # Módulos disponibles con animación
-    st.markdown("""
-    <div class="modules-grid fade-in-up-delay">
-        <div class="module-card">
-            <span class="module-icon">📚</span>
-            <h4 class="module-title">Formación</h4>
-            <p class="module-desc">Gestión de acciones formativas, grupos, participantes y documentos FUNDAE.</p>
-        </div>
-        <div class="module-card">
-            <span class="module-icon">📋</span>
-            <h4 class="module-title">ISO 9001</h4>
-            <p class="module-desc">Auditorías, informes y seguimiento de calidad empresarial.</p>
-        </div>
-        <div class="module-card">
-            <span class="module-icon">🛡️</span>
-            <h4 class="module-title">RGPD</h4>
-            <p class="module-desc">Consentimientos, documentación legal y trazabilidad de datos.</p>
-        </div>
-        <div class="module-card">
-            <span class="module-icon">📈</span>
-            <h4 class="module-title">CRM</h4>
-            <p class="module-desc">Gestión de clientes, oportunidades y tareas comerciales.</p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Formulario de login con estilo
+    # FORMULARIO DE LOGIN PRIMERO
     with st.container():
         col1, col2, col3 = st.columns([1, 2, 1])
         
@@ -437,6 +411,36 @@ def login_view():
                     "🚀 Entrar al sistema" if not st.session_state.get("login_loading") else "⏳ Iniciando sesión...",
                     disabled=st.session_state.get("login_loading", False)
                 )
+    
+    # Divisor visual
+    st.markdown("<div style='margin: 2rem 0;'></div>", unsafe_allow_html=True)
+    
+    # MÓDULOS DISPONIBLES DESPUÉS DEL LOGIN
+    st.markdown("### 🎯 Módulos disponibles")
+    st.markdown("""
+    <div class="modules-grid fade-in-up-delay">
+        <div class="module-card">
+            <span class="module-icon">📚</span>
+            <h4 class="module-title">Formación</h4>
+            <p class="module-desc">Gestión de acciones formativas, grupos, participantes y documentos FUNDAE.</p>
+        </div>
+        <div class="module-card">
+            <span class="module-icon">📋</span>
+            <h4 class="module-title">ISO 9001</h4>
+            <p class="module-desc">Auditorías, informes y seguimiento de calidad empresarial.</p>
+        </div>
+        <div class="module-card">
+            <span class="module-icon">🛡️</span>
+            <h4 class="module-title">RGPD</h4>
+            <p class="module-desc">Consentimientos, documentación legal y trazabilidad de datos.</p>
+        </div>
+        <div class="module-card">
+            <span class="module-icon">📈</span>
+            <h4 class="module-title">CRM</h4>
+            <p class="module-desc">Gestión de clientes, oportunidades y tareas comerciales.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     if submitted:
         if not email or not password:
