@@ -208,6 +208,7 @@ class AuthService:
         self, tabla: str, registro_id: str, auth_id: Optional[str] = None
     ) -> bool:
         try:
+            # 1. Obtener auth_id si no se proporcionó
             if not auth_id:
                 res = (
                     self.supabase.table(tabla)
@@ -217,20 +218,50 @@ class AuthService:
                 )
                 if res.data and res.data[0].get("auth_id"):
                     auth_id = res.data[0]["auth_id"]
+                    st.write(f"🔍 Auth ID encontrado: {auth_id}")
+                else:
+                    st.warning("⚠️ No se encontró auth_id en la tabla")
 
-            # Borrar en tabla
-            self.supabase.table(tabla).delete().eq("id", registro_id).execute()
+            # 2. Eliminar en tabla primero
+            st.write(f"🗑️ Eliminando de tabla {tabla} registro ID: {registro_id}")
+            delete_res = self.supabase.table(tabla).delete().eq("id", registro_id).execute()
+            st.write(f"📥 Resultado eliminación tabla: {delete_res.data}")
 
-            # Borrar en Auth
+            # 3. Eliminar en Auth si tenemos auth_id
             if auth_id:
                 try:
-                    self.supabase.auth.admin.delete_user(auth_id)
-                except Exception as rb:
-                    st.warning(f"⚠️ Error borrando en Auth: {rb}")
+                    st.write(f"🗑️ Eliminando de Supabase Auth ID: {auth_id}")
+                    
+                    # Verificar que el usuario existe en Auth antes de eliminar
+                    try:
+                        user_info = self.supabase.auth.admin.get_user_by_id(auth_id)
+                        st.write(f"👤 Usuario encontrado en Auth: {user_info.user.email if user_info.user else 'No encontrado'}")
+                    except Exception as check_e:
+                        st.warning(f"⚠️ Error verificando usuario en Auth: {check_e}")
+                    
+                    # Intentar eliminar
+                    auth_delete_res = self.supabase.auth.admin.delete_user(auth_id)
+                    st.write(f"📥 Resultado eliminación Auth: {auth_delete_res}")
+                    st.success("✅ Usuario eliminado de Auth correctamente")
+                    
+                except Exception as auth_e:
+                    st.error(f"❌ Error eliminando de Auth: {str(auth_e)}")
+                    st.error(f"🔍 Tipo error: {type(auth_e).__name__}")
+                    
+                    # Mostrar detalles del error
+                    if hasattr(auth_e, 'message'):
+                        st.error(f"📄 Mensaje: {auth_e.message}")
+                    
+                    # No retornar False aquí - la eliminación de la tabla ya se hizo
+                    st.warning("⚠️ Usuario eliminado de la tabla pero falló eliminación en Auth")
+            else:
+                st.warning("⚠️ No se pudo eliminar de Auth - no hay auth_id")
 
             return True
+            
         except Exception as e:
-            st.error(f"❌ Error eliminando usuario: {e}")
+            st.error(f"❌ Error general eliminando usuario: {str(e)}")
+            st.error(f"🔍 Tipo: {type(e).__name__}")
             return False
 
 
