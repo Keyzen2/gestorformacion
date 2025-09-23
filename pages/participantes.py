@@ -58,24 +58,103 @@ def cargar_grupos(_grupos_service, _session_state):
 # MÉTRICAS DE PARTICIPANTES
 # =========================
 def mostrar_metricas_participantes(participantes_service, session_state):
-    """Muestra métricas generales de los participantes."""
+    """Muestra métricas generales calculadas directamente desde los datos."""
     try:
-        metricas = participantes_service.get_estadisticas_participantes()
+        # Calcular métricas directamente desde get_participantes_completos
+        df = participantes_service.get_participantes_completos()
+        
+        if df.empty:
+            metricas = {"total": 0, "con_grupo": 0, "sin_grupo": 0, "nuevos_mes": 0, "con_diploma": 0}
+        else:
+            # Filtrar por rol si es gestor
+            if session_state.role == "gestor":
+                empresa_id = session_state.user.get("empresa_id")
+                df = df[df["empresa_id"] == empresa_id]
+            
+            total = len(df)
+            con_grupo = len(df[df["grupo_id"].notna()]) if "grupo_id" in df.columns else 0
+            sin_grupo = total - con_grupo
+            
+            # Participantes nuevos este mes
+            nuevos_mes = 0
+            if "created_at" in df.columns:
+                try:
+                    df['created_at_dt'] = pd.to_datetime(df["created_at"], errors="coerce")
+                    mes_actual = datetime.now().month
+                    año_actual = datetime.now().year
+                    nuevos_mes = len(df[
+                        (df['created_at_dt'].dt.month == mes_actual) & 
+                        (df['created_at_dt'].dt.year == año_actual)
+                    ])
+                except:
+                    nuevos_mes = 0
+            
+            # Diplomas (consulta directa si es necesario)
+            con_diploma = 0
+            try:
+                if not df.empty:
+                    participante_ids = df["id"].tolist()
+                    diplomas_res = participantes_service.supabase.table("diplomas").select("participante_id").in_("participante_id", participante_ids).execute()
+                    con_diploma = len(set(d["participante_id"] for d in (diplomas_res.data or [])))
+            except:
+                pass
+            
+            metricas = {
+                "total": total,
+                "con_grupo": con_grupo,
+                "sin_grupo": sin_grupo,
+                "nuevos_mes": nuevos_mes,
+                "con_diploma": con_diploma
+            }
 
+        # Mostrar métricas con mejor diseño
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
-            st.metric("👥 Total Participantes", metricas.get("total", 0))
+            st.metric("👥 Total", metricas["total"], 
+                     delta=f"+{metricas['nuevos_mes']}" if metricas['nuevos_mes'] > 0 else None)
         with col2:
-            st.metric("🆕 Nuevos (30 días)", metricas.get("nuevos_mes", 0))
+            st.metric("🎓 Con grupo", metricas["con_grupo"])
         with col3:
-            st.metric("🎓 En curso", metricas.get("en_curso", 0))
+            st.metric("❓ Sin grupo", metricas["sin_grupo"])
         with col4:
-            st.metric("✅ Finalizados", metricas.get("finalizados", 0))
+            st.metric("🆕 Nuevos (mes)", metricas["nuevos_mes"])
         with col5:
-            st.metric("📜 Con diploma", metricas.get("con_diploma", 0))
+            st.metric("📜 Con diploma", metricas["con_diploma"])
+        
+        # Gráfico de distribución si hay datos
+        if metricas["total"] > 0:
+            st.markdown("#### 📊 Distribución")
+            col_chart1, col_chart2 = st.columns(2)
+            
+            with col_chart1:
+                # Gráfico de grupos
+                import plotly.express as px
+                data_grupos = {
+                    "Estado": ["Con grupo", "Sin grupo"],
+                    "Cantidad": [metricas["con_grupo"], metricas["sin_grupo"]]
+                }
+                fig_grupos = px.pie(values=data_grupos["Cantidad"], names=data_grupos["Estado"], 
+                                   title="Asignación a grupos")
+                st.plotly_chart(fig_grupos, use_container_width=True)
+            
+            with col_chart2:
+                # Gráfico de diplomas
+                data_diplomas = {
+                    "Estado": ["Con diploma", "Sin diploma"],
+                    "Cantidad": [metricas["con_diploma"], metricas["total"] - metricas["con_diploma"]]
+                }
+                fig_diplomas = px.pie(values=data_diplomas["Cantidad"], names=data_diplomas["Estado"],
+                                     title="Diplomas obtenidos")
+                st.plotly_chart(fig_diplomas, use_container_width=True)
 
     except Exception as e:
-        st.error(f"❌ Error cargando métricas de participantes: {e}")
+        st.error(f"❌ Error calculando métricas: {e}")
+        # Mostrar métricas vacías
+        col1, col2, col3, col4, col5 = st.columns(5)
+        for col, label in zip([col1, col2, col3, col4, col5], 
+                             ["👥 Total", "🎓 Con grupo", "❓ Sin grupo", "🆕 Nuevos", "📜 Diplomas"]):
+            with col:
+                st.metric(label, 0)
 
 # =========================
 # TABLA GENERAL
@@ -145,76 +224,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     return None, df_paged
 
 # =========================
-# CAMPOS CONECTADOS FUERA DEL FORMULARIO
-# =========================
-def mostrar_campos_conectados_empresa_grupo(
-    empresas_service, 
-    grupos_service, 
-    session_state, 
-    datos, 
-    key_suffix=""
-):
-    """
-    CORREGIDO: Campos conectados empresa->grupo FUERA del formulario
-    para que se actualicen dinámicamente.
-    """
-    # Cargar empresas disponibles
-    df_empresas = cargar_empresas_disponibles(empresas_service, session_state)
-    empresa_options = {row["nombre"]: row["id"] for _, row in df_empresas.iterrows()}
-    
-    # Empresa seleccionada
-    empresa_key = f"empresa_sel_{key_suffix}"
-    if empresa_key not in st.session_state:
-        empresa_actual_id = datos.get("empresa_id")
-        empresa_actual_nombre = next((k for k, v in empresa_options.items() if v == empresa_actual_id), "")
-        st.session_state[empresa_key] = empresa_actual_nombre
-    
-    empresa_sel = st.selectbox(
-        "🏢 Selecciona Empresa",
-        options=[""] + list(empresa_options.keys()),
-        index=list(empresa_options.keys()).index(st.session_state[empresa_key]) + 1 if st.session_state[empresa_key] in empresa_options else 0,
-        key=f"empresa_select_{key_suffix}"
-    )
-    
-    # Actualizar session_state si cambió
-    if empresa_sel != st.session_state[empresa_key]:
-        st.session_state[empresa_key] = empresa_sel
-        # Limpiar grupo seleccionado cuando cambia la empresa
-        st.session_state.pop(f"grupo_sel_{key_suffix}", None)
-        st.rerun()
-    
-    empresa_id = empresa_options.get(empresa_sel) if empresa_sel else None
-    
-    # Grupos disponibles según la empresa seleccionada
-    grupo_sel = ""
-    grupo_id = None
-    
-    if empresa_id:
-        df_grupos = cargar_grupos(grupos_service, session_state)
-        # Filtrar grupos por empresa
-        df_grupos_empresa = df_grupos[df_grupos["empresa_id"] == empresa_id]
-        grupo_options = {row["codigo_grupo"]: row["id"] for _, row in df_grupos_empresa.iterrows()}
-        
-        if grupo_options:
-            grupo_actual_id = datos.get("grupo_id")
-            grupo_actual_nombre = next((k for k, v in grupo_options.items() if v == grupo_actual_id), "")
-            
-            grupo_sel = st.selectbox(
-                "🎓 Asignar a Grupo",
-                options=[""] + list(grupo_options.keys()),
-                index=list(grupo_options.keys()).index(grupo_actual_nombre) + 1 if grupo_actual_nombre in grupo_options else 0,
-                key=f"grupo_select_{key_suffix}"
-            )
-            grupo_id = grupo_options.get(grupo_sel) if grupo_sel else None
-        else:
-            st.selectbox("🎓 Asignar a Grupo", options=["No hay grupos disponibles"], disabled=True, key=f"grupo_empty_{key_suffix}")
-    else:
-        st.selectbox("🎓 Asignar a Grupo", options=["Seleccione empresa primero"], disabled=True, key=f"grupo_disabled_{key_suffix}")
-    
-    return empresa_sel, empresa_id, grupo_sel, grupo_id
-
-# =========================
-# FORMULARIO DE PARTICIPANTE
+# FORMULARIO DE PARTICIPANTE INTEGRADO
 # =========================
 def mostrar_formulario_participante(
     participante_data,
@@ -225,7 +235,7 @@ def mostrar_formulario_participante(
     session_state,
     es_creacion=False
 ):
-    """CORREGIDO: Formulario con AuthService centralizado y campos conectados fuera del form."""
+    """CORREGIDO: Formulario completamente integrado con todos los campos dentro."""
 
     if es_creacion:
         st.subheader("➕ Crear Participante")
@@ -236,13 +246,12 @@ def mostrar_formulario_participante(
 
     form_id = f"participante_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
 
-    # CAMPOS CONECTADOS FUERA DEL FORMULARIO
-    if not es_creacion or True:  # Siempre mostrar para permitir selección dinámica
-        st.markdown("#### 🏢 Empresa y Grupo (Selección conectada)")
-        empresa_sel, empresa_id, grupo_sel, grupo_id = mostrar_campos_conectados_empresa_grupo(
-            empresas_service, grupos_service, session_state, datos, form_id
-        )
-        st.divider()
+    # Cargar datos para selectboxes
+    df_empresas = cargar_empresas_disponibles(empresas_service, session_state)
+    empresa_options = {row["nombre"]: row["id"] for _, row in df_empresas.iterrows()}
+    
+    df_grupos = cargar_grupos(grupos_service, session_state)
+    grupos_completos = {f"{row['codigo_grupo']} - {row.get('accion_formativa_titulo', 'Sin título')}": row["id"] for _, row in df_grupos.iterrows()}
 
     with st.form(form_id, clear_on_submit=es_creacion):
         
@@ -279,6 +288,48 @@ def mostrar_formulario_participante(
             telefono = st.text_input("Teléfono", value=datos.get("telefono",""), key=f"{form_id}_tel")
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
 
+        # =========================
+        # EMPRESA Y GRUPO (INTEGRADO)
+        # =========================
+        st.markdown("### 🏢 Empresa y Formación")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Empresa
+            empresa_actual_id = datos.get("empresa_id")
+            empresa_actual_nombre = next((k for k, v in empresa_options.items() if v == empresa_actual_id), "")
+            
+            empresa_sel = st.selectbox(
+                "🏢 Empresa",
+                options=[""] + list(empresa_options.keys()),
+                index=list(empresa_options.keys()).index(empresa_actual_nombre) + 1 if empresa_actual_nombre else 0,
+                key=f"{form_id}_empresa",
+                help="Empresa a la que pertenece el participante"
+            )
+            empresa_id = empresa_options.get(empresa_sel) if empresa_sel else None
+        
+        with col2:
+            # Grupo (filtrado por empresa)
+            if empresa_id:
+                # Filtrar grupos por empresa
+                grupos_empresa = {k: v for k, v in grupos_completos.items() 
+                                if any(row["id"] == v and row.get("empresa_id") == empresa_id for _, row in df_grupos.iterrows())}
+                
+                grupo_actual_id = datos.get("grupo_id")
+                grupo_actual_nombre = next((k for k, v in grupos_empresa.items() if v == grupo_actual_id), "")
+                
+                grupo_sel = st.selectbox(
+                    "🎓 Grupo de Formación",
+                    options=[""] + list(grupos_empresa.keys()),
+                    index=list(grupos_empresa.keys()).index(grupo_actual_nombre) + 1 if grupo_actual_nombre else 0,
+                    key=f"{form_id}_grupo",
+                    help="Grupo de formación (opcional)"
+                )
+                grupo_id = grupos_empresa.get(grupo_sel) if grupo_sel else None
+            else:
+                st.selectbox("🎓 Grupo de Formación", options=["Seleccione empresa primero"], disabled=True, key=f"{form_id}_grupo_disabled")
+                grupo_id = None
+
         # Credenciales Auth (solo en creación)
         if es_creacion:
             st.markdown("### 🔐 Credenciales de acceso")
@@ -295,20 +346,6 @@ def mostrar_formulario_participante(
             if st.checkbox("Generar nueva contraseña", key=f"{form_id}_reset_pass", help="Marca para generar nueva contraseña automática"):
                 st.info("Se generará una nueva contraseña al guardar los cambios")
                 password = "NUEVA_PASSWORD_AUTO"  # Flag para generar nueva
-        
-        # Mostrar empresa/grupo seleccionados
-        st.markdown("### 📊 Asignación actual")
-        col1, col2 = st.columns(2)
-        with col1:
-            if empresa_sel:
-                st.success(f"🏢 **Empresa:** {empresa_sel}")
-            else:
-                st.warning("⚠️ **Empresa:** No seleccionada")
-        with col2:
-            if grupo_sel:
-                st.success(f"🎓 **Grupo:** {grupo_sel}")
-            else:
-                st.info("ℹ️ **Grupo:** Sin asignar (opcional)")
 
         # =========================
         # VALIDACIONES
@@ -360,8 +397,7 @@ def mostrar_formulario_participante(
                     "nombre": nombre,
                     "apellidos": apellidos,
                     "tipo_documento": tipo_documento or None,
-                    "dni": dni or None,
-                    "nif": nif or None,
+                    "dni": documento or None,  # Guardamos el documento en el campo dni
                     "niss": niss or None,
                     "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
                     "sexo": sexo or None,
@@ -373,13 +409,82 @@ def mostrar_formulario_participante(
 
                 if es_creacion:
                     # USAR AUTHSERVICE CENTRALIZADO
-                    if password:
-                        datos_payload["password"] = password
+                    password_final = password if password and password != "" else None
                     
                     ok, participante_id = auth_service.crear_usuario_con_auth(
                         datos_payload, 
                         tabla="participantes", 
-                        password=password
+                        password=password_final
+                    )
+                    
+                    if ok:
+                        st.success("✅ Participante creado correctamente con acceso al portal")
+                        st.rerun()
+                else:
+                    # ACTUALIZAR USANDO AUTHSERVICE
+                    password_final = None
+                    if password == "NUEVA_PASSWORD_AUTO":
+                        # Generar nueva contraseña
+                        import secrets
+                        import string
+                        caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
+                        password_final = ''.join(secrets.choice(caracteres) for _ in range(12))
+                        
+                        # Actualizar en Auth también
+                        try:
+                            # Buscar auth_id
+                            participante_auth = participantes_service.supabase.table("participantes").select("auth_id").eq("id", datos["id"]).execute()
+                            if participante_auth.data and participante_auth.data[0].get("auth_id"):
+                                auth_id = participante_auth.data[0]["auth_id"]
+                                participantes_service.supabase.auth.admin.update_user_by_id(auth_id, {"password": password_final})
+                                st.success(f"🔑 Nueva contraseña generada: {password_final}")
+                        except Exception as e:
+                            st.warning(f"⚠️ Error actualizando contraseña en Auth: {e}")
+                    
+                    ok = auth_service.actualizar_usuario_con_auth(
+                        tabla="participantes",
+                        registro_id=datos["id"],
+                        datos_editados=datos_payload
+                    )
+                    
+                    if ok:
+                        st.success("✅ Cambios guardados correctamente")
+                        st.rerun()
+
+        if eliminar:
+            if st.session_state.get("confirmar_eliminar_participante"):
+                try:
+                    # ELIMINAR USANDO AUTHSERVICE
+                    ok = auth_service.eliminar_usuario_con_auth(
+                        tabla="participantes",
+                        registro_id=datos["id"]
+                    )
+                    
+                    if ok:
+                        st.success("✅ Participante eliminado correctamente")
+                        del st.session_state["confirmar_eliminar_participante"]
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error eliminando participante: {e}")
+            else:
+                st.session_state["confirmar_eliminar_participante"] = True
+                st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")": niss or None,
+                    "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
+                    "sexo": sexo or None,
+                    "telefono": telefono or None,
+                    "email": email or None,
+                    "empresa_id": empresa_id,
+                    "grupo_id": grupo_id or None,
+                }
+
+                if es_creacion:
+                    # USAR AUTHSERVICE CENTRALIZADO
+                    password_final = password if password and password != "" else None
+                    
+                    ok, participante_id = auth_service.crear_usuario_con_auth(
+                        datos_payload, 
+                        tabla="participantes", 
+                        password=password_final
                     )
                     
                     if ok:
@@ -390,6 +495,25 @@ def mostrar_formulario_participante(
                         st.rerun()
                 else:
                     # ACTUALIZAR USANDO AUTHSERVICE
+                    password_final = None
+                    if password == "NUEVA_PASSWORD_AUTO":
+                        # Generar nueva contraseña
+                        import secrets
+                        import string
+                        caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
+                        password_final = ''.join(secrets.choice(caracteres) for _ in range(12))
+                        
+                        # Actualizar en Auth también
+                        try:
+                            # Buscar auth_id
+                            participante_auth = participantes_service.supabase.table("participantes").select("auth_id").eq("id", datos["id"]).execute()
+                            if participante_auth.data and participante_auth.data[0].get("auth_id"):
+                                auth_id = participante_auth.data[0]["auth_id"]
+                                participantes_service.supabase.auth.admin.update_user_by_id(auth_id, {"password": password_final})
+                                st.success(f"🔑 Nueva contraseña generada: {password_final}")
+                        except Exception as e:
+                            st.warning(f"⚠️ Error actualizando contraseña en Auth: {e}")
+                    
                     ok = auth_service.actualizar_usuario_con_auth(
                         tabla="participantes",
                         registro_id=datos["id"],
@@ -532,7 +656,7 @@ def importar_participantes(auth_service, empresas_service, session_state):
                     datos = {
                         "nombre": fila.get("nombre"),
                         "apellidos": fila.get("apellidos"),
-                        "dni": fila.get("dni"),
+                        "dni": fila.get("dni") or fila.get("documento"),  # Compatibilidad con ambos nombres
                         "email": fila.get("email"),
                         "telefono": fila.get("telefono"),
                         "empresa_id": empresa_id,
@@ -586,7 +710,7 @@ def main(supabase, session_state):
         try:
             df_participantes = participantes_service.get_participantes_completos()
 
-            # 🔒 Filtrado por rol gestor
+            # Filtrado por rol gestor
             if session_state.role == "gestor":
                 empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
                 empresas_ids = empresas_df["id"].tolist()
@@ -606,17 +730,27 @@ def main(supabase, session_state):
 
             with st.expander("ℹ️ Ayuda sobre Participantes"):
                 st.markdown("""
-                - Usa los filtros para buscar rápidamente.
-                - Haz clic en una fila para **editar un participante**.
-                - Usa exportar/importar para gestión en bloque.
-                - Los gestores solo verán sus empresas y grupos.
-                - **IMPORTANTE**: Los campos de empresa y grupo están conectados - selecciona empresa primero.
+                **Funcionalidades principales:**
+                - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar participantes rápidamente
+                - ✏️ **Edición**: Haz clic en una fila para editar un participante
+                - 📊 **Exportar/Importar**: Gestión masiva de datos en los expanders superiores
+                - 🏢 **Empresas y grupos**: Los selectores están conectados - primero empresa, luego grupo
+                
+                **Permisos por rol:**
+                - 👑 **Admin**: Ve todos los participantes de todas las empresas
+                - 👨‍💼 **Gestor**: Solo ve participantes de su empresa y empresas clientes
+                
+                **Importante:**
+                - Los participantes creados aquí automáticamente tienen acceso al portal de alumnos
+                - Las contraseñas se generan automáticamente de forma segura
+                - Los campos empresa y grupo están integrados en el formulario para mejor usabilidad
                 """)
 
             if seleccionado is not None:
-                mostrar_formulario_participante(
-                    seleccionado, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=False
-                )
+                with st.container(border=True):
+                    mostrar_formulario_participante(
+                        seleccionado, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=False
+                    )
         except Exception as e:
             st.error(f"❌ Error cargando participantes: {e}")
 
@@ -624,9 +758,10 @@ def main(supabase, session_state):
     # TAB CREAR
     # =========================
     with tabs[1]:
-        mostrar_formulario_participante(
-            {}, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=True
-        )
+        with st.container(border=True):
+            mostrar_formulario_participante(
+                {}, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=True
+            )
 
     # =========================
     # TAB MÉTRICAS
