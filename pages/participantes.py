@@ -261,9 +261,8 @@ def mostrar_formulario_participante(
                 index=["","DNI","NIE","PASAPORTE"].index(datos.get("tipo_documento","")) if datos.get("tipo_documento","") in ["","DNI","NIE","PASAPORTE"] else 0,
                 key=f"{form_id}_tipo_doc"
             )
-            dni = st.text_input("Documento", value=datos.get("dni",""), key=f"{form_id}_dni")
-            nif = st.text_input("NIF", value=datos.get("nif",""), key=f"{form_id}_nif")
-            niss = st.text_input("NISS", value=datos.get("niss",""), key=f"{form_id}_niss")
+            documento = st.text_input("Número de Documento", value=datos.get("dni",""), key=f"{form_id}_documento", help="DNI, NIE, CIF o Pasaporte")
+            niss = st.text_input("NISS", value=datos.get("niss",""), key=f"{form_id}_niss", help="Número de la Seguridad Social")
         
         with col2:
             fecha_nacimiento = st.date_input(
@@ -280,24 +279,36 @@ def mostrar_formulario_participante(
             telefono = st.text_input("Teléfono", value=datos.get("telefono",""), key=f"{form_id}_tel")
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
 
-        # 🔐 Solo en creación → credenciales Auth
+        # Credenciales Auth (solo en creación)
         if es_creacion:
             st.markdown("### 🔐 Credenciales de acceso")
             password = st.text_input(
                 "Contraseña (opcional - se genera automáticamente si se deja vacío)", 
                 type="password", 
-                key=f"{form_id}_password"
+                key=f"{form_id}_password",
+                help="Deja vacío para generar una contraseña automática segura"
             )
         else:
             password = None
-
-        # Mostrar empresa/grupo seleccionados (solo informativo en el form)
-        st.markdown("### 📊 Asignación")
+            # Mostrar opción para resetear contraseña
+            st.markdown("### 🔐 Gestión de contraseña")
+            if st.checkbox("Generar nueva contraseña", key=f"{form_id}_reset_pass", help="Marca para generar nueva contraseña automática"):
+                st.info("Se generará una nueva contraseña al guardar los cambios")
+                password = "NUEVA_PASSWORD_AUTO"  # Flag para generar nueva
+        
+        # Mostrar empresa/grupo seleccionados
+        st.markdown("### 📊 Asignación actual")
         col1, col2 = st.columns(2)
         with col1:
-            st.info(f"**🏢 Empresa:** {empresa_sel if empresa_sel else 'No seleccionada'}")
+            if empresa_sel:
+                st.success(f"🏢 **Empresa:** {empresa_sel}")
+            else:
+                st.warning("⚠️ **Empresa:** No seleccionada")
         with col2:
-            st.info(f"**🎓 Grupo:** {grupo_sel if grupo_sel else 'No seleccionado'}")
+            if grupo_sel:
+                st.success(f"🎓 **Grupo:** {grupo_sel}")
+            else:
+                st.info("ℹ️ **Grupo:** Sin asignar (opcional)")
 
         # =========================
         # VALIDACIONES
@@ -307,7 +318,7 @@ def mostrar_formulario_participante(
             errores.append("Nombre requerido")
         if not apellidos:
             errores.append("Apellidos requeridos")
-        if dni and not validar_dni_cif(dni):
+        if documento and not validar_dni_cif(documento):
             errores.append("Documento inválido")
         if not empresa_id:
             errores.append("Debe seleccionar una empresa")
