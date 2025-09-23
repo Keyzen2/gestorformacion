@@ -340,12 +340,19 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                 eliminar = False
 
         # =========================
-        # PROCESAMIENTO CORREGIDO
+        # PROCESAMIENTO CORREGIDO CON DEBUG
         # =========================
         if submitted:
+            # DETENER EJECUCIÓN PARA VER DEBUG
+            st.write("🚀 **FORMULARIO ENVIADO - INICIANDO PROCESAMIENTO**")
+            st.write(f"📝 Errores detectados: {errores}")
+            
             if errores:
                 st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
+                # NO hacer rerun aquí, mostrar errores
             else:
+                st.write("✅ **SIN ERRORES - CONTINUANDO CON CREACIÓN**")
+                
                 try:
                     # DATOS COMPLETOS CORREGIDOS SEGÚN EL SCHEMA
                     datos_usuario = {
@@ -355,69 +362,57 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                         "telefono": telefono.strip() if telefono else None,
                         "nif": nif.strip() if nif else None,
                         "rol": rol,
-                        # CORREGIDO: Solo asignar empresa_id para roles que lo necesitan
                         "empresa_id": empresa_id if rol in ["gestor", "comercial"] else None,
-                        # IMPORTANTE: Los usuarios admin/gestor/comercial NO tienen grupo_id
-                        # El campo grupo_id es solo para rol "alumno" (que se crea en participantes.py)
                     }
                     
+                    st.write("📄 **DATOS PREPARADOS PARA AUTHSERVICE:**")
+                    st.json(datos_usuario)
+                    
                     if es_creacion:
-                        # CREAR CON AUTHSERVICE - DEBUG MEJORADO
                         password_final = password.strip() if password and password.strip() != "" else None
                         
-                        # DEBUG COMPLETO: Mostrar datos que se van a enviar
-                        st.write("🔍 **Debug - Datos a insertar en tabla usuarios:**")
-                        st.json(datos_usuario)
+                        st.write("🔐 **CONFIGURACIÓN DE PASSWORD:**")
+                        st.write(f"Password proporcionada: {'Sí' if password_final else 'No (se generará automáticamente)'}")
                         
-                        st.write("📋 **Campos requeridos por tabla usuarios:**")
-                        st.write("- `id`: uuid (auto-generado)")
-                        st.write("- `auth_id`: uuid (lo genera AuthService)")
-                        st.write("- `email`: text (NOT NULL)")
-                        st.write("- `rol`: text (default 'usuario')")
-                        st.write("- `empresa_id`: uuid (nullable)")
-                        st.write("- `nif`: varchar (nullable)")
-                        st.write("- `nombre_completo`: text (nullable)")
-                        st.write("- `telefono`: text (nullable)")
-                        st.write("- `nombre`: text (nullable)")
-                        st.write("- `grupo_id`: uuid (nullable, para alumnos)")
-                        st.write("- `created_at`: timestamp (auto-generado)")
+                        # NO usar with st.spinner aquí para ver el debug completo
+                        st.write("🚀 **LLAMANDO A auth_service.crear_usuario_con_auth...**")
                         
-                        # Validar campos obligatorios antes de enviar
-                        if not datos_usuario.get("email"):
-                            st.error("❌ Email es obligatorio y está vacío")
-                            return
-                            
-                        if not datos_usuario.get("rol"):
-                            st.error("❌ Rol es obligatorio y está vacío") 
-                            return
+                        ok, usuario_id = auth_service.crear_usuario_con_auth(
+                            datos_usuario, 
+                            tabla="usuarios", 
+                            password=password_final
+                        )
                         
-                        with st.spinner("Creando usuario..."):
-                            ok, usuario_id = auth_service.crear_usuario_con_auth(
-                                datos_usuario, 
-                                tabla="usuarios", 
-                                password=password_final
-                            )
+                        st.write(f"📥 **RESULTADO DE AUTHSERVICE:**")
+                        st.write(f"✅ Éxito: {ok}")
+                        st.write(f"🆔 ID devuelto: {usuario_id}")
                         
                         if ok:
                             st.success("✅ Usuario creado correctamente con acceso al sistema")
+                            st.balloons()  # Confirmar éxito visual
+                            
                             # MARCAR PARA RESET
                             st.session_state["usuario_creado_exitosamente"] = True
+                            
                             # LIMPIAR CACHE
                             if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
                                 data_service.get_usuarios.clear()
-                            st.rerun()
+                                st.write("🧹 Cache limpiado")
+                            
+                            # NO HACER RERUN INMEDIATAMENTE - permitir ver el debug
+                            st.write("⏸️ **PROCESO COMPLETADO - Haz clic en 'Crear' de nuevo para ver el formulario reseteado**")
+                            
                         else:
                             st.error("❌ AuthService devolvió False. Revisa los logs del servicio.")
+                            st.write("🔍 **EL PROBLEMA ESTÁ EN AUTHSERVICE** - revisa los mensajes de debug anteriores")
                     else:
-                        # ACTUALIZAR CON AUTHSERVICE
+                        # LÓGICA DE ACTUALIZACIÓN (mantener igual)
                         if password == "NUEVA_PASSWORD_AUTO":
-                            # Generar nueva contraseña
                             import secrets
                             import string
                             caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
                             nueva_password = ''.join(secrets.choice(caracteres) for _ in range(12))
                             
-                            # Actualizar contraseña en Auth
                             try:
                                 auth_id = datos.get("auth_id")
                                 if auth_id:
@@ -426,16 +421,14 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                             except Exception as e:
                                 st.warning(f"⚠️ Error actualizando contraseña: {e}")
                         
-                        with st.spinner("Actualizando usuario..."):
-                            ok = auth_service.actualizar_usuario_con_auth(
-                                tabla="usuarios",
-                                registro_id=datos["id"],
-                                datos_editados=datos_usuario
-                            )
+                        ok = auth_service.actualizar_usuario_con_auth(
+                            tabla="usuarios",
+                            registro_id=datos["id"],
+                            datos_editados=datos_usuario
+                        )
                         
                         if ok:
                             st.success("✅ Usuario actualizado correctamente")
-                            # LIMPIAR CACHE
                             if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
                                 data_service.get_usuarios.clear()
                             st.rerun()
@@ -443,10 +436,13 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                             st.error("❌ No se pudo actualizar el usuario.")
                             
                 except Exception as e:
-                    st.error(f"❌ Error procesando usuario: {str(e)}")
-                    # DEBUG: Mostrar detalles del error
-                    if "column" in str(e).lower():
-                        st.error("💡 Error de campo de base de datos. Verifica que todos los campos existan en la tabla 'usuarios'.")
+                    st.error(f"🚨 **EXCEPCIÓN CAPTURADA EN USUARIOS.PY:**")
+                    st.error(f"❌ Error: {str(e)}")
+                    st.error(f"🔍 Tipo: {type(e).__name__}")
+                    
+                    # Información adicional para debug
+                    import traceback
+                    st.code(traceback.format_exc())
 
         if eliminar:
             if st.session_state.get("confirmar_eliminar_usuario"):
