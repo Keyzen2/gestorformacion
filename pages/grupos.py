@@ -949,56 +949,74 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         
         # Procesar formulario
         if submitted:
-        # Validaciones manuales - INDENTACIÓN CORREGIDA
-        if not responsable or not telefono_contacto:
-            st.error("❌ Responsable y Teléfono de contacto son obligatorios")
-        else:
-            # Preparar datos según operación
-            datos_para_guardar = {
-                "accion_formativa_id": acciones_dict[accion_formativa],
-                "modalidad": modalidad_grupo,
-                "fecha_inicio": fecha_inicio.isoformat(),
-                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                "provincia": provincia_sel,
-                "localidad": localidad_sel,
-                "cp": cp,
-                "responsable": responsable.strip(),
-                "telefono_contacto": telefono_contacto.strip(),
-                "n_participantes_previstos": n_participantes_previstos,
-                "lugar_imparticion": lugar_imparticion,
-                "observaciones": observaciones,
-                "horario": horario_nuevo if horario_nuevo else None
-            }
-            
-            # Añadir código solo en creación
-            if es_creacion:
-                datos_para_guardar["codigo_grupo"] = codigo_grupo  # CORRECCIÓN: usar variable correcta
-                datos_para_guardar["empresa_id"] = empresa_id  # CORRECCIÓN: usar variable correcta
-            
-            try:
+            # Solo procesar si no hay errores críticos
+            if errores:
+                st.error("❌ Corrija los errores antes de continuar")
+            else:
+                # Preparar datos según operación
+                datos_para_guardar = {
+                    "accion_formativa_id": acciones_dict[accion_formativa],
+                    "modalidad": modalidad_grupo,
+                    "fecha_inicio": fecha_inicio.isoformat(),
+                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                    "provincia": provincia_sel,
+                    "localidad": localidad_sel,
+                    "cp": cp,
+                    "responsable": responsable.strip(),
+                    "telefono_contacto": telefono_contacto.strip(),
+                    "n_participantes_previstos": n_participantes_previstos,
+                    "lugar_imparticion": lugar_imparticion,
+                    "observaciones": observaciones,
+                    "horario": horario_nuevo if horario_nuevo else None
+                }
+                
+                # Añadir código solo en creación
                 if es_creacion:
-                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
-                    if exito:
-                        st.success("✅ Grupo creado correctamente")
-                        # Cargar grupo recién creado
-                        grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                        if grupo_creado.data:
-                            st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                        st.rerun()
+                    datos_para_guardar["codigo_grupo"] = codigo_grupo
+                    datos_para_guardar["empresa_id"] = empresa_id
+                
+                # Añadir datos de finalización si aplica
+                if datos_finalizacion:
+                    datos_para_guardar.update(datos_finalizacion)
+                
+                try:
+                    if es_creacion:
+                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
+                        if exito:
+                            st.success("✅ Grupo creado correctamente")
+                            # Cargar grupo recién creado
+                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                            if grupo_creado.data:
+                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al crear grupo")
                     else:
-                        st.error("❌ Error al crear grupo")
-                else:
-                    # Actualización de grupo existente
-                    res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
-                    if res.data:
-                        st.success("✅ Cambios guardados correctamente")
-                        st.session_state.grupo_seleccionado = res.data[0]
-                        st.rerun()
-                    else:
-                        st.error("❌ No se guardaron cambios en el grupo")
+                        # Actualización de grupo existente
+                        res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
+                        if res.data:
+                            st.success("✅ Cambios guardados correctamente")
+                            st.session_state.grupo_seleccionado = res.data[0]
+                            st.rerun()
+                        else:
+                            st.error("❌ No se guardaron cambios en el grupo")
+                except Exception as e:
+                    st.error(f"❌ Error al procesar grupo: {e}")
+        
+        elif cancelar:
+            st.session_state.grupo_seleccionado = None
+            st.rerun()
+        
+        elif recargar:
+            try:
+                grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                if grupo_recargado.data:
+                    st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                st.rerun()
             except Exception as e:
-                st.error(f"❌ Error al procesar grupo: {e}")
-
+                st.error(f"Error al recargar: {e}")
+        
+        return datos_grupo.get("id") if datos_grupo else None
 # =========================
 # SECCIONES ADICIONALES CON JERARQUÍA
 # =========================
