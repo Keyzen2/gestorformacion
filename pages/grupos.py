@@ -170,9 +170,8 @@ def parsear_horario_fundae(horario_str):
 # =========================
 # COMPONENTES UI MODERNOS
 # =========================
-
 def mostrar_metricas_grupos(df_grupos, session_state):
-    """Muestra métricas con información jerárquica usando Streamlit 1.49."""
+    """Muestra métricas con información jerárquica mejorada."""
     if df_grupos.empty:
         st.info("📋 No hay grupos registrados.")
         return
@@ -196,16 +195,11 @@ def mostrar_metricas_grupos(df_grupos, session_state):
     with col4:
         st.metric("✅ Finalizados", finalizados)
     
-    # Métricas adicionales por rol
-    if session_state.role == "admin":
-        with st.container():
-            st.markdown("##### 🌳 Distribución por Empresa")
-            if "empresa_nombre" in df_grupos.columns:
-                empresas = df_grupos["empresa_nombre"].value_counts().head(5)
-                col1, col2, col3 = st.columns(3)
-                for i, (empresa, count) in enumerate(empresas.items()):
-                    with [col1, col2, col3][i % 3]:
-                        st.metric(empresa[:20], count)
+    # Información contextual por rol (sin métricas redundantes)
+    if session_state.role == "gestor":
+        st.caption("🏢 Mostrando grupos de tu empresa y empresas clientes")
+    elif session_state.role == "admin":
+        st.caption("🌍 Mostrando todos los grupos del sistema")
 
 def mostrar_avisos_grupos(grupos_pendientes):
     """Muestra avisos de grupos pendientes de finalización con acciones."""
@@ -324,19 +318,30 @@ def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial
 # =========================
 
 def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacion=False):
-    """Formulario unificado para crear/editar grupos con validaciones FUNDAE completas."""
+    """CORREGIDO: Formulario con carga correcta de datos existentes."""
     
     # Obtener datos necesarios
     acciones_dict = grupos_service.get_acciones_dict()
     
     if not acciones_dict:
-        st.error("❌ No hay acciones formativas disponibles. Crea una acción formativa primero.")
+        st.error("⚠ No hay acciones formativas disponibles. Crea una acción formativa primero.")
         return None
     
     # Datos iniciales
-    if grupo_seleccionado:
-        datos_grupo = grupo_seleccionado.copy()
-        estado_actual = determinar_estado_grupo(datos_grupo)
+    if grupo_seleccionado and not es_creacion:
+        try:
+            # Recargar datos frescos desde la BD para evitar inconsistencias
+            grupo_fresh = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_seleccionado.get("id")).execute()
+            if grupo_fresh.data:
+                datos_grupo = grupo_fresh.data[0]
+                estado_actual = determinar_estado_grupo(datos_grupo)
+            else:
+                datos_grupo = grupo_seleccionado.copy()
+                estado_actual = "ABIERTO"
+        except Exception as e:
+            st.error(f"Error recargando datos del grupo: {e}")
+            datos_grupo = grupo_seleccionado.copy()
+            estado_actual = "ABIERTO"
     else:
         datos_grupo = {}
         estado_actual = "ABIERTO"
@@ -592,13 +597,13 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
 
                 responsable = st.text_input(
                     "👤 Responsable del Grupo *",
-                    value=datos_grupo.get("responsable", ""),
+                    value=datos_grupo.get("responsable", ""),  # Verificar nombre exacto del campo
                     help="Persona responsable del grupo (obligatorio FUNDAE)"
                 )
                 
                 telefono_contacto = st.text_input(
-                    "📞 Teléfono de Contacto *",
-                    value=datos_grupo.get("telefono_contacto", ""),
+                    "📞 Teléfono de Contacto *", 
+                    value=datos_grupo.get("telefono_contacto", ""),  # Verificar nombre exacto del campo
                     help="Teléfono de contacto del responsable (obligatorio FUNDAE)"
                 )
                 
@@ -895,8 +900,13 @@ def mostrar_secciones_adicionales(grupos_service, grupo_id):
         mostrar_seccion_costes(grupos_service, grupo_id)
 
 def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
-    """Gestión de tutores del grupo con soporte jerárquico."""
+    """CORREGIDO: Gestión de tutores con manejo seguro de UUIDs."""
     st.markdown("**Gestión de Tutores con Jerarquía**")
+    
+    # CORRECCIÓN: Validar grupo_id antes de usarlo
+    if not grupo_id or grupo_id == "None":
+        st.error("⚠ ID de grupo no válido")
+        return
     
     # Validar permisos
     if not grupos_service.validar_permisos_grupo(grupo_id):
@@ -910,7 +920,6 @@ def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
         if not df_tutores.empty:
             st.markdown("##### Tutores Asignados")
             
-            # Mostrar tutores con información de empresa
             for _, row in df_tutores.iterrows():
                 tutor = row.get("tutor", {})
                 if not tutor:
@@ -929,16 +938,20 @@ def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
                                     st.success("✅ Tutor eliminado")
                                     st.rerun()
                                 else:
-                                    st.error("❌ Error al eliminar tutor")
+                                    st.error("⚠ Error al eliminar tutor")
                             except Exception as e:
                                 st.error(f"Error: {e}")
         else:
             st.info("📋 No hay tutores asignados")
         
-        # Añadir tutores con jerarquía
+        # CORRECCIÓN: Añadir tutores con manejo seguro de UUIDs
         st.markdown("##### Añadir Tutores")
         try:
-            df_tutores_disponibles = grupos_service.get_tutores_disponibles_jerarquia(grupo_id)
+            # CORRECCIÓN: Pasar grupo_id válido y manejar None
+            if grupo_id and grupo_id != "None":
+                df_tutores_disponibles = grupos_service.get_tutores_disponibles_jerarquia(grupo_id)
+            else:
+                df_tutores_disponibles = pd.DataFrame()
             
             if not df_tutores_disponibles.empty:
                 opciones_tutores = {}
@@ -959,11 +972,13 @@ def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
                     exitos = 0
                     for tutor_nombre in tutores_seleccionados:
                         tutor_id = opciones_tutores[tutor_nombre]
-                        try:
-                            if grupos_service.create_tutor_grupo(grupo_id, tutor_id):
-                                exitos += 1
-                        except Exception as e:
-                            st.error(f"Error al asignar {tutor_nombre}: {e}")
+                        # CORRECCIÓN: Validar tutor_id antes de usar
+                        if tutor_id and tutor_id != "None":
+                            try:
+                                if grupos_service.create_tutor_grupo(grupo_id, tutor_id):
+                                    exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al asignar {tutor_nombre}: {e}")
                     
                     if exitos > 0:
                         st.success(f"✅ Se asignaron {exitos} tutores")
@@ -1118,8 +1133,13 @@ def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
         st.error(f"Error al cargar sección de empresas: {e}")
 
 def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
-    """Gestión de participantes del grupo con soporte jerárquico."""
+    """CORREGIDO: Gestión de participantes con manejo seguro de UUIDs."""
     st.markdown("**Participantes del Grupo con Jerarquía**")
+    
+    # CORRECCIÓN: Validar grupo_id
+    if not grupo_id or grupo_id == "None":
+        st.error("⚠ ID de grupo no válido")
+        return
     
     try:
         # Participantes actuales
@@ -1136,7 +1156,6 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                     columnas_mostrar.append(col)
             
             if columnas_mostrar:
-                # Usar dataframe moderno de Streamlit 1.49
                 st.dataframe(
                     df_participantes[columnas_mostrar],
                     use_container_width=True,
@@ -1151,50 +1170,21 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                 )
             else:
                 st.warning("⚠️ No se pueden mostrar los datos de participantes")
-            
-            # Desasignar participantes con diseño moderno
-            with st.expander("❌ Desasignar Participantes"):
-                participantes_opciones = []
-                for _, row in df_participantes.iterrows():
-                    nif = row.get('nif', 'Sin NIF')
-                    nombre = row.get('nombre', '')
-                    apellidos = row.get('apellidos', '')
-                    participantes_opciones.append(f"{nif} - {nombre} {apellidos}")
-                
-                if participantes_opciones:
-                    participantes_quitar = st.multiselect(
-                        "Seleccionar participantes a desasignar:",
-                        participantes_opciones,
-                        key=f"participantes_quitar_{grupo_id}"
-                    )
-                    
-                    if participantes_quitar and st.button("Desasignar Seleccionados", type="secondary"):
-                        exitos = 0
-                        for participante_str in participantes_quitar:
-                            try:
-                                nif = participante_str.split(" - ")[0]
-                                participante_row = df_participantes[df_participantes["nif"] == nif]
-                                if not participante_row.empty:
-                                    relacion_id = participante_row.iloc[0]["relacion_id"]
-                                    if grupos_service.desasignar_participante_de_grupo(relacion_id):
-                                        exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al desasignar {participante_str}: {e}")
-                        
-                        if exitos > 0:
-                            st.success(f"✅ Se desasignaron {exitos} participantes")
-                            st.rerun()
         else:
             st.info("📋 No hay participantes asignados")
         
-        # Asignar participantes con jerarquía
+        # CORRECCIÓN: Asignar participantes con validación UUID
         st.markdown("##### Asignar Participantes")
         
         tab1, tab2 = st.tabs(["👤 Individual", "📊 Masivo (Excel)"])
         
         with tab1:
             try:
-                df_disponibles = grupos_service.get_participantes_disponibles_jerarquia(grupo_id)
+                # CORRECCIÓN: Validar grupo_id antes de la consulta
+                if grupo_id and grupo_id != "None":
+                    df_disponibles = grupos_service.get_participantes_disponibles_jerarquia(grupo_id)
+                else:
+                    df_disponibles = pd.DataFrame()
                 
                 if not df_disponibles.empty:
                     participantes_opciones = {}
@@ -1216,11 +1206,13 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         exitos = 0
                         for participante_str in participantes_seleccionados:
                             participante_id = participantes_opciones[participante_str]
-                            try:
-                                if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
-                                    exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al asignar {participante_str}: {e}")
+                            # CORRECCIÓN: Validar participante_id
+                            if participante_id and participante_id != "None":
+                                try:
+                                    if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
+                                        exitos += 1
+                                except Exception as e:
+                                    st.error(f"Error al asignar {participante_str}: {e}")
                         
                         if exitos > 0:
                             st.success(f"✅ Se asignaron {exitos} participantes")
