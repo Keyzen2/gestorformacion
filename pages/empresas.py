@@ -139,7 +139,7 @@ def exportar_empresas(empresas_service, session_state):
         
 def mostrar_acciones_empresa(empresa_sel, empresas_service, session_state):
     """Muestra acciones disponibles para la empresa seleccionada."""
-    if not empresa_sel or session_state.role != "admin":
+    if empresa_sel is None or empresa_sel.empty or session_state.role != "admin":
         return
     
     st.markdown("#### ⚙️ Acciones Rápidas")
