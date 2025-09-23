@@ -44,6 +44,42 @@ def cargar_grupos(_grupos_service, _session_state):
     """Carga grupos disponibles según permisos."""
     try:
         df_grupos = _grupos_service.get_grupos_completos()
+        
+        if df_grupos.empty:
+            return df_grupos
+            
+        if _session_state.role == "admin":
+            return df_grupos
+        elif _session_state.role == "gestor":
+            empresa_id = _session_state.user.get("empresa_id")
+            if not empresa_id:
+                return pd.DataFrame()
+                
+            # CORRECCIÓN: Verificar qué campo existe para empresa_id
+            if "empresa_id" in df_grupos.columns:
+                # Si existe el campo directo
+                return df_grupos[df_grupos["empresa_id"] == empresa_id]
+            elif "empresa" in df_grupos.columns:
+                # Si viene como relación anidada, extraer el ID
+                df_grupos["empresa_id_extraido"] = df_grupos["empresa"].apply(
+                    lambda x: x.get("id") if isinstance(x, dict) else None
+                )
+                return df_grupos[df_grupos["empresa_id_extraido"] == empresa_id]
+            else:
+                # Debug: mostrar qué columnas existen
+                st.error(f"Debug - Columnas disponibles en grupos: {df_grupos.columns.tolist()}")
+                return pd.DataFrame()
+                
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"❌ Error cargando grupos: {e}")
+        # Debug adicional
+        st.write("Error details:", str(e))
+        return pd.DataFrame()
+def cargar_grupos(_grupos_service, _session_state):
+    """Carga grupos disponibles según permisos."""
+    try:
+        df_grupos = _grupos_service.get_grupos_completos()
         if _session_state.role == "admin":
             return df_grupos
         elif _session_state.role == "gestor":
@@ -311,13 +347,23 @@ def mostrar_formulario_participante(
         with col2:
             # Grupo (filtrado por empresa)
             if empresa_id:
-                # Filtrar grupos por empresa
-                grupos_empresa = {k: v for k, v in grupos_completos.items() 
-                                if any(row["id"] == v and row.get("empresa_id") == empresa_id for _, row in df_grupos.iterrows())}
-                
+                # CORRECCIÓN: Filtrar grupos por empresa usando el campo correcto
+                grupos_empresa = {}
+                for k, v in grupos_completos.items():
+                    for _, row in df_grupos.iterrows():
+                        if row["id"] == v:
+                            # Verificar empresa_id según el formato de datos
+                            if "empresa_id" in row and row["empresa_id"] == empresa_id:
+                               grupos_empresa[k] = v
+                                break
+                            elif "empresa" in row and isinstance(row["empresa"], dict):
+                                if row["empresa"].get("id") == empresa_id:
+                                    grupos_empresa[k] = v
+                                    break
+        
                 grupo_actual_id = datos.get("grupo_id")
                 grupo_actual_nombre = next((k for k, v in grupos_empresa.items() if v == grupo_actual_id), "")
-                
+        
                 grupo_sel = st.selectbox(
                     "🎓 Grupo de Formación",
                     options=[""] + list(grupos_empresa.keys()),
