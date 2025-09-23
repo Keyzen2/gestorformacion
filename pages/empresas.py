@@ -1105,7 +1105,7 @@ def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
     
     if session_state.role == "admin":
-        tab1, tab2, tab3 = st.tabs(["📊 Métricas", "🏢 Empresas", "➕ Nueva Empresa"])
+        tab1, tab2, tab3 = st.tabs(["🏢 Empresas", "➕ Nueva Empresa", "📊 Métricas"])
     else:
         tab1, tab2, tab3 = st.tabs(["📊 Mi Empresa", "👥 Empresas Cliente", "➕ Nueva Empresa"])
     
