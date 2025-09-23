@@ -76,19 +76,6 @@ def cargar_grupos(_grupos_service, _session_state):
         # Debug adicional
         st.write("Error details:", str(e))
         return pd.DataFrame()
-def cargar_grupos(_grupos_service, _session_state):
-    """Carga grupos disponibles según permisos."""
-    try:
-        df_grupos = _grupos_service.get_grupos_completos()
-        if _session_state.role == "admin":
-            return df_grupos
-        elif _session_state.role == "gestor":
-            empresa_id = _session_state.user.get("empresa_id")
-            return df_grupos[df_grupos["empresa_id"] == empresa_id]
-        return pd.DataFrame()
-    except Exception as e:
-        st.error(f"❌ Error cargando grupos: {e}")
-        return pd.DataFrame()
 
 # =========================
 # MÉTRICAS DE PARTICIPANTES
