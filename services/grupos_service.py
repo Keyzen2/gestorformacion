@@ -1131,36 +1131,39 @@ class GruposService:
         """Obtiene participantes asignados a un grupo."""
         try:
             res = _self.supabase.table("participantes_grupos").select("""
-                id as relacion_id, fecha_asignacion,
+                id, fecha_asignacion,
                 participante:participantes(id, nif, nombre, apellidos, email, telefono, empresa_id)
             """).eq("grupo_id", grupo_id).order("fecha_asignacion").execute()
         
             df = pd.DataFrame(res.data or [])
-        
-            if not df.empty and "participante" in df.columns:
-                # Extraer datos del participante
-                participante_data = []
-                for _, row in df.iterrows():
-                    p = row.get("participante", {})
-                    if isinstance(p, dict):
-                        participante_data.append({
-                            "relacion_id": row["relacion_id"],
-                            "fecha_asignacion": row["fecha_asignacion"],
-                            "id": p.get("id"),
-                            "nif": p.get("nif"),
-                            "nombre": p.get("nombre"),
-                            "apellidos": p.get("apellidos"),
-                            "email": p.get("email"),
-                            "telefono": p.get("telefono"),
-                            "empresa_id": p.get("empresa_id")
-                        })
             
-                return pd.DataFrame(participante_data)
-        
+            # Renombrar id → relacion_id para evitar conflictos
+            if not df.empty:
+                df.rename(columns={"id": "relacion_id"}, inplace=True)
+    
+                if "participante" in df.columns:
+                    participante_data = []
+                    for _, row in df.iterrows():
+                        p = row.get("participante", {})
+                        if isinstance(p, dict):
+                            participante_data.append({
+                                "relacion_id": row["relacion_id"],
+                                "fecha_asignacion": row["fecha_asignacion"],
+                                "id": p.get("id"),
+                                "nif": p.get("nif"),
+                                "nombre": p.get("nombre"),
+                                "apellidos": p.get("apellidos"),
+                                "email": p.get("email"),
+                                "telefono": p.get("telefono"),
+                                "empresa_id": p.get("empresa_id")
+                            })
+                    return pd.DataFrame(participante_data)
+            
             return pd.DataFrame()
         except Exception as e:
             return _self._handle_query_error("cargar participantes de grupo", e)
-
+    
+    
     def get_participantes_disponibles_jerarquia(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes disponibles según jerarquía empresarial."""
         try:
@@ -1168,50 +1171,47 @@ class GruposService:
             if not grupo_id or grupo_id == "None":
                 return pd.DataFrame()
             
-            # Validar rol y empresa para gestores
             if self.rol == "gestor" and not self.empresa_id:
                 return pd.DataFrame()  # Gestor sin empresa asignada
-            # Obtener participantes ya asignados
-            participantes_asignados = self.supabase.table("participantes_grupos").select("participante_id").eq("grupo_id", grupo_id).execute()
+    
+            # Participantes ya asignados
+            participantes_asignados = self.supabase.table("participantes_grupos") \
+                .select("participante_id").eq("grupo_id", grupo_id).execute()
             participantes_asignados_ids = [p["participante_id"] for p in (participantes_asignados.data or [])]
-        
-            # Obtener empresas participantes del grupo
+    
+            # Empresas participantes del grupo
             empresas_grupo = self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
             empresas_ids = [e["empresa_id"] for e in (empresas_grupo.data or [])]
-        
-            # Añadir empresa propietaria del grupo
+    
+            # Empresa propietaria
             grupo_info = self.supabase.table("grupos").select("empresa_id").eq("id", grupo_id).execute()
             if grupo_info.data:
                 empresas_ids.append(grupo_info.data[0]["empresa_id"])
-        
+    
             if not empresas_ids:
                 return pd.DataFrame()
-        
-            # Obtener participantes de empresas participantes
+    
+            # Participantes de empresas participantes
             query = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, empresa_id,
                 empresa:empresas(nombre)
             """).in_("empresa_id", empresas_ids)
-        
-            # Filtrar por rol
+    
+            # Filtro por rol
             if self.rol == "gestor" and self.empresa_id:
-                # Gestor solo ve participantes de empresas bajo su gestión
                 query = query.or_(f"empresa_id.eq.{self.empresa_id},empresa.empresa_matriz_id.eq.{self.empresa_id}")
-        
+    
             res = query.execute()
             df = pd.DataFrame(res.data or [])
-        
+    
             if not df.empty:
-                # Añadir información de empresa
                 df["empresa_nombre"] = df["empresa"].apply(
                     lambda x: x.get("nombre") if isinstance(x, dict) else ""
                 )
-            
-                # Filtrar participantes ya asignados
                 df = df[~df["id"].isin(participantes_asignados_ids)]
-        
+    
             return df
-        
+    
         except Exception as e:
             return self._handle_query_error("cargar participantes disponibles", e)
 
