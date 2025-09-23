@@ -28,46 +28,41 @@ class ParticipantesService:
     # =========================
     @st.cache_data(ttl=300)
     def get_participantes_completos(_self) -> pd.DataFrame:
-        """CORREGIDO: Obtiene participantes con información de grupo y empresa."""
+        """Obtiene participantes con información de grupo y empresa."""
         try:
             query = _self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, grupo_id, empresa_id,
-                grupo:grupos!fk_participante_grupo (id, codigo_grupo),
-                empresa:empresas!fk_participante_empresa (id, nombre, cif)
+                empresa:empresas(id, nombre, cif)
             """)
             query = _self._apply_empresa_filter(query)
-
+    
             res = query.order("created_at", desc=True).execute()
-            df = pd.DataFrame(res.data or [])
-
-            # CORRECCIÓN: Aplanar relaciones usando los nombres correctos
-            if not df.empty:
-                # Relación con grupos (ya era correcta)
-                if "grupo" in df.columns:  # ✅ Correcto: es 'grupo' singular
-                    df["grupo_codigo"] = df["grupo"].apply(
-                        lambda x: x.get("codigo_grupo") if isinstance(x, dict) else ""
-                    )
-                    # grupo_id ya viene como columna directa
-                else:
-                    df["grupo_codigo"] = ""
-
-                # CORRECCIÓN: Relación con empresas - usar 'empresa' singular
-                if "empresa" in df.columns:  # ✅ CORREGIDO: era 'empresas' -> 'empresa'
-                    df["empresa_nombre"] = df["empresa"].apply(
-                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                    )
-                    # empresa_id ya viene como columna directa, no necesita procesamiento
-                else:
-                    df["empresa_nombre"] = ""
-
-                # Verificar que las columnas necesarias existen
-                if "empresa_id" not in df.columns:
-                    df["empresa_id"] = None
-                if "grupo_id" not in df.columns:
-                    df["grupo_id"] = None
-
+            
+            # CORRECCIÓN: Manejar caso sin datos
+            if not res.data:
+                # Crear DataFrame vacío con todas las columnas necesarias
+                empty_df = pd.DataFrame(columns=[
+                    'id', 'nif', 'nombre', 'apellidos', 'dni', 'email', 'telefono',
+                    'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
+                    'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
+                ])
+                return empty_df
+            
+            df = pd.DataFrame(res.data)
+    
+            # Procesar relaciones solo si hay datos
+            if "empresa" in df.columns:
+                df["empresa_nombre"] = df["empresa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+            else:
+                df["empresa_nombre"] = ""
+                
+            df["grupo_codigo"] = ""  # Simplificado
+            
             return df
+            
         except Exception as e:
             return _self._handle_query_error("cargar participantes", e)
             
