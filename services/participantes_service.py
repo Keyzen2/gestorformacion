@@ -26,9 +26,8 @@ class ParticipantesService:
     # =========================
     # CONSULTAS PRINCIPALES
     # =========================
-    @st.cache_data(ttl=300)
     def get_participantes_completos(_self) -> pd.DataFrame:
-        """Obtiene participantes con información de grupo y empresa."""
+        """CORREGIDO: Retorna siempre DataFrame válido, nunca None."""
         try:
             query = _self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
@@ -39,33 +38,43 @@ class ParticipantesService:
     
             res = query.order("created_at", desc=True).execute()
             
-            # CORRECCIÓN: Manejar caso sin datos
-            if not res.data:
-                # Crear DataFrame vacío con todas las columnas necesarias
-                empty_df = pd.DataFrame(columns=[
+            # CORRECCIÓN: Manejar todos los casos None
+            if not res or not res.data:
+                # Retornar DataFrame vacío con columnas correctas
+                return pd.DataFrame(columns=[
                     'id', 'nif', 'nombre', 'apellidos', 'dni', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                     'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
                 ])
-                return empty_df
             
             df = pd.DataFrame(res.data)
-    
-            # Procesar relaciones solo si hay datos
-            if "empresa" in df.columns:
-                df["empresa_nombre"] = df["empresa"].apply(
-                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                )
+            
+            # Verificar que df no esté vacío antes de procesar relaciones
+            if not df.empty:
+                if "empresa" in df.columns:
+                    df["empresa_nombre"] = df["empresa"].apply(
+                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                    )
+                else:
+                    df["empresa_nombre"] = ""
+                    
+                df["grupo_codigo"] = ""
             else:
+                # DataFrame vacío - añadir columnas necesarias
                 df["empresa_nombre"] = ""
-                
-            df["grupo_codigo"] = ""  # Simplificado
+                df["grupo_codigo"] = ""
             
             return df
             
         except Exception as e:
-            return _self._handle_query_error("cargar participantes", e)
-            
+            # IMPORTANTE: Siempre retornar DataFrame, nunca None
+            st.error(f"Error al cargar participantes: {e}")
+            return pd.DataFrame(columns=[
+                'id', 'nif', 'nombre', 'apellidos', 'dni', 'email', 'telefono',
+                'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
+                'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
+            ])
+ 
     @st.cache_data(ttl=300)
     def get_participantes_con_empresa_jerarquica(_self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica de empresa."""
