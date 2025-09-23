@@ -1641,11 +1641,12 @@ def main(supabase, session_state):
             column_config=column_config
         )
         
-        # Procesar selección
+        # Procesar selección o resetear
         if event.selection.rows:
             selected_idx = event.selection.rows[0]
-            grupo_seleccionado = df_grupos.iloc[selected_idx].to_dict()
-            st.session_state.grupo_seleccionado = grupo_seleccionado
+            st.session_state.grupo_seleccionado = df_grupos.iloc[selected_idx].to_dict()
+        else:
+            st.session_state.grupo_seleccionado = None
     
     st.divider()
     
