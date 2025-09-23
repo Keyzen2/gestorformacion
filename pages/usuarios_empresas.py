@@ -55,7 +55,7 @@ def validar_datos_usuario(datos: dict, empresas_dict: dict, es_creacion: bool = 
         return "Email no válido."
     if not datos.get("nombre_completo"):
         return "El nombre completo es obligatorio."
-    if datos.get("documento") and not validar_dni_cif(datos["documento"]):
+    if datos.get("nif") and not validar_dni_cif(datos["nif"]):
         return "Documento no válido."
     
     # Validar que gestor tiene empresa
@@ -189,11 +189,11 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista 
         ]
     if filtro_rol != "Todos":
         df_filtered = df_filtered[df_filtered["rol"] == filtro_rol]
-    if filtro_empresa:
+    if filtro_empresa and "empresa_nombre" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
-    # Configuración columnas
-    columnas = ["nombre_completo", "email", "telefono", "rol", "documento", "empresa_nombre", "created_at"]
+    # Configuración columnas - USAR CAMPOS CORRECTOS
+    columnas = ["nombre_completo", "email", "telefono", "rol", "nif", "empresa_nombre", "created_at"]
     columnas_existentes = [col for col in columnas if col in df_filtered.columns]
     df_display = df_filtered[columnas_existentes] if not df_filtered.empty else pd.DataFrame(columns=columnas_existentes)
 
@@ -239,7 +239,8 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
             telefono = st.text_input("Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_telefono")
         
         with col2:
-            documento = st.text_input("Documento (DNI/NIE/CIF)", value=datos.get("documento", ""), key=f"{form_id}_documento")
+            # CORREGIDO: Usar 'nif' en lugar de 'documento'
+            nif = st.text_input("Documento (DNI/NIE/CIF)", value=datos.get("nif", ""), key=f"{form_id}_nif")
             rol = st.selectbox("Rol", ["", "admin", "gestor", "comercial"], 
                               index=["", "admin", "gestor", "comercial"].index(datos.get("rol", "")) if datos.get("rol") in ["", "admin", "gestor", "comercial"] else 0,
                               key=f"{form_id}_rol", 
@@ -299,7 +300,7 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
             "email": email,
             "nombre_completo": nombre_completo,
             "telefono": telefono,
-            "documento": documento,
+            "nif": nif,  # CORREGIDO: usar 'nif'
             "rol": rol,
             "empresa_sel": empresa_sel
         }
@@ -339,11 +340,13 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                 st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
             else:
                 try:
+                    # CORREGIDO: Usar campos que existen en la tabla
                     datos_usuario = {
                         "email": email,
                         "nombre_completo": nombre_completo,
+                        "nombre": nombre_completo,  # También llenar campo 'nombre'
                         "telefono": telefono,
-                        "documento": documento,
+                        "nif": nif,  # CORREGIDO: usar 'nif' no 'documento'
                         "rol": rol,
                         "empresa_id": empresa_id if rol in ["gestor", "comercial"] else None,
                     }
@@ -360,7 +363,9 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                         
                         if ok:
                             st.success("✅ Usuario creado correctamente con acceso al sistema")
-                            data_service.get_usuarios.clear()
+                            # CORREGIDO: Limpiar cache correctamente
+                            if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
+                                data_service.get_usuarios.clear()
                             st.rerun()
                     else:
                         # ACTUALIZAR CON AUTHSERVICE
@@ -388,7 +393,9 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                         
                         if ok:
                             st.success("✅ Usuario actualizado correctamente")
-                            data_service.get_usuarios.clear()
+                            # CORREGIDO: Limpiar cache correctamente
+                            if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
+                                data_service.get_usuarios.clear()
                             st.rerun()
                             
                 except Exception as e:
@@ -405,7 +412,9 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                     if ok:
                         st.success("✅ Usuario eliminado correctamente")
                         del st.session_state["confirmar_eliminar_usuario"]
-                        data_service.get_usuarios.clear()
+                        # CORREGIDO: Limpiar cache correctamente
+                        if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
+                            data_service.get_usuarios.clear()
                         st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error eliminando usuario: {e}")
