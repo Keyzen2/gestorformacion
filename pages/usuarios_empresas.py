@@ -23,30 +23,29 @@ st.set_page_config(
 # =========================
 def exportar_usuarios(df: pd.DataFrame):
     """Exporta usuarios a CSV o Excel en expander."""
-    with st.expander("📥 Exportar Usuarios"):
-        col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2)
 
-        with col1:
-            csv_data = df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "📄 Descargar CSV",
-                data=csv_data,
-                file_name=f"usuarios_{datetime.today().strftime('%Y%m%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+    with col1:
+        csv_data = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "📄 Descargar CSV",
+            data=csv_data,
+            file_name=f"usuarios_{datetime.today().strftime('%Y%m%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
-        with col2:
-            buffer = BytesIO()
-            df.to_excel(buffer, index=False, engine="openpyxl")
-            buffer.seek(0)
-            st.download_button(
-                "📊 Descargar Excel",
-                data=buffer,
-                file_name=f"usuarios_{datetime.today().strftime('%Y%m%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
+    with col2:
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False, engine="openpyxl")
+        buffer.seek(0)
+        st.download_button(
+            "📊 Descargar Excel",
+            data=buffer,
+            file_name=f"usuarios_{datetime.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 def validar_datos_usuario(datos: dict, empresas_dict: dict, es_creacion: bool = False):
     """Valida los campos obligatorios de un usuario (SIN rol alumno)."""
@@ -73,34 +72,346 @@ def validar_datos_usuario(datos: dict, empresas_dict: dict, es_creacion: bool = 
     return None
 
 # =========================
-# CAMPOS CONECTADOS EMPRESA
+# MÉTRICAS CON GRÁFICOS
 # =========================
-def mostrar_campos_empresa_usuario(empresas_dict, datos, key_suffix=""):
-    """Campos de empresa conectados al rol (solo para gestor/comercial)."""
+def mostrar_metricas_usuarios(df_usuarios):
+    """Muestra métricas con gráficos como en participantes.py."""
+    try:
+        # Filtrar solo usuarios del sistema (no alumnos)
+        df_sistema = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])]
+        
+        if df_sistema.empty:
+            metricas = {"total": 0, "admin": 0, "gestor": 0, "comercial": 0, "nuevos_mes": 0}
+        else:
+            total = len(df_sistema)
+            admin = len(df_sistema[df_sistema["rol"] == "admin"])
+            gestor = len(df_sistema[df_sistema["rol"] == "gestor"])
+            comercial = len(df_sistema[df_sistema["rol"] == "comercial"])
+            
+            # Usuarios nuevos este mes
+            nuevos_mes = 0
+            if "created_at" in df_sistema.columns:
+                try:
+                    df_sistema['created_at_dt'] = pd.to_datetime(df_sistema["created_at"], errors="coerce")
+                    mes_actual = datetime.now().month
+                    año_actual = datetime.now().year
+                    nuevos_mes = len(df_sistema[
+                        (df_sistema['created_at_dt'].dt.month == mes_actual) & 
+                        (df_sistema['created_at_dt'].dt.year == año_actual)
+                    ])
+                except:
+                    nuevos_mes = 0
+            
+            metricas = {
+                "total": total,
+                "admin": admin,
+                "gestor": gestor,
+                "comercial": comercial,
+                "nuevos_mes": nuevos_mes
+            }
+
+        # Mostrar métricas
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("👥 Total", metricas["total"], 
+                     delta=f"+{metricas['nuevos_mes']}" if metricas['nuevos_mes'] > 0 else None)
+        with col2:
+            st.metric("🔧 Administradores", metricas["admin"])
+        with col3:
+            st.metric("👨‍💼 Gestores", metricas["gestor"])
+        with col4:
+            st.metric("💼 Comerciales", metricas["comercial"])
+        with col5:
+            st.metric("🆕 Nuevos (mes)", metricas["nuevos_mes"])
+        
+        # Gráficos de distribución si hay datos
+        if metricas["total"] > 0:
+            st.markdown("#### 📊 Distribución por Roles")
+            col_chart1, col_chart2 = st.columns(2)
+            
+            with col_chart1:
+                # Gráfico de roles
+                import plotly.express as px
+                data_roles = {
+                    "Rol": ["Admin", "Gestor", "Comercial"],
+                    "Cantidad": [metricas["admin"], metricas["gestor"], metricas["comercial"]]
+                }
+                fig_roles = px.pie(values=data_roles["Cantidad"], names=data_roles["Rol"], 
+                                  title="Distribución por roles")
+                st.plotly_chart(fig_roles, use_container_width=True)
+            
+            with col_chart2:
+                # Gráfico temporal (simplificado)
+                data_temporal = {
+                    "Periodo": ["Anteriores", "Este mes"],
+                    "Cantidad": [metricas["total"] - metricas["nuevos_mes"], metricas["nuevos_mes"]]
+                }
+                fig_temporal = px.bar(x=data_temporal["Periodo"], y=data_temporal["Cantidad"],
+                                     title="Usuarios por periodo")
+                st.plotly_chart(fig_temporal, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Error calculando métricas: {e}")
+        # Mostrar métricas vacías
+        col1, col2, col3, col4, col5 = st.columns(5)
+        for col, label in zip([col1, col2, col3, col4, col5], 
+                             ["👥 Total", "🔧 Admin", "👨‍💼 Gestor", "💼 Comercial", "🆕 Nuevos"]):
+            with col:
+                st.metric(label, 0)
+
+# =========================
+# TABLA GENERAL
+# =========================
+def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista de Usuarios"):
+    """Muestra tabla de usuarios con filtros y selección de fila."""
+    if df_usuarios.empty:
+        st.info("📋 No hay usuarios para mostrar")
+        return None
+
+    st.markdown(f"### {titulo_tabla}")
+
+    # 🔍 Filtros
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        filtro_nombre = st.text_input("👤 Nombre/Email contiene", key="filtro_tabla_nombre")
+    with col2:
+        filtro_rol = st.selectbox("Filtrar por rol", ["Todos", "admin", "gestor", "comercial"], key="filtro_tabla_rol")
+    with col3:
+        filtro_empresa = st.text_input("🏢 Empresa contiene", key="filtro_tabla_empresa")
+
+    # Aplicar filtros
+    df_filtered = df_usuarios.copy()
     
-    # Empresa seleccionada
-    empresa_key = f"empresa_usuario_{key_suffix}"
-    if empresa_key not in st.session_state:
-        empresa_actual = datos.get("empresa_nombre", "")
-        st.session_state[empresa_key] = empresa_actual
-    
-    empresa_opciones = [""] + sorted(empresas_dict.keys())
-    empresa_sel = st.selectbox(
-        "🏢 Empresa asignada",
-        options=empresa_opciones,
-        index=empresa_opciones.index(st.session_state[empresa_key]) if st.session_state[empresa_key] in empresa_opciones else 0,
-        key=f"empresa_select_{key_suffix}",
-        help="Solo obligatorio para gestores y comerciales"
+    if filtro_nombre:
+        df_filtered = df_filtered[
+            df_filtered["nombre_completo"].str.contains(filtro_nombre, case=False, na=False) |
+            df_filtered["email"].str.contains(filtro_nombre, case=False, na=False)
+        ]
+    if filtro_rol != "Todos":
+        df_filtered = df_filtered[df_filtered["rol"] == filtro_rol]
+    if filtro_empresa:
+        df_filtered = df_filtered[df_filtered["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
+
+    # Configuración columnas
+    columnas = ["nombre_completo", "email", "telefono", "rol", "documento", "empresa_nombre", "created_at"]
+    columnas_existentes = [col for col in columnas if col in df_filtered.columns]
+    df_display = df_filtered[columnas_existentes] if not df_filtered.empty else pd.DataFrame(columns=columnas_existentes)
+
+    # Mostrar tabla
+    evento = st.dataframe(
+        df_display,
+        use_container_width=True,
+        hide_index=True,
+        selection_mode="single-row",
+        on_select="rerun"
     )
+
+    if evento.selection.rows:
+        return df_filtered.iloc[evento.selection.rows[0]], df_filtered
+    return None, df_filtered
+
+# =========================
+# FORMULARIO INTEGRADO
+# =========================
+def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresas_dict, es_creacion=False):
+    """Formulario completamente integrado como participantes.py."""
     
-    # Actualizar session_state si cambió
-    if empresa_sel != st.session_state[empresa_key]:
-        st.session_state[empresa_key] = empresa_sel
-        st.rerun()
-    
-    empresa_id = empresas_dict.get(empresa_sel) if empresa_sel else None
-    
-    return empresa_sel, empresa_id
+    if es_creacion:
+        st.subheader("➕ Crear Usuario del Sistema")
+        datos = {}
+    else:
+        st.subheader(f"✏️ Editar Usuario: {usuario_data['nombre_completo']}")
+        datos = usuario_data.copy()
+
+    form_id = f"usuario_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
+
+    with st.form(form_id, clear_on_submit=es_creacion):
+        
+        # =========================
+        # INFORMACIÓN PERSONAL
+        # =========================
+        st.markdown("### 👤 Información Personal")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            email = st.text_input("Email", value=datos.get("email", ""), key=f"{form_id}_email")
+            nombre_completo = st.text_input("Nombre completo", value=datos.get("nombre_completo", ""), key=f"{form_id}_nombre")
+            telefono = st.text_input("Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_telefono")
+        
+        with col2:
+            documento = st.text_input("Documento (DNI/NIE/CIF)", value=datos.get("documento", ""), key=f"{form_id}_documento")
+            rol = st.selectbox("Rol", ["", "admin", "gestor", "comercial"], 
+                              index=["", "admin", "gestor", "comercial"].index(datos.get("rol", "")) if datos.get("rol") in ["", "admin", "gestor", "comercial"] else 0,
+                              key=f"{form_id}_rol", 
+                              help="Admin: acceso total, Gestor: empresa específica, Comercial: CRM")
+
+        # =========================
+        # EMPRESA (INTEGRADA)
+        # =========================
+        st.markdown("### 🏢 Asignación de Empresa")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Empresa
+            empresa_actual_nombre = datos.get("empresa_nombre", "")
+            empresa_opciones = [""] + sorted(empresas_dict.keys())
+            
+            empresa_sel = st.selectbox(
+                "🏢 Empresa",
+                options=empresa_opciones,
+                index=empresa_opciones.index(empresa_actual_nombre) if empresa_actual_nombre in empresa_opciones else 0,
+                key=f"{form_id}_empresa",
+                help="Solo obligatorio para gestores y comerciales"
+            )
+            empresa_id = empresas_dict.get(empresa_sel) if empresa_sel else None
+        
+        with col2:
+            # Estado de la asignación
+            if empresa_sel:
+                st.success(f"✅ **Empresa asignada:** {empresa_sel}")
+            else:
+                if rol in ["gestor", "comercial"]:
+                    st.warning("⚠️ **Empresa requerida** para este rol")
+                else:
+                    st.info("ℹ️ **Empresa no requerida** para administradores")
+
+        # Credenciales (solo en creación)
+        if es_creacion:
+            st.markdown("### 🔐 Credenciales de acceso")
+            password = st.text_input(
+                "Contraseña (opcional - se genera automáticamente si se deja vacío)", 
+                type="password", 
+                key=f"{form_id}_password",
+                help="Deja vacío para generar una contraseña automática segura"
+            )
+        else:
+            password = None
+            # Mostrar opción para resetear contraseña
+            st.markdown("### 🔐 Gestión de contraseña")
+            if st.checkbox("Generar nueva contraseña", key=f"{form_id}_reset_pass", help="Marca para generar nueva contraseña automática"):
+                st.info("Se generará una nueva contraseña al guardar los cambios")
+                password = "NUEVA_PASSWORD_AUTO"
+
+        # =========================
+        # VALIDACIONES
+        # =========================
+        datos_validar = {
+            "email": email,
+            "nombre_completo": nombre_completo,
+            "telefono": telefono,
+            "documento": documento,
+            "rol": rol,
+            "empresa_sel": empresa_sel
+        }
+        
+        errores = []
+        error_validacion = validar_datos_usuario(datos_validar, empresas_dict, es_creacion=es_creacion)
+        if error_validacion:
+            errores.append(error_validacion)
+        
+        if errores:
+            st.warning(f"⚠️ Campos pendientes: {', '.join(errores)}")
+            st.info("💡 Puedes intentar guardar - se validarán al procesar")
+
+        # =========================
+        # BOTONES
+        # =========================
+        st.markdown("---")
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button(
+                "➕ Crear Usuario" if es_creacion else "💾 Guardar Cambios",
+                type="primary",
+                use_container_width=True
+            )
+        with col2:
+            eliminar = st.form_submit_button(
+                "🗑️ Eliminar" if not es_creacion else "❌ Cancelar",
+                type="secondary",
+                use_container_width=True
+            ) if not es_creacion else False
+
+        # =========================
+        # PROCESAMIENTO
+        # =========================
+        if submitted:
+            if errores:
+                st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
+            else:
+                try:
+                    datos_usuario = {
+                        "email": email,
+                        "nombre_completo": nombre_completo,
+                        "telefono": telefono,
+                        "documento": documento,
+                        "rol": rol,
+                        "empresa_id": empresa_id if rol in ["gestor", "comercial"] else None,
+                    }
+                    
+                    if es_creacion:
+                        # CREAR CON AUTHSERVICE
+                        password_final = password if password and password != "" else None
+                        
+                        ok, usuario_id = auth_service.crear_usuario_con_auth(
+                            datos_usuario, 
+                            tabla="usuarios", 
+                            password=password_final
+                        )
+                        
+                        if ok:
+                            st.success("✅ Usuario creado correctamente con acceso al sistema")
+                            data_service.get_usuarios.clear()
+                            st.rerun()
+                    else:
+                        # ACTUALIZAR CON AUTHSERVICE
+                        if password == "NUEVA_PASSWORD_AUTO":
+                            # Generar nueva contraseña
+                            import secrets
+                            import string
+                            caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
+                            nueva_password = ''.join(secrets.choice(caracteres) for _ in range(12))
+                            
+                            # Actualizar contraseña en Auth
+                            try:
+                                auth_id = datos.get("auth_id")
+                                if auth_id:
+                                    auth_service.supabase.auth.admin.update_user_by_id(auth_id, {"password": nueva_password})
+                                    st.success(f"🔑 Nueva contraseña generada: {nueva_password}")
+                            except Exception as e:
+                                st.warning(f"⚠️ Error actualizando contraseña: {e}")
+                        
+                        ok = auth_service.actualizar_usuario_con_auth(
+                            tabla="usuarios",
+                            registro_id=datos["id"],
+                            datos_editados=datos_usuario
+                        )
+                        
+                        if ok:
+                            st.success("✅ Usuario actualizado correctamente")
+                            data_service.get_usuarios.clear()
+                            st.rerun()
+                            
+                except Exception as e:
+                    st.error(f"❌ Error procesando usuario: {e}")
+
+        if eliminar:
+            if st.session_state.get("confirmar_eliminar_usuario"):
+                try:
+                    ok = auth_service.eliminar_usuario_con_auth(
+                        tabla="usuarios",
+                        registro_id=datos["id"]
+                    )
+                    
+                    if ok:
+                        st.success("✅ Usuario eliminado correctamente")
+                        del st.session_state["confirmar_eliminar_usuario"]
+                        data_service.get_usuarios.clear()
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error eliminando usuario: {e}")
+            else:
+                st.session_state["confirmar_eliminar_usuario"] = True
+                st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
 
 # =========================
 # MAIN
@@ -126,309 +437,68 @@ def main(supabase, session_state):
         st.error(f"❌ Error al cargar datos: {e}")
         return
 
-    # =========================
-    # Métricas rápidas
-    # =========================
-    if not df_usuarios.empty:
-        # Filtrar solo usuarios del sistema (no alumnos)
-        df_sistema = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])]
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("👥 Total", len(df_sistema))
-        with col2:
-            st.metric("🔧 Administradores", len(df_sistema[df_sistema["rol"] == "admin"]))
-        with col3:
-            st.metric("👨‍💼 Gestores", len(df_sistema[df_sistema["rol"] == "gestor"]))
-        with col4:
-            st.metric("💼 Comerciales", len(df_sistema[df_sistema["rol"] == "comercial"]))
-
     if df_usuarios.empty:
         st.info("ℹ️ No hay usuarios registrados.")
         return
 
-    # =========================
-    # Filtros
-    # =========================
-    st.divider()
-    st.markdown("### 🔍 Buscar y filtrar")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        query = st.text_input("🔍 Buscar por nombre, email o teléfono")
-    with col2:
-        rol_filter = st.selectbox("Filtrar por rol", ["Todos", "admin", "gestor", "comercial"])
-
-    # Filtrar solo usuarios del sistema (no alumnos)
-    df_filtered = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])].copy()
-    
-    if query:
-        q_lower = query.lower()
-        search_cols = []
-        for col in ["nombre_completo", "email", "telefono", "documento"]:
-            if col in df_filtered.columns:
-                search_cols.append(df_filtered[col].fillna("").str.lower().str.contains(q_lower, na=False))
-        if search_cols:
-            mask = search_cols[0]
-            for m in search_cols[1:]:
-                mask = mask | m
-            df_filtered = df_filtered[mask]
-
-    if rol_filter != "Todos":
-        df_filtered = df_filtered[df_filtered["rol"] == rol_filter]
+    # Tabs principales (títulos simplificados como participantes)
+    tabs = st.tabs(["Listado", "Crear", "Métricas"])
 
     # =========================
-    # Tabla con selección
+    # TAB LISTADO
     # =========================
-    st.divider()
-    st.markdown("### 📋 Usuarios del Sistema")
+    with tabs[0]:
+        try:
+            # Filtrar solo usuarios del sistema (no alumnos)
+            df_filtered = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])].copy()
+            
+            # Mostrar tabla
+            seleccionado, df_paged = mostrar_tabla_usuarios(df_filtered, session_state)
 
-    columnas = ["nombre_completo", "email", "telefono", "rol", "documento", "empresa_nombre", "created_at"]
-    columnas_existentes = [col for col in columnas if col in df_filtered.columns]
-    df_display = df_filtered[columnas_existentes] if not df_filtered.empty else pd.DataFrame(columns=columnas_existentes)
+            # Exportación en expander (como participantes)
+            st.divider()
+            
+            with st.expander("📥 Exportar Usuarios"):
+                exportar_usuarios(df_filtered)
 
-    evento = st.dataframe(
-        df_display,
-        use_container_width=True,
-        hide_index=True,
-        selection_mode="single-row",
-        on_select="rerun"
-    )
+            with st.expander("ℹ️ Ayuda sobre Usuarios"):
+                st.markdown("""
+                **Funcionalidades principales:**
+                - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar usuarios rápidamente
+                - ✏️ **Edición**: Haz clic en una fila para editar un usuario
+                - 📊 **Exportar**: Gestión de datos en el expander superior
+                - 🏢 **Empresa integrada**: Selección dentro del formulario
 
-    seleccionado = None
-    if evento.selection.rows:
-        seleccionado = df_filtered.iloc[evento.selection.rows[0]]
+                **Roles disponibles:**
+                - 👑 **Admin**: Acceso total al sistema, puede gestionar todas las empresas
+                - 👨‍💼 **Gestor**: Administra una empresa específica (requiere empresa asignada)
+                - 💼 **Comercial**: Gestión de CRM y clientes (requiere empresa asignada)
 
-    # Exportación
-    if not df_filtered.empty:
-        exportar_usuarios(df_filtered)
+                **Importante:**
+                - 🎓 **Los alumnos NO se crean aquí** - se crean desde "Participantes"
+                - Los gestores y comerciales deben tener empresa asignada obligatoriamente
+                - Las contraseñas se generan automáticamente de forma segura
+                """)
 
-    # =========================
-    # Tabs para Formularios
-    # =========================
-    st.divider()
-    tabs = st.tabs(["Crear Usuario", "Editar Usuario"])
+            if seleccionado is not None:
+                with st.container(border=True):
+                    mostrar_formulario_usuario(seleccionado, data_service, auth_service, empresas_dict, es_creacion=False)
+
+        except Exception as e:
+            st.error(f"❌ Error cargando usuarios: {e}")
 
     # =========================
     # TAB CREAR
     # =========================
-    with tabs[0]:
-        st.markdown("### ➕ Crear Usuario del Sistema")
-        
-        # Campos empresa fuera del formulario para roles que lo necesiten
-        st.markdown("#### 🏢 Asignación de Empresa")
-        empresa_sel_crear, empresa_id_crear = mostrar_campos_empresa_usuario(empresas_dict, {}, "crear")
-        st.divider()
-        
-        with st.form("crear_usuario", clear_on_submit=False):
-            
-            st.markdown("#### 👤 Información Personal")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                email = st.text_input("Email", key="crear_email")
-                nombre_completo = st.text_input("Nombre completo", key="crear_nombre_completo")
-                telefono = st.text_input("Teléfono", key="crear_telefono")
-            
-            with col2:
-                documento = st.text_input("Documento (DNI/NIE/CIF)", key="crear_documento")
-                rol = st.selectbox("Rol", ["", "admin", "gestor", "comercial"], key="crear_rol", 
-                                 help="Admin: acceso total, Gestor: empresa específica, Comercial: CRM")
-                password = st.text_input("Contraseña (opcional - se genera automática)", type="password", key="crear_pass")
-            
-            # Mostrar empresa seleccionada
-            st.markdown("#### 📊 Asignación actual")
-            if empresa_sel_crear:
-                st.success(f"🏢 **Empresa:** {empresa_sel_crear}")
-            else:
-                if rol in ["gestor", "comercial"]:
-                    st.warning("⚠️ **Empresa:** Requerida para gestores y comerciales")
-                else:
-                    st.info("ℹ️ **Empresa:** No requerida para administradores")
-            
-            # Validaciones
-            datos_nuevo = {
-                "email": email,
-                "nombre_completo": nombre_completo,
-                "telefono": telefono,
-                "documento": documento,
-                "rol": rol,
-                "empresa_sel": empresa_sel_crear,
-                "password": password
-            }
-            
-            errores = []
-            error_validacion = validar_datos_usuario(datos_nuevo, empresas_dict, es_creacion=True)
-            if error_validacion:
-                errores.append(error_validacion)
-            
-            if errores:
-                st.warning(f"⚠️ Campos pendientes: {', '.join(errores)}")
-                st.info("💡 Puedes intentar crear - se validarán al procesar")
-            
-            submitted = st.form_submit_button("➕ Crear Usuario", type="primary")
-
-            if submitted:
-                if errores:
-                    st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
-                else:
-                    try:
-                        datos_usuario = {
-                            "email": email,
-                            "nombre_completo": nombre_completo,
-                            "telefono": telefono,
-                            "documento": documento,
-                            "rol": rol,
-                            "empresa_id": empresa_id_crear if rol in ["gestor", "comercial"] else None,
-                        }
-                        
-                        # USAR AUTHSERVICE CENTRALIZADO
-                        ok, usuario_id = auth_service.crear_usuario_con_auth(
-                            datos_usuario, 
-                            tabla="usuarios", 
-                            password=password if password else None
-                        )
-                        
-                        if ok:
-                            st.success("✅ Usuario creado correctamente con acceso al sistema")
-                            data_service.get_usuarios.clear()
-                            # Limpiar session state
-                            st.session_state.pop("empresa_usuario_crear", None)
-                            st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Error al crear usuario: {e}")
-
-    # =========================
-    # TAB EDITAR
-    # =========================
     with tabs[1]:
-        if seleccionado is not None:
-            st.markdown(f"### ✏️ Editar Usuario: {seleccionado['nombre_completo']}")
-            
-            # Campos empresa fuera del formulario
-            st.markdown("#### 🏢 Asignación de Empresa")
-            empresa_sel_editar, empresa_id_editar = mostrar_campos_empresa_usuario(empresas_dict, seleccionado, f"editar_{seleccionado['id']}")
-            st.divider()
-            
-            with st.form(f"editar_usuario_{seleccionado['id']}", clear_on_submit=False):
-                
-                st.markdown("#### 👤 Información Personal")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    email_edit = st.text_input("Email", value=seleccionado["email"])
-                    nombre_completo_edit = st.text_input("Nombre completo", value=seleccionado["nombre_completo"])
-                    telefono_edit = st.text_input("Teléfono", value=seleccionado.get("telefono", ""))
-                
-                with col2:
-                    documento_edit = st.text_input("Documento", value=seleccionado.get("documento", ""))
-                    roles_disponibles = ["admin", "gestor", "comercial"]
-                    rol_edit = st.selectbox("Rol", roles_disponibles, 
-                                          index=roles_disponibles.index(seleccionado["rol"]) if seleccionado["rol"] in roles_disponibles else 0)
-                
-                # Gestión de contraseña
-                st.markdown("#### 🔐 Gestión de contraseña")
-                if st.checkbox("Generar nueva contraseña", help="Marca para generar nueva contraseña automática"):
-                    st.info("Se generará una nueva contraseña al guardar los cambios")
-                    reset_password = True
-                else:
-                    reset_password = False
-                
-                # Mostrar empresa seleccionada
-                st.markdown("#### 📊 Asignación actual")
-                if empresa_sel_editar:
-                    st.success(f"🏢 **Empresa:** {empresa_sel_editar}")
-                else:
-                    if rol_edit in ["gestor", "comercial"]:
-                        st.warning("⚠️ **Empresa:** Requerida para gestores y comerciales")
-                    else:
-                        st.info("ℹ️ **Empresa:** No requerida para administradores")
-                
-                # Validaciones
-                datos_editados = {
-                    "email": email_edit,
-                    "nombre_completo": nombre_completo_edit,
-                    "telefono": telefono_edit,
-                    "documento": documento_edit,
-                    "rol": rol_edit,
-                    "empresa_sel": empresa_sel_editar
-                }
-                
-                errores_edit = []
-                error_validacion_edit = validar_datos_usuario(datos_editados, empresas_dict, es_creacion=False)
-                if error_validacion_edit:
-                    errores_edit.append(error_validacion_edit)
-                
-                if errores_edit:
-                    st.warning(f"⚠️ Campos pendientes: {', '.join(errores_edit)}")
-                
-                submitted_edit = st.form_submit_button("💾 Guardar cambios", type="primary")
-
-                if submitted_edit:
-                    if errores_edit:
-                        st.error(f"❌ Corrige estos errores: {', '.join(errores_edit)}")
-                    else:
-                        try:
-                            datos_finales = {
-                                "email": email_edit,
-                                "nombre_completo": nombre_completo_edit,
-                                "telefono": telefono_edit,
-                                "documento": documento_edit,
-                                "rol": rol_edit,
-                                "empresa_id": empresa_id_editar if rol_edit in ["gestor", "comercial"] else None,
-                            }
-                            
-                            # Manejar reset de contraseña
-                            if reset_password:
-                                import secrets
-                                import string
-                                caracteres = string.ascii_letters + string.digits + "!@#$%^&*"
-                                nueva_password = ''.join(secrets.choice(caracteres) for _ in range(12))
-                                
-                                # Actualizar contraseña en Auth
-                                try:
-                                    auth_id = seleccionado.get("auth_id")
-                                    if auth_id:
-                                        supabase.auth.admin.update_user_by_id(auth_id, {"password": nueva_password})
-                                        st.success(f"🔑 Nueva contraseña generada: {nueva_password}")
-                                except Exception as e:
-                                    st.warning(f"⚠️ Error actualizando contraseña: {e}")
-                            
-                            # USAR AUTHSERVICE CENTRALIZADO
-                            ok = auth_service.actualizar_usuario_con_auth(
-                                tabla="usuarios",
-                                registro_id=seleccionado["id"],
-                                datos_editados=datos_finales
-                            )
-                            
-                            if ok:
-                                st.success("✅ Usuario actualizado correctamente")
-                                data_service.get_usuarios.clear()
-                                st.rerun()
-                                
-                        except Exception as e:
-                            st.error(f"❌ Error al actualizar usuario: {e}")
-        else:
-            st.info("👆 Selecciona un usuario de la tabla para editarlo")
+        with st.container(border=True):
+            mostrar_formulario_usuario({}, data_service, auth_service, empresas_dict, es_creacion=True)
 
     # =========================
-    # Información adicional
+    # TAB MÉTRICAS
     # =========================
+    with tabs[2]:
+        mostrar_metricas_usuarios(df_usuarios)
+
     st.divider()
-    with st.expander("ℹ️ Información sobre Roles y Usuarios"):
-        st.markdown("""
-        **Roles disponibles en este módulo:**
-        
-        - **👑 Admin**: Acceso total al sistema, puede gestionar todas las empresas y usuarios
-        - **👨‍💼 Gestor**: Administra una empresa específica y sus datos (requiere empresa asignada)
-        - **💼 Comercial**: Gestión de CRM y clientes de la empresa (requiere empresa asignada)
-        
-        **Importante:**
-        - 🎓 **Los alumnos NO se crean aquí** - se crean desde la sección "Participantes"
-        - Los alumnos creados en Participantes automáticamente tienen acceso a "Mis Grupos"
-        - Los gestores y comerciales deben tener una empresa asignada obligatoriamente
-        - Las contraseñas se generan automáticamente de forma segura si no se especifican
-        """)
-    
     st.caption("💡 Gestiona usuarios administrativos del sistema desde esta interfaz centralizada.")
