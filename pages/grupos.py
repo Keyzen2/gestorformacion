@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import uuid
 from datetime import datetime, date, time
 from services.grupos_service import get_grupos_service
 from utils import validar_dni_cif, export_csv
@@ -54,7 +55,19 @@ def safe_date_conversion(date_value):
         return date_value.date() if callable(getattr(date_value, 'date', None)) else date_value
     
     return date_value
-
+    
+def validar_uuid_seguro(uuid_str):
+    """Valida que un string sea un UUID válido."""
+    if not uuid_str:
+        return None
+    
+    try:
+        import uuid
+        uuid.UUID(str(uuid_str))
+        return str(uuid_str)
+    except (ValueError, TypeError):
+        return None
+        
 # =========================
 # FUNCIONES DE ESTADO AUTOMÁTICO
 # =========================
@@ -223,94 +236,220 @@ def mostrar_avisos_grupos(grupos_pendientes):
                         st.rerun()
 
 def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial=""):
-    """Crea selector de horarios con formato FUNDAE."""
-
-    # Franja horaria con key única
+    """Crea selector de horarios con formato FUNDAE - VERSIÓN CORREGIDA."""
+    
+    # Parsear horario inicial si existe
+    manana_i, manana_f, tarde_i, tarde_f, dias_iniciales = (None, None, None, None, [])
+    if horario_inicial:
+        manana_i, manana_f, tarde_i, tarde_f, dias_iniciales = parsear_horario_fundae(horario_inicial)
+    
+    # Determinar franja inicial basada en horario existente
+    if manana_i and tarde_i:
+        franja_inicial = "Mañanas y Tardes"
+    elif manana_i:
+        franja_inicial = "Mañanas"
+    elif tarde_i:
+        franja_inicial = "Tardes"
+    else:
+        franja_inicial = "Mañanas"
+    
+    # Selector de franja con key único
     franja = st.selectbox(
         "Franja horaria",
         ["Mañanas", "Tardes", "Mañanas y Tardes"],
-        key=f"franja_{key_suffix}"
+        index=["Mañanas", "Tardes", "Mañanas y Tardes"].index(franja_inicial),
+        key=f"franja_{key_suffix}_{hash(horario_inicial)}"  # Key único
     )
-
-    # Definir rangos según franja SELECCIONADA
+    
+    # Generar intervalos correctamente
+    intervalos_manana = []
+    intervalos_tarde = []
+    
+    # Mañanas: 06:00 a 14:45
+    for h in range(6, 15):
+        for m in [0, 15, 30, 45]:
+            intervalos_manana.append(f"{h:02d}:{m:02d}")
+    
+    # Tardes: 15:00 a 23:45  
+    for h in range(15, 24):
+        for m in [0, 15, 30, 45]:
+            if h == 23 and m > 0:  # Máximo hasta 23:00
+                break
+            intervalos_tarde.append(f"{h:02d}:{m:02d}")
+    
+    # Inicializar variables
+    hora_inicio = None
+    hora_fin = None
+    manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
+    
+    # Selector dinámico según franja
     if franja == "Mañanas":
-        horas_disponibles = [
-            "09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45",
-            "11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45",
-            "13:00","13:15","13:30","13:45","14:00"
-        ]
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Índice inicial para mañana
+            idx_inicial = 0
+            if manana_i and manana_i in intervalos_manana:
+                idx_inicial = intervalos_manana.index(manana_i)
+            
+            manana_inicio = st.selectbox(
+                "Hora inicio mañana",
+                intervalos_manana[:-1],  # Excluir última
+                index=idx_inicial,
+                key=f"manana_inicio_{key_suffix}_v2"
+            )
+        
+        with col2:
+            if manana_inicio:
+                idx_inicio = intervalos_manana.index(manana_inicio)
+                horas_fin = intervalos_manana[idx_inicio + 1:]
+                
+                # Índice para hora fin
+                idx_fin = 0
+                if manana_f and manana_f in horas_fin:
+                    idx_fin = horas_fin.index(manana_f)
+                
+                manana_fin = st.selectbox(
+                    "Hora fin mañana",
+                    horas_fin,
+                    index=min(idx_fin, len(horas_fin)-1),
+                    key=f"manana_fin_{key_suffix}_v2"
+                )
+    
     elif franja == "Tardes":
-        horas_disponibles = [
-            "14:00","14:15","14:30","14:45","15:00","15:15","15:30","15:45",
-            "16:00","16:15","16:30","16:45","17:00","17:15","17:30","17:45",
-            "18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00"
-        ]
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Índice inicial para tarde
+            idx_inicial = 0
+            if tarde_i and tarde_i in intervalos_tarde:
+                idx_inicial = intervalos_tarde.index(tarde_i)
+            
+            tarde_inicio = st.selectbox(
+                "Hora inicio tarde",
+                intervalos_tarde[:-1],
+                index=idx_inicial,
+                key=f"tarde_inicio_{key_suffix}_v2"
+            )
+        
+        with col2:
+            if tarde_inicio:
+                idx_inicio = intervalos_tarde.index(tarde_inicio)
+                horas_fin = intervalos_tarde[idx_inicio + 1:]
+                
+                # Índice para hora fin
+                idx_fin = 0
+                if tarde_f and tarde_f in horas_fin:
+                    idx_fin = horas_fin.index(tarde_f)
+                
+                tarde_fin = st.selectbox(
+                    "Hora fin tarde",
+                    horas_fin,
+                    index=min(idx_fin, len(horas_fin)-1),
+                    key=f"tarde_fin_{key_suffix}_v2"
+                )
+    
     else:  # Mañanas y Tardes
-        horas_disponibles = [
-            "09:00","09:15","09:30","09:45","10:00","10:15","10:30","10:45",
-            "11:00","11:15","11:30","11:45","12:00","12:15","12:30","12:45","13:00",
-            "13:15","13:30","13:45","14:00","14:15","14:30","14:45","15:00","15:15",
-            "15:30","15:45","16:00","16:15","16:30","16:45","17:00","17:15","17:30",
-            "17:45","18:00","18:15","18:30","18:45","19:00","19:15","19:30","19:45","20:00"
-        ]
-
-    # Selector de horas
-    col1, col2 = st.columns(2)
-    with col1:
-        hora_inicio = st.selectbox(
-            "Hora inicio",
-            horas_disponibles[:-1],  # Excluir última hora para inicio
-            key=f"hora_inicio_{key_suffix}_{franja}"
-        )
-
-    with col2:
-        idx_inicio = horas_disponibles.index(hora_inicio)
-        horas_fin_disponibles = horas_disponibles[idx_inicio + 1:]
-
-        hora_fin = st.selectbox(
-            "Hora fin",
-            horas_fin_disponibles,
-            key=f"hora_fin_{key_suffix}_{franja}"
-        )
-
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**🌅 Tramo Mañana**")
+            
+            sub_col1, sub_col2 = st.columns(2)
+            with sub_col1:
+                idx_inicial_m = 0
+                if manana_i and manana_i in intervalos_manana:
+                    idx_inicial_m = intervalos_manana.index(manana_i)
+                
+                manana_inicio = st.selectbox(
+                    "Inicio",
+                    intervalos_manana[:-1],
+                    index=idx_inicial_m,
+                    key=f"m_inicio_{key_suffix}_v2"
+                )
+            
+            with sub_col2:
+                if manana_inicio:
+                    idx_inicio = intervalos_manana.index(manana_inicio)
+                    horas_fin_m = intervalos_manana[idx_inicio + 1:]
+                    
+                    idx_fin_m = 0
+                    if manana_f and manana_f in horas_fin_m:
+                        idx_fin_m = horas_fin_m.index(manana_f)
+                    
+                    manana_fin = st.selectbox(
+                        "Fin",
+                        horas_fin_m,
+                        index=min(idx_fin_m, len(horas_fin_m)-1),
+                        key=f"m_fin_{key_suffix}_v2"
+                    )
+        
+        with col2:
+            st.markdown("**🌆 Tramo Tarde**")
+            
+            sub_col1, sub_col2 = st.columns(2)
+            with sub_col1:
+                idx_inicial_t = 0
+                if tarde_i and tarde_i in intervalos_tarde:
+                    idx_inicial_t = intervalos_tarde.index(tarde_i)
+                
+                tarde_inicio = st.selectbox(
+                    "Inicio",
+                    intervalos_tarde[:-1],
+                    index=idx_inicial_t,
+                    key=f"t_inicio_{key_suffix}_v2"
+                )
+            
+            with sub_col2:
+                if tarde_inicio:
+                    idx_inicio = intervalos_tarde.index(tarde_inicio)
+                    horas_fin_t = intervalos_tarde[idx_inicio + 1:]
+                    
+                    idx_fin_t = 0
+                    if tarde_f and tarde_f in horas_fin_t:
+                        idx_fin_t = horas_fin_t.index(tarde_f)
+                    
+                    tarde_fin = st.selectbox(
+                        "Fin",
+                        horas_fin_t,
+                        index=min(idx_fin_t, len(horas_fin_t)-1),
+                        key=f"t_fin_{key_suffix}_v2"
+                    )
+    
     # Días de la semana
-    DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
-    NOMBRES_DIAS = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
-
     st.markdown("**📅 Días de Impartición**")
     with st.container(border=True):
         cols = st.columns(7)
         dias_seleccionados = []
-
+        
         for i, (dia_corto, dia_largo) in enumerate(zip(DIAS_SEMANA, NOMBRES_DIAS)):
             with cols[i]:
+                # Valor por defecto o desde horario inicial
+                valor_default = dia_corto in dias_iniciales if dias_iniciales else dia_corto in ["L", "M", "X", "J", "V"]
+                
                 if st.checkbox(
                     dia_largo,
-                    value=dia_corto in ["L","M","X","J","V"],  # L-V por defecto
-                    key=f"{key_suffix}_dia_{dia_corto}_{franja}"
+                    value=valor_default,
+                    key=f"dia_{dia_corto}_{key_suffix}_v2"
                 ):
                     dias_seleccionados.append(dia_corto)
-
-    # Construir horario según franja seleccionada
-    if franja == "Mañanas":
-        horario_final = grupos_service.construir_horario_fundae(
-            hora_inicio, hora_fin, None, None, dias_seleccionados
-        )
-    elif franja == "Tardes":
-        horario_final = grupos_service.construir_horario_fundae(
-            None, None, hora_inicio, hora_fin, dias_seleccionados
-        )
-    else:  # Mañanas y Tardes
-        horario_final = grupos_service.construir_horario_fundae(
-            "09:00", "14:00", "15:00", hora_fin, dias_seleccionados
-        )
-
+    
+    # Construir horario final
+    horario_final = construir_horario_fundae(
+        manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados
+    )
+    
     # Mostrar resultado
     if horario_final:
         st.success(f"✅ Horario FUNDAE: {horario_final}")
+        
+        # Validar formato
+        es_valido, error = validar_horario_fundae(horario_final)
+        if not es_valido:
+            st.error(f"❌ Error: {error}")
     else:
         st.warning("⚠️ Configure al menos un tramo horario y días")
-
+    
     return horario_final
 
 # =========================
@@ -810,67 +949,55 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         
         # Procesar formulario
         if submitted:
-        # Validaciones manuales
-            if not responsable or not telefono_contacto:
-                st.error("❌ Responsable y Teléfono de contacto son obligatorios")
-            else:
-                # Preparar datos según operación
-                datos_para_guardar = {
-                    "accion_formativa_id": acciones_dict[accion_formativa],
-                    "modalidad": modalidad_grupo,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "provincia": provincia_sel,
-                    "localidad": localidad_sel,
-                    "cp": cp,
-                    "responsable": responsable.strip(),
-                    "telefono_contacto": telefono_contacto.strip(),
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "lugar_imparticion": lugar_imparticion,
-                    "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
-                }
-        
-                # Añadir código solo en creación
-                if es_creacion:
-                    datos_para_guardar["codigo_grupo"] = datos_grupo.get("codigo_grupo", "")
-                    datos_para_guardar["empresa_id"] = datos_grupo.get("empresa_id")
-        
-                try:
-                    if es_creacion:
-                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
-                        if exito:
-                            st.success("✅ Grupo creado correctamente")
-                            # Cargar grupo recién creado y mantenerlo seleccionado
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                            st.rerun()
-                    else:
-                        res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
-                        if res.data:
-                            st.success("✅ Cambios guardados correctamente")
-                            st.session_state.grupo_seleccionado = res.data[0]  # mantener actualizado
-                            st.rerun()
-                        else:
-                            st.error("❌ No se guardaron cambios en el grupo")
-                except Exception as e:
-                    st.error(f"❌ Error al procesar grupo: {e}")
-        
-        elif cancelar:
-            st.session_state.grupo_seleccionado = None
-            st.rerun()
-        
-        elif recargar:
+        # Validaciones manuales - INDENTACIÓN CORREGIDA
+        if not responsable or not telefono_contacto:
+            st.error("❌ Responsable y Teléfono de contacto son obligatorios")
+        else:
+            # Preparar datos según operación
+            datos_para_guardar = {
+                "accion_formativa_id": acciones_dict[accion_formativa],
+                "modalidad": modalidad_grupo,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                "provincia": provincia_sel,
+                "localidad": localidad_sel,
+                "cp": cp,
+                "responsable": responsable.strip(),
+                "telefono_contacto": telefono_contacto.strip(),
+                "n_participantes_previstos": n_participantes_previstos,
+                "lugar_imparticion": lugar_imparticion,
+                "observaciones": observaciones,
+                "horario": horario_nuevo if horario_nuevo else None
+            }
+            
+            # Añadir código solo en creación
+            if es_creacion:
+                datos_para_guardar["codigo_grupo"] = codigo_grupo  # CORRECCIÓN: usar variable correcta
+                datos_para_guardar["empresa_id"] = empresa_id  # CORRECCIÓN: usar variable correcta
+            
             try:
-                grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
-                if grupo_recargado.data:
-                    st.session_state.grupo_seleccionado = grupo_recargado.data[0]
-                st.rerun()
+                if es_creacion:
+                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
+                    if exito:
+                        st.success("✅ Grupo creado correctamente")
+                        # Cargar grupo recién creado
+                        grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                        if grupo_creado.data:
+                            st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al crear grupo")
+                else:
+                    # Actualización de grupo existente
+                    res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
+                    if res.data:
+                        st.success("✅ Cambios guardados correctamente")
+                        st.session_state.grupo_seleccionado = res.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ No se guardaron cambios en el grupo")
             except Exception as e:
-                st.error(f"Error al recargar: {e}")
-        
-        return datos_grupo.get("id") if datos_grupo else None
+                st.error(f"❌ Error al procesar grupo: {e}")
 
 # =========================
 # SECCIONES ADICIONALES CON JERARQUÍA
@@ -900,97 +1027,128 @@ def mostrar_secciones_adicionales(grupos_service, grupo_id):
         mostrar_seccion_costes(grupos_service, grupo_id)
 
 def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
-    """CORREGIDO: Gestión de tutores con manejo seguro de UUIDs."""
+    """CORREGIDO: Usando tabla tutores_grupos (N:N)."""
     st.markdown("**Gestión de Tutores con Jerarquía**")
     
-    # CORRECCIÓN: Validar grupo_id antes de usarlo
-    if not grupo_id or grupo_id == "None":
-        st.error("⚠ ID de grupo no válido")
-        return
-    
-    # Validar permisos
-    if not grupos_service.validar_permisos_grupo(grupo_id):
-        st.warning("⚠️ No tienes permisos para gestionar tutores de este grupo")
+    grupo_id_limpio = validar_uuid_seguro(grupo_id)
+    if not grupo_id_limpio:
+        st.error("ID de grupo no válido")
         return
     
     try:
-        # Tutores actuales
-        df_tutores = grupos_service.get_tutores_grupo(grupo_id)
+        # CORRECCIÓN: Usar tabla de relación tutores_grupos
+        tutores_res = grupos_service.supabase.table("tutores_grupos").select("""
+            id, tutor_id, fecha_asignacion,
+            tutor:tutores(id, nombre, apellidos, email, especialidad)
+        """).eq("grupo_id", grupo_id_limpio).execute()
+        
+        df_tutores = pd.DataFrame(tutores_res.data or [])
         
         if not df_tutores.empty:
             st.markdown("##### Tutores Asignados")
             
             for _, row in df_tutores.iterrows():
                 tutor = row.get("tutor", {})
-                if not tutor:
-                    continue
-                    
-                with st.container(border=True):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        nombre_completo = f"{tutor.get('nombre', '')} {tutor.get('apellidos', '')}"
-                        st.write(f"**{nombre_completo.strip()}**")
-                        st.caption(f"📧 {tutor.get('email', 'N/A')} | 🎯 {tutor.get('especialidad', 'Sin especialidad')}")
-                    with col2:
-                        if st.button("Quitar", key=f"quitar_tutor_{row.get('id')}", type="secondary"):
-                            try:
-                                if grupos_service.delete_tutor_grupo(row.get("id")):
-                                    st.success("✅ Tutor eliminado")
+                if isinstance(tutor, dict):
+                    with st.container(border=True):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            nombre_completo = f"{tutor.get('nombre', '')} {tutor.get('apellidos', '')}".strip()
+                            st.write(f"**{nombre_completo}**")
+                            st.caption(f"📧 {tutor.get('email', 'N/A')} | 🎯 {tutor.get('especialidad', 'Sin especialidad')}")
+                        with col2:
+                            if st.button("Quitar", key=f"quitar_tutor_{row.get('id')}", type="secondary"):
+                                try:
+                                    # CORRECCIÓN: Eliminar de tabla de relación
+                                    grupos_service.supabase.table("tutores_grupos").delete().eq("id", row.get("id")).execute()
+                                    st.success("Tutor eliminado")
                                     st.rerun()
-                                else:
-                                    st.error("⚠ Error al eliminar tutor")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
         else:
             st.info("📋 No hay tutores asignados")
         
-        # CORRECCIÓN: Añadir tutores con manejo seguro de UUIDs
+        # Asignar nuevos tutores
         st.markdown("##### Añadir Tutores")
+        
         try:
-            # CORRECCIÓN: Pasar grupo_id válido y manejar None
-            if grupo_id and grupo_id != "None":
-                df_tutores_disponibles = grupos_service.get_tutores_disponibles_jerarquia(grupo_id)
-            else:
-                df_tutores_disponibles = pd.DataFrame()
+            # CORRECCIÓN: Buscar tutores disponibles (no asignados a este grupo)
+            tutores_grupo = grupos_service.supabase.table("tutores_grupos").select("tutor_id").eq("grupo_id", grupo_id_limpio).execute()
+            tutores_asignados = [t["tutor_id"] for t in (tutores_grupo.data or [])]
             
-            if not df_tutores_disponibles.empty:
-                opciones_tutores = {}
-                for _, row in df_tutores_disponibles.iterrows():
-                    nombre = row.get('nombre_completo', f"{row.get('nombre', '')} {row.get('apellidos', '')}")
-                    especialidad = row.get('especialidad', 'Sin especialidad')
-                    empresa = row.get('empresa_nombre', 'Sin empresa')
-                    opciones_tutores[f"{nombre} - {especialidad} ({empresa})"] = row["id"]
+            # Obtener tutores según jerarquía
+            if grupos_service.rol == "admin":
+                query = grupos_service.supabase.table("tutores").select("""
+                    id, nombre, apellidos, email, especialidad, empresa_id,
+                    empresa:empresas(nombre)
+                """)
+            elif grupos_service.rol == "gestor" and grupos_service.empresa_id:
+                # Tutores de su empresa y empresas clientes
+                empresa_id_limpio = validar_uuid_seguro(grupos_service.empresa_id)
+                if empresa_id_limpio:
+                    clientes_res = grupos_service.supabase.table("empresas").select("id").eq("empresa_matriz_id", empresa_id_limpio).execute()
+                    empresas_gestionables = [empresa_id_limpio]
+                    if clientes_res.data:
+                        empresas_gestionables.extend([c["id"] for c in clientes_res.data])
+                    
+                    query = grupos_service.supabase.table("tutores").select("""
+                        id, nombre, apellidos, email, especialidad, empresa_id,
+                        empresa:empresas(nombre)
+                    """).in_("empresa_id", empresas_gestionables)
+                else:
+                    query = None
+            else:
+                query = None
+            
+            if query:
+                if tutores_asignados:
+                    query = query.not_.in_("id", tutores_asignados)
                 
-                tutores_seleccionados = st.multiselect(
-                    "Seleccionar tutores:",
-                    opciones_tutores.keys(),
-                    key=f"tutores_add_{grupo_id}",
-                    help="Solo se muestran tutores de empresas con las que tienes relación jerárquica"
-                )
+                disponibles_res = query.execute()
+                df_disponibles = pd.DataFrame(disponibles_res.data or [])
                 
-                if tutores_seleccionados and st.button("Asignar Tutores", type="primary"):
-                    exitos = 0
-                    for tutor_nombre in tutores_seleccionados:
-                        tutor_id = opciones_tutores[tutor_nombre]
-                        # CORRECCIÓN: Validar tutor_id antes de usar
-                        if tutor_id and tutor_id != "None":
+                if not df_disponibles.empty:
+                    opciones_tutores = {}
+                    for _, row in df_disponibles.iterrows():
+                        empresa_nombre = row.get("empresa", {}).get("nombre", "Sin empresa") if isinstance(row.get("empresa"), dict) else "Sin empresa"
+                        nombre_completo = f"{row.get('nombre', '')} {row.get('apellidos', '')} - {row.get('especialidad', 'Sin especialidad')} ({empresa_nombre})"
+                        opciones_tutores[nombre_completo] = row["id"]
+                    
+                    tutores_seleccionados = st.multiselect(
+                        "Seleccionar tutores:",
+                        opciones_tutores.keys(),
+                        key=f"tutores_add_{grupo_id_limpio}"
+                    )
+                    
+                    if tutores_seleccionados and st.button("Asignar Tutores", type="primary"):
+                        exitos = 0
+                        for tutor_nombre in tutores_seleccionados:
+                            tutor_id = opciones_tutores[tutor_nombre]
                             try:
-                                if grupos_service.create_tutor_grupo(grupo_id, tutor_id):
-                                    exitos += 1
+                                # CORRECCIÓN: Insertar en tabla de relación N:N
+                                grupos_service.supabase.table("tutores_grupos").insert({
+                                    "grupo_id": grupo_id_limpio,
+                                    "tutor_id": tutor_id,
+                                    "fecha_asignacion": datetime.utcnow().isoformat()
+                                }).execute()
+                                exitos += 1
                             except Exception as e:
                                 st.error(f"Error al asignar {tutor_nombre}: {e}")
-                    
-                    if exitos > 0:
-                        st.success(f"✅ Se asignaron {exitos} tutores")
-                        st.rerun()
+                        
+                        if exitos > 0:
+                            st.success(f"Se asignaron {exitos} tutores")
+                            st.rerun()
+                else:
+                    st.info("No hay tutores disponibles")
             else:
-                st.info("📋 No hay tutores disponibles en tu ámbito jerárquico")
+                st.info("No hay tutores disponibles en tu ámbito")
+                
         except Exception as e:
-            st.error(f"Error al cargar tutores disponibles: {e}")
+            st.error(f"Error cargando tutores disponibles: {e}")
             
     except Exception as e:
-        st.error(f"Error al cargar sección de tutores: {e}")
-
+        st.error(f"Error en sección de tutores: {e}")
+        
 def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
     """Gestión de Centro Gestor con validaciones jerárquicas."""
     st.markdown("**Centro Gestor (solo Teleformación/Mixta)**")
@@ -1051,50 +1209,46 @@ def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
         st.error(f"Error en sección Centro Gestor: {e}")
 
 def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
-    """Gestión de empresas participantes con soporte jerárquico."""
+    """Gestión de empresas participantes usando empresas_grupos."""
     st.markdown("**Empresas Participantes con Jerarquía**")
     
-    # Información contextual por rol
-    if grupos_service.rol == "gestor":
-        st.info("ℹ️ Como gestor, puedes asignar tu empresa y empresas clientes")
-    elif grupos_service.rol == "admin":
-        st.info("ℹ️ Como admin, puedes asignar cualquier empresa del sistema")
+    grupo_id_limpio = validar_uuid_seguro(grupo_id)
+    if not grupo_id_limpio:
+        st.error("ID de grupo no válido")
+        return
     
     try:
-        # Empresas actuales
-        df_empresas = grupos_service.get_empresas_grupo(grupo_id)
+        # Usar tabla de relación empresas_grupos
+        empresas_res = grupos_service.supabase.table("empresas_grupos").select("""
+            id, empresa_id, fecha_asignacion,
+            empresa:empresas(id, nombre, cif, tipo_empresa)
+        """).eq("grupo_id", grupo_id_limpio).execute()
+        
+        df_empresas = pd.DataFrame(empresas_res.data or [])
         
         if not df_empresas.empty:
             st.markdown("##### Empresas Asignadas")
             for _, row in df_empresas.iterrows():
                 empresa = row.get("empresa", {})
-                if not empresa:
-                    continue
-                    
-                with st.container(border=True):
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.write(f"**{empresa.get('nombre', 'Sin nombre')}**")
-                        cif = empresa.get('cif', 'Sin CIF')
-                        fecha = row.get('fecha_asignacion', 'Sin fecha')
-                        if isinstance(fecha, str) and len(fecha) > 10:
-                            fecha = fecha[:10]
-                        st.caption(f"📄 CIF: {cif} | 📅 Fecha: {fecha}")
-                    with col2:
-                        # Solo permitir quitar si tiene permisos
-                        if grupos_service.validar_permisos_grupo(grupo_id) and st.button(
-                            "Quitar", 
-                            key=f"quitar_empresa_{row.get('id')}", 
-                            type="secondary"
-                        ):
-                            try:
-                                if grupos_service.delete_empresa_grupo(row.get("id")):
-                                    st.success("✅ Empresa eliminada")
+                if isinstance(empresa, dict):
+                    with st.container(border=True):
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"**{empresa.get('nombre', 'Sin nombre')}**")
+                            tipo = empresa.get('tipo_empresa', 'Sin tipo')
+                            cif = empresa.get('cif', 'Sin CIF')
+                            fecha = row.get('fecha_asignacion', '')
+                            if isinstance(fecha, str) and len(fecha) > 10:
+                                fecha = fecha[:10]
+                            st.caption(f"🏢 {tipo} | 📄 {cif} | 📅 {fecha}")
+                        with col2:
+                            if st.button("Quitar", key=f"quitar_empresa_{row.get('id')}", type="secondary"):
+                                try:
+                                    grupos_service.supabase.table("empresas_grupos").delete().eq("id", row.get("id")).execute()
+                                    st.success("Empresa eliminada")
                                     st.rerun()
-                                else:
-                                    st.error("❌ Error al eliminar empresa")
-                            except Exception as e:
-                                st.error(f"Error: {e}")
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
         else:
             st.info("📋 No hay empresas asignadas")
         
@@ -1133,31 +1287,45 @@ def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
         st.error(f"Error al cargar sección de empresas: {e}")
 
 def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
-    """CORREGIDO: Gestión de participantes con manejo seguro de UUIDs."""
+    """CORREGIDO: Usando tabla participantes_grupos (N:N)."""
     st.markdown("**Participantes del Grupo con Jerarquía**")
     
-    # CORRECCIÓN: Validar grupo_id
-    if not grupo_id or grupo_id == "None":
-        st.error("⚠ ID de grupo no válido")
+    grupo_id_limpio = validar_uuid_seguro(grupo_id)
+    if not grupo_id_limpio:
+        st.error("ID de grupo no válido")
         return
     
     try:
-        # Participantes actuales
-        df_participantes = grupos_service.get_participantes_grupo(grupo_id)
+        # CORRECCIÓN: Usar tabla de relación participantes_grupos
+        participantes_res = grupos_service.supabase.table("participantes_grupos").select("""
+            id, participante_id, fecha_asignacion,
+            participante:participantes(id, nif, nombre, apellidos, email, telefono)
+        """).eq("grupo_id", grupo_id_limpio).execute()
+        
+        df_participantes = pd.DataFrame(participantes_res.data or [])
         
         if not df_participantes.empty:
             st.markdown("##### Participantes Asignados")
             
-            # Verificar columnas disponibles
-            columnas_mostrar = []
-            columnas_disponibles = ["nif", "nombre", "apellidos", "email", "telefono"]
-            for col in columnas_disponibles:
-                if col in df_participantes.columns:
-                    columnas_mostrar.append(col)
+            # Procesar datos de participantes
+            participantes_data = []
+            for _, row in df_participantes.iterrows():
+                participante = row.get("participante", {})
+                if isinstance(participante, dict):
+                    participantes_data.append({
+                        "relacion_id": row.get("id"),
+                        "nif": participante.get("nif", ""),
+                        "nombre": participante.get("nombre", ""),
+                        "apellidos": participante.get("apellidos", ""),
+                        "email": participante.get("email", ""),
+                        "telefono": participante.get("telefono", ""),
+                        "fecha_asignacion": row.get("fecha_asignacion", "")
+                    })
             
-            if columnas_mostrar:
+            if participantes_data:
+                df_display = pd.DataFrame(participantes_data)
                 st.dataframe(
-                    df_participantes[columnas_mostrar],
+                    df_display[["nif", "nombre", "apellidos", "email", "telefono"]],
                     use_container_width=True,
                     hide_index=True,
                     column_config={
@@ -1168,59 +1336,91 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium")
                     }
                 )
-            else:
-                st.warning("⚠️ No se pueden mostrar los datos de participantes")
+                
+                # Desasignar participantes
+                with st.expander("❌ Desasignar Participantes"):
+                    for _, row in df_display.iterrows():
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.write(f"{row['nif']} - {row['nombre']} {row['apellidos']}")
+                        with col2:
+                            if st.button("Quitar", key=f"quitar_part_{row['relacion_id']}", type="secondary"):
+                                try:
+                                    # CORRECCIÓN: Eliminar de tabla de relación
+                                    grupos_service.supabase.table("participantes_grupos").delete().eq("id", row['relacion_id']).execute()
+                                    st.success("Participante desasignado")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {e}")
         else:
             st.info("📋 No hay participantes asignados")
         
-        # CORRECCIÓN: Asignar participantes con validación UUID
+        # Asignar nuevos participantes
         st.markdown("##### Asignar Participantes")
         
-        tab1, tab2 = st.tabs(["👤 Individual", "📊 Masivo (Excel)"])
-        
-        with tab1:
-            try:
-                # CORRECCIÓN: Validar grupo_id antes de la consulta
-                if grupo_id and grupo_id != "None":
-                    df_disponibles = grupos_service.get_participantes_disponibles_jerarquia(grupo_id)
-                else:
-                    df_disponibles = pd.DataFrame()
+        try:
+            # CORRECCIÓN: Buscar participantes disponibles (sin grupo asignado en la relación)
+            participantes_con_grupo = grupos_service.supabase.table("participantes_grupos").select("participante_id").execute()
+            participantes_asignados = [p["participante_id"] for p in (participantes_con_grupo.data or [])]
+            
+            # Obtener empresas participantes del grupo
+            empresas_grupo = grupos_service.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id_limpio).execute()
+            empresas_participantes = [e["empresa_id"] for e in (empresas_grupo.data or [])]
+            
+            if empresas_participantes:
+                # Participantes de empresas participantes que no están en ningún grupo
+                query = grupos_service.supabase.table("participantes").select("""
+                    id, nif, nombre, apellidos, email, empresa_id,
+                    empresa:empresas(nombre)
+                """).in_("empresa_id", empresas_participantes)
+                
+                if participantes_asignados:
+                    query = query.not_.in_("id", participantes_asignados)
+                
+                disponibles_res = query.execute()
+                df_disponibles = pd.DataFrame(disponibles_res.data or [])
                 
                 if not df_disponibles.empty:
-                    participantes_opciones = {}
+                    opciones_participantes = {}
                     for _, row in df_disponibles.iterrows():
-                        nif = row.get('nif', 'Sin NIF')
-                        nombre = row.get('nombre', '')
-                        apellidos = row.get('apellidos', '')
-                        empresa = row.get('empresa_nombre', 'Sin empresa')
-                        participantes_opciones[f"{nif} - {nombre} {apellidos} ({empresa})"] = row["id"]
+                        empresa_nombre = row.get("empresa", {}).get("nombre", "Sin empresa") if isinstance(row.get("empresa"), dict) else "Sin empresa"
+                        nombre_completo = f"{row.get('nif', 'Sin NIF')} - {row.get('nombre', '')} {row.get('apellidos', '')} ({empresa_nombre})"
+                        opciones_participantes[nombre_completo] = row["id"]
                     
                     participantes_seleccionados = st.multiselect(
                         "Seleccionar participantes:",
-                        participantes_opciones.keys(),
-                        key=f"participantes_add_{grupo_id}",
-                        help="Solo se muestran participantes de empresas participantes en el grupo"
+                        opciones_participantes.keys(),
+                        key=f"participantes_add_{grupo_id_limpio}"
                     )
                     
                     if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
                         exitos = 0
-                        for participante_str in participantes_seleccionados:
-                            participante_id = participantes_opciones[participante_str]
-                            # CORRECCIÓN: Validar participante_id
-                            if participante_id and participante_id != "None":
-                                try:
-                                    if grupos_service.asignar_participante_a_grupo(participante_id, grupo_id):
-                                        exitos += 1
-                                except Exception as e:
-                                    st.error(f"Error al asignar {participante_str}: {e}")
+                        for participante_nombre in participantes_seleccionados:
+                            participante_id = opciones_participantes[participante_nombre]
+                            try:
+                                # CORRECCIÓN: Insertar en tabla de relación N:N
+                                grupos_service.supabase.table("participantes_grupos").insert({
+                                    "grupo_id": grupo_id_limpio,
+                                    "participante_id": participante_id,
+                                    "fecha_asignacion": datetime.utcnow().isoformat()
+                                }).execute()
+                                exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al asignar {participante_nombre}: {e}")
                         
                         if exitos > 0:
-                            st.success(f"✅ Se asignaron {exitos} participantes")
+                            st.success(f"Se asignaron {exitos} participantes")
                             st.rerun()
                 else:
-                    st.info("📋 No hay participantes disponibles en tu ámbito jerárquico")
-            except Exception as e:
-                st.error(f"Error al cargar participantes disponibles: {e}")
+                    st.info("No hay participantes disponibles")
+            else:
+                st.warning("Primero asigna empresas participantes al grupo")
+                
+        except Exception as e:
+            st.error(f"Error cargando participantes disponibles: {e}")
+            
+    except Exception as e:
+        st.error(f"Error en sección de participantes: {e}")
         
         with tab2:
             st.markdown("**📊 Importación masiva desde Excel**")
