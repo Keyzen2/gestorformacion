@@ -344,7 +344,7 @@ def mostrar_formulario_participante(
             )
             empresa_id = empresa_options.get(empresa_sel) if empresa_sel else None
         
-        with col2:
+         with col2:
             # Grupo (filtrado por empresa)
             if empresa_id:
                 # CORRECCIÓN: Filtrar grupos por empresa usando el campo correcto
