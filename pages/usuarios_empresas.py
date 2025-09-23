@@ -214,7 +214,7 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista 
 # FORMULARIO INTEGRADO CORREGIDO
 # =========================
 def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresas_dict, es_creacion=False):
-    """Formulario completo siguiendo el patrón que funciona."""
+    """Formulario simplificado: crear sin empresa, editar con empresa."""
     
     if es_creacion:
         st.subheader("➕ Crear Usuario del Sistema")
@@ -223,13 +223,12 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
         st.subheader(f"✏️ Editar Usuario: {usuario_data['nombre_completo']}")
         datos = usuario_data.copy()
 
-    # Form key que funciona
     form_key = f"usuario_form_{es_creacion}_{datos.get('id', 'nuevo')}"
 
     with st.form(form_key, clear_on_submit=es_creacion):
         
         # =========================
-        # INFORMACIÓN PERSONAL
+        # INFORMACIÓN PERSONAL (SIEMPRE)
         # =========================
         st.markdown("### 👤 Información Personal")
         col1, col2 = st.columns(2)
@@ -242,44 +241,61 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
         with col2:
             nif = st.text_input("Documento (DNI/NIE/CIF)", value=datos.get("nif", ""))
             
-            # Rol
+            # Rol siempre disponible
             roles = ["", "admin", "gestor", "comercial"]
             rol_index = roles.index(datos.get("rol", "")) if datos.get("rol") in roles else 0
             rol = st.selectbox("Rol", roles, index=rol_index, 
                               help="Admin: acceso total, Gestor: empresa específica, Comercial: CRM")
 
         # =========================
-        # EMPRESA (CONDICIONAL)
+        # EMPRESA (SOLO EN EDICIÓN)
         # =========================
         empresa_id = None
-        if rol in ["gestor", "comercial"]:
+        if not es_creacion:
             st.markdown("### 🏢 Asignación de Empresa")
-            empresa_opciones = [""] + sorted(empresas_dict.keys())
+            
+            # Mostrar empresa actual si existe
             empresa_actual = datos.get("empresa_nombre", "")
+            if empresa_actual:
+                st.info(f"Empresa actual: {empresa_actual}")
+            
+            # Campo para cambiar empresa
+            empresa_opciones = [""] + sorted(empresas_dict.keys())
             empresa_index = empresa_opciones.index(empresa_actual) if empresa_actual in empresa_opciones else 0
-            empresa_sel = st.selectbox("Empresa", empresa_opciones, index=empresa_index,
-                                     help="Empresa que gestionará este usuario")
+            empresa_sel = st.selectbox(
+                "Nueva empresa" if empresa_actual else "Asignar empresa", 
+                empresa_opciones, 
+                index=empresa_index,
+                help="Selecciona empresa para gestores y comerciales"
+            )
             empresa_id = empresas_dict.get(empresa_sel) if empresa_sel else None
             
-            if empresa_sel:
-                st.success(f"✅ Empresa asignada: {empresa_sel}")
-            else:
-                st.warning("⚠️ Debe seleccionar una empresa para este rol")
+            # Mostrar validación visual
+            if rol in ["gestor", "comercial"]:
+                if empresa_sel:
+                    st.success(f"✅ Empresa asignada: {empresa_sel}")
+                else:
+                    st.warning("⚠️ Este rol requiere empresa asignada")
+            elif empresa_sel:
+                st.info("ℹ️ Los administradores no requieren empresa específica")
 
-        # Credenciales (solo creación)
+        # =========================
+        # CREDENCIALES
+        # =========================
         password = None
         if es_creacion:
             st.markdown("### 🔐 Credenciales")
-            password = st.text_input("Contraseña (opcional - se generará automáticamente)", 
+            st.info("💡 Se generará contraseña automática segura al crear el usuario")
+            password = st.text_input("Contraseña personalizada (opcional)", 
                                    type="password",
                                    help="Deja vacío para generar contraseña automática")
         else:
-            # Opción resetear contraseña
+            st.markdown("### 🔐 Gestión de Contraseña")
             if st.checkbox("Generar nueva contraseña", help="Marca para generar nueva contraseña"):
                 password = "NUEVA_PASSWORD_AUTO"
 
         # =========================
-        # VALIDACIONES Y BOTÓN
+        # VALIDACIONES
         # =========================
         errores = []
         if not email:
@@ -288,17 +304,22 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
             errores.append("Nombre completo obligatorio")
         if not rol:
             errores.append("Rol obligatorio")
-        if rol in ["gestor", "comercial"] and not empresa_id:
+        
+        # Validación de empresa solo en edición
+        if not es_creacion and rol in ["gestor", "comercial"] and not empresa_id:
             errores.append("Empresa obligatoria para gestores y comerciales")
         
         if errores:
             st.warning(f"⚠️ Campos pendientes: {', '.join(errores)}")
 
-        submitted = st.form_submit_button(
-            "➕ Crear Usuario" if es_creacion else "💾 Guardar Cambios",
-            type="primary",
-            use_container_width=True
-        )
+        # =========================
+        # BOTÓN PRINCIPAL
+        # =========================
+        if es_creacion:
+            submitted = st.form_submit_button("➕ Crear Usuario", type="primary", use_container_width=True)
+            st.caption("💡 Después podrás asignar empresa editando el usuario")
+        else:
+            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
         
         # =========================
         # PROCESAMIENTO
@@ -308,7 +329,7 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                 st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
                 return
             
-            # Preparar datos con todos los campos opcionales
+            # Preparar datos
             datos_usuario = {
                 "email": email.strip(),
                 "nombre_completo": nombre_completo.strip(),
@@ -316,12 +337,12 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                 "telefono": telefono.strip() if telefono else None,
                 "nif": nif.strip() if nif else None,
                 "rol": rol,
-                "empresa_id": empresa_id,  # Solo para gestor/comercial
+                "empresa_id": empresa_id,  # None para creación, puede ser algo para edición
             }
             
             try:
                 if es_creacion:
-                    # Crear usuario
+                    # CREAR: Sin empresa, se asigna después
                     password_final = password.strip() if password and password.strip() else None
                     
                     ok, usuario_id = auth_service.crear_usuario_con_auth(
@@ -332,15 +353,19 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                     
                     if ok:
                         st.success("✅ Usuario creado correctamente")
+                        if rol in ["gestor", "comercial"]:
+                            st.info("💡 Ve a la pestaña 'Listado' para asignarle una empresa")
                         st.balloons()
+                        
                         # Limpiar cache
                         if hasattr(data_service, 'get_usuarios') and hasattr(data_service.get_usuarios, 'clear'):
                             data_service.get_usuarios.clear()
                         st.rerun()
                     else:
                         st.error("❌ Error al crear usuario")
+                        
                 else:
-                    # Actualizar usuario
+                    # ACTUALIZAR: Incluye empresa
                     if password == "NUEVA_PASSWORD_AUTO":
                         # Generar nueva contraseña
                         import secrets
@@ -374,7 +399,7 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
                 st.error(f"❌ Error procesando usuario: {str(e)}")
 
     # =========================
-    # BOTÓN DE ELIMINAR (fuera del form)
+    # BOTÓN ELIMINAR (solo edición, fuera del form)
     # =========================
     if not es_creacion:
         st.markdown("---")
