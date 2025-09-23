@@ -334,7 +334,7 @@ def mostrar_formulario_participante(
             # Empresa
             empresa_actual_id = datos.get("empresa_id")
             empresa_actual_nombre = next((k for k, v in empresa_options.items() if v == empresa_actual_id), "")
-            
+        
             empresa_sel = st.selectbox(
                 "🏢 Empresa",
                 options=[""] + list(empresa_options.keys()),
@@ -344,7 +344,7 @@ def mostrar_formulario_participante(
             )
             empresa_id = empresa_options.get(empresa_sel) if empresa_sel else None
         
-         with col2:
+        with col2:
             # Grupo (filtrado por empresa)
             if empresa_id:
                 # CORRECCIÓN: Filtrar grupos por empresa usando el campo correcto
@@ -354,7 +354,7 @@ def mostrar_formulario_participante(
                         if row["id"] == v:
                             # Verificar empresa_id según el formato de datos
                             if "empresa_id" in row and row["empresa_id"] == empresa_id:
-                               grupos_empresa[k] = v
+                                grupos_empresa[k] = v
                                 break
                             elif "empresa" in row and isinstance(row["empresa"], dict):
                                 if row["empresa"].get("id") == empresa_id:
@@ -373,9 +373,14 @@ def mostrar_formulario_participante(
                 )
                 grupo_id = grupos_empresa.get(grupo_sel) if grupo_sel else None
             else:
-                st.selectbox("🎓 Grupo de Formación", options=["Seleccione empresa primero"], disabled=True, key=f"{form_id}_grupo_disabled")
+                st.selectbox(
+                    "🎓 Grupo de Formación",
+                    options=["Seleccione empresa primero"],
+                    disabled=True,
+                    key=f"{form_id}_grupo_disabled"
+                )
                 grupo_id = None
-
+        
         # Credenciales Auth (solo en creación)
         if es_creacion:
             st.markdown("### 🔐 Credenciales de acceso")
@@ -389,7 +394,11 @@ def mostrar_formulario_participante(
             password = None
             # Mostrar opción para resetear contraseña
             st.markdown("### 🔐 Gestión de contraseña")
-            if st.checkbox("Generar nueva contraseña", key=f"{form_id}_reset_pass", help="Marca para generar nueva contraseña automática"):
+            if st.checkbox(
+                "Generar nueva contraseña",
+                key=f"{form_id}_reset_pass",
+                help="Marca para generar nueva contraseña automática"
+            ):
                 st.info("Se generará una nueva contraseña al guardar los cambios")
                 password = "NUEVA_PASSWORD_AUTO"  # Flag para generar nueva
 
