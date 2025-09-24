@@ -11,16 +11,6 @@ import math
 # CONFIGURACIÓN Y CONSTANTES
 # =========================
 
-MODALIDADES_FUNDAE = {
-    "PRESENCIAL": "PRESENCIAL",
-    "TELEFORMACION": "TELEFORMACION", 
-    "MIXTA": "MIXTA"
-}
-
-INTERVALOS_TIEMPO = [
-    f"{h:02d}:{m:02d}" for h in range(6, 24) for m in [0, 15, 30, 45]
-]
-
 DIAS_SEMANA = ["L", "M", "X", "J", "V", "S", "D"]
 NOMBRES_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
