@@ -276,9 +276,6 @@ def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "
         st.warning("⚠ No hay datos para exportar")
         return
 
-    from io import BytesIO
-    import pandas as pd
-
     # Crear buffer y guardar Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
