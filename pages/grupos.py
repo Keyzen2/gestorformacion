@@ -1819,10 +1819,10 @@ def main(supabase, session_state):
     if hasattr(st.session_state, 'grupo_seleccionado'):
         if st.session_state.grupo_seleccionado == "nuevo":
             # Mostrar formulario de creación
-            mostrar_formulario_grupo(grupos_service, es_creacion=True)
+            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
         elif st.session_state.grupo_seleccionado:
             # Mostrar formulario de edición
-            grupo_id = mostrar_formulario_grupo(grupos_service, st.session_state.grupo_seleccionado)
+            grupo_id = mostrar_formulario_grupo_corregido(grupos_service, st.session_state.grupo_seleccionado)
             
             # Mostrar secciones adicionales si el grupo existe
             if grupo_id:
