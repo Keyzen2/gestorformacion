@@ -1627,12 +1627,12 @@ def validar_grupo_fundae_completo(datos_grupo):
     return len(errores) == 0, errores
 
 def preparar_datos_xml_inicio_simple(grupo_id, supabase):
-    """Prepara datos para XML FUNDAE con estructura actual."""
+    """Prepara datos para XML FUNDAE con estructura corregida."""
     try:
-        # Datos del grupo con acción
+        # ✅ CORRECCIÓN 1: Campos correctos de acciones_formativas
         grupo = supabase.table("grupos").select("""
             *, 
-            accion_formativa:acciones_formativas(codigo, denominacion, num_horas)
+            accion_formativa:acciones_formativas(codigo_accion, nombre, num_horas, modalidad)
         """).eq("id", grupo_id).single().execute()
         
         if not grupo.data:
@@ -1640,12 +1640,7 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
             
         grupo_data = grupo.data
         
-        # Validar completitud
-        es_valido, errores = validar_grupo_fundae_completo(grupo_data)
-        if not es_valido:
-            return None, errores
-        
-        # Tutores con tipos de documento automáticos
+        # ✅ CORRECCIÓN 2: Usar tabla de relaciones para tutores
         tutores = supabase.table("tutores_grupos").select("""
             tutor:tutores(*)
         """).eq("grupo_id", grupo_id).execute()
@@ -1654,62 +1649,34 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
         for tg in tutores.data or []:
             tutor = tg.get("tutor")
             if tutor:
-                # Detectar tipo automáticamente si no está definido
-                tipo_doc = tutor.get("tipo_documento")
-                if not tipo_doc or tipo_doc == "":
-                    tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
-                else:
-                    # Convertir texto a código si es necesario
-                    tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
-                    tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(tutor.get("nif", "")))
-                
+                tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
                 tutor_fundae = {**tutor, "tipo_documento_fundae": tipo_doc}
                 tutores_fundae.append(tutor_fundae)
         
-        # Participantes con tipos de documento automáticos
-        participantes = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute()
+        # ✅ CORRECCIÓN 3: Usar tabla de relaciones para participantes
+        participantes_rel = supabase.table("participantes_grupos").select("""
+            participante:participantes(*)
+        """).eq("grupo_id", grupo_id).execute()
         
         participantes_fundae = []
-        for part in participantes.data or []:
-            # Detectar tipo automáticamente si no está definido
-            tipo_doc = part.get("tipo_documento")
-            if not tipo_doc or tipo_doc == "":
+        for rel in participantes_rel.data or []:
+            part = rel.get("participante")
+            if part:
                 tipo_doc = detectar_tipo_documento_fundae(part.get("nif", ""))
-            else:
-                # Convertir texto a código si es necesario
-                tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
-                tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(part.get("nif", "")))
-            
-            part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
-            participantes_fundae.append(part_fundae)
+                part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
+                participantes_fundae.append(part_fundae)
         
-        # Empresas participantes
+        # ✅ CORRECCIÓN 4: Usar tabla de relaciones para empresas
         empresas = supabase.table("empresas_grupos").select("""
             empresa:empresas(cif, nombre)
         """).eq("grupo_id", grupo_id).execute()
         
         empresas_fundae = [eg["empresa"] for eg in empresas.data or [] if eg.get("empresa")]
         
-        # Validar que hay datos mínimos requeridos
-        errores_adicionales = []
-        if not tutores_fundae:
-            errores_adicionales.append("El grupo debe tener al menos un tutor asignado")
-        if not empresas_fundae:
-            errores_adicionales.append("El grupo debe tener al menos una empresa participante")
-        if not participantes_fundae:
-            errores_adicionales.append("El grupo debe tener participantes inscritos")
-        
-        # Verificar datos faltantes en participantes
-        for i, part in enumerate(participantes_fundae):
-            if not part.get("nif"):
-                errores_adicionales.append(f"Participante {i+1}: falta NIF/documento")
-            if not part.get("sexo"):
-                errores_adicionales.append(f"Participante {i+1}: falta sexo")
-            if not part.get("fecha_nacimiento"):
-                errores_adicionales.append(f"Participante {i+1}: falta fecha de nacimiento")
-        
-        if errores_adicionales:
-            return None, errores_adicionales
+        # Validar completitud (usando función corregida)
+        es_valido, errores = validar_grupo_fundae_completo(grupo_data)
+        if not es_valido:
+            return None, errores
         
         return {
             "grupo": grupo_data,
