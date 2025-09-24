@@ -1638,6 +1638,10 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         df_bonificaciones = grupos_service.get_grupo_bonificaciones(grupo_id)
     
         if not df_bonificaciones.empty:
+            # 🔧 Convertir tipos seguros
+            df_bonificaciones["mes"] = pd.to_numeric(df_bonificaciones["mes"], errors="coerce").fillna(0).astype(int)
+            df_bonificaciones["importe"] = pd.to_numeric(df_bonificaciones["importe"], errors="coerce").fillna(0.0).astype(float)
+    
             st.markdown("###### 📋 Bonificaciones registradas")
             for _, row in df_bonificaciones.iterrows():
                 with st.container(border=True):
@@ -1662,7 +1666,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                                 mes_edit = st.selectbox(
                                     "📅 Mes",
                                     options=list(range(1, 13)),
-                                    index=(row["mes"] - 1),
+                                    index=max(0, row["mes"] - 1),
                                     format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
                                     key=f"mes_edit_{row['id']}"
                                 )
@@ -1670,7 +1674,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                                     "💰 Importe (€)",
                                     min_value=0.0,
                                     max_value=limite_boni if limite_boni > 0 else 999999.0,
-                                    value=float(row["importe"]),
+                                    value=row["importe"],
                                     key=f"importe_edit_{row['id']}"
                                 )
                             with col2:
@@ -1696,7 +1700,7 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
         else:
             st.info("📋 No hay bonificaciones registradas")
     
-        # Añadir nueva bonificación
+        # ➕ Añadir nueva bonificación
         with st.expander("➕ Añadir Bonificación Mensual"):
             with st.form(f"bonificacion_{grupo_id}"):
                 col1, col2 = st.columns(2)
