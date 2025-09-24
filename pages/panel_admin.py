@@ -292,7 +292,7 @@ def main(supabase, session_state):
     # =========================
     # Tabs: Alertas, Estadísticas y Análisis
     # =========================
-    tab1, tab2, tab3 = st.tabs(["🔔 Alertas del Sistema", "📊 Estadísticas Detalladas", "📈 Análisis de Tendencias", "📄 Informe de Cursos"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🔔 Alertas del Sistema", "📊 Estadísticas Detalladas", "📈 Análisis de Tendencias", "📄 Informe de Cursos"])
 
     with tab1:
         st.subheader("🔍 Alertas Activas")
