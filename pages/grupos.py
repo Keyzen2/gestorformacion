@@ -1830,10 +1830,14 @@ def main(supabase, session_state):
     
     with col2:
         if not df_grupos.empty:
-            filename = f"grupos_{datetime.now().strftime('%Y%m%d')}.xlsx"
-            export_excel(df_grupos, filename)
+            # Nombre dinámico con fecha
+            fecha_str = datetime.now().strftime("%Y%m%d")
+            filename = f"grupos_fundae_{fecha_str}.xlsx"
+
+            # Botón de exportación a Excel
+            export_excel(df_grupos, filename=filename, label="📥 Exportar a Excel")
         else:
-            st.info("📋 No hay grupos para exportar")
+            st.warning("⚠ No hay datos para exportar")
         
     with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
