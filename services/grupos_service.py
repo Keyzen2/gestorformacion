@@ -1424,22 +1424,19 @@ class GruposService:
     def create_grupo_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
         """Crea una bonificación mensual para un grupo."""
         try:
-            datos_bonif = datos_bonif.copy()
+            datos_bonif["id"] = str(uuid.uuid4())   # 👈 generar ID aquí
             datos_bonif["created_at"] = datetime.utcnow().isoformat()
-    
-            res = self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
-            if not res.data:
-                return False
-    
+            
+            self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
+            
             # Limpiar cache
-            if hasattr(self, "get_grupo_bonificaciones"):
+            if hasattr(self, 'get_grupo_bonificaciones'):
                 self.get_grupo_bonificaciones.clear()
-    
+            
             return True
         except Exception as e:
-            st.error(f"❌ Error al crear bonificación de grupo: {e}")
+            st.error(f"Error al crear bonificación de grupo: {e}")
             return False
-    
     
     def delete_grupo_bonificacion(self, bonificacion_id: str) -> bool:
         """Elimina una bonificación de un grupo."""
