@@ -479,52 +479,10 @@ def main(supabase, session_state):
                     st.altair_chart(chart, use_container_width=True)
                 else:
                     st.info("ℹ️ No hay datos de fechas de creación de empresas para mostrar tendencias.")
-        with tab4:
-            st.subheader("📄 Generar Informe de Curso")
-        
-            # 1. Selección de filtros
-            ano_fundae = st.selectbox("📅 Año FUNDAE", sorted({a["ano_fundae"] for a in supabase.table("acciones_formativas").select("ano_fundae").execute().data if a.get("ano_fundae")}))
-            empresa_sel = st.selectbox("🏢 Empresa Gestora", [e["nombre"] for e in empresas_data])
-        
-            # Obtener acciones de esa empresa y año
-            acciones_res = supabase.table("acciones_formativas").select("id, nombre").eq("empresa_id", empresa_id).eq("ano_fundae", ano_fundae).execute()
-            acciones = acciones_res.data or []
-            accion_sel = st.selectbox("📚 Acción Formativa", [a["nombre"] for a in acciones])
-        
-            # Obtener grupos de esa acción
-            grupos_res = supabase.table("grupos").select("id, codigo_grupo").eq("accion_formativa_id", accion_id).execute()
-            grupos = grupos_res.data or []
-            grupo_sel = st.selectbox("👥 Grupo", [g["codigo_grupo"] for g in grupos])
-        
-            # 2. Botón para generar PDF
-            if st.button("📥 Exportar Informe PDF"):
-                buffer = io.BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=A4)
-                styles = getSampleStyleSheet()
-                story = []
-        
-                story.append(Paragraph("Ficha del Curso", styles["Title"]))
-                story.append(Spacer(1, 12))
-        
-                # Añadir tablas con los datos de la acción, grupo, tutores, empresas, participantes...
-                # ejemplo tabla simple
-                data = [["Campo", "Valor"], ["Acción", accion_sel], ["Grupo", grupo_sel]]
-                table = Table(data, colWidths=[150, 300])
-                table.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
-                    ("GRID", (0,0), (-1,-1), 1, colors.black)
-                ]))
-                story.append(table)
-        
-                doc.build(story)
-                pdf = buffer.getvalue()
-                buffer.close()
-        
-                st.download_button("⬇️ Descargar PDF", pdf, file_name="informe_curso.pdf", mime="application/pdf")
                 
         except Exception as e:
             st.error(f"❌ Error al generar gráfico de tendencias: {e}")
-
+                
         # Tabla de actividad reciente
         st.markdown("#### 📅 Actividad Reciente (Últimos 7 días)")
         try:
@@ -571,6 +529,78 @@ def main(supabase, session_state):
                 
         except Exception as e:
             st.error(f"❌ Error al cargar actividad reciente: {e}")
-
+    with tab4:
+        st.subheader("📄 Generar Informe de Curso")
+    
+        # 1. Selección de filtros
+        ano_fundae = st.selectbox(
+            "📅 Año FUNDAE",
+            sorted({
+                a["ano_fundae"]
+                for a in supabase.table("acciones_formativas")
+                .select("ano_fundae")
+                .execute().data
+                if a.get("ano_fundae")
+            })
+        )
+        empresa_sel = st.selectbox("🏢 Empresa Gestora", [e["nombre"] for e in empresas_data])
+    
+        # Obtener empresa_id según selección
+        empresa_id = next((e["id"] for e in empresas_data if e["nombre"] == empresa_sel), None)
+    
+        # Obtener acciones de esa empresa y año
+        acciones_res = (
+            supabase.table("acciones_formativas")
+            .select("id, nombre")
+            .eq("empresa_id", empresa_id)
+            .eq("ano_fundae", ano_fundae)
+            .execute()
+        )
+        acciones = acciones_res.data or []
+        accion_sel = st.selectbox("📚 Acción Formativa", [a["nombre"] for a in acciones])
+    
+        # Obtener accion_id según selección
+        accion_id = next((a["id"] for a in acciones if a["nombre"] == accion_sel), None)
+    
+        # Obtener grupos de esa acción
+        grupos_res = (
+            supabase.table("grupos")
+            .select("id, codigo_grupo")
+            .eq("accion_formativa_id", accion_id)
+            .execute()
+        )
+        grupos = grupos_res.data or []
+        grupo_sel = st.selectbox("👥 Grupo", [g["codigo_grupo"] for g in grupos])
+    
+        # 2. Botón para generar PDF
+        if st.button("📥 Exportar Informe PDF"):
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4)
+            styles = getSampleStyleSheet()
+            story = []
+    
+            story.append(Paragraph("Ficha del Curso", styles["Title"]))
+            story.append(Spacer(1, 12))
+    
+            # Ejemplo de tabla simple (puedes ampliar con tutores, empresas, participantes…)
+            data = [["Campo", "Valor"], ["Acción", accion_sel], ["Grupo", grupo_sel]]
+            table = Table(data, colWidths=[150, 300])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ("GRID", (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            story.append(table)
+    
+            doc.build(story)
+            pdf = buffer.getvalue()
+            buffer.close()
+    
+            st.download_button(
+                "⬇️ Descargar PDF",
+                pdf,
+                file_name="informe_curso.pdf",
+                mime="application/pdf"
+            )
+            
     st.divider()
     st.caption(f"🔄 Panel actualizado automáticamente - Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
