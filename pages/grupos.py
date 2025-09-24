@@ -881,7 +881,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                             )
                             if grupo_creado.data:
                                 st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                                return grupo_id
                             st.rerun()
                         else:
                             st.error("❌ Error al crear grupo")
