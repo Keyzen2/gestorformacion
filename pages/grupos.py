@@ -1877,6 +1877,9 @@ def main(supabase, session_state):
     st.title("👥 Gestión de Grupos FUNDAE")
     st.caption("🎯 Creación y administración de grupos formativos con jerarquía empresarial")
     
+    if "grupo_seleccionado" not in st.session_state:
+        st.session_state.grupo_seleccionado = None
+        
     # Verificar permisos
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección")
