@@ -1829,17 +1829,17 @@ def main(supabase, session_state):
             st.rerun()
     
     with col2:
-        if st.button("📊 Exportar CSV", use_container_width=True):
-            if not df_grupos.empty:
-                csv_data = export_csv(df_grupos)
-                st.download_button(
-                    label="⬇️ Descargar",
-                    data=csv_data,
-                    file_name=f"grupos_fundae_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.warning("No hay datos para exportar")
+        if not df_grupos.empty:
+            csv_data = df_grupos.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="⬇️ Descargar CSV",
+                data=csv_data,
+                file_name="grupos.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+else:
+    st.info("📋 No hay grupos para exportar")
     
     with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
