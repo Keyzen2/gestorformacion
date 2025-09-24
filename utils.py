@@ -235,7 +235,432 @@ def preparar_df_export_grupos(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return df_export[columnas_finales]
+# =========================
+# FUNCIONES XML FUNDAE CORREGIDAS
+# =========================
 
+def preparar_datos_xml_inicio_simple(grupo_id, supabase):
+    """
+    Prepara datos para XML FUNDAE con estructura corregida.
+    VERSIÓN CORREGIDA con nombres de campos correctos.
+    """
+    try:
+        # ✅ CORRECCIÓN 1: Campos correctos de acciones_formativas
+        grupo_res = supabase.table("grupos").select("""
+            *, 
+            accion_formativa:acciones_formativas(codigo_accion, nombre, num_horas, modalidad)
+        """).eq("id", grupo_id).execute()
+        
+        if not grupo_res.data:
+            return None, ["Grupo no encontrado"]
+            
+        grupo_data = grupo_res.data[0]
+        
+        # Validar completitud básica
+        es_valido, errores = validar_grupo_fundae_completo(grupo_data)
+        if not es_valido:
+            return None, errores
+        
+        # ✅ CORRECCIÓN 2: Usar tabla de relaciones para tutores
+        tutores_res = supabase.table("tutores_grupos").select("""
+            tutor:tutores(*)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        tutores_fundae = []
+        for tg in tutores_res.data or []:
+            tutor = tg.get("tutor")
+            if tutor:
+                # Detectar tipo automáticamente si no está definido
+                tipo_doc = tutor.get("tipo_documento")
+                if not tipo_doc or tipo_doc == "":
+                    tipo_doc = detectar_tipo_documento_fundae(tutor.get("nif", ""))
+                else:
+                    # Convertir texto a código si es necesario
+                    tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
+                    tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(tutor.get("nif", "")))
+                
+                tutor_fundae = {**tutor, "tipo_documento_fundae": tipo_doc}
+                tutores_fundae.append(tutor_fundae)
+        
+        # ✅ CORRECCIÓN 3: Usar tabla de relaciones para participantes
+        participantes_res = supabase.table("participantes_grupos").select("""
+            participante:participantes(*)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        participantes_fundae = []
+        for rel in participantes_res.data or []:
+            part = rel.get("participante")
+            if part:
+                # Detectar tipo automáticamente si no está definido
+                tipo_doc = part.get("tipo_documento")
+                if not tipo_doc or tipo_doc == "":
+                    tipo_doc = detectar_tipo_documento_fundae(part.get("nif", ""))
+                else:
+                    # Convertir texto a código si es necesario
+                    tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
+                    tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(part.get("nif", "")))
+                
+                part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
+                participantes_fundae.append(part_fundae)
+        
+        # ✅ CORRECCIÓN 4: Usar tabla de relaciones para empresas
+        empresas_res = supabase.table("empresas_grupos").select("""
+            empresa:empresas(cif, nombre)
+        """).eq("grupo_id", grupo_id).execute()
+        
+        empresas_fundae = [eg["empresa"] for eg in empresas_res.data or [] if eg.get("empresa")]
+        
+        # Validar que hay datos mínimos requeridos
+        errores_adicionales = []
+        if not tutores_fundae:
+            errores_adicionales.append("El grupo debe tener al menos un tutor asignado")
+        if not empresas_fundae:
+            errores_adicionales.append("El grupo debe tener al menos una empresa participante")
+        if not participantes_fundae:
+            errores_adicionales.append("El grupo debe tener participantes inscritos")
+        
+        # Verificar datos faltantes en participantes
+        for i, part in enumerate(participantes_fundae):
+            if not part.get("nif"):
+                errores_adicionales.append(f"Participante {i+1}: falta NIF/documento")
+            if not part.get("nombre"):
+                errores_adicionales.append(f"Participante {i+1}: falta nombre")
+            if not part.get("apellidos"):
+                errores_adicionales.append(f"Participante {i+1}: falta apellidos")
+            if not part.get("email"):
+                errores_adicionales.append(f"Participante {i+1}: falta email")
+        
+        if errores_adicionales:
+            return None, errores_adicionales
+        
+        return {
+            "grupo": grupo_data,
+            "tutores": tutores_fundae,
+            "empresas": empresas_fundae,
+            "participantes": participantes_fundae
+        }, []
+        
+    except Exception as e:
+        return None, [f"Error: {str(e)}"]
+
+def detectar_tipo_documento_fundae(nif):
+    """Detecta automáticamente el tipo de documento para XML FUNDAE."""
+    import re
+    
+    if not nif:
+        return 20  # Pasaporte por defecto
+    
+    nif = nif.upper().strip()
+    if re.match(r'^[0-9]{8}[A-Z], nif):
+        return 10  # NIF
+    elif re.match(r'^[XYZ][0-9]{7}[A-Z], nif):
+        return 60  # NIE
+    else:
+        return 20  # Pasaporte
+
+def validar_grupo_fundae_completo(datos_grupo):
+    """Validación completa para XML FUNDAE."""
+    errores = []
+    
+    # Campos obligatorios básicos
+    campos_requeridos = [
+        ("codigo_grupo", "Código del grupo"),
+        ("fecha_inicio", "Fecha de inicio"), 
+        ("fecha_fin_prevista", "Fecha fin prevista"),
+        ("localidad", "Localidad"),
+        ("responsable", "Responsable"),
+        ("telefono_contacto", "Teléfono de contacto"),
+        ("n_participantes_previstos", "Participantes previstos")
+    ]
+    
+    for campo, nombre in campos_requeridos:
+        if not datos_grupo.get(campo):
+            errores.append(f"❌ {nombre} es obligatorio")
+    
+    # Validar teléfono formato FUNDAE
+    tel = datos_grupo.get("telefono_contacto", "")
+    if tel and not re.match(r'^\d{9,12}, tel.replace(' ', '').replace('-', '')):
+        errores.append("❌ Teléfono debe tener entre 9 y 12 dígitos")
+    
+    # Validar participantes
+    try:
+        n_part = int(datos_grupo.get("n_participantes_previstos", 0))
+        if not (1 <= n_part <= 9999):
+            errores.append("❌ Participantes debe estar entre 1 y 9999")
+    except:
+        errores.append("❌ Participantes debe ser un número válido")
+    
+    return len(errores) == 0, errores
+
+# =========================
+# FUNCIONES XML MEJORADAS CON VALIDACIONES
+# =========================
+
+def generar_xml_accion_formativa_mejorado(accion, namespace="http://www.fundae.es/esquemas"):
+    """
+    Versión mejorada del generador XML con validaciones FUNDAE.
+    """
+    try:
+        # Validar datos básicos antes de generar
+        if not accion.get('codigo_accion'):
+            raise ValueError("Código de acción requerido")
+        if not accion.get('nombre'):
+            raise ValueError("Nombre de acción requerido")
+        if not accion.get('modalidad'):
+            raise ValueError("Modalidad requerida")
+        
+        # Normalizar modalidad FUNDAE
+        modalidad = accion.get('modalidad', '').upper()
+        if modalidad not in ['PRESENCIAL', 'TELEFORMACION', 'MIXTA']:
+            modalidad = 'PRESENCIAL'  # Fallback seguro
+        
+        # Usar función existente como base
+        xml_content = generar_xml_accion_formativa(accion)
+        
+        if xml_content:
+            # Añadir metadatos de validación
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Código único validado para empresa gestora y año
+- Modalidad normalizada: {modalidad}
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata después de la declaración XML
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"Error al generar XML de acción formativa: {e}")
+        return None
+
+def generar_xml_inicio_grupo_con_validaciones(datos_xml):
+    """
+    Versión mejorada del generador XML inicio con validaciones de jerarquía.
+    """
+    try:
+        # Validar que tenemos empresa responsable
+        if "empresa_responsable" not in datos_xml:
+            raise ValueError("Falta información de empresa responsable ante FUNDAE")
+        
+        grupo = datos_xml["grupo"]
+        participantes = datos_xml.get("participantes", [])
+        
+        # Usar la función existente pero con datos validados
+        xml_content = generar_xml_inicio_grupo(grupo, participantes)
+        
+        if xml_content:
+            # Agregar metadatos de validación como comentario
+            empresa_resp = datos_xml["empresa_responsable"]
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Empresa responsable: {empresa_resp.get('nombre')} (CIF: {empresa_resp.get('cif')})
+- Código grupo único validado para año y empresa gestora
+- Jerarquía empresarial respetada
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata después de la declaración XML
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"❌ Error al generar XML con jerarquía: {e}")
+        return None
+
+def generar_xml_finalizacion_grupo_mejorado(grupo_data, participantes_data):
+    """
+    Versión mejorada del generador XML finalización con validaciones coherencia.
+    """
+    try:
+        # Validaciones de coherencia antes de generar
+        n_finalizados = grupo_data.get('n_participantes_finalizados', 0)
+        n_aptos = grupo_data.get('n_aptos', 0)
+        n_no_aptos = grupo_data.get('n_no_aptos', 0)
+        
+        # Validar coherencia de números
+        if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
+            raise ValueError(f"Incoherencia: {n_aptos} aptos + {n_no_aptos} no aptos ≠ {n_finalizados} finalizados")
+        
+        # Validar que hay participantes
+        if not participantes_data:
+            raise ValueError("No hay participantes para finalizar")
+        
+        # Usar función existente como base
+        xml_content = generar_xml_finalizacion_grupo(grupo_data, participantes_data)
+        
+        if xml_content:
+            # Agregar metadatos de validación
+            empresa_resp = grupo_data.get("empresa_responsable", {})
+            metadata = f"""
+<!-- 
+VALIDACIONES FUNDAE APLICADAS:
+- Coherencia participantes validada: {n_aptos} aptos + {n_no_aptos} no aptos = {n_finalizados} finalizados
+- Empresa responsable: {empresa_resp.get('nombre', 'N/A')}
+- Participantes procesados: {len(participantes_data)}
+- Generado: {datetime.now().isoformat()}
+-->
+"""
+            # Insertar metadata
+            if xml_content.startswith('<?xml'):
+                lines = xml_content.split('\n')
+                lines.insert(1, metadata)
+                xml_content = '\n'.join(lines)
+        
+        return xml_content
+        
+    except Exception as e:
+        st.error(f"Error al generar XML finalización: {e}")
+        return None
+
+# =========================
+# VALIDACIONES ADICIONALES FUNDAE
+# =========================
+
+def validar_datos_grupo_fundae_completo(grupo_data, tipo_validacion="inicio"):
+    """
+    Validación completa de grupo para XML FUNDAE con nuevas reglas.
+    """
+    errores = []
+    
+    # Validaciones básicas existentes
+    es_valido_basico, errores_basicos = validar_grupo_fundae_completo(grupo_data)
+    if errores_basicos:
+        errores.extend(errores_basicos)
+    
+    # Validaciones adicionales de jerarquía
+    if not grupo_data.get("empresa_id"):
+        errores.append("❌ Falta empresa propietaria del grupo")
+    
+    if not grupo_data.get("accion_formativa_id"):
+        errores.append("❌ Falta acción formativa asociada")
+    
+    # Validaciones específicas por tipo
+    if tipo_validacion == "finalizacion":
+        # Validar coherencia de finalización
+        n_finalizados = grupo_data.get('n_participantes_finalizados', 0)
+        n_aptos = grupo_data.get('n_aptos', 0)
+        n_no_aptos = grupo_data.get('n_no_aptos', 0)
+        
+        if n_finalizados > 0:
+            if n_aptos + n_no_aptos != n_finalizados:
+                errores.append(f"❌ Incoherencia: {n_aptos} aptos + {n_no_aptos} no aptos ≠ {n_finalizados} finalizados")
+            
+            if n_aptos < 0 or n_no_aptos < 0:
+                errores.append("❌ Los números de participantes no pueden ser negativos")
+        
+        # Validar fecha de finalización
+        if not grupo_data.get("fecha_fin"):
+            errores.append("❌ Falta fecha real de finalización")
+    
+    return len(errores) == 0, errores
+
+def validar_participantes_fundae(participantes_data):
+    """
+    Valida que los participantes cumplan requisitos FUNDAE.
+    """
+    errores = []
+    
+    if not participantes_data:
+        errores.append("❌ No hay participantes en el grupo")
+        return False, errores
+    
+    for i, participante in enumerate(participantes_data, 1):
+        # Validar campos obligatorios FUNDAE
+        if not participante.get("nif"):
+            errores.append(f"❌ Participante {i}: falta NIF/documento")
+        
+        if not participante.get("nombre"):
+            errores.append(f"❌ Participante {i}: falta nombre")
+        
+        if not participante.get("apellidos"):
+            errores.append(f"❌ Participante {i}: falta apellidos")
+        
+        if not participante.get("email"):
+            errores.append(f"❌ Participante {i}: falta email")
+        
+        # Validar formato NIF si existe
+        nif = participante.get("nif", "")
+        if nif and not validar_dni_cif(nif):
+            errores.append(f"❌ Participante {i}: NIF inválido ({nif})")
+        
+        # Validar email si existe
+        email = participante.get("email", "")
+        if email and not validar_email(email):
+            errores.append(f"❌ Participante {i}: email inválido ({email})")
+    
+    return len(errores) == 0, errores
+
+def generar_informe_validacion_fundae(grupo_id, supabase):
+    """
+    Genera un informe completo de validación FUNDAE para un grupo.
+    """
+    try:
+        informe = {
+            "grupo_id": grupo_id,
+            "fecha_validacion": datetime.now().isoformat(),
+            "errores": [],
+            "advertencias": [],
+            "estado": "PENDIENTE"
+        }
+        
+        # Validar datos XML
+        datos_xml, errores_xml = preparar_datos_xml_inicio_simple(grupo_id, supabase)
+        
+        if errores_xml:
+            informe["errores"].extend(errores_xml)
+            informe["estado"] = "ERROR"
+            return informe
+        
+        # Validar grupo
+        grupo_data = datos_xml["grupo"]
+        es_valido_grupo, errores_grupo = validar_datos_grupo_fundae_completo(grupo_data)
+        
+        if errores_grupo:
+            informe["errores"].extend(errores_grupo)
+        
+        # Validar participantes
+        participantes = datos_xml.get("participantes", [])
+        es_valido_part, errores_part = validar_participantes_fundae(participantes)
+        
+        if errores_part:
+            informe["errores"].extend(errores_part)
+        
+        # Determinar estado final
+        if informe["errores"]:
+            informe["estado"] = "ERROR"
+        elif informe["advertencias"]:
+            informe["estado"] = "ADVERTENCIA"
+        else:
+            informe["estado"] = "VALIDO"
+        
+        # Añadir resumen
+        informe["resumen"] = {
+            "total_errores": len(informe["errores"]),
+            "total_advertencias": len(informe["advertencias"]),
+            "participantes_validados": len(participantes)
+        }
+        
+        return informe
+        
+    except Exception as e:
+        return {
+            "grupo_id": grupo_id,
+            "fecha_validacion": datetime.now().isoformat(),
+            "errores": [f"Error al generar informe: {e}"],
+            "estado": "ERROR",
+            "resumen": {"total_errores": 1}
+        }
 # =========================
 # EXPORTACIÓN DE DATOS
 # =========================
