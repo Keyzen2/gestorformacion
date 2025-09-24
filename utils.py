@@ -343,17 +343,14 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
     except Exception as e:
         return None, [f"Error: {str(e)}"]
 
-def detectar_tipo_documento_fundae(nif):
-    """Detecta automáticamente el tipo de documento para XML FUNDAE."""
-    import re
-    
+def detectar_tipo_documento_fundae(nif: str) -> int:
+    """Devuelve 10=NIF, 60=NIE, 20=Pasaporte (fallback)."""
     if not nif:
-        return 20  # Pasaporte por defecto
-    
+        return 20
     nif = nif.upper().strip()
-    if re.match(r'^[0-9]{8}[A-Z], nif):
+    if re.match(r'^[0-9]{8}[A-Z]$', nif):
         return 10  # NIF
-    elif re.match(r'^[XYZ][0-9]{7}[A-Z], nif):
+    elif re.match(r'^[XYZ][0-9]{7}[A-Z]$', nif):
         return 60  # NIE
     else:
         return 20  # Pasaporte
@@ -379,8 +376,10 @@ def validar_grupo_fundae_completo(datos_grupo):
     
     # Validar teléfono formato FUNDAE
     tel = datos_grupo.get("telefono_contacto", "")
-    if tel and not re.match(r'^\d{9,12}, tel.replace(' ', '').replace('-', '')):
-        errores.append("❌ Teléfono debe tener entre 9 y 12 dígitos")
+    if tel:
+        tel_norm = tel.replace(' ', '').replace('-', '')
+        if not re.match(r'^\d{9,12}$', tel_norm):
+            errores.append("❌ Teléfono debe tener entre 9 y 12 dígitos")
     
     # Validar participantes
     try:
