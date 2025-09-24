@@ -3,7 +3,6 @@ import pandas as pd
 import uuid
 import re
 from utils import validar_uuid_seguro, validar_codigo_grupo_fundae
-
 from datetime import datetime, time, date
 from typing import Dict, Any, Tuple, List, Optional
 
@@ -350,16 +349,11 @@ class GruposService:
 
     def generar_codigo_grupo_sugerido_correlativo(self, accion_formativa_id, fecha_inicio=None):
         """
-        Genera código de grupo correlativo automático COMPATIBLE CON XML FUNDAE.
-    
-        FORMATO FUNDAE CORRECTO:
-        - codigo_accion: 1, 2, 3... (numérico puro)
-        - codigo_grupo: 1, 2, 3... (numérico puro)
-        - Visual para usuario: "1-1", "1-2", "1-3" (acción-grupo)
-        - En BD se guarda como números separados.
+        Genera el siguiente número correlativo libre para la acción/año/empresa gestora.
+        Retorna (codigo_sugerido: str, error: str).
         """
         try:
-            # Determinar año
+            # Año de referencia
             if fecha_inicio:
                 if isinstance(fecha_inicio, str):
                     ano = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')).year
@@ -368,7 +362,7 @@ class GruposService:
             else:
                 ano = datetime.now().year
     
-            # Obtener información de la acción formativa
+            # Info acción
             accion_res = self.supabase.table("acciones_formativas").select(
                 "codigo_accion, empresa_id"
             ).eq("id", accion_formativa_id).execute()
@@ -376,41 +370,43 @@ class GruposService:
             if not accion_res.data:
                 return None, "Acción formativa no encontrada"
     
-            codigo_accion = accion_res.data[0]["codigo_accion"]
             empresa_gestora_id = accion_res.data[0]["empresa_id"]
     
-            # Buscar grupos existentes de esa acción en el mismo año
+            # Números usados ese año para esa acción (filtrando por gestora)
             grupos_existentes = self.supabase.table("grupos").select("""
                 codigo_grupo, fecha_inicio,
-                accion_formativa:acciones_formativas(empresa_id, codigo_accion)
+                accion_formativa:acciones_formativas(empresa_id)
             """).eq("accion_formativa_id", accion_formativa_id).gte(
                 "fecha_inicio", f"{ano}-01-01"
-            ).lt("fecha_inicio", f"{ano + 1}-01-01").execute()
+            ).lt(
+                "fecha_inicio", f"{ano + 1}-01-01"
+            ).execute()
     
-            # Recoger números ya usados
-            numeros_usados = set()
-            for grupo in grupos_existentes.data or []:
-                if grupo.get("accion_formativa", {}).get("empresa_id") == empresa_gestora_id:
+            usados = set()
+            for g in (grupos_existentes.data or []):
+                if g.get("accion_formativa", {}).get("empresa_id") == empresa_gestora_id:
                     try:
-                        numero = int(str(grupo["codigo_grupo"]).strip())
-                        numeros_usados.add(numero)
-                    except (ValueError, TypeError):
-                        continue
+                        usados.add(int(str(g["codigo_grupo"]).strip()))
+                    except Exception:
+                        pass
     
-            # Encontrar el siguiente número disponible
-            siguiente_numero = 1
-            while siguiente_numero in numeros_usados:
-                siguiente_numero += 1
+            # Siguiente correlativo libre
+            n = 1
+            while n in usados:
+                n += 1
     
-            # Validar formato FUNDAE con utils
-            from utils import validar_codigo_grupo_fundae
-            es_valido_xml, error_xml = validar_codigo_grupo_fundae(str(siguiente_numero))
-            if not es_valido_xml:
-                return None, f"Código sugerido no válido FUNDAE: {error_xml}"
+            codigo_sugerido = str(n)
     
-            # Devolver código sugerido (como string)
-            return str(siguiente_numero), ""
+            # Validar el sugerido con la validación central
+            ok, msg = self.validar_codigo_grupo_correlativo(
+                codigo_sugerido,
+                accion_formativa_id,
+                fecha_inicio or date.today()
+            )
+            if not ok:
+                return None, f"Código sugerido no válido: {msg}"
     
+            return codigo_sugerido, ""
         except Exception as e:
             return None, f"Error al generar código correlativo: {e}"
 
