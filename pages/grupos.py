@@ -3,7 +3,7 @@ import pandas as pd
 import uuid
 from datetime import datetime, date, time
 from services.grupos_service import get_grupos_service
-from utils import validar_dni_cif, export_csv
+from utils import validar_dni_cif, export_csv, export_excel
 import re
 import math
 
@@ -1830,27 +1830,11 @@ def main(supabase, session_state):
     
     with col2:
         if not df_grupos.empty:
-            # Detectar si hay un año_fundae común en el dataset
-            anos_unicos = df_grupos["ano_fundae"].unique() if "ano_fundae" in df_grupos.columns else []
-            if len(anos_unicos) == 1:
-                ano_fundae = anos_unicos[0]
-            else:
-                ano_fundae = datetime.now().year
-        
-            file_name = f"grupos_fundae_{ano_fundae}_{datetime.now().strftime('%Y%m%d')}.csv"
-        
-            csv_data = df_grupos.to_csv(index=False).encode("utf-8")
-        
-            st.download_button(
-                label="⬇️ Descargar CSV",
-                data=csv_data,
-                file_name=file_name,
-                mime="text/csv",
-                use_container_width=True,
-            )
+        filename = f"grupos_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        export_excel(df_grupos, filename)  # 🔹 Aquí se dibuja el botón con tu diseño
         else:
-            st.warning("No hay datos para exportar")
-    
+            st.info("📋 No hay grupos para exportar")
+        
     with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
             grupos_service.limpiar_cache_grupos()
