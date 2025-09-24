@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import uuid
 import re
-from utils import validar_uuid_seguro
+from utils import validar_uuid_seguro, validar_codigo_grupo_fundae
+
 from datetime import datetime, time, date
 from typing import Dict, Any, Tuple, List, Optional
 
@@ -350,12 +351,12 @@ class GruposService:
     def generar_codigo_grupo_sugerido_correlativo(self, accion_formativa_id, fecha_inicio=None):
         """
         Genera código de grupo correlativo automático COMPATIBLE CON XML FUNDAE.
-        
-        FORMATO FUNDAE CORRECTO: 
-        - codigo_accion: 1, 2, 3, 4... (numérico puro)
-        - codigo_grupo: 1, 2, 3, 4... (numérico puro)
-        - Resultado visual para usuario: "1-1", "1-2", "1-3" (acción-grupo)
-        - Pero en BD se guarda como números separados
+    
+        FORMATO FUNDAE CORRECTO:
+        - codigo_accion: 1, 2, 3... (numérico puro)
+        - codigo_grupo: 1, 2, 3... (numérico puro)
+        - Visual para usuario: "1-1", "1-2", "1-3" (acción-grupo)
+        - En BD se guarda como números separados.
         """
         try:
             # Determinar año
@@ -366,52 +367,53 @@ class GruposService:
                     ano = fecha_inicio.year
             else:
                 ano = datetime.now().year
-            
+    
             # Obtener información de la acción formativa
             accion_res = self.supabase.table("acciones_formativas").select(
                 "codigo_accion, empresa_id"
             ).eq("id", accion_formativa_id).execute()
-            
+    
             if not accion_res.data:
                 return None, "Acción formativa no encontrada"
-            
+    
             codigo_accion = accion_res.data[0]["codigo_accion"]
             empresa_gestora_id = accion_res.data[0]["empresa_id"]
-            
-            # Buscar grupos existentes para esta acción en el año específico
-            # IMPORTANTE: Filtrar por empresa gestora para evitar conflictos
+    
+            # Buscar grupos existentes de esa acción en el mismo año
             grupos_existentes = self.supabase.table("grupos").select("""
                 codigo_grupo, fecha_inicio,
                 accion_formativa:acciones_formativas(empresa_id, codigo_accion)
             """).eq("accion_formativa_id", accion_formativa_id).gte(
                 "fecha_inicio", f"{ano}-01-01"
             ).lt("fecha_inicio", f"{ano + 1}-01-01").execute()
-            
-            # Filtrar por empresa gestora responsable
+    
+            # Recoger números ya usados
             numeros_usados = set()
             for grupo in grupos_existentes.data or []:
                 if grupo.get("accion_formativa", {}).get("empresa_id") == empresa_gestora_id:
-                    codigo_grupo = grupo["codigo_grupo"]
-                    # Intentar convertir a número
                     try:
-                        numero = int(str(codigo_grupo).strip())
+                        numero = int(str(grupo["codigo_grupo"]).strip())
                         numeros_usados.add(numero)
-                    except ValueError:
-                        # Códigos no numéricos los ignoramos para la secuencia
+                    except (ValueError, TypeError):
                         continue
-            
-            # Encontrar el siguiente número correlativo
+    
+            # Encontrar el siguiente número disponible
             siguiente_numero = 1
             while siguiente_numero in numeros_usados:
                 siguiente_numero += 1
-            
-            # CÓDIGO GRUPO NUMÉRICO PURO para FUNDAE
-            codigo_sugerido = str(siguiente_numero)
-            
-            return codigo_sugerido, ""
-            
+    
+            # Validar formato FUNDAE con utils
+            from utils import validar_codigo_grupo_fundae
+            es_valido_xml, error_xml = validar_codigo_grupo_fundae(str(siguiente_numero))
+            if not es_valido_xml:
+                return None, f"Código sugerido no válido FUNDAE: {error_xml}"
+    
+            # Devolver código sugerido (como string)
+            return str(siguiente_numero), ""
+    
         except Exception as e:
             return None, f"Error al generar código correlativo: {e}"
+
             
     def get_codigo_accion_numerico(self, accion_formativa_id):
         """
@@ -441,39 +443,37 @@ class GruposService:
     def validar_codigo_grupo_correlativo(self, codigo_grupo, accion_formativa_id, fecha_inicio, grupo_id=None):
         """
         Valida que el código de grupo sea único Y compatible con XML FUNDAE.
-        
+    
         VALIDACIONES FUNDAE:
-        1. Unicidad: acción_formativa + empresa_gestora + año
-        2. Estructura XML: Caracteres válidos, longitud adecuada
-        3. Separación clara: codigo_accion vs codigo_grupo en XML
+        1. Estructura XML: caracteres válidos y longitud (usando utils.validar_codigo_grupo_fundae)
+        2. Unicidad: acción_formativa + empresa_gestora + año
         """
         try:
             if not codigo_grupo or not accion_formativa_id or not fecha_inicio:
                 return False, "Código de grupo, acción formativa y fecha de inicio son obligatorios"
-            
+    
             # VALIDACIÓN 1: Estructura XML FUNDAE
-            es_valido_xml, error_xml = self.validar_estructura_xml_fundae(codigo_grupo, accion_formativa_id)
+            es_valido_xml, error_xml = validar_codigo_grupo_fundae(codigo_grupo)
             if not es_valido_xml:
                 return False, f"XML FUNDAE: {error_xml}"
-            
-            # VALIDACIÓN 2: Unicidad por empresa-acción-año (lógica existente)
+    
             # Determinar año
             if isinstance(fecha_inicio, str):
                 ano = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')).year
             else:
                 ano = fecha_inicio.year
-            
+    
             # Obtener empresa gestora de la acción
             accion_res = self.supabase.table("acciones_formativas").select(
                 "codigo_accion, empresa_id"
             ).eq("id", accion_formativa_id).execute()
-            
+    
             if not accion_res.data:
                 return False, "Acción formativa no encontrada"
-            
+    
             empresa_gestora_id = accion_res.data[0]["empresa_id"]
             codigo_accion = accion_res.data[0]["codigo_accion"]
-            
+    
             # Buscar códigos duplicados en el mismo año para la misma empresa gestora
             query = self.supabase.table("grupos").select("""
                 id, codigo_grupo,
@@ -481,23 +481,27 @@ class GruposService:
             """).eq("codigo_grupo", codigo_grupo).gte(
                 "fecha_inicio", f"{ano}-01-01"
             ).lt("fecha_inicio", f"{ano + 1}-01-01")
-            
+    
             # Excluir grupo actual si estamos editando
             if grupo_id:
                 query = query.neq("id", grupo_id)
-            
+    
             res = query.execute()
-            
-            # Verificar si hay conflictos con la misma empresa gestora
+    
             for grupo_existente in res.data or []:
                 accion_formativa = grupo_existente.get("accion_formativa", {})
                 if accion_formativa.get("empresa_id") == empresa_gestora_id:
-                    return False, f"Ya existe el código '{codigo_grupo}' para la acción '{accion_formativa.get('codigo_accion')}' en {ano} (empresa gestora: {empresa_gestora_id})"
-            
+                    return False, (
+                        f"Ya existe el código '{codigo_grupo}' para la acción "
+                        f"'{accion_formativa.get('codigo_accion')}' en {ano} "
+                        f"(empresa gestora: {empresa_gestora_id})"
+                    )
+    
             return True, ""
-            
+    
         except Exception as e:
             return False, f"Error al validar código correlativo: {e}"
+
     
     def validar_numero_correlativo_disponible(self, accion_formativa_id, numero_grupo, fecha_inicio):
         """
