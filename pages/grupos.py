@@ -235,186 +235,122 @@ def mostrar_avisos_grupos(grupos_pendientes):
                         st.session_state.grupo_seleccionado = grupo_copy
                         st.rerun()
 
-def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial=""):
-    """Crea selector de horarios con formato FUNDAE - VERSIÓN CORREGIDA."""
+def crear_selector_horario_fundae_simplificado(grupos_service, key_suffix="", horario_inicial=""):
+    """Selector de horarios simplificado con franjas fijas visibles."""
     
     # Parsear horario inicial si existe
     manana_i, manana_f, tarde_i, tarde_f, dias_iniciales = (None, None, None, None, [])
     if horario_inicial:
         manana_i, manana_f, tarde_i, tarde_f, dias_iniciales = parsear_horario_fundae(horario_inicial)
     
-    # Determinar franja inicial basada en horario existente
-    if manana_i and tarde_i:
-        franja_inicial = "Mañanas y Tardes"
-    elif manana_i:
-        franja_inicial = "Mañanas"
-    elif tarde_i:
-        franja_inicial = "Tardes"
-    else:
-        franja_inicial = "Mañanas"
+    st.markdown("### ⏰ Configuración de Horarios FUNDAE")
+    st.caption("Configure los horarios de impartición (intervalos de 15 minutos)")
     
-    # Selector de franja con key único
-    franja = st.selectbox(
-        "Franja horaria",
-        ["Mañanas", "Tardes", "Mañanas y Tardes"],
-        index=["Mañanas", "Tardes", "Mañanas y Tardes"].index(franja_inicial),
-        key=f"franja_{key_suffix}_{hash(horario_inicial)}"  # Key único
-    )
+    # Generar intervalos de tiempo
+    def generar_intervalos(hora_inicio, hora_fin):
+        intervalos = []
+        for h in range(hora_inicio, hora_fin):
+            for m in [0, 15, 30, 45]:
+                intervalos.append(f"{h:02d}:{m:02d}")
+        return intervalos
     
-    # Generar intervalos correctamente
-    intervalos_manana = []
-    intervalos_tarde = []
+    intervalos_manana = generar_intervalos(6, 15)   # 06:00 a 14:45
+    intervalos_tarde = generar_intervalos(15, 24)   # 15:00 a 23:45
     
-    # Mañanas: 06:00 a 14:45
-    for h in range(6, 15):
-        for m in [0, 15, 30, 45]:
-            intervalos_manana.append(f"{h:02d}:{m:02d}")
+    # Contenedor para horarios con dos columnas siempre visibles
+    col1, col2 = st.columns(2)
     
-    # Tardes: 15:00 a 23:45  
-    for h in range(15, 24):
-        for m in [0, 15, 30, 45]:
-            if h == 23 and m > 0:  # Máximo hasta 23:00
-                break
-            intervalos_tarde.append(f"{h:02d}:{m:02d}")
-    
-    # Inicializar variables
-    hora_inicio = None
-    hora_fin = None
-    manana_inicio = manana_fin = tarde_inicio = tarde_fin = None
-    
-    # Selector dinámico según franja
-    if franja == "Mañanas":
-        col1, col2 = st.columns(2)
+    # MAÑANAS (siempre visible)
+    with col1:
+        st.markdown("**🌅 Tramo Mañana (06:00 - 14:45)**")
         
-        with col1:
-            # Índice inicial para mañana
-            idx_inicial = 0
-            if manana_i and manana_i in intervalos_manana:
-                idx_inicial = intervalos_manana.index(manana_i)
-            
-            manana_inicio = st.selectbox(
-                "Hora inicio mañana",
-                intervalos_manana[:-1],  # Excluir última
-                index=idx_inicial,
-                key=f"manana_inicio_{key_suffix}_v2"
-            )
+        usar_manana = st.checkbox(
+            "Incluir tramo mañana",
+            value=bool(manana_i),
+            key=f"usar_manana_{key_suffix}"
+        )
         
-        with col2:
-            if manana_inicio:
-                idx_inicio = intervalos_manana.index(manana_inicio)
-                horas_fin = intervalos_manana[idx_inicio + 1:]
-                
-                # Índice para hora fin
-                idx_fin = 0
-                if manana_f and manana_f in horas_fin:
-                    idx_fin = horas_fin.index(manana_f)
-                
-                manana_fin = st.selectbox(
-                    "Hora fin mañana",
-                    horas_fin,
-                    index=min(idx_fin, len(horas_fin)-1),
-                    key=f"manana_fin_{key_suffix}_v2"
-                )
-    
-    elif franja == "Tardes":
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Índice inicial para tarde
-            idx_inicial = 0
-            if tarde_i and tarde_i in intervalos_tarde:
-                idx_inicial = intervalos_tarde.index(tarde_i)
-            
-            tarde_inicio = st.selectbox(
-                "Hora inicio tarde",
-                intervalos_tarde[:-1],
-                index=idx_inicial,
-                key=f"tarde_inicio_{key_suffix}_v2"
-            )
-        
-        with col2:
-            if tarde_inicio:
-                idx_inicio = intervalos_tarde.index(tarde_inicio)
-                horas_fin = intervalos_tarde[idx_inicio + 1:]
-                
-                # Índice para hora fin
-                idx_fin = 0
-                if tarde_f and tarde_f in horas_fin:
-                    idx_fin = horas_fin.index(tarde_f)
-                
-                tarde_fin = st.selectbox(
-                    "Hora fin tarde",
-                    horas_fin,
-                    index=min(idx_fin, len(horas_fin)-1),
-                    key=f"tarde_fin_{key_suffix}_v2"
-                )
-    
-    else:  # Mañanas y Tardes
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**🌅 Tramo Mañana**")
-            
+        manana_inicio = manana_fin = None
+        if usar_manana:
             sub_col1, sub_col2 = st.columns(2)
+            
             with sub_col1:
-                idx_inicial_m = 0
+                idx_inicial = 12  # 09:00 por defecto
                 if manana_i and manana_i in intervalos_manana:
-                    idx_inicial_m = intervalos_manana.index(manana_i)
+                    idx_inicial = intervalos_manana.index(manana_i)
                 
                 manana_inicio = st.selectbox(
-                    "Inicio",
+                    "Hora inicio:",
                     intervalos_manana[:-1],
-                    index=idx_inicial_m,
-                    key=f"m_inicio_{key_suffix}_v2"
+                    index=idx_inicial,
+                    key=f"manana_inicio_{key_suffix}"
                 )
             
             with sub_col2:
                 if manana_inicio:
                     idx_inicio = intervalos_manana.index(manana_inicio)
-                    horas_fin_m = intervalos_manana[idx_inicio + 1:]
+                    horas_fin = intervalos_manana[idx_inicio + 1:]
                     
-                    idx_fin_m = 0
-                    if manana_f and manana_f in horas_fin_m:
-                        idx_fin_m = horas_fin_m.index(manana_f)
+                    idx_fin = min(16, len(horas_fin) - 1)  # 13:00 por defecto
+                    if manana_f and manana_f in horas_fin:
+                        idx_fin = horas_fin.index(manana_f)
                     
                     manana_fin = st.selectbox(
-                        "Fin",
-                        horas_fin_m,
-                        index=min(idx_fin_m, len(horas_fin_m)-1),
-                        key=f"m_fin_{key_suffix}_v2"
+                        "Hora fin:",
+                        horas_fin,
+                        index=idx_fin,
+                        key=f"manana_fin_{key_suffix}"
                     )
+        else:
+            st.info("Tramo mañana desactivado")
+    
+    # TARDES (siempre visible)
+    with col2:
+        st.markdown("**🌆 Tramo Tarde (15:00 - 23:45)**")
         
-        with col2:
-            st.markdown("**🌆 Tramo Tarde**")
-            
+        usar_tarde = st.checkbox(
+            "Incluir tramo tarde",
+            value=bool(tarde_i),
+            key=f"usar_tarde_{key_suffix}"
+        )
+        
+        tarde_inicio = tarde_fin = None
+        if usar_tarde:
             sub_col1, sub_col2 = st.columns(2)
+            
             with sub_col1:
-                idx_inicial_t = 0
+                idx_inicial = 0  # 15:00 por defecto
                 if tarde_i and tarde_i in intervalos_tarde:
-                    idx_inicial_t = intervalos_tarde.index(tarde_i)
+                    idx_inicial = intervalos_tarde.index(tarde_i)
                 
                 tarde_inicio = st.selectbox(
-                    "Inicio",
+                    "Hora inicio:",
                     intervalos_tarde[:-1],
-                    index=idx_inicial_t,
-                    key=f"t_inicio_{key_suffix}_v2"
+                    index=idx_inicial,
+                    key=f"tarde_inicio_{key_suffix}"
                 )
             
             with sub_col2:
                 if tarde_inicio:
                     idx_inicio = intervalos_tarde.index(tarde_inicio)
-                    horas_fin_t = intervalos_tarde[idx_inicio + 1:]
+                    horas_fin = intervalos_tarde[idx_inicio + 1:]
                     
-                    idx_fin_t = 0
-                    if tarde_f and tarde_f in horas_fin_t:
-                        idx_fin_t = horas_fin_t.index(tarde_f)
+                    idx_fin = min(16, len(horas_fin) - 1)  # 19:00 por defecto
+                    if tarde_f and tarde_f in horas_fin:
+                        idx_fin = horas_fin.index(tarde_f)
                     
                     tarde_fin = st.selectbox(
-                        "Fin",
-                        horas_fin_t,
-                        index=min(idx_fin_t, len(horas_fin_t)-1),
-                        key=f"t_fin_{key_suffix}_v2"
+                        "Hora fin:",
+                        horas_fin,
+                        index=idx_fin,
+                        key=f"tarde_fin_{key_suffix}"
                     )
+        else:
+            st.info("Tramo tarde desactivado")
+    
+    # Validación de que al menos un tramo esté seleccionado
+    if not usar_manana and not usar_tarde:
+        st.warning("⚠️ Debe seleccionar al menos un tramo horario (mañana o tarde)")
     
     # Días de la semana
     st.markdown("**📅 Días de Impartición**")
@@ -428,9 +364,10 @@ def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial
                 valor_default = dia_corto in dias_iniciales if dias_iniciales else dia_corto in ["L", "M", "X", "J", "V"]
                 
                 if st.checkbox(
-                    dia_largo,
+                    f"{dia_corto}",
                     value=valor_default,
-                    key=f"dia_{dia_corto}_{key_suffix}_v2"
+                    key=f"dia_{dia_corto}_{key_suffix}",
+                    help=dia_largo
                 ):
                     dias_seleccionados.append(dia_corto)
     
@@ -441,7 +378,7 @@ def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial
     
     # Mostrar resultado
     if horario_final:
-        st.success(f"✅ Horario FUNDAE: {horario_final}")
+        st.success(f"✅ **Horario FUNDAE:** {horario_final}")
         
         # Validar formato
         es_valido, error = validar_horario_fundae(horario_final)
@@ -451,7 +388,19 @@ def crear_selector_horario_fundae(grupos_service, key_suffix="", horario_inicial
         st.warning("⚠️ Configure al menos un tramo horario y días")
     
     return horario_final
+# =========================
+# FUNCIÓN AUXILIAR PARA GENERAR INTERVALOS
+# =========================
 
+def generar_intervalos_horarios():
+    """Genera intervalos de 15 minutos para uso en selectboxes."""
+    intervalos = []
+    for h in range(6, 24):  # De 06:00 a 23:45
+        for m in [0, 15, 30, 45]:
+            if h == 23 and m > 0:  # Máximo hasta 23:00
+                break
+            intervalos.append(f"{h:02d}:{m:02d}")
+    return intervalos
 # =========================
 # FORMULARIO PRINCIPAL CON VALIDACIONES FUNDAE INTEGRADAS
 # =========================
@@ -790,11 +739,11 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 cambiar_horario = st.checkbox("Modificar horario")
         
                 if cambiar_horario:
-                    horario_nuevo = crear_selector_horario_fundae(grupos_service, "edit")
+                    horario_nuevo = crear_selector_horario_fundae_simplificado(grupos_service, "edit")
                 else:
                     horario_nuevo = horario_actual
             else:
-                horario_nuevo = crear_selector_horario_fundae(grupos_service, "new")
+                horario_nuevo = crear_selector_horario_fundae_simplificado(grupos_service, "new")
         
         # =====================
         # SECCIÓN 3: FINALIZACIÓN (Condicional)
@@ -923,6 +872,11 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         # Botones de acción
         st.divider()
         
+        # CORRECCION: Inicializar todas las variables de botones
+        submitted = False
+        cancelar = False
+        recargar = False
+        
         if es_creacion:
             col1, col2 = st.columns([2, 1])
             with col1:
@@ -1007,7 +961,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             st.session_state.grupo_seleccionado = None
             st.rerun()
         
-        elif recargar:
+        elif recargar and not es_creacion:  # Solo recargar si no es creación
             try:
                 grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
                 if grupo_recargado.data:
