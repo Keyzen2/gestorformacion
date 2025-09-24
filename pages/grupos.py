@@ -422,8 +422,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
         st.caption(f"Estado: {color_estado.get(estado_actual.lower(), '⚪')} {estado_actual}")
 
     # FORMULARIO
-    form_key = f"grupo_form_{datos_grupo.get('id', 'nuevo')}_{datetime.now().timestamp()}"
-    with st.form(form_key, clear_on_submit=es_creacion):
+    form_key = f"grupo_form_{datos_grupo.get('id', 'nuevo')}"
+    with st.form(form_key, clear_on_submit=False):
         
         errores = []
         # =====================
