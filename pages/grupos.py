@@ -45,7 +45,18 @@ def safe_date_conversion(date_value):
         return date_value.date() if callable(getattr(date_value, 'date', None)) else date_value
     
     return date_value
-        
+    
+def validar_uuid_seguro(uuid_str):
+    """Valida que un string sea un UUID válido."""
+    if not uuid_str:
+        return None
+    
+    try:
+        import uuid
+        uuid.UUID(str(uuid_str))
+        return str(uuid_str)
+    except (ValueError, TypeError):
+        return None        
 # =========================
 # FUNCIONES DE ESTADO AUTOMÁTICO
 # =========================
@@ -126,21 +137,6 @@ def parsear_horario_fundae(horario_str):
         pass
     
     return manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias
-    
-def validar_uuid_seguro(uuid_str):
-    """Valida que un string sea un UUID válido y maneja casos especiales."""
-    if uuid_str is None:
-        return None
-    if str(uuid_str).lower() in ["none", "null", ""]:
-        return None
-    if pd.isna(uuid_str):
-        return None
-    
-    try:
-        uuid.UUID(str(uuid_str).strip())
-        return str(uuid_str).strip()
-    except (ValueError, TypeError, AttributeError):
-        return None
 
 def validar_formato_hora(hora_str):
     """Valida que una hora tenga formato HH:MM válido."""
