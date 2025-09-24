@@ -1830,16 +1830,26 @@ def main(supabase, session_state):
     
     with col2:
         if not df_grupos.empty:
+            # Detectar si hay un año_fundae común en el dataset
+            anos_unicos = df_grupos["ano_fundae"].unique() if "ano_fundae" in df_grupos.columns else []
+            if len(anos_unicos) == 1:
+                ano_fundae = anos_unicos[0]
+            else:
+                ano_fundae = datetime.now().year
+        
+            file_name = f"grupos_fundae_{ano_fundae}_{datetime.now().strftime('%Y%m%d')}.csv"
+        
             csv_data = df_grupos.to_csv(index=False).encode("utf-8")
+        
             st.download_button(
                 label="⬇️ Descargar CSV",
                 data=csv_data,
-                file_name="grupos.csv",
+                file_name=file_name,
                 mime="text/csv",
-                use_container_width=True
+                use_container_width=True,
             )
-else:
-    st.info("📋 No hay grupos para exportar")
+        else:
+            st.warning("No hay datos para exportar")
     
     with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
