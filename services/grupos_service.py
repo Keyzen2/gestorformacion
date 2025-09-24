@@ -1389,75 +1389,74 @@ class GruposService:
             return False
 
     @st.cache_data(ttl=300)
-    @st.cache_data(ttl=300)
-def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
-    """Obtiene bonificaciones de un grupo."""
-    try:
-        grupo_id_limpio = validar_uuid_seguro(grupo_id)
-        if not grupo_id_limpio:
-            st.error("❌ ID de grupo no válido para cargar bonificaciones")
-            return pd.DataFrame()
-
-        res = (
-            _self.supabase.table("grupo_bonificaciones")
-            .select("*")
-            .eq("grupo_id", grupo_id_limpio)
-            .order("mes")
-            .execute()
-        )
-        return pd.DataFrame(res.data or [])
-    except Exception as e:
-        return _self._handle_query_error("cargar bonificaciones de grupo", e)
-
-
-def create_grupo_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
-    """Crea una bonificación mensual para un grupo."""
-    try:
-        datos_bonif["id"] = str(uuid.uuid4())  # 🔑 generar UUID válido
-        datos_bonif["created_at"] = datetime.utcnow().isoformat()
-
-        self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
-
-        # Limpiar cache
-        if hasattr(self, "get_grupo_bonificaciones"):
-            self.get_grupo_bonificaciones.clear()
-
-        return True
-    except Exception as e:
-        st.error(f"❌ Error al crear bonificación de grupo: {e}")
-        return False
-
-
-def update_grupo_bonificacion(self, bonificacion_id: str, datos_edit: Dict[str, Any]) -> bool:
-    """Actualiza una bonificación mensual de un grupo."""
-    try:
-        datos_edit["updated_at"] = datetime.utcnow().isoformat()
-
-        self.supabase.table("grupo_bonificaciones").update(datos_edit).eq("id", bonificacion_id).execute()
-
-        # Limpiar cache
-        if hasattr(self, "get_grupo_bonificaciones"):
-            self.get_grupo_bonificaciones.clear()
-
-        return True
-    except Exception as e:
-        st.error(f"❌ Error al actualizar bonificación: {e}")
-        return False
-
-
-def delete_grupo_bonificacion(self, bonificacion_id: str) -> bool:
-    """Elimina una bonificación de un grupo."""
-    try:
-        self.supabase.table("grupo_bonificaciones").delete().eq("id", bonificacion_id).execute()
-
-        # Limpiar cache
-        if hasattr(self, "get_grupo_bonificaciones"):
-            self.get_grupo_bonificaciones.clear()
-
-        return True
-    except Exception as e:
-        st.error(f"❌ Error al eliminar bonificación: {e}")
-        return False
+    def get_grupo_bonificaciones(_self, grupo_id: str) -> pd.DataFrame:
+        """Obtiene bonificaciones de un grupo."""
+        try:
+            grupo_id_limpio = validar_uuid_seguro(grupo_id)
+            if not grupo_id_limpio:
+                st.error("❌ ID de grupo no válido para cargar bonificaciones")
+                return pd.DataFrame()
+    
+            res = (
+                _self.supabase.table("grupo_bonificaciones")
+                .select("*")
+                .eq("grupo_id", grupo_id_limpio)
+                .order("mes")
+                .execute()
+            )
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            return _self._handle_query_error("cargar bonificaciones de grupo", e)
+    
+    
+    def create_grupo_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
+        """Crea una bonificación mensual para un grupo."""
+        try:
+            datos_bonif["id"] = str(uuid.uuid4())  # 🔑 generar UUID válido
+            datos_bonif["created_at"] = datetime.utcnow().isoformat()
+    
+            self.supabase.table("grupo_bonificaciones").insert(datos_bonif).execute()
+    
+            # Limpiar cache
+            if hasattr(self, "get_grupo_bonificaciones"):
+                self.get_grupo_bonificaciones.clear()
+    
+            return True
+        except Exception as e:
+            st.error(f"❌ Error al crear bonificación de grupo: {e}")
+            return False
+    
+    
+    def update_grupo_bonificacion(self, bonificacion_id: str, datos_edit: Dict[str, Any]) -> bool:
+        """Actualiza una bonificación mensual de un grupo."""
+        try:
+            datos_edit["updated_at"] = datetime.utcnow().isoformat()
+    
+            self.supabase.table("grupo_bonificaciones").update(datos_edit).eq("id", bonificacion_id).execute()
+    
+            # Limpiar cache
+            if hasattr(self, "get_grupo_bonificaciones"):
+                self.get_grupo_bonificaciones.clear()
+    
+            return True
+        except Exception as e:
+            st.error(f"❌ Error al actualizar bonificación: {e}")
+            return False
+    
+    
+    def delete_grupo_bonificacion(self, bonificacion_id: str) -> bool:
+        """Elimina una bonificación de un grupo."""
+        try:
+            self.supabase.table("grupo_bonificaciones").delete().eq("id", bonificacion_id).execute()
+    
+            # Limpiar cache
+            if hasattr(self, "get_grupo_bonificaciones"):
+                self.get_grupo_bonificaciones.clear()
+    
+            return True
+        except Exception as e:
+            st.error(f"❌ Error al eliminar bonificación: {e}")
+            return False
 
     # =========================
     # MÉTODOS ADICIONALES PARA RESPONSABLE Y TELEFONO
