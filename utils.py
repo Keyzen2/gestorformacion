@@ -187,6 +187,55 @@ def es_fecha_valida(fecha_str: str) -> bool:
     except:
         return False
 
+def preparar_df_export_grupos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Limpia y organiza el DataFrame de grupos para exportación a Excel.
+    Aplana campos anidados (empresa, acción, etc.) y reordena columnas.
+    """
+    if df is None or df.empty:
+        return pd.DataFrame()
+
+    df_export = df.copy()
+
+    # Empresa
+    if "empresa" in df_export.columns:
+        df_export["empresa_nombre"] = df_export["empresa"].apply(
+            lambda x: x.get("nombre") if isinstance(x, dict) else x
+        )
+        df_export["empresa_cif"] = df_export["empresa"].apply(
+            lambda x: x.get("cif") if isinstance(x, dict) else ""
+        )
+        df_export.drop(columns=["empresa"], inplace=True, errors="ignore")
+
+    # Acción formativa
+    if "accion_formativa" in df_export.columns:
+        df_export["accion_nombre"] = df_export["accion_formativa"].apply(
+            lambda x: x.get("nombre") if isinstance(x, dict) else x
+        )
+        df_export["accion_codigo"] = df_export["accion_formativa"].apply(
+            lambda x: x.get("codigo_accion") if isinstance(x, dict) else ""
+        )
+        df_export.drop(columns=["accion_formativa"], inplace=True, errors="ignore")
+
+    # Orden sugerido
+    columnas_orden = [
+        "codigo_grupo",
+        "accion_codigo",
+        "accion_nombre",
+        "empresa_cif",
+        "empresa_nombre",
+        "fecha_inicio",
+        "fecha_fin_prevista",
+        "estado",
+    ]
+
+    # Añadir las columnas que falten y mantener el resto al final
+    columnas_finales = [c for c in columnas_orden if c in df_export.columns] + [
+        c for c in df_export.columns if c not in columnas_orden
+    ]
+
+    return df_export[columnas_finales]
+
 # =========================
 # EXPORTACIÓN DE DATOS
 # =========================
