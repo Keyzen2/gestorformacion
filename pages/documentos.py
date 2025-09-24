@@ -14,7 +14,7 @@ from utils import (
     generar_xml_accion_formativa_mejorado,
     generar_xml_inicio_grupo_con_validaciones,
     generar_xml_finalizacion_grupo_mejorado,
-    preparar_datos_xml_inicio_mejorado,
+    preparar_datos_xml_inicio_simple,
     validar_datos_grupo_fundae_completo,
     get_empresa_responsable_fundae
 )
@@ -474,7 +474,7 @@ def procesar_xml_inicio_grupo(df_grupos, supabase, session_state, xsd_urls):
         with st.spinner("Validando datos FUNDAE del grupo..."):
             try:
                 # USAR FUNCIÓN MEJORADA de utils.py
-                datos_xml, errores = preparar_datos_xml_inicio_mejorado(grupo_id, supabase, session_state)
+                datos_xml, errores = preparar_datos_xml_inicio_simple(grupo_id, supabase, session_state)
                 
                 if errores:
                     mostrar_errores_grupo(errores, grupo_data)
