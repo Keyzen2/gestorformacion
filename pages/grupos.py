@@ -863,8 +863,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
             with col3:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
         
-        return submitted, cancelar, recargar
-        
         # Procesar formulario
         if submitted:
             if errores:  # <- ya lo tienes arriba
@@ -913,6 +911,7 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                             )
                             if grupo_creado.data:
                                 st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                                return grupo_id
                             st.rerun()
                         else:
                             st.error("❌ Error al crear grupo")
@@ -936,7 +935,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
             st.session_state.grupo_seleccionado = None
             st.session_state.grupo_editando = None
             st.rerun()
-
+            return None
+            
         elif recargar and not es_creacion:
             try:
                 grupo_recargado = (
@@ -947,6 +947,7 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                 )
                 if grupo_recargado.data:
                     st.session_state.grupo_seleccionado = grupo_recargado.data[0]
+                    return grupo_recargado.data[0]["id"]
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al recargar: {e}")
