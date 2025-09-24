@@ -33,10 +33,11 @@ class GruposService:
     # =========================
     # VALIDACIONES FUNDAE
     # =========================
-    def generar_codigo_grupo_sugerido(self, accion_id: str):
-        """Compatibilidad: devuelve un código sugerido y error (si lo hay)."""
+    def generar_codigo_grupo_sugerido(self, accion_id: str, fecha_inicio=None):
+        """Compatibilidad: wrapper para obtener sugerido simple."""
         try:
-            codigo, error = self.generar_codigo_grupo_sugerido_correlativo(accion_id)
+            fecha_ref = fecha_inicio or date.today()
+            codigo, error = self.generar_codigo_grupo_sugerido_correlativo(accion_id, fecha_ref)
             return codigo, error
         except Exception as e:
             return None, str(e)
@@ -504,28 +505,9 @@ class GruposService:
         Valida que un número de grupo específico esté disponible para una acción y año.
         """
         try:
-            # Determinar año
-            if isinstance(fecha_inicio, str):
-                ano = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00')).year
-            else:
-                ano = fecha_inicio.year
-            
-            # Obtener código de acción
-            accion_res = self.supabase.table("acciones_formativas").select(
-                "codigo_accion, empresa_id"
-            ).eq("id", accion_formativa_id).execute()
-            
-            if not accion_res.data:
-                return False, "Acción formativa no encontrada"
-            
-            codigo_accion = accion_res.data[0]["codigo_accion"]
-            codigo_buscado = f"{codigo_accion}-G{numero_grupo}"
-            
-            # Usar validación existente
-            return self.validar_codigo_grupo_correlativo(
-                codigo_buscado, accion_formativa_id, fecha_inicio
-            )
-            
+            fecha_ref = fecha_inicio or date.today()
+            codigo = str(numero_grupo).strip()
+            return self.validar_codigo_grupo_correlativo(codigo, accion_formativa_id, fecha_ref)
         except Exception as e:
             return False, f"Error al validar número correlativo: {e}"
     
@@ -537,70 +519,34 @@ class GruposService:
             codigo_sugerido, error = self.generar_codigo_grupo_sugerido_correlativo(
                 accion_formativa_id, fecha_inicio
             )
-            
             if error:
                 return None, error
-            
-            # Extraer número del código sugerido
-            if codigo_sugerido and "-G" in codigo_sugerido:
-                try:
-                    numero_str = codigo_sugerido.split("-G")[1]
-                    numero = int(numero_str)
-                    return numero, ""
-                except (ValueError, IndexError):
-                    return None, "Error al extraer número de grupo del código sugerido"
-            
-            return 1, ""  # Fallback al primer grupo
-            
+            return int(codigo_sugerido), ""
         except Exception as e:
             return None, f"Error al obtener siguiente número: {e}"
     
     def generar_rango_codigos_disponibles(self, accion_formativa_id, fecha_inicio, cantidad=5):
         """
-        Genera un rango de códigos disponibles para selección manual.
-        Útil para mostrar opciones al usuario.
+        Genera un rango de códigos numéricos disponibles para selección manual.
         """
         try:
             siguiente_numero, error = self.obtener_siguiente_numero_grupo(
                 accion_formativa_id, fecha_inicio
             )
-            
             if error:
                 return [], error
-            
-            # Obtener información de la acción
-            accion_res = self.supabase.table("acciones_formativas").select(
-                "codigo_accion"
-            ).eq("id", accion_formativa_id).execute()
-            
-            if not accion_res.data:
-                return [], "Acción formativa no encontrada"
-            
-            codigo_accion = accion_res.data[0]["codigo_accion"]
-            
-            # Generar rango de códigos
+    
             codigos_disponibles = []
             for i in range(siguiente_numero, siguiente_numero + cantidad):
-                codigo = f"{codigo_accion}-G{i}"
-                # Verificar disponibilidad
-                es_valido, _ = self.validar_codigo_grupo_correlativo(
-                    codigo, accion_formativa_id, fecha_inicio
+                disponible, _ = self.validar_numero_correlativo_disponible(
+                    accion_formativa_id, i, fecha_inicio
                 )
-                if es_valido:
-                    codigos_disponibles.append({
-                        "numero": i,
-                        "codigo": codigo,
-                        "disponible": True
-                    })
-                else:
-                    codigos_disponibles.append({
-                        "numero": i,
-                        "codigo": codigo,
-                        "disponible": False
-                    })
-            
+                codigos_disponibles.append({
+                    "numero": i,
+                    "codigo": str(i),
+                    "disponible": disponible
+                })
             return codigos_disponibles, ""
-            
         except Exception as e:
             return [], f"Error al generar rango de códigos: {e}"
         
