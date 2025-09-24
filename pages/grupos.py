@@ -458,58 +458,78 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                 
                 accion_id = acciones_dict[accion_formativa]
 
-                # =====================
-                # CÓDIGO DEL GRUPO CON VALIDACIONES FUNDAE
-                # =====================
-                if es_creacion:
-                    # Generar código sugerido automáticamente
-                    codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido(accion_id)
+                # =========================
+                # SECCIÓN: CÓDIGO DEL GRUPO
+                # =========================
+                with st.container(border=True):
+                    st.markdown("### 🏷️ Código del Grupo")
                 
-                    if codigo_sugerido and not error_sugerido:
-                        st.info(f"💡 Código sugerido: **{codigo_sugerido}**")
-                        codigo_default = datos_grupo.get("codigo_grupo", codigo_sugerido)
-                    else:
-                        codigo_default = datos_grupo.get("codigo_grupo", "")
+                    if es_creacion:
+                        # Generar sugerido correlativo
+                        codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
+                            accion_id, fecha_inicio
+                        )
+                
                         if error_sugerido:
-                            st.warning(f"⚠️ No se pudo generar código sugerido: {error_sugerido}")
-                
-                    codigo_grupo = st.text_input(
-                        "🏷️ Código del Grupo *",
-                        value=codigo_default,
-                        max_chars=50,
-                        help="Código único por acción formativa, empresa gestora y año",
-                        key="codigo_grupo_input"
-                    )
-                
-                    # VALIDACIÓN EN TIEMPO REAL DEL CÓDIGO
-                    if codigo_grupo and accion_id:
-                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_unico_fundae(
-                            codigo_grupo, accion_id
-                        )
-                        if es_valido:
-                            st.success(f"✅ Código '{codigo_grupo}' disponible")
+                            st.error(f"❌ Error al generar código sugerido: {error_sugerido}")
+                            codigo_grupo = st.text_input(
+                                "Código del Grupo *",
+                                value="",
+                                placeholder="Introduce un número",
+                                key=f"codigo_grupo_{form_key}"
+                            )
                         else:
-                            st.error(f"❌ {mensaje_error}")
+                            # Mostrar sugerido y permitir cambiarlo
+                            col1, col2 = st.columns([2, 1])
+                            with col1:
+                                st.success(f"✅ Código sugerido: {codigo_sugerido}")
+                            with col2:
+                                usar_sugerido = st.checkbox(
+                                    "Usar sugerido",
+                                    value=True,
+                                    key=f"usar_sugerido_{form_key}"
+                                )
                 
-                else:
-                    # Modo edición - mostrar el código en solo lectura
-                    codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                    st.text_input(
-                        "🏷️ Código del Grupo",
-                        value=codigo_grupo,
-                        disabled=True,
-                        help="No se puede modificar después de la creación"
-                    )
+                            if usar_sugerido:
+                                codigo_grupo = codigo_sugerido
+                            else:
+                                codigo_grupo = st.text_input(
+                                    "Código del Grupo *",
+                                    value=codigo_sugerido,
+                                    placeholder="Introduce un número",
+                                    key=f"codigo_grupo_manual_{form_key}"
+                                )
                 
-                    # Mostrar validación del código existente
-                    if codigo_grupo and accion_id:
-                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_unico_fundae(
-                            codigo_grupo, accion_id, datos_grupo.get("id")
+                        # Validación en tiempo real
+                        if codigo_grupo:
+                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                                codigo_grupo, accion_id, fecha_inicio
+                            )
+                            if es_valido:
+                                st.success(f"✅ Código '{codigo_grupo}' válido")
+                            else:
+                                st.error(f"❌ {mensaje_error}")
+                
+                    else:
+                        # Modo edición - solo lectura
+                        codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                        st.text_input(
+                            "🏷️ Código del Grupo",
+                            value=codigo_grupo,
+                            disabled=True,
+                            help="No se puede modificar después de la creación"
                         )
-                        if es_valido:
-                            st.success("✅ Código válido")
-                        else:
-                            st.error(f"❌ {mensaje_error}")
+                
+                        # Validar igualmente el existente
+                        if codigo_grupo:
+                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                                codigo_grupo, accion_id, fecha_inicio, datos_grupo.get("id")
+                            )
+                            if es_valido:
+                                st.success("✅ Código válido")
+                            else:
+                                st.error(f"❌ {mensaje_error}")
+
 
                                 
                 # Calcular modalidad automáticamente
