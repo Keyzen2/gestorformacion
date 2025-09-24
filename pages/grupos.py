@@ -374,35 +374,42 @@ def crear_selector_horario_manual(key_suffix="", horario_inicial=""):
 # FUNCIÓN MOSTRAR_FORMULARIO_GRUPO CORREGIDA COMPLETA
 # =========================
 
-def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, es_creacion=False):
+def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
     """Formulario con horarios manuales y botones submit correctos."""
-    
-    # Obtener datos necesarios
+
+    # ✅ Obtener grupo desde session_state
+    grupo_seleccionado = st.session_state.get("grupo_seleccionado", None)
+
+    # Obtener acciones disponibles
     acciones_dict = grupos_service.get_acciones_dict()
-    
     if not acciones_dict:
         st.error("⚠ No hay acciones formativas disponibles. Crea una acción formativa primero.")
         return None
-    
-    # Datos iniciales
+
+    # Datos iniciales según si es creación o edición
     if grupo_seleccionado and not es_creacion:
         try:
-            grupo_fresh = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_seleccionado.get("id")).execute()
+            grupo_fresh = (
+                grupos_service.supabase.table("grupos")
+                .select("*")
+                .eq("id", grupo_seleccionado.get("id"))
+                .execute()
+            )
             if grupo_fresh.data:
                 datos_grupo = grupo_fresh.data[0]
                 estado_actual = determinar_estado_grupo(datos_grupo)
             else:
                 datos_grupo = grupo_seleccionado.copy()
-                estado_actual = "ABIERTO"
+                estado_actual = "abierto"
         except Exception as e:
             st.error(f"Error recargando datos del grupo: {e}")
             datos_grupo = grupo_seleccionado.copy()
-            estado_actual = "ABIERTO"
+            estado_actual = "abierto"
     else:
         datos_grupo = {}
-        estado_actual = "ABIERTO"
+        estado_actual = "abierto"
         es_creacion = True
-    
+
     # Título del formulario
     if es_creacion:
         st.markdown("### ➕ Crear Nuevo Grupo")
@@ -410,12 +417,11 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
     else:
         codigo = datos_grupo.get("codigo_grupo", "Sin código")
         st.markdown(f"### ✏️ Editar Grupo: {codigo}")
-        color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
-        st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
-    
-    # FORMULARIO CON KEY ÚNICO
+        color_estado = {"abierto": "🟢", "finalizar": "🟡", "finalizado": "✅", "cancelado": "❌"}
+        st.caption(f"Estado: {color_estado.get(estado_actual.lower(), '⚪')} {estado_actual}")
+
+    # FORMULARIO
     form_key = f"grupo_form_{datos_grupo.get('id', 'nuevo')}_{datetime.now().timestamp()}"
-    
     with st.form(form_key, clear_on_submit=es_creacion):
         
         errores = []
@@ -834,30 +840,23 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
         
         # Botones de acción
         st.divider()
-        
-        # CORRECCION: Inicializar todas las variables de botones
         submitted = False
         cancelar = False
         recargar = False
-        
+
         if es_creacion:
             col1, col2 = st.columns([2, 1])
             with col1:
                 submitted = st.form_submit_button(
-                    "➕ Crear Grupo", 
-                    type="primary", 
-                    use_container_width=True
+                    "➕ Crear Grupo", type="primary", use_container_width=True
                 )
             with col2:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
-                
         else:
             col1, col2, col3 = st.columns(3)
             with col1:
                 submitted = st.form_submit_button(
-                    "💾 Guardar Cambios",
-                    type="primary",
-                    use_container_width=True
+                    "💾 Guardar Cambios", type="primary", use_container_width=True
                 )
             with col2:
                 recargar = st.form_submit_button("🔄 Recargar", use_container_width=True)
@@ -868,11 +867,9 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
         
         # Procesar formulario
         if submitted:
-            # Solo procesar si no hay errores críticos
-            if errores:
+            if errores:  # <- ya lo tienes arriba
                 st.error("❌ Corrija los errores antes de continuar")
             else:
-                # Preparar datos según operación
                 datos_para_guardar = {
                     "accion_formativa_id": acciones_dict[accion_formativa],
                     "modalidad": modalidad_grupo,
@@ -886,33 +883,46 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
                     "n_participantes_previstos": n_participantes_previstos,
                     "lugar_imparticion": lugar_imparticion,
                     "observaciones": observaciones,
-                    "horario": horario_nuevo if horario_nuevo else None
+                    "horario": horario_nuevo if horario_nuevo else None,
                 }
-                
-                # Añadir código solo en creación
+
+                # Código + empresa solo en creación
                 if es_creacion:
                     datos_para_guardar["codigo_grupo"] = codigo_grupo
                     datos_para_guardar["empresa_id"] = empresa_id
-                
-                # Añadir datos de finalización si aplica
+                    datos_para_guardar["estado"] = "abierto"
+                else:
+                    datos_para_guardar["estado"] = determinar_estado_grupo(datos_grupo).lower()
+
+                # Finalización
                 if datos_finalizacion:
                     datos_para_guardar.update(datos_finalizacion)
-                
+
                 try:
                     if es_creacion:
-                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
+                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(
+                            datos_para_guardar
+                        )
                         if exito:
                             st.success("✅ Grupo creado correctamente")
-                            # Cargar grupo recién creado
-                            grupo_creado = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                            grupo_creado = (
+                                grupos_service.supabase.table("grupos")
+                                .select("*")
+                                .eq("id", grupo_id)
+                                .execute()
+                            )
                             if grupo_creado.data:
                                 st.session_state.grupo_seleccionado = grupo_creado.data[0]
                             st.rerun()
                         else:
                             st.error("❌ Error al crear grupo")
                     else:
-                        # Actualización de grupo existente
-                        res = grupos_service.supabase.table("grupos").update(datos_para_guardar).eq("id", datos_grupo["id"]).execute()
+                        res = (
+                            grupos_service.supabase.table("grupos")
+                            .update(datos_para_guardar)
+                            .eq("id", datos_grupo["id"])
+                            .execute()
+                        )
                         if res.data:
                             st.success("✅ Cambios guardados correctamente")
                             st.session_state.grupo_seleccionado = res.data[0]
@@ -921,20 +931,26 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
                             st.error("❌ No se guardaron cambios en el grupo")
                 except Exception as e:
                     st.error(f"❌ Error al procesar grupo: {e}")
-        
+
         elif cancelar:
             st.session_state.grupo_seleccionado = None
+            st.session_state.grupo_editando = None
             st.rerun()
-        
+
         elif recargar and not es_creacion:
             try:
-                grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
+                grupo_recargado = (
+                    grupos_service.supabase.table("grupos")
+                    .select("*")
+                    .eq("id", datos_grupo["id"])
+                    .execute()
+                )
                 if grupo_recargado.data:
                     st.session_state.grupo_seleccionado = grupo_recargado.data[0]
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al recargar: {e}")
-        
+
         return datos_grupo.get("id") if datos_grupo else None
 # =========================
 # SECCIONES ADICIONALES CON JERARQUÍA
