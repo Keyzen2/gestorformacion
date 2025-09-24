@@ -580,52 +580,40 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                 )
                 
                 accion_id = acciones_dict[accion_formativa]
-        
-                # Calcular modalidad automáticamente
-                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
-                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
-        
-                # Mostrar modalidad en solo lectura
-                st.text_input(
-                    "🎯 Modalidad",
-                    value=modalidad_grupo,
-                    disabled=True,
-                    help="Modalidad tomada automáticamente de la acción formativa"
-                )
-                
-                # Fechas
-                fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
-                fecha_inicio = st.date_input(
-                    "📅 Fecha de Inicio *",
-                    value=fecha_inicio_value,
-                    help="Fecha de inicio de la formación"
-                )
-        
-                fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
-                fecha_fin_prevista = st.date_input(
-                    "📅 Fecha Fin Prevista *",
-                    value=fecha_fin_prevista_value,
-                    help="Fecha prevista de finalización"
-                )
 
-                # CÓDIGO DEL GRUPO CON VALIDACIONES FUNDAE
+                # Código del grupo simple
                 if es_creacion:
-                    # Generar código sugerido automáticamente
-                    codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
-                        accion_id, fecha_inicio
+                    codigo_grupo = st.text_input(
+                        "🏷️ Código del Grupo *",
+                        value=codigo_sugerido if codigo_sugerido and not error_sugerido else "",
+                        max_chars=50,
+                        help="Código único por acción formativa, empresa gestora y año",
+                        key="codigo_grupo_input"
                     )
                     
+                    # Solo mostrar sugerencia sin botón
                     if codigo_sugerido and not error_sugerido:
                         st.info(f"💡 Código sugerido: **{codigo_sugerido}**")
-                        # Usar el código sugerido como valor por defecto
-                        codigo_default = datos_grupo.get("codigo_grupo", codigo_sugerido)
-                    else:
-                        codigo_default = datos_grupo.get("codigo_grupo", "")
-                        if error_sugerido:
-                            st.warning(f"⚠️ No se pudo generar código sugerido: {error_sugerido}")
+                    elif error_sugerido:
+                        st.warning(f"⚠️ {error_sugerido}")
                     
-                    codigo_grupo = generar_selector_codigo_grupo_inteligente(
-                        grupos_service, accion_id, fecha_inicio, es_creacion=True
+                    # Validación simple
+                    if codigo_grupo and accion_id:
+                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_unico_fundae(
+                            codigo_grupo, accion_id
+                        )
+                        if es_valido:
+                            st.success(f"✅ Código '{codigo_grupo}' disponible")
+                        else:
+                            st.error(f"❌ {mensaje_error}")
+                
+                else:
+                    codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                    st.text_input(
+                        "🏷️ Código del Grupo",
+                        value=codigo_grupo,
+                        disabled=True,
+                        help="No se puede modificar después de la creación"
                     )
                     
                     # VALIDACIÓN EN TIEMPO REAL DEL CÓDIGO
@@ -662,6 +650,33 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                             st.success(f"✅ Código válido")
                         else:
                             st.error(f"❌ {mensaje_error}")
+                            
+                # Calcular modalidad automáticamente
+                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
+                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
+        
+                # Mostrar modalidad en solo lectura
+                st.text_input(
+                    "🎯 Modalidad",
+                    value=modalidad_grupo,
+                    disabled=True,
+                    help="Modalidad tomada automáticamente de la acción formativa"
+                )
+                
+                # Fechas
+                fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
+                fecha_inicio = st.date_input(
+                    "📅 Fecha de Inicio *",
+                    value=fecha_inicio_value,
+                    help="Fecha de inicio de la formación"
+                )
+        
+                fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
+                fecha_fin_prevista = st.date_input(
+                    "📅 Fecha Fin Prevista *",
+                    value=fecha_fin_prevista_value,
+                    help="Fecha prevista de finalización"
+                )
                 
                 # VALIDACIÓN TEMPORAL EN TIEMPO REAL
                 if fecha_inicio and fecha_fin_prevista and accion_id:
