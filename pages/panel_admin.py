@@ -530,50 +530,46 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error al cargar actividad reciente: {e}")
     with tab4:
-            st.subheader("📄 Generar Informe de Curso")
-        
-            # 1. Selección de filtros
-            ano_fundae = st.selectbox(
-                "📅 Año FUNDAE",
-                sorted({
-                    a["ano_fundae"]
-                    for a in supabase.table("acciones_formativas")
-                    .select("ano_fundae")
-                    .execute().data
-                    if a.get("ano_fundae")
-                })
-            )
-            empresa_sel = st.selectbox("🏢 Empresa Gestora", [e["nombre"] for e in empresas_data])
-        
-            # Obtener empresa_id según selección
-            empresa_id = next((e["id"] for e in empresas_data if e["nombre"] == empresa_sel), None)
-        
-            # Obtener acciones de esa empresa y año
-            acciones_res = (
-                supabase.table("acciones_formativas")
-                .select("id, nombre")
-                .eq("empresa_id", empresa_id)
-                .eq("ano_fundae", ano_fundae)
-                .execute()
-            )
-            acciones = acciones_res.data or []
-            accion_sel = st.selectbox("📚 Acción Formativa", [a["nombre"] for a in acciones])
-        
-            # Obtener accion_id según selección
-            accion_id = next((a["id"] for a in acciones if a["nombre"] == accion_sel), None)
-        
-            # Obtener grupos de esa acción
-            grupos_res = (
-                supabase.table("grupos")
-                .select("id, codigo_grupo")
-                .eq("accion_formativa_id", accion_id)
-                .execute()
-            )
-            grupos = grupos_res.data or []
-            grupo_sel = st.selectbox("👥 Grupo", [g["codigo_grupo"] for g in grupos])
-        
-            # 2. Botón para generar PDF
-            if st.button("📥 Exportar Informe PDF"):
+        st.subheader("📄 Generar Informe de Curso")
+    
+        # 1. Selección de filtros
+        anos = supabase.table("acciones_formativas").select("ano_fundae").execute().data
+        anos_disponibles = sorted({a["ano_fundae"] for a in anos if a.get("ano_fundae")})
+        ano_fundae = st.selectbox("📅 Año FUNDAE", anos_disponibles)
+    
+        empresas_dict = {e["nombre"]: e["id"] for e in empresas_data}
+        empresa_sel = st.selectbox("🏢 Empresa Gestora", list(empresas_dict.keys()))
+        empresa_id = empresas_dict.get(empresa_sel)
+    
+        # Obtener acciones de esa empresa y año
+        acciones_res = (
+            supabase.table("acciones_formativas")
+            .select("id, nombre, codigo_accion, horas, modalidad, ano_fundae")
+            .eq("empresa_id", empresa_id)
+            .eq("ano_fundae", ano_fundae)
+            .execute()
+        )
+        acciones = acciones_res.data or []
+        acciones_dict = {a["nombre"]: a["id"] for a in acciones}
+    
+        accion_sel = st.selectbox("📚 Acción Formativa", list(acciones_dict.keys()))
+        accion_id = acciones_dict.get(accion_sel)
+    
+        # Obtener grupos de esa acción
+        grupos_res = (
+            supabase.table("grupos")
+            .select("id, codigo_grupo, fecha_inicio, fecha_fin_prevista, horario, lugar_imparticion, observaciones")
+            .eq("accion_formativa_id", accion_id)
+            .execute()
+        )
+        grupos = grupos_res.data or []
+        grupos_dict = {g["codigo_grupo"]: g["id"] for g in grupos}
+    
+        grupo_sel = st.selectbox("👥 Grupo", list(grupos_dict.keys()))
+        grupo_id = grupos_dict.get(grupo_sel)
+    
+        # 2. Botón para generar PDF
+        if st.button("📥 Exportar Informe PDF"):
                 buffer = io.BytesIO()
                 doc = SimpleDocTemplate(buffer, pagesize=A4)
                 styles = getSampleStyleSheet()
