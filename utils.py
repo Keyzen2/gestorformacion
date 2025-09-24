@@ -211,39 +211,49 @@ def export_csv(df: pd.DataFrame, filename: str = "export.csv"):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Descargar CSV</a>'
     st.markdown(href, unsafe_allow_html=True)
 
-def export_excel(df: pd.DataFrame, filename: str = "export.xlsx"):
+def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar a Excel"):
     """
-    Genera un botón para exportar un DataFrame a Excel.
+    Genera un botón para exportar un DataFrame a Excel con estilo nativo de Streamlit.
     
     Args:
         df: DataFrame a exportar
         filename: Nombre del archivo a generar
+        label: Texto del botón
         
     Returns:
         None
     """
     if df is None or df.empty:
+        st.warning("⚠ No hay datos para exportar")
         return
-    
+
+    from io import BytesIO
+    import pandas as pd
+
     # Crear buffer y guardar Excel
     output = BytesIO()
-    writer = pd.ExcelWriter(output, engine='xlsxwriter')
-    df.to_excel(writer, index=False, sheet_name='Sheet1')
-    
-    # Autoajustar columnas
-    worksheet = writer.sheets['Sheet1']
-    for i, col in enumerate(df.columns):
-        # Establecer ancho basado en el contenido
-        max_len = max(df[col].astype(str).str.len().max(), len(str(col))) + 2
-        worksheet.set_column(i, i, max_len)
-    
-    writer.close()
-    
-    # Preparar para descarga
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+
+        # Autoajustar columnas
+        worksheet = writer.sheets["Sheet1"]
+        for i, col in enumerate(df.columns):
+            max_len = max(df[col].astype(str).str.len().max(), len(str(col))) + 2
+            worksheet.set_column(i, i, max_len)
+
+    # Preparar datos binarios
     excel_data = output.getvalue()
-    b64 = base64.b64encode(excel_data).decode('utf-8')
-    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">📥 Descargar Excel</a>'
-    st.markdown(href, unsafe_allow_html=True)
+
+    # Botón nativo de Streamlit (con mismo diseño que Crear/Actualizar)
+    st.download_button(
+        label=label,
+        data=excel_data,
+        file_name=filename,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+        type="primary"
+    )
+
 
 # =========================
 # SUPABASE STORAGE
