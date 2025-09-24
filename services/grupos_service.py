@@ -36,7 +36,8 @@ class GruposService:
     def generar_codigo_grupo_sugerido(self, accion_id: str):
         """Compatibilidad: devuelve un código sugerido y error (si lo hay)."""
         try:
-            return self.generar_codigo_grupo_sugerido_correlativo(accion_id), None
+            codigo, error = self.generar_codigo_grupo_sugerido_correlativo(accion_id)
+            return codigo, error
         except Exception as e:
             return None, str(e)
         
