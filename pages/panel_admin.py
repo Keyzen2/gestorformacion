@@ -530,77 +530,150 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error al cargar actividad reciente: {e}")
     with tab4:
-        st.subheader("📄 Generar Informe de Curso")
-    
-        # 1. Selección de filtros
-        ano_fundae = st.selectbox(
-            "📅 Año FUNDAE",
-            sorted({
-                a["ano_fundae"]
-                for a in supabase.table("acciones_formativas")
-                .select("ano_fundae")
-                .execute().data
-                if a.get("ano_fundae")
-            })
-        )
-        empresa_sel = st.selectbox("🏢 Empresa Gestora", [e["nombre"] for e in empresas_data])
-    
-        # Obtener empresa_id según selección
-        empresa_id = next((e["id"] for e in empresas_data if e["nombre"] == empresa_sel), None)
-    
-        # Obtener acciones de esa empresa y año
-        acciones_res = (
-            supabase.table("acciones_formativas")
-            .select("id, nombre")
-            .eq("empresa_id", empresa_id)
-            .eq("ano_fundae", ano_fundae)
-            .execute()
-        )
-        acciones = acciones_res.data or []
-        accion_sel = st.selectbox("📚 Acción Formativa", [a["nombre"] for a in acciones])
-    
-        # Obtener accion_id según selección
-        accion_id = next((a["id"] for a in acciones if a["nombre"] == accion_sel), None)
-    
-        # Obtener grupos de esa acción
-        grupos_res = (
-            supabase.table("grupos")
-            .select("id, codigo_grupo")
-            .eq("accion_formativa_id", accion_id)
-            .execute()
-        )
-        grupos = grupos_res.data or []
-        grupo_sel = st.selectbox("👥 Grupo", [g["codigo_grupo"] for g in grupos])
-    
-        # 2. Botón para generar PDF
-        if st.button("📥 Exportar Informe PDF"):
-            buffer = io.BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=A4)
-            styles = getSampleStyleSheet()
-            story = []
-    
-            story.append(Paragraph("Ficha del Curso", styles["Title"]))
-            story.append(Spacer(1, 12))
-    
-            # Ejemplo de tabla simple (puedes ampliar con tutores, empresas, participantes…)
-            data = [["Campo", "Valor"], ["Acción", accion_sel], ["Grupo", grupo_sel]]
-            table = Table(data, colWidths=[150, 300])
-            table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
-                ("GRID", (0, 0), (-1, -1), 1, colors.black),
-            ]))
-            story.append(table)
-    
-            doc.build(story)
-            pdf = buffer.getvalue()
-            buffer.close()
-    
-            st.download_button(
-                "⬇️ Descargar PDF",
-                pdf,
-                file_name="informe_curso.pdf",
-                mime="application/pdf"
+            st.subheader("📄 Generar Informe de Curso")
+        
+            # 1. Selección de filtros
+            ano_fundae = st.selectbox(
+                "📅 Año FUNDAE",
+                sorted({
+                    a["ano_fundae"]
+                    for a in supabase.table("acciones_formativas")
+                    .select("ano_fundae")
+                    .execute().data
+                    if a.get("ano_fundae")
+                })
             )
+            empresa_sel = st.selectbox("🏢 Empresa Gestora", [e["nombre"] for e in empresas_data])
+        
+            # Obtener empresa_id según selección
+            empresa_id = next((e["id"] for e in empresas_data if e["nombre"] == empresa_sel), None)
+        
+            # Obtener acciones de esa empresa y año
+            acciones_res = (
+                supabase.table("acciones_formativas")
+                .select("id, nombre")
+                .eq("empresa_id", empresa_id)
+                .eq("ano_fundae", ano_fundae)
+                .execute()
+            )
+            acciones = acciones_res.data or []
+            accion_sel = st.selectbox("📚 Acción Formativa", [a["nombre"] for a in acciones])
+        
+            # Obtener accion_id según selección
+            accion_id = next((a["id"] for a in acciones if a["nombre"] == accion_sel), None)
+        
+            # Obtener grupos de esa acción
+            grupos_res = (
+                supabase.table("grupos")
+                .select("id, codigo_grupo")
+                .eq("accion_formativa_id", accion_id)
+                .execute()
+            )
+            grupos = grupos_res.data or []
+            grupo_sel = st.selectbox("👥 Grupo", [g["codigo_grupo"] for g in grupos])
+        
+            # 2. Botón para generar PDF
+            if st.button("📥 Exportar Informe PDF"):
+                buffer = io.BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4)
+                styles = getSampleStyleSheet()
+                story = []
+            
+                # Título
+                story.append(Paragraph("📄 Ficha del Curso", styles["Title"]))
+                story.append(Spacer(1, 12))
+            
+                # ====================
+                # 1. Datos de la acción
+                # ====================
+                accion = next((a for a in acciones if a["nombre"] == accion_sel), {})
+                data_accion = [
+                    ["Campo", "Valor"],
+                    ["Nombre", accion.get("nombre", "")],
+                    ["Código", accion.get("codigo_accion", "")],
+                    ["Horas", accion.get("horas", "")],
+                    ["Modalidad", accion.get("modalidad", "")],
+                    ["Año FUNDAE", accion.get("ano_fundae", "")]
+                ]
+                table_accion = Table(data_accion, colWidths=[150, 300])
+                table_accion.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+                                                  ("GRID", (0,0), (-1,-1), 1, colors.black)]))
+                story.append(Paragraph("📚 Acción Formativa", styles["Heading2"]))
+                story.append(table_accion)
+                story.append(Spacer(1, 12))
+            
+                # ====================
+                # 2. Datos del grupo
+                # ====================
+                grupo = next((g for g in grupos if g["codigo_grupo"] == grupo_sel), {})
+                data_grupo = [
+                    ["Código", grupo.get("codigo_grupo", "")],
+                    ["Fecha Inicio", grupo.get("fecha_inicio", "")],
+                    ["Fecha Fin Prevista", grupo.get("fecha_fin_prevista", "")],
+                    ["Horario", grupo.get("horario", "")],
+                    ["Lugar", grupo.get("lugar_imparticion", "")],
+                    ["Observaciones", grupo.get("observaciones", "")]
+                ]
+                table_grupo = Table(data_grupo, colWidths=[150, 300])
+                table_grupo.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+                                                 ("GRID", (0,0), (-1,-1), 1, colors.black)]))
+                story.append(Paragraph("👥 Grupo", styles["Heading2"]))
+                story.append(table_grupo)
+                story.append(Spacer(1, 12))
+            
+                # ====================
+                # 3. Empresas vinculadas
+                # ====================
+                empresas_res = supabase.table("empresas_grupos").select("empresa_id, empresas(nombre, cif, tipo)").eq("grupo_id", grupo.get("id")).execute()
+                empresas = [e["empresas"] for e in (empresas_res.data or [])]
+            
+                if empresas:
+                    data_empresas = [["Nombre", "CIF", "Tipo"]] + [[e["nombre"], e["cif"], e["tipo"]] for e in empresas]
+                    table_empresas = Table(data_empresas, colWidths=[150, 150, 150])
+                    table_empresas.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+                                                        ("GRID", (0,0), (-1,-1), 1, colors.black)]))
+                    story.append(Paragraph("🏢 Empresas Vinculadas", styles["Heading2"]))
+                    story.append(table_empresas)
+                    story.append(Spacer(1, 12))
+            
+                # ====================
+                # 4. Tutores
+                # ====================
+                tutores_res = supabase.table("grupos_tutores").select("tutor_id, tutores(nombre, dni, email, telefono)").eq("grupo_id", grupo.get("id")).execute()
+                tutores = [t["tutores"] for t in (tutores_res.data or [])]
+            
+                if tutores:
+                    data_tutores = [["Nombre", "DNI", "Email", "Teléfono"]] + [[t["nombre"], t["dni"], t["email"], t.get("telefono","")] for t in tutores]
+                    table_tutores = Table(data_tutores, colWidths=[120, 100, 180, 100])
+                    table_tutores.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+                                                       ("GRID", (0,0), (-1,-1), 1, colors.black)]))
+                    story.append(Paragraph("🧑‍🏫 Tutores", styles["Heading2"]))
+                    story.append(table_tutores)
+                    story.append(Spacer(1, 12))
+            
+                # ====================
+                # 5. Participantes
+                # ====================
+                participantes_res = supabase.table("participantes").select("nombre, email, apto, empresas(nombre)").eq("grupo_id", grupo.get("id")).execute()
+                participantes = participantes_res.data or []
+            
+                if participantes:
+                    data_participantes = [["Nombre", "Email", "Apto", "Empresa"]] + [
+                        [p["nombre"], p["email"], "✅" if p.get("apto") else "❌", p.get("empresas", {}).get("nombre","")]
+                        for p in participantes
+                    ]
+                    table_participantes = Table(data_participantes, colWidths=[120, 180, 50, 150])
+                    table_participantes.setStyle(TableStyle([("BACKGROUND", (0,0), (-1,0), colors.lightgrey),
+                                                             ("GRID", (0,0), (-1,-1), 1, colors.black)]))
+                    story.append(Paragraph("👤 Participantes", styles["Heading2"]))
+                    story.append(table_participantes)
+            
+                # Construir PDF
+                doc.build(story)
+                pdf = buffer.getvalue()
+                buffer.close()
+            
+                st.download_button("⬇️ Descargar PDF", pdf, file_name="informe_curso.pdf", mime="application/pdf")
             
     st.divider()
     st.caption(f"🔄 Panel actualizado automáticamente - Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
