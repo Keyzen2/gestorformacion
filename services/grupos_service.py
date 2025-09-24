@@ -33,7 +33,13 @@ class GruposService:
     # =========================
     # VALIDACIONES FUNDAE
     # =========================
-
+    def generar_codigo_grupo_sugerido(self, accion_id: str):
+        """Compatibilidad: devuelve un código sugerido y error (si lo hay)."""
+        try:
+            return self.generar_codigo_grupo_sugerido_correlativo(accion_id), None
+        except Exception as e:
+            return None, str(e)
+        
     def validar_grupo_fundae(self, datos_grupo: Dict[str, Any], tipo_xml: str = "inicio") -> Tuple[bool, List[str]]:
         """Valida que un grupo cumpla con los requisitos FUNDAE para generar XML."""
         errores = []
