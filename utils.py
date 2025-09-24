@@ -16,7 +16,18 @@ import requests
 # =========================
 # VALIDACIONES
 # =========================
-
+def validar_uuid_seguro(uuid_str):
+    """Valida que un string sea un UUID válido."""
+    if not uuid_str:
+        return None
+    
+    try:
+        import uuid
+        uuid.UUID(str(uuid_str))
+        return str(uuid_str)
+    except (ValueError, TypeError):
+        return None
+        
 def validar_dni_cif(documento: str) -> bool:
     """
     Valida DNI, NIE o CIF.
