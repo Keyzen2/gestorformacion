@@ -580,7 +580,34 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                 )
                 
                 accion_id = acciones_dict[accion_formativa]
+        
+                # Calcular modalidad automáticamente
+                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
+                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
+        
+                # Mostrar modalidad en solo lectura
+                st.text_input(
+                    "🎯 Modalidad",
+                    value=modalidad_grupo,
+                    disabled=True,
+                    help="Modalidad tomada automáticamente de la acción formativa"
+                )
                 
+                # Fechas
+                fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
+                fecha_inicio = st.date_input(
+                    "📅 Fecha de Inicio *",
+                    value=fecha_inicio_value,
+                    help="Fecha de inicio de la formación"
+                )
+        
+                fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
+                fecha_fin_prevista = st.date_input(
+                    "📅 Fecha Fin Prevista *",
+                    value=fecha_fin_prevista_value,
+                    help="Fecha prevista de finalización"
+                )
+
                 # CÓDIGO DEL GRUPO CON VALIDACIONES FUNDAE
                 if es_creacion:
                     # Generar código sugerido automáticamente
@@ -635,33 +662,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                             st.success(f"✅ Código válido")
                         else:
                             st.error(f"❌ {mensaje_error}")
-        
-                # Calcular modalidad automáticamente
-                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
-                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
-        
-                # Mostrar modalidad en solo lectura
-                st.text_input(
-                    "🎯 Modalidad",
-                    value=modalidad_grupo,
-                    disabled=True,
-                    help="Modalidad tomada automáticamente de la acción formativa"
-                )
-                
-                # Fechas
-                fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
-                fecha_inicio = st.date_input(
-                    "📅 Fecha de Inicio *",
-                    value=fecha_inicio_value,
-                    help="Fecha de inicio de la formación"
-                )
-        
-                fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
-                fecha_fin_prevista = st.date_input(
-                    "📅 Fecha Fin Prevista *",
-                    value=fecha_fin_prevista_value,
-                    help="Fecha prevista de finalización"
-                )
                 
                 # VALIDACIÓN TEMPORAL EN TIEMPO REAL
                 if fecha_inicio and fecha_fin_prevista and accion_id:
