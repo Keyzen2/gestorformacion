@@ -693,8 +693,7 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
             
             # SECCIÓN 2: HORARIOS FUNDAE MANUAL
             with st.container(border=True):
-                st.markdown("### ⏰ Horarios de Impartición")
-                
+                              
                 # Cargar horario actual
                 horario_actual = datos_grupo.get("horario", "")
                 
