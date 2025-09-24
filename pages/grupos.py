@@ -1830,8 +1830,8 @@ def main(supabase, session_state):
     
     with col2:
         if not df_grupos.empty:
-        filename = f"grupos_{datetime.now().strftime('%Y%m%d')}.xlsx"
-        export_excel(df_grupos, filename)  # 🔹 Aquí se dibuja el botón con tu diseño
+            filename = f"grupos_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            export_excel(df_grupos, filename)
         else:
             st.info("📋 No hay grupos para exportar")
         
