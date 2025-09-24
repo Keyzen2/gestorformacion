@@ -1807,11 +1807,9 @@ def main(supabase, session_state):
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
-            with col1:
-                if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
-                    st.session_state.grupo_seleccionado = {}      # dict vacío
-                    st.session_state.grupo_editando = "nuevo"     # flag opcional
-                    st.rerun()
+            st.session_state.grupo_seleccionado = {}      # dict vacío
+            st.session_state.grupo_editando = "nuevo"     # flag opcional
+            st.rerun()
     
     with col2:
         if st.button("📊 Exportar CSV", use_container_width=True):
@@ -1832,16 +1830,16 @@ def main(supabase, session_state):
             st.rerun()
     
     # Mostrar formulario según estado
-    if hasattr(st.session_state, 'grupo_seleccionado'):
-        if st.session_state.grupo_seleccionado == {}:
-            # Crear grupo
-            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
-        elif st.session_state.grupo_seleccionado:
-            # Editar grupo
-            grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
-            if grupo_id:
-                st.divider()
-                mostrar_secciones_adicionales(grupos_service, grupo_id)
+    if st.session_state.grupo_seleccionado == {}:
+        # Creación de grupo
+        mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
+    
+    elif st.session_state.grupo_seleccionado:
+        # Edición de grupo existente
+        grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
+        if grupo_id:
+            st.divider()
+            mostrar_secciones_adicionales(grupos_service, grupo_id)
 
 # =========================
 # PUNTO DE ENTRADA
