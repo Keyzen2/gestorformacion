@@ -656,15 +656,15 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                 )
 
                 responsable = st.text_input(
-                    "👤 Responsable del Grupo *",
-                    value=datos_grupo.get("responsable", ""),  # Verificar nombre exacto del campo
-                    help="Persona responsable del grupo (obligatorio FUNDAE)"
+                    "👤 Responsable del Grupo",
+                    value=datos_grupo.get("responsable") or "",
+                    help="Persona responsable del grupo (opcional)"
                 )
                 
                 telefono_contacto = st.text_input(
-                    "📞 Teléfono de Contacto *", 
-                    value=datos_grupo.get("telefono_contacto", ""),  # Verificar nombre exacto del campo
-                    help="Teléfono de contacto del responsable (obligatorio FUNDAE)"
+                    "📞 Teléfono de Contacto", 
+                    value=datos_grupo.get("telefono_contacto") or "",
+                    help="Teléfono de contacto del responsable (opcional)"
                 )
                 
                 # Participantes previstos
@@ -807,10 +807,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
             errores.append("Fecha fin prevista requerida")
         if not localidad_sel:
             errores.append("Localidad requerida")
-        if not responsable:
-            errores.append("Responsable requerido")
-        if not telefono_contacto:
-            errores.append("Teléfono de contacto requerido")
         if grupos_service.rol == "admin" and not empresa_id:
             errores.append("Empresa propietaria requerida")
         if not horario_nuevo:
