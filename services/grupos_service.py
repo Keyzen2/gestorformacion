@@ -1393,7 +1393,14 @@ class GruposService:
             grupo_id_limpio = validar_uuid_seguro(grupo_id)
             if not grupo_id_limpio:
                 return pd.DataFrame(columns=["id", "mes", "importe", "observaciones"])
-    
+                
+            # Validar rápido si parece un UUID
+            import uuid
+            try:
+                uuid.UUID(str(grupo_id))
+            except Exception:
+                return pd.DataFrame()
+                
             res = (
                 _self.supabase.table("grupo_bonificaciones")
                 .select("id, grupo_id, mes, importe, observaciones, created_at")
