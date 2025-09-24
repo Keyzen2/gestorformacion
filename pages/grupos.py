@@ -708,20 +708,19 @@ def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, 
             with st.container(border=True):
                 st.markdown("### ⏰ Horarios de Impartición")
                 
-                # Cargar horario actual si existe
+                # Cargar horario actual
                 horario_actual = datos_grupo.get("horario", "")
                 
+                # Mostrar horario actual como información si existe
                 if horario_actual and not es_creacion:
                     st.info(f"**Horario actual:** {horario_actual}")
-                    
-                    if st.checkbox("Modificar horario", key="cambiar_horario"):
-                        horario_nuevo = crear_selector_horario_manual(f"edit_{datos_grupo.get('id', 'nuevo')}", horario_actual)
-                    else:
-                        horario_nuevo = horario_actual
-                else:
-                    horario_nuevo = crear_selector_horario_manual(f"new_{datetime.now().timestamp()}", horario_actual)
-            
-            return horario_nuevo
+                    st.caption("Modifique los campos para cambiar el horario o mantenga los valores actuales")
+                
+                # Siempre mostrar el selector manual (con valores precargados si existen)
+                horario_nuevo = crear_selector_horario_manual(
+                    f"horario_{datos_grupo.get('id', 'nuevo')}", 
+                    horario_actual if horario_actual else ""
+                )
         
         # =====================
         # SECCIÓN 3: FINALIZACIÓN (Condicional)
