@@ -55,18 +55,6 @@ def safe_date_conversion(date_value):
         return date_value.date() if callable(getattr(date_value, 'date', None)) else date_value
     
     return date_value
-    
-def validar_uuid_seguro(uuid_str):
-    """Valida que un string sea un UUID válido."""
-    if not uuid_str:
-        return None
-    
-    try:
-        import uuid
-        uuid.UUID(str(uuid_str))
-        return str(uuid_str)
-    except (ValueError, TypeError):
-        return None
         
 # =========================
 # FUNCIONES DE ESTADO AUTOMÁTICO
@@ -148,48 +136,38 @@ def parsear_horario_fundae(horario_str):
         pass
     
     return manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias
+    
+def validar_uuid_seguro(uuid_str):
+    """Valida que un string sea un UUID válido y maneja casos especiales."""
+    if uuid_str is None:
+        return None
+    if str(uuid_str).lower() in ["none", "null", ""]:
+        return None
+    if pd.isna(uuid_str):
+        return None
+    
+    try:
+        uuid.UUID(str(uuid_str).strip())
+        return str(uuid_str).strip()
+    except (ValueError, TypeError, AttributeError):
+        return None
+
 def validar_formato_hora(hora_str):
     """Valida que una hora tenga formato HH:MM válido."""
     if not hora_str:
         return False
     
-    import re
     patron = r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
-    return bool(re.match(patron, hora_str))
-
+    return bool(re.match(patron, hora_str.strip()))
 
 def comparar_horas(hora_inicio, hora_fin):
     """Compara que hora_fin > hora_inicio."""
     try:
-        from datetime import datetime
         inicio = datetime.strptime(hora_inicio, "%H:%M")
         fin = datetime.strptime(hora_fin, "%H:%M")
         return fin > inicio
     except:
         return False
-
-
-def construir_horario_fundae_manual(manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados):
-    """Construye string de horario en formato FUNDAE desde campos manuales."""
-    if not dias_seleccionados:
-        return ""
-    
-    partes = []
-    
-    # Añadir tramo mañana si está completo
-    if manana_inicio and manana_fin:
-        partes.append(f"Mañana: {manana_inicio} - {manana_fin}")
-    
-    # Añadir tramo tarde si está completo
-    if tarde_inicio and tarde_fin:
-        partes.append(f"Tarde: {tarde_inicio} - {tarde_fin}")
-    
-    # Añadir días
-    if dias_seleccionados:
-        dias_str = "-".join(dias_seleccionados)
-        partes.append(f"Días: {dias_str}")
-    
-    return " | ".join(partes)
 # =========================
 # COMPONENTES UI MODERNOS
 # =========================
@@ -244,6 +222,28 @@ def mostrar_avisos_grupos(grupos_pendientes):
                         grupo_copy['_mostrar_finalizacion'] = True
                         st.session_state.grupo_seleccionado = grupo_copy
                         st.rerun()
+
+def construir_horario_fundae_manual(manana_inicio, manana_fin, tarde_inicio, tarde_fin, dias_seleccionados):
+    """Construye string de horario en formato FUNDAE desde campos manuales."""
+    if not dias_seleccionados:
+        return ""
+    
+    partes = []
+    
+    # Añadir tramo mañana si está completo
+    if manana_inicio and manana_fin:
+        partes.append(f"Mañana: {manana_inicio} - {manana_fin}")
+    
+    # Añadir tramo tarde si está completo
+    if tarde_inicio and tarde_fin:
+        partes.append(f"Tarde: {tarde_inicio} - {tarde_fin}")
+    
+    # Añadir días
+    if dias_seleccionados:
+        dias_str = "-".join(dias_seleccionados)
+        partes.append(f"Días: {dias_str}")
+    
+    return " | ".join(partes)
 
 def crear_selector_horario_manual(key_suffix="", horario_inicial=""):
     """Selector de horarios manual simplificado - estilo plataforma FUNDAE."""
@@ -385,11 +385,11 @@ def crear_selector_horario_manual(key_suffix="", horario_inicial=""):
     return horario_final
 
 # =========================
-# FORMULARIO PRINCIPAL CON VALIDACIONES FUNDAE INTEGRADAS
+# FUNCIÓN MOSTRAR_FORMULARIO_GRUPO CORREGIDA COMPLETA
 # =========================
 
-def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacion=False):
-    """CORREGIDO: Formulario con carga correcta de datos existentes."""
+def mostrar_formulario_grupo_corregido(grupos_service, grupo_seleccionado=None, es_creacion=False):
+    """Formulario con horarios manuales y botones submit correctos."""
     
     # Obtener datos necesarios
     acciones_dict = grupos_service.get_acciones_dict()
@@ -401,7 +401,6 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
     # Datos iniciales
     if grupo_seleccionado and not es_creacion:
         try:
-            # Recargar datos frescos desde la BD para evitar inconsistencias
             grupo_fresh = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_seleccionado.get("id")).execute()
             if grupo_fresh.data:
                 datos_grupo = grupo_fresh.data[0]
@@ -418,19 +417,17 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
         estado_actual = "ABIERTO"
         es_creacion = True
     
-    # Título del formulario con estilo moderno
+    # Título del formulario
     if es_creacion:
         st.markdown("### ➕ Crear Nuevo Grupo")
         st.caption("🎯 Complete los datos básicos obligatorios para crear el grupo")
     else:
         codigo = datos_grupo.get("codigo_grupo", "Sin código")
         st.markdown(f"### ✏️ Editar Grupo: {codigo}")
-        
-        # Mostrar estado actual con colores
         color_estado = {"ABIERTO": "🟢", "FINALIZAR": "🟡", "FINALIZADO": "✅"}
         st.caption(f"Estado: {color_estado.get(estado_actual, '⚪')} {estado_actual}")
     
-    # Usar formulario con key único
+    # FORMULARIO CON KEY ÚNICO
     form_key = f"grupo_form_{datos_grupo.get('id', 'nuevo')}_{datetime.now().timestamp()}"
     
     with st.form(form_key, clear_on_submit=es_creacion):
@@ -706,40 +703,25 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
                 height=80,
                 help="Información adicional sobre el grupo (opcional)"
             )
-
-        # SECCIÓN 2: HORARIOS FUNDAE MANUAL
-        with st.container(border=True):
-            st.markdown("### ⏰ Horarios de Impartición")
             
-            # Cargar horario actual si existe
-            horario_actual = datos_grupo.get("horario", "")
-            
-            if horario_actual and not es_creacion:
-                st.info(f"**Horario actual:** {horario_actual}")
+            # SECCIÓN 2: HORARIOS FUNDAE MANUAL
+            with st.container(border=True):
+                st.markdown("### ⏰ Horarios de Impartición")
                 
-                if st.checkbox("Modificar horario", key="cambiar_horario"):
-                    horario_nuevo = crear_selector_horario_manual(f"edit_{datos_grupo.get('id', 'nuevo')}", horario_actual)
-                else:
-                    horario_nuevo = horario_actual
-            else:
-                horario_nuevo = crear_selector_horario_manual(f"new_{datetime.now().timestamp()}", horario_actual)
-                with st.container(border=True):
-                    st.markdown("### ⏰ Horarios de Impartición")
+                # Cargar horario actual si existe
+                horario_actual = datos_grupo.get("horario", "")
                 
-                    # Cargar horario actual si existe
-                    horario_actual = datos_grupo.get("horario", "")
-                
-                    if horario_actual and not es_creacion:
-                        st.info(f"**Horario actual**: {horario_actual}")
-                
-                        cambiar_horario = st.checkbox("Modificar horario")
-                
-                        if cambiar_horario:
-                            horario_nuevo = crear_selector_horario_fundae_simplificado(grupos_service, "edit")
-                        else:
-                            horario_nuevo = horario_actual
+                if horario_actual and not es_creacion:
+                    st.info(f"**Horario actual:** {horario_actual}")
+                    
+                    if st.checkbox("Modificar horario", key="cambiar_horario"):
+                        horario_nuevo = crear_selector_horario_manual(f"edit_{datos_grupo.get('id', 'nuevo')}", horario_actual)
                     else:
-                        horario_nuevo = crear_selector_horario_fundae_simplificado(grupos_service, "new")
+                        horario_nuevo = horario_actual
+                else:
+                    horario_nuevo = crear_selector_horario_manual(f"new_{datetime.now().timestamp()}", horario_actual)
+            
+            return horario_nuevo
         
         # =====================
         # SECCIÓN 3: FINALIZACIÓN (Condicional)
@@ -897,6 +879,8 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             with col3:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
         
+        return submitted, cancelar, recargar
+        
         # Procesar formulario
         if submitted:
             # Solo procesar si no hay errores críticos
@@ -957,7 +941,7 @@ def mostrar_formulario_grupo(grupos_service, grupo_seleccionado=None, es_creacio
             st.session_state.grupo_seleccionado = None
             st.rerun()
         
-        elif recargar and not es_creacion:  # Solo recargar si no es creación
+        elif recargar and not es_creacion:
             try:
                 grupo_recargado = grupos_service.supabase.table("grupos").select("*").eq("id", datos_grupo["id"]).execute()
                 if grupo_recargado.data:
