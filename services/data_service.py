@@ -1170,6 +1170,15 @@ class DataService:
                 st.error("No tienes permisos para editar esta acción formativa")
                 return False
             
+            # NORMALIZACIÓN DE MODALIDAD AL PRINCIPIO (ANTES DE VALIDACIONES)
+            if "modalidad" in data:
+                if data["modalidad"] == "Online":
+                    data["modalidad"] = "TELEFORMACION"
+                elif data["modalidad"] == "Presencial":
+                    data["modalidad"] = "PRESENCIAL"
+                elif data["modalidad"] == "Mixta":
+                    data["modalidad"] = "MIXTA"
+            
             # Si se está cambiando el código, validar unicidad
             if "codigo_accion" in data:
                 codigo_nuevo = data["codigo_accion"]
@@ -1189,7 +1198,7 @@ class DataService:
                     st.error(f"Código FUNDAE inválido: {error_codigo}")
                     return False
             
-            # Validar modalidad si se está cambiando
+            # VALIDAR MODALIDAD AHORA CON VALORES NORMALIZADOS
             if "modalidad" in data:
                 modalidades_validas = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
                 if data["modalidad"] not in modalidades_validas:
