@@ -722,7 +722,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
             and (
                 estado_actual in ["FINALIZAR", "FINALIZADO"]
                 or (fecha_fin_prevista and fecha_fin_prevista <= date.today())
-                or datos_grupo.get("_mostrar_finalizacion", False)
             )
         )
     
