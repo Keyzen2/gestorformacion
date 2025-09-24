@@ -1636,29 +1636,71 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
     
     try:
         df_bonificaciones = grupos_service.get_grupo_bonificaciones(grupo_id)
-        
+    
         if not df_bonificaciones.empty:
-            # Mostrar bonificaciones existentes con diseño moderno
-            st.dataframe(
-                df_bonificaciones[["mes", "importe", "observaciones"]],
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "mes": st.column_config.NumberColumn("📅 Mes", width="small"),
-                    "importe": st.column_config.NumberColumn("💰 Importe €", width="medium", format="%.2f")
-                }
-            )
-            
+            st.markdown("###### 📋 Bonificaciones registradas")
+            for _, row in df_bonificaciones.iterrows():
+                with st.container(border=True):
+                    col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
+                    with col1:
+                        st.write(f"📅 **Mes:** {row['mes']:02d}")
+                    with col2:
+                        st.write(f"💰 **Importe:** {row['importe']:.2f} €")
+                    with col3:
+                        st.caption(f"📝 {row.get('observaciones','')}")
+                    with col4:
+                        if st.button("❌ Eliminar", key=f"del_bonif_{row['id']}", type="secondary"):
+                            if grupos_service.delete_grupo_bonificacion(row["id"]):
+                                st.success("✅ Bonificación eliminada")
+                                st.rerun()
+    
+                    # Expander para edición
+                    with st.expander("✏️ Editar", expanded=False):
+                        with st.form(f"edit_bonif_{row['id']}"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                mes_edit = st.selectbox(
+                                    "📅 Mes",
+                                    options=list(range(1, 13)),
+                                    index=(row["mes"] - 1),
+                                    format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
+                                    key=f"mes_edit_{row['id']}"
+                                )
+                                importe_edit = st.number_input(
+                                    "💰 Importe (€)",
+                                    min_value=0.0,
+                                    max_value=limite_boni if limite_boni > 0 else 999999.0,
+                                    value=float(row["importe"]),
+                                    key=f"importe_edit_{row['id']}"
+                                )
+                            with col2:
+                                obs_edit = st.text_area(
+                                    "📝 Observaciones",
+                                    value=row.get("observaciones", ""),
+                                    height=60,
+                                    key=f"obs_edit_{row['id']}"
+                                )
+    
+                            if st.form_submit_button("💾 Guardar cambios", type="primary"):
+                                datos_edit = {
+                                    "mes": mes_edit,
+                                    "importe": importe_edit,
+                                    "observaciones": obs_edit
+                                }
+                                if grupos_service.update_grupo_bonificacion(row["id"], datos_edit):
+                                    st.success("✅ Bonificación actualizada")
+                                    st.rerun()
+    
             total_bonificado = df_bonificaciones["importe"].sum()
             st.metric("💰 Total Bonificado", f"{total_bonificado:,.2f} €")
         else:
             st.info("📋 No hay bonificaciones registradas")
-            
+    
         # Añadir nueva bonificación
         with st.expander("➕ Añadir Bonificación Mensual"):
             with st.form(f"bonificacion_{grupo_id}"):
                 col1, col2 = st.columns(2)
-                
+    
                 with col1:
                     mes_bonif = st.selectbox(
                         "📅 Mes",
@@ -1666,7 +1708,6 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                         format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
                         key=f"mes_bonif_{grupo_id}"
                     )
-                    
                     importe_bonif = st.number_input(
                         "💰 Importe (€)",
                         min_value=0.0,
@@ -1674,18 +1715,20 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                         value=0.0,
                         key=f"importe_bonif_{grupo_id}"
                     )
-                
+    
                 with col2:
                     observaciones_bonif = st.text_area(
                         "📝 Observaciones",
                         height=80,
                         key=f"obs_bonif_{grupo_id}"
                     )
-                
+    
                 if st.form_submit_button("➕ Añadir Bonificación", type="primary"):
-                    # Verificar que el mes no esté duplicado
-                    mes_existente = df_bonificaciones[df_bonificaciones["mes"] == mes_bonif] if not df_bonificaciones.empty else pd.DataFrame()
-                    
+                    mes_existente = (
+                        df_bonificaciones[df_bonificaciones["mes"] == mes_bonif]
+                        if not df_bonificaciones.empty
+                        else pd.DataFrame()
+                    )
                     if not mes_existente.empty:
                         st.error(f"❌ Ya existe una bonificación para el mes {mes_bonif}")
                     elif importe_bonif <= 0:
@@ -1695,20 +1738,17 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
                             "grupo_id": grupo_id,
                             "mes": mes_bonif,
                             "importe": importe_bonif,
-                            "observaciones": observaciones_bonif
+                            "observaciones": observaciones_bonif,
                         }
-                        
-                        try:
-                            if grupos_service.create_grupo_bonificacion(datos_bonif):
-                                st.success("✅ Bonificación añadida correctamente")
-                                st.rerun()
-                            else:
-                                st.error("❌ Error al añadir bonificación")
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-                            
+                        if grupos_service.create_grupo_bonificacion(datos_bonif):
+                            st.success("✅ Bonificación añadida correctamente")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al añadir bonificación")
+    
     except Exception as e:
         st.error(f"Error al cargar bonificaciones: {e}")
+
 
 # =========================
 # FUNCIÓN PRINCIPAL
