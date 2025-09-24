@@ -430,144 +430,108 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
         # SECCIÓN 1: DATOS BÁSICOS FUNDAE CON VALIDACIONES
         # =====================
         with st.container(border=True):
-            st.markdown("### 🆔 Datos Básicos FUNDAE")
-            st.markdown("**Información obligatoria para XML FUNDAE**")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Acción formativa PRIMERO (necesaria para validaciones)
-                acciones_nombres = list(acciones_dict.keys())
-                if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
-                    accion_actual = None
-                    for nombre, id_accion in acciones_dict.items():
-                        if id_accion == datos_grupo.get("accion_formativa_id"):
-                            accion_actual = nombre
-                            break
-                    indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
+        st.markdown("### 🆔 Datos Básicos FUNDAE")
+        st.markdown("**Información obligatoria para XML FUNDAE**")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Acción formativa primero
+            acciones_nombres = list(acciones_dict.keys())
+            if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
+                accion_actual = next((n for n, i in acciones_dict.items() if i == datos_grupo.get("accion_formativa_id")), None)
+                indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
+            else:
+                indice_actual = 0
+    
+            accion_formativa = st.selectbox(
+                "📚 Acción Formativa *",
+                acciones_nombres,
+                index=indice_actual,
+                help="Selecciona la acción formativa asociada",
+                key="accion_formativa_select"
+            )
+            accion_id = acciones_dict[accion_formativa]
+    
+            # =========================
+            # CÓDIGO DEL GRUPO
+            # =========================
+            st.markdown("### 🏷️ Código del Grupo")
+            if es_creacion:
+                codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
+                    accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
+                )
+    
+                if error_sugerido:
+                    st.error(f"❌ Error al generar código sugerido: {error_sugerido}")
+                    codigo_grupo = st.text_input(
+                        "Código del Grupo *",
+                        value="",
+                        placeholder="Introduce un número",
+                        key=f"codigo_grupo_{form_key}"
+                    )
                 else:
-                    indice_actual = 0
-                
-                accion_formativa = st.selectbox(
-                    "📚 Acción Formativa *",
-                    acciones_nombres,
-                    index=indice_actual,
-                    help="Selecciona la acción formativa asociada",
-                    key="accion_formativa_select"
-                )
-                
-                accion_id = acciones_dict[accion_formativa]
-                
-                # Calcular modalidad automáticamente
-                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
-                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
-        
-                # Mostrar modalidad en solo lectura
-                st.text_input(
-                    "🎯 Modalidad",
-                    value=modalidad_grupo,
-                    disabled=True,
-                    help="Modalidad tomada automáticamente de la acción formativa"
-                )
-                
-                # Fechas
-                fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
-                fecha_inicio = st.date_input(
-                    "📅 Fecha de Inicio *",
-                    value=fecha_inicio_value,
-                    help="Fecha de inicio de la formación"
-                )
-        
-                fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
-                fecha_fin_prevista = st.date_input(
-                    "📅 Fecha Fin Prevista *",
-                    value=fecha_fin_prevista_value,
-                    help="Fecha prevista de finalización"
-                )
-                # =========================
-                # SECCIÓN: CÓDIGO DEL GRUPO
-                # =========================
-                with st.container(border=True):
-                    st.markdown("### 🏷️ Código del Grupo")
-                
-                    if es_creacion:
-                        # Generar sugerido correlativo
-                        codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
-                            accion_id, fecha_inicio
+                    colc1, colc2 = st.columns([2, 1])
+                    with colc1:
+                        st.success(f"✅ Código sugerido: {codigo_sugerido}")
+                    with colc2:
+                        usar_sugerido = st.checkbox(
+                            "Usar sugerido",
+                            value=True,
+                            key=f"usar_sugerido_{form_key}"
                         )
-                
-                        if error_sugerido:
-                            st.error(f"❌ Error al generar código sugerido: {error_sugerido}")
-                            codigo_grupo = st.text_input(
-                                "Código del Grupo *",
-                                value="",
-                                placeholder="Introduce un número",
-                                key=f"codigo_grupo_{form_key}"
-                            )
-                        else:
-                            # Mostrar sugerido y permitir cambiarlo
-                            col1, col2 = st.columns([2, 1])
-                            with col1:
-                                st.success(f"✅ Código sugerido: {codigo_sugerido}")
-                            with col2:
-                                usar_sugerido = st.checkbox(
-                                    "Usar sugerido",
-                                    value=True,
-                                    key=f"usar_sugerido_{form_key}"
-                                )
-                
-                            if usar_sugerido:
-                                codigo_grupo = codigo_sugerido
-                            else:
-                                codigo_grupo = st.text_input(
-                                    "Código del Grupo *",
-                                    value=codigo_sugerido,
-                                    placeholder="Introduce un número",
-                                    key=f"codigo_grupo_manual_{form_key}"
-                                )
-                
-                        # Validación en tiempo real
-                        if codigo_grupo:
-                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
-                                codigo_grupo, accion_id, fecha_inicio
-                            )
-                            if es_valido:
-                                st.success(f"✅ Código '{codigo_grupo}' válido")
-                            else:
-                                st.error(f"❌ {mensaje_error}")
-                
+                    if usar_sugerido:
+                        codigo_grupo = codigo_sugerido
                     else:
-                        # Modo edición - solo lectura
-                        codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                        st.text_input(
-                            "🏷️ Código del Grupo",
-                            value=codigo_grupo,
-                            disabled=True,
-                            help="No se puede modificar después de la creación"
+                        codigo_grupo = st.text_input(
+                            "Código del Grupo *",
+                            value=codigo_sugerido,
+                            placeholder="Introduce un número",
+                            key=f"codigo_grupo_manual_{form_key}"
                         )
-                
-                        # Validar igualmente el existente
-                        if codigo_grupo:
-                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
-                                codigo_grupo, accion_id, fecha_inicio, datos_grupo.get("id")
-                            )
-                            if es_valido:
-                                st.success("✅ Código válido")
-                            else:
-                                st.error(f"❌ {mensaje_error}")
-                
-                # VALIDACIÓN TEMPORAL EN TIEMPO REAL
-                if fecha_inicio and fecha_fin_prevista and accion_id:
-                    try:
-                        fecha_inicio_dt = fecha_inicio if isinstance(fecha_inicio, date) else datetime.fromisoformat(str(fecha_inicio)).date()
-                        fecha_fin_dt = fecha_fin_prevista if isinstance(fecha_fin_prevista, date) else datetime.fromisoformat(str(fecha_fin_prevista)).date()
-                        
-                        errores_temporales = grupos_service.validar_coherencia_temporal_grupo(
-                            fecha_inicio_dt, fecha_fin_dt, accion_id
-                        )
-                        errores.extend(errores_temporales)
-                    except Exception as e:
-                        st.warning(f"No se pudo validar coherencia temporal: {e}")
+    
+                if codigo_grupo:
+                    es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                        codigo_grupo, accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
+                    )
+                    st.success(f"✅ Código '{codigo_grupo}' válido") if es_valido else st.error(f"❌ {mensaje_error}")
+            else:
+                codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                st.text_input(
+                    "🏷️ Código del Grupo",
+                    value=codigo_grupo,
+                    disabled=True,
+                    help="No se puede modificar después de la creación"
+                )
+                if codigo_grupo:
+                    es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                        codigo_grupo, accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today(), datos_grupo.get("id")
+                    )
+                    st.success("✅ Código válido") if es_valido else st.error(f"❌ {mensaje_error}")
+    
+            # Modalidad
+            accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
+            modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
+            st.text_input(
+                "🎯 Modalidad",
+                value=modalidad_grupo,
+                disabled=True,
+                help="Modalidad tomada automáticamente de la acción formativa"
+            )
+    
+            # Fechas
+            fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
+            fecha_inicio = st.date_input(
+                "📅 Fecha de Inicio *",
+                value=fecha_inicio_value,
+                help="Fecha de inicio de la formación"
+            )
+            fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
+            fecha_fin_prevista = st.date_input(
+                "📅 Fecha Fin Prevista *",
+                value=fecha_fin_prevista_value,
+                help="Fecha prevista de finalización"
+            )
             
             with col2:
                 # Empresa propietaria (solo admin)
