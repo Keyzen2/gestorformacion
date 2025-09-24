@@ -994,17 +994,19 @@ class DataService:
         """
         Valida que el código de acción sea único para la empresa gestora en el año especificado.
         FUNDAE: Los códigos de acción deben ser únicos por empresa gestora y año.
+        
+        *** CORRECCIÓN: Para acciones formativas, la validación es más flexible ***
+        Ya que las acciones formativas son catálogo general, no tienen fechas específicas.
         """
-        if not codigo_accion or not ano or not empresa_id:
-            return False, "Código de acción, empresa y año requeridos"
+        if not codigo_accion or not empresa_id:
+            return False, "Código de acción y empresa requeridos"
         
         try:
-            # Buscar acciones con mismo código en el mismo año y empresa gestora
+            # *** CORRECCIÓN: Buscar duplicados solo por empresa y código ***
+            # No por año específico, ya que las acciones formativas no tienen fecha_inicio obligatoria
             query = self.supabase.table("acciones_formativas").select("id, codigo_accion").eq(
                 "codigo_accion", codigo_accion
-            ).eq("empresa_id", empresa_id).gte(
-                "fecha_inicio", f"{ano}-01-01"
-            ).lt("fecha_inicio", f"{ano + 1}-01-01")
+            ).eq("empresa_id", empresa_id)
             
             # Excluir la acción actual si estamos editando
             if accion_id:
@@ -1013,7 +1015,7 @@ class DataService:
             res = query.execute()
             
             if res.data:
-                return False, f"Ya existe una acción con código '{codigo_accion}' en {ano} para esta empresa gestora"
+                return False, f"Ya existe una acción con código '{codigo_accion}' para esta empresa gestora"
             
             return True, ""
             
@@ -1090,30 +1092,39 @@ class DataService:
                 st.error("Sin permisos para crear acciones formativas")
                 return False
             
-            # Validar campos obligatorios FUNDAE
-            campos_obligatorios = ["nombre", "codigo_accion", "modalidad", "num_horas", "fecha_inicio"]
+            # *** CORRECIÓN: Campos obligatorios sin fecha_inicio ***
+            # La fecha_inicio es obligatoria para GRUPOS, no para ACCIONES FORMATIVAS
+            campos_obligatorios = ["nombre", "codigo_accion", "modalidad", "num_horas"]
+            
             for campo in campos_obligatorios:
                 if not data.get(campo):
                     st.error(f"Campo '{campo}' es obligatorio para FUNDAE")
                     return False
             
-            # Validar código único FUNDAE
+            # *** CORRECCIÓN: Validar código sin necesidad de año específico ***
+            # Para acciones formativas, usamos año actual por defecto
             codigo_accion = data["codigo_accion"]
             empresa_id = data["empresa_id"]
-            fecha_inicio = data["fecha_inicio"]
-            
-            try:
-                ano = datetime.fromisoformat(str(fecha_inicio).replace('Z', '+00:00')).year
-            except:
-                ano = datetime.now().year
+            ano_actual = datetime.now().year
             
             es_valido, error_codigo = self.validar_codigo_accion_fundae(
-                codigo_accion, empresa_id, ano
+                codigo_accion, empresa_id, ano_actual
             )
             
             if not es_valido:
                 st.error(f"Código FUNDAE inválido: {error_codigo}")
                 return False
+            
+            # Normalizar modalidad
+            modalidad_normalizada = data["modalidad"].upper()
+            if modalidad_normalizada == "ONLINE":
+                modalidad_normalizada = "TELEFORMACION"
+            elif modalidad_normalizada == "PRESENCIAL":
+                modalidad_normalizada = "PRESENCIAL"  
+            elif modalidad_normalizada == "MIXTA":
+                modalidad_normalizada = "MIXTA"
+            
+            data["modalidad"] = modalidad_normalizada
             
             # Validar modalidad FUNDAE
             modalidades_validas = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
@@ -1131,11 +1142,11 @@ class DataService:
                 st.error("Las horas deben ser un número entero")
                 return False
             
-            # Agregar metadatos
+            # Agregar metadatos (sin fecha_inicio obligatoria)
             data.update({
                 "created_at": datetime.utcnow().isoformat(),
                 "validada_fundae": True,
-                "ano_fundae": ano
+                "ano_fundae": ano_actual  # Año de creación, no de inicio
             })
             
             # Crear acción formativa
@@ -1170,7 +1181,7 @@ class DataService:
                 st.error("No tienes permisos para editar esta acción formativa")
                 return False
             
-            # NORMALIZACIÓN DE MODALIDAD AL PRINCIPIO (ANTES DE VALIDACIONES)
+            # NORMALIZACIÓN DE MODALIDAD AL PRINCIPIO
             if "modalidad" in data:
                 if data["modalidad"] == "Online":
                     data["modalidad"] = "TELEFORMACION"
@@ -1179,26 +1190,25 @@ class DataService:
                 elif data["modalidad"] == "Mixta":
                     data["modalidad"] = "MIXTA"
             
-            # Si se está cambiando el código, validar unicidad
+            # *** CORRECCIÓN: Validar código sin fecha_inicio ***
             if "codigo_accion" in data:
                 codigo_nuevo = data["codigo_accion"]
-                fecha_inicio = data.get("fecha_inicio", accion_data.get("fecha_inicio"))
-                empresa_id = accion_data["empresa_id"]  # No se puede cambiar empresa en edición
+                empresa_id = accion_data["empresa_id"]
                 
-                try:
-                    ano = datetime.fromisoformat(str(fecha_inicio).replace('Z', '+00:00')).year
-                except:
-                    ano = datetime.now().year
+                # Para acciones formativas, usar año actual o año de la acción original
+                ano_validacion = datetime.now().year
+                if accion_data.get("ano_fundae"):
+                    ano_validacion = accion_data["ano_fundae"]
                 
                 es_valido, error_codigo = self.validar_codigo_accion_fundae(
-                    codigo_nuevo, empresa_id, ano, accion_id
+                    codigo_nuevo, empresa_id, ano_validacion, accion_id
                 )
                 
                 if not es_valido:
                     st.error(f"Código FUNDAE inválido: {error_codigo}")
                     return False
             
-            # VALIDAR MODALIDAD AHORA CON VALORES NORMALIZADOS
+            # VALIDAR MODALIDAD CON VALORES NORMALIZADOS
             if "modalidad" in data:
                 modalidades_validas = ["PRESENCIAL", "TELEFORMACION", "MIXTA"]
                 if data["modalidad"] not in modalidades_validas:
