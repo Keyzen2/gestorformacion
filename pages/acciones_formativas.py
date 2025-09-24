@@ -18,10 +18,9 @@ def main(supabase, session_state):
     # =========================
     # CARGAR DATOS CON JERARQUÍA  
     # =========================
-    with st.spinner("Cargando datos..."):
-        df_acciones = data_service.get_acciones_formativas()
-        areas_dict = data_service.get_areas_dict() 
-        grupos_acciones_df = data_service.get_grupos_acciones()
+    df_acciones = data_service.get_acciones_formativas()
+    areas_dict = data_service.get_areas_dict() 
+    grupos_acciones_df = data_service.get_grupos_acciones()
 
     # =========================
     # MÉTRICAS CON JERARQUÍA
@@ -65,7 +64,7 @@ def main(supabase, session_state):
     st.divider()
 
     # =========================
-    # TABLA PRINCIPAL CON NUEVO PATRÓN
+    # TABLA PRINCIPAL CON PATRÓN CORRECTO
     # =========================
     if not df_acciones.empty:
         # Filtros
@@ -132,7 +131,7 @@ def main(supabase, session_state):
             columnas_mostrar.append("empresa_nombre")
             column_config["empresa_nombre"] = st.column_config.TextColumn("🏢 Empresa", width="medium")
 
-        # Mostrar tabla con selección
+        # PATRÓN CORRECTO: Mostrar tabla con selección directa para editar
         event = st.dataframe(
             df_filtered[columnas_mostrar],
             use_container_width=True,
@@ -142,54 +141,47 @@ def main(supabase, session_state):
             column_config=column_config
         )
 
-        # Procesar selección
+        # PATRÓN CORRECTO: Al seleccionar fila, abrir formulario automáticamente
         accion_seleccionada = None
         if event.selection.rows:
             selected_idx = event.selection.rows[0]
             accion_seleccionada = df_filtered.iloc[selected_idx]
+            # ABRIR FORMULARIO DIRECTAMENTE sin botones intermedios
+            if "accion_editando" not in st.session_state or st.session_state.accion_editando["id"] != accion_seleccionada["id"]:
+                st.session_state.accion_editando = accion_seleccionada.to_dict()
+                # NO hacer st.rerun() aquí para evitar el problema del menú lateral
 
     st.divider()
 
     # =========================
-    # BOTONES DE ACCIÓN
+    # BOTÓN DE CREAR (separado del formulario)
     # =========================
     if data_service.can_modify_data():
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns([2, 1])
         
         with col1:
-            if st.button("➕ Crear Nueva Acción", type="primary", use_container_width=True):
+            if st.button("➕ Crear Nueva Acción Formativa", type="primary", use_container_width=True):
+                # Limpiar cualquier edición anterior
+                if "accion_editando" in st.session_state:
+                    del st.session_state.accion_editando
                 st.session_state.modo_accion = "crear"
-                st.rerun()
         
         with col2:
-            if st.button("✏️ Editar Seleccionada", disabled=accion_seleccionada is None, use_container_width=True):
-                if accion_seleccionada is not None:
-                    st.session_state.modo_accion = "editar"
-                    st.session_state.accion_editando = accion_seleccionada.to_dict()
-                    st.rerun()
-        
-        with col3:
-            if st.button("🗑️ Eliminar Seleccionada", disabled=accion_seleccionada is None, use_container_width=True):
-                if accion_seleccionada is not None:
-                    st.session_state.modo_accion = "eliminar"
-                    st.session_state.accion_eliminando = accion_seleccionada.to_dict()
-                    st.rerun()
+            if st.button("🔄 Actualizar Lista", use_container_width=True):
+                data_service.get_acciones_formativas.clear()
+                st.rerun()
 
     # =========================
-    # FORMULARIOS MODALES
+    # FORMULARIOS SIN RERUNS INNECESARIOS
     # =========================
     
-    # Formulario de creación
-    if hasattr(st.session_state, 'modo_accion') and st.session_state.modo_accion == "crear":
-        mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, session_state)
+    # Formulario de edición (aparece automáticamente al seleccionar fila)
+    if hasattr(st.session_state, 'accion_editando') and st.session_state.accion_editando:
+        mostrar_formulario_edicion_estable(data_service, areas_dict, grupos_acciones_df, session_state)
     
-    # Formulario de edición
-    elif hasattr(st.session_state, 'modo_accion') and st.session_state.modo_accion == "editar":
-        mostrar_formulario_edicion(data_service, areas_dict, grupos_acciones_df, session_state)
-    
-    # Confirmación de eliminación
-    elif hasattr(st.session_state, 'modo_accion') and st.session_state.modo_accion == "eliminar":
-        mostrar_confirmacion_eliminacion(data_service, session_state)
+    # Formulario de creación (solo aparece al pulsar botón crear)
+    elif hasattr(st.session_state, 'modo_accion') and st.session_state.modo_accion == "crear":
+        mostrar_formulario_creacion_estable(data_service, areas_dict, grupos_acciones_df, session_state)
 
     # =========================
     # INFORMACIÓN CONTEXTUAL FUNDAE
@@ -217,58 +209,216 @@ def main(supabase, session_state):
         4. Generar documentación XML FUNDAE
         """)
 
-def mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, session_state):
-    """Formulario de creación de acción formativa."""
-    with st.form("crear_accion", clear_on_submit=False):
-        st.markdown("### ➕ Crear Nueva Acción Formativa")
-        st.markdown("**Complete los datos básicos obligatorios**")
-        
+
+def mostrar_formulario_edicion_estable(data_service, areas_dict, grupos_acciones_df, session_state):
+    """Formulario de edición estable sin reruns innecesarios."""
+    accion = st.session_state.accion_editando
+    
+    st.markdown("### ✏️ Editar Acción Formativa")
+    st.markdown(f"**Editando:** {accion.get('nombre', 'Sin nombre')}")
+    
+    # USAR UN SOLO FORM para evitar reruns parciales
+    with st.form("form_editar_accion", clear_on_submit=False):
         col1, col2 = st.columns(2)
         
         with col1:
             codigo_accion = st.text_input(
                 "Código de la acción *",
-                help="Código único identificativo",
-                key="nuevo_codigo"
+                value=accion.get("codigo_accion", ""),
+                help="Código único identificativo"
             )
             nombre = st.text_input(
-                "Nombre de la acción *", 
-                help="Denominación completa de la acción formativa",
-                key="nuevo_nombre"
+                "Nombre de la acción *",
+                value=accion.get("nombre", ""),
+                help="Denominación completa de la acción formativa"
             )
             modalidad = st.selectbox(
                 "Modalidad *",
                 ["Presencial", "Online", "Mixta"],
-                key="nueva_modalidad"
+                index=["Presencial", "Online", "Mixta"].index(accion.get("modalidad", "Presencial")) if accion.get("modalidad") in ["Presencial", "Online", "Mixta"] else 0
+            )
+            num_horas = st.number_input(
+                "Número de horas *",
+                min_value=1,
+                max_value=9999,
+                value=int(accion.get("num_horas", 20))
+            )
+
+        with col2:
+            # Área profesional actual
+            area_actual = None
+            if accion.get("cod_area_profesional") and areas_dict:
+                for k, v in areas_dict.items():
+                    if v == accion.get("cod_area_profesional"):
+                        area_actual = k
+                        break
+            
+            area_profesional = st.selectbox(
+                "Área profesional *",
+                list(areas_dict.keys()) if areas_dict else ["No disponible"],
+                index=list(areas_dict.keys()).index(area_actual) if area_actual and area_actual in areas_dict.keys() else 0
+            )
+            nivel = st.selectbox(
+                "Nivel",
+                ["Básico", "Intermedio", "Avanzado"],
+                index=["Básico", "Intermedio", "Avanzado"].index(accion.get("nivel", "Básico")) if accion.get("nivel") in ["Básico", "Intermedio", "Avanzado"] else 0
+            )
+            certificado_profesionalidad = st.checkbox(
+                "Certificado de profesionalidad",
+                value=accion.get("certificado_profesionalidad", False)
+            )
+            sector = st.text_input(
+                "Sector",
+                value=accion.get("sector", ""),
+                help="Sector profesional al que se dirige"
+            )
+
+        # Campos de texto largo en columnas
+        descripcion = st.text_area(
+            "Descripción",
+            value=accion.get("descripcion", ""),
+            height=60,
+            help="Descripción general de la acción formativa"
+        )
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            objetivos = st.text_area(
+                "Objetivos",
+                value=accion.get("objetivos", ""),
+                height=80,
+                help="Objetivos de aprendizaje"
+            )
+        with col2:
+            contenidos = st.text_area(
+                "Contenidos",
+                value=accion.get("contenidos", ""),
+                height=80,
+                help="Contenidos temáticos principales"
+            )
+
+        requisitos = st.text_area(
+            "Requisitos de acceso",
+            value=accion.get("requisitos", ""),
+            height=60,
+            help="Requisitos previos para acceder a la formación"
+        )
+        
+        observaciones = st.text_area(
+            "Observaciones",
+            value=accion.get("observaciones", ""),
+            height=60,
+            help="Información adicional relevante"
+        )
+
+        # Botones de acción
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+        with col2:
+            if st.form_submit_button("🗑️ Eliminar", use_container_width=True):
+                st.session_state.confirmar_eliminacion = accion["id"]
+        with col3:
+            canceled = st.form_submit_button("❌ Cancelar", use_container_width=True)
+
+        if submitted:
+            # Preparar datos editados
+            datos_editados = {
+                "codigo_accion": codigo_accion.strip(),
+                "nombre": nombre.strip(),
+                "modalidad": modalidad,
+                "num_horas": num_horas,
+                "nivel": nivel,
+                "certificado_profesionalidad": certificado_profesionalidad,
+                "sector": sector.strip() if sector else None,
+                "descripcion": descripcion.strip() if descripcion else None,
+                "objetivos": objetivos.strip() if objetivos else None,
+                "contenidos": contenidos.strip() if contenidos else None,
+                "requisitos": requisitos.strip() if requisitos else None,
+                "observaciones": observaciones.strip() if observaciones else None
+            }
+
+            # Procesar área profesional
+            if area_profesional and " - " in area_profesional:
+                codigo_area, nombre_area = area_profesional.split(" - ", 1)
+                datos_editados["cod_area_profesional"] = codigo_area
+                datos_editados["area_profesional"] = nombre_area
+
+            # Usar el método FUNDAE de data_service
+            success = data_service.update_accion_formativa_con_validaciones_fundae(accion["id"], datos_editados)
+            if success:
+                st.success("✅ Acción formativa actualizada correctamente.")
+                del st.session_state.accion_editando
+                st.rerun()
+
+        elif canceled:
+            del st.session_state.accion_editando
+            st.rerun()
+
+    # Confirmación de eliminación fuera del form
+    if hasattr(st.session_state, 'confirmar_eliminacion'):
+        st.warning("⚠️ ¿Está seguro de que desea eliminar esta acción formativa? Esta acción no se puede deshacer.")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Sí, Eliminar Definitivamente", type="primary", use_container_width=True):
+                success = data_service.delete_accion_formativa(st.session_state.confirmar_eliminacion)
+                if success:
+                    st.success("✅ Acción formativa eliminada correctamente.")
+                    del st.session_state.confirmar_eliminacion
+                    del st.session_state.accion_editando
+                    st.rerun()
+        with col2:
+            if st.button("❌ Cancelar Eliminación", use_container_width=True):
+                del st.session_state.confirmar_eliminacion
+
+
+def mostrar_formulario_creacion_estable(data_service, areas_dict, grupos_acciones_df, session_state):
+    """Formulario de creación estable sin reruns innecesarios."""
+    
+    st.markdown("### ➕ Crear Nueva Acción Formativa")
+    st.markdown("**Complete los datos básicos obligatorios**")
+    
+    # USAR UN SOLO FORM para evitar reruns parciales
+    with st.form("form_crear_accion", clear_on_submit=False):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            codigo_accion = st.text_input(
+                "Código de la acción *",
+                help="Código único identificativo"
+            )
+            nombre = st.text_input(
+                "Nombre de la acción *", 
+                help="Denominación completa de la acción formativa"
+            )
+            modalidad = st.selectbox(
+                "Modalidad *",
+                ["Presencial", "Online", "Mixta"]
             )
             num_horas = st.number_input(
                 "Número de horas *",
                 min_value=1,
                 max_value=9999,
                 value=20,
-                help="Duración total de la acción formativa",
-                key="nuevas_horas"
+                help="Duración total de la acción formativa"
             )
 
         with col2:
             area_profesional = st.selectbox(
                 "Área profesional *",
-                list(areas_dict.keys()) if areas_dict else ["No disponible"],
-                key="nueva_area"
+                list(areas_dict.keys()) if areas_dict else ["No disponible"]
             )
             nivel = st.selectbox(
                 "Nivel",
-                ["Básico", "Intermedio", "Avanzado"],
-                key="nuevo_nivel"
+                ["Básico", "Intermedio", "Avanzado"]
             )
             certificado_profesionalidad = st.checkbox(
-                "Certificado de profesionalidad",
-                key="nuevo_certificado"
+                "Certificado de profesionalidad"
             )
             sector = st.text_input(
                 "Sector",
-                help="Sector profesional al que se dirige",
-                key="nuevo_sector"
+                help="Sector profesional al que se dirige"
             )
 
         # Solo admin puede seleccionar empresa gestora
@@ -278,8 +428,7 @@ def mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, se
             if empresas_dict:
                 empresa_gestora = st.selectbox(
                     "Empresa Gestora *",
-                    list(empresas_dict.keys()),
-                    key="nueva_empresa_gestora"
+                    list(empresas_dict.keys())
                 )
                 empresa_gestora_id = empresas_dict[empresa_gestora]
 
@@ -287,8 +436,7 @@ def mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, se
         descripcion = st.text_area(
             "Descripción",
             height=60,
-            help="Descripción general de la acción formativa",
-            key="nueva_descripcion"
+            help="Descripción general de la acción formativa"
         )
         
         col1, col2 = st.columns(2)
@@ -296,29 +444,25 @@ def mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, se
             objetivos = st.text_area(
                 "Objetivos",
                 height=80,
-                help="Objetivos de aprendizaje",
-                key="nuevos_objetivos"
+                help="Objetivos de aprendizaje"
             )
         with col2:
             contenidos = st.text_area(
                 "Contenidos",
                 height=80,
-                help="Contenidos temáticos principales",
-                key="nuevos_contenidos"
+                help="Contenidos temáticos principales"
             )
 
         requisitos = st.text_area(
             "Requisitos de acceso",
             height=60,
-            help="Requisitos previos para acceder a la formación",
-            key="nuevos_requisitos"
+            help="Requisitos previos para acceder a la formación"
         )
         
         observaciones = st.text_area(
             "Observaciones",
             height=60,
-            help="Información adicional relevante",
-            key="nuevas_observaciones"
+            help="Información adicional relevante"
         )
 
         # Botones de acción
@@ -364,192 +508,13 @@ def mostrar_formulario_creacion(data_service, areas_dict, grupos_acciones_df, se
             if session_state.role == "admin" and empresa_gestora_id:
                 datos_nuevos["empresa_id"] = empresa_gestora_id
 
-            try:
-                # Usar el método FUNDAE de data_service
-                success = data_service.create_accion_formativa_con_validaciones_fundae(datos_nuevos)
-                if success:
-                    st.success("✅ Acción formativa creada correctamente.")
-                    del st.session_state.modo_accion
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al crear: {e}")
+            # Usar el método FUNDAE de data_service
+            success = data_service.create_accion_formativa_con_validaciones_fundae(datos_nuevos)
+            if success:
+                st.success("✅ Acción formativa creada correctamente.")
+                del st.session_state.modo_accion
+                st.rerun()
 
         elif canceled:
             del st.session_state.modo_accion
-            st.rerun()
-
-def mostrar_formulario_edicion(data_service, areas_dict, grupos_acciones_df, session_state):
-    """Formulario de edición de acción formativa."""
-    accion = st.session_state.accion_editando
-    
-    with st.form("editar_accion", clear_on_submit=False):
-        st.markdown(f"### ✏️ Editar Acción: {accion.get('nombre', 'Sin nombre')}")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            codigo_accion = st.text_input(
-                "Código de la acción *",
-                value=accion.get("codigo_accion", ""),
-                key="edit_codigo"
-            )
-            nombre = st.text_input(
-                "Nombre de la acción *",
-                value=accion.get("nombre", ""),
-                key="edit_nombre"
-            )
-            modalidad = st.selectbox(
-                "Modalidad *",
-                ["Presencial", "Online", "Mixta"],
-                index=["Presencial", "Online", "Mixta"].index(accion.get("modalidad", "Presencial")),
-                key="edit_modalidad"
-            )
-            num_horas = st.number_input(
-                "Número de horas *",
-                min_value=1,
-                max_value=9999,
-                value=int(accion.get("num_horas", 20)),
-                key="edit_horas"
-            )
-
-        with col2:
-            # Área profesional actual
-            area_actual = None
-            if accion.get("cod_area_profesional"):
-                for k, v in areas_dict.items():
-                    if v == accion.get("cod_area_profesional"):
-                        area_actual = k
-                        break
-            
-            area_profesional = st.selectbox(
-                "Área profesional *",
-                list(areas_dict.keys()) if areas_dict else ["No disponible"],
-                index=list(areas_dict.keys()).index(area_actual) if area_actual else 0,
-                key="edit_area"
-            )
-            nivel = st.selectbox(
-                "Nivel",
-                ["Básico", "Intermedio", "Avanzado"],
-                index=["Básico", "Intermedio", "Avanzado"].index(accion.get("nivel", "Básico")),
-                key="edit_nivel"
-            )
-            certificado_profesionalidad = st.checkbox(
-                "Certificado de profesionalidad",
-                value=accion.get("certificado_profesionalidad", False),
-                key="edit_certificado"
-            )
-            sector = st.text_input(
-                "Sector",
-                value=accion.get("sector", ""),
-                key="edit_sector"
-            )
-
-        # Campos de texto largo
-        descripcion = st.text_area(
-            "Descripción",
-            value=accion.get("descripcion", ""),
-            height=60,
-            key="edit_descripcion"
-        )
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            objetivos = st.text_area(
-                "Objetivos",
-                value=accion.get("objetivos", ""),
-                height=80,
-                key="edit_objetivos"
-            )
-        with col2:
-            contenidos = st.text_area(
-                "Contenidos",
-                value=accion.get("contenidos", ""),
-                height=80,
-                key="edit_contenidos"
-            )
-
-        requisitos = st.text_area(
-            "Requisitos de acceso",
-            value=accion.get("requisitos", ""),
-            height=60,
-            key="edit_requisitos"
-        )
-        
-        observaciones = st.text_area(
-            "Observaciones",
-            value=accion.get("observaciones", ""),
-            height=60,
-            key="edit_observaciones"
-        )
-
-        # Botones de acción
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
-        with col2:
-            canceled = st.form_submit_button("❌ Cancelar", use_container_width=True)
-
-        if submitted:
-            # Preparar datos editados
-            datos_editados = {
-                "codigo_accion": codigo_accion.strip(),
-                "nombre": nombre.strip(),
-                "modalidad": modalidad,
-                "num_horas": num_horas,
-                "nivel": nivel,
-                "certificado_profesionalidad": certificado_profesionalidad,
-                "sector": sector.strip() if sector else None,
-                "descripcion": descripcion.strip() if descripcion else None,
-                "objetivos": objetivos.strip() if objetivos else None,
-                "contenidos": contenidos.strip() if contenidos else None,
-                "requisitos": requisitos.strip() if requisitos else None,
-                "observaciones": observaciones.strip() if observaciones else None
-            }
-
-            # Procesar área profesional
-            if area_profesional and " - " in area_profesional:
-                codigo_area, nombre_area = area_profesional.split(" - ", 1)
-                datos_editados["cod_area_profesional"] = codigo_area
-                datos_editados["area_profesional"] = nombre_area
-
-            try:
-                # Usar el método FUNDAE de data_service
-                success = data_service.update_accion_formativa_con_validaciones_fundae(accion["id"], datos_editados)
-                if success:
-                    st.success("✅ Acción formativa actualizada correctamente.")
-                    del st.session_state.modo_accion
-                    del st.session_state.accion_editando
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al actualizar: {e}")
-
-        elif canceled:
-            del st.session_state.modo_accion
-            del st.session_state.accion_editando
-            st.rerun()
-
-def mostrar_confirmacion_eliminacion(data_service, session_state):
-    """Confirmación de eliminación de acción formativa."""
-    accion = st.session_state.accion_eliminando
-    
-    st.warning(f"⚠️ ¿Está seguro de que desea eliminar la acción formativa **{accion.get('nombre', 'Sin nombre')}**?")
-    st.caption("Esta acción no se puede deshacer.")
-    
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        if st.button("🗑️ Sí, Eliminar", type="primary", use_container_width=True):
-            try:
-                success = data_service.delete_accion_formativa(accion["id"])
-                if success:
-                    st.success("✅ Acción formativa eliminada correctamente.")
-                    del st.session_state.modo_accion
-                    del st.session_state.accion_eliminando
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al eliminar: {e}")
-    
-    with col2:
-        if st.button("❌ Cancelar", use_container_width=True):
-            del st.session_state.modo_accion
-            del st.session_state.accion_eliminando
             st.rerun()
