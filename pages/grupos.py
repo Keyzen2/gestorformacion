@@ -657,13 +657,13 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
 
                 responsable = st.text_input(
                     "👤 Responsable del Grupo",
-                    value=datos_grupo.get("responsable") or "",
+                    value=str(datos_grupo.get("responsable") or ""),
                     help="Persona responsable del grupo (opcional)"
                 )
                 
                 telefono_contacto = st.text_input(
                     "📞 Teléfono de Contacto", 
-                    value=datos_grupo.get("telefono_contacto") or "",
+                    value=str(datos_grupo.get("telefono_contacto") or ""),
                     help="Teléfono de contacto del responsable (opcional)"
                 )
                 
@@ -872,8 +872,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                     "provincia": provincia_sel,
                     "localidad": localidad_sel,
                     "cp": cp,
-                    "responsable": responsable.strip(),
-                    "telefono_contacto": telefono_contacto.strip(),
+                    "responsable": responsable.strip() if responsable.strip() else None,
+                    "telefono_contacto": telefono_contacto.strip() if telefono_contacto.strip() else None,
                     "n_participantes_previstos": n_participantes_previstos,
                     "lugar_imparticion": lugar_imparticion,
                     "observaciones": observaciones,
