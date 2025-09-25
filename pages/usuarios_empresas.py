@@ -462,23 +462,40 @@ def main(supabase, session_state):
         # =========================
         # Leer columnas dinámicas desde ajustes
         # =========================
-        ajustes = get_ajustes_app(supabase)
-
-        columnas_mostrar = ajustes.get(
-            "columnas_usuarios",
-            ["nombre_completo", "email", "telefono", "rol", "empresa_nombre", "created_at"]
-        )
-
-        # Asegurar que las columnas existen en el dataframe
+        ajustes = get_ajustes_app(supabase, campos=["columnas_usuarios"])
+        columnas_mostrar = ajustes.get("columnas_usuarios")
+        
+        # ✅ Fallback si viene None
+        if not columnas_mostrar:
+            columnas_mostrar = [
+                "nombre_completo", "email", "telefono",
+                "rol", "empresa_nombre", "created_at"
+            ]
+        
+        # Filtrar solo las columnas que existen en df
         columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
+        # =========================
+        # Configuración de columnas visibles (solo admin)
+        # =========================
+        if session_state.role == "admin":
+            st.subheader("⚙️ Configuración de columnas visibles")
 
-        # Mostrar tabla
-        st.dataframe(
-            df_usuarios[columnas_mostrar],
-            use_container_width=True,
-            hide_index=True
-        )
+            columnas_disponibles = df_usuarios.columns.tolist()
 
+            columnas_seleccionadas = st.multiselect(
+                "Selecciona las columnas a mostrar",
+                options=columnas_disponibles,
+                default=columnas_mostrar if columnas_mostrar else columnas_disponibles
+            )
+
+            if st.button("💾 Guardar columnas", type="primary"):
+                if not columnas_seleccionadas:
+                    st.warning("⚠️ Debes seleccionar al menos una columna")
+                else:
+                    from utils import update_ajustes_app
+                    update_ajustes_app(supabase, {"columnas_usuarios": columnas_seleccionadas})
+                    st.success("✅ Columnas guardadas correctamente")
+                    st.rerun()
     # =========================
     # TAB LISTADO
     # =========================
