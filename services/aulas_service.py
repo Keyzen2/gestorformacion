@@ -541,12 +541,62 @@ class AulasService:
             st.error(f"Error calculando ocupación por aula: {e}")
             return pd.DataFrame()
 
-    # =========================
-    # FUNCIONES DE CRONOGRAMA
-    # =========================
-    
     def get_eventos_cronograma(self, fecha_inicio: str, fecha_fin: str, 
                              aulas_ids: Optional[List[str]] = None) -> List[Dict]:
+        """Obtiene eventos para el componente de cronograma"""
+        try:
+            query = self.supabase.table("aula_reservas").select("""
+                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado,
+                aulas!inner(id, nombre, color_cronograma, empresa_id),
+                grupos(codigo_grupo)
+            """).gte("fecha_inicio", fecha_inicio).lte("fecha_fin", fecha_fin)
+            
+            # Filtrar por aulas específicas
+            if aulas_ids:
+                query = query.in_("aula_id", aulas_ids)
+            
+            # Filtrar según rol
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                query = query.in_("aulas.empresa_id", empresas_gestionadas)
+            
+            result = query.execute()
+            
+            eventos = []
+            for reserva in result.data or []:
+                aula = reserva["aulas"]
+                grupo = reserva.get("grupos")
+                
+                # Determinar color según tipo
+                color = self._get_color_evento(reserva["tipo_reserva"], aula.get("color_cronograma"))
+                
+                # Determinar clases CSS
+                css_class = f"fc-event-{reserva['tipo_reserva'].lower()}"
+                
+                evento = {
+                    "id": reserva["id"],
+                    "title": f"{aula['nombre']}: {reserva['titulo']}",
+                    "start": reserva["fecha_inicio"],
+                    "end": reserva["fecha_fin"],
+                    "backgroundColor": color,
+                    "borderColor": color,
+                    "textColor": "#ffffff" if reserva["tipo_reserva"] != "MANTENIMIENTO" else "#000000",
+                    "className": css_class,
+                    "extendedProps": {
+                        "aula_id": aula["id"],
+                        "aula_nombre": aula["nombre"],
+                        "tipo_reserva": reserva["tipo_reserva"],
+                        "estado": reserva["estado"],
+                        "grupo_codigo": grupo.get("codigo_grupo") if grupo else None
+                    }
+                }
+                eventos.append(evento)
+            
+            return eventos
+            
+        except Exception as e:
+            st.error(f"Error obteniendo eventos de cronograma: {e}")
+            return []
         """Obtiene eventos para el componente de cronograma"""
         try:
             query = self.supabase.table("aula_reservas").select("""
