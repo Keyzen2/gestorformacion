@@ -1389,7 +1389,7 @@ def eliminar_diploma(supabase, diploma, participante_id):
         st.error(f"❌ Error eliminando diploma: {e}")
         return False
         
- def determinar_empresa_responsable_diploma(supabase, grupo_empresa_id, participante_empresa_id, accion_empresa_id):
+def determinar_empresa_responsable_diploma(supabase, grupo_empresa_id, participante_empresa_id, accion_empresa_id):
     """
     Determina qué empresa es responsable ante FUNDAE para el diploma.
     Sigue la lógica de jerarquía empresarial.
