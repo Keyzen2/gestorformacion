@@ -461,52 +461,57 @@ def main(supabase, session_state):
 
         with tabs[0]:
         st.markdown("### 📊 Listado de Usuarios")
-
+    
         # =========================
         # Leer columnas dinámicas desde ajustes
         # =========================
         ajustes = get_ajustes_app(supabase, campos=["columnas_usuarios"])
         columnas_mostrar = ajustes.get("columnas_usuarios")
-
-        # ✅ Fallback si viene None o vacío
+        
+        # ✅ Fallback si viene None
         if not columnas_mostrar:
             columnas_mostrar = [
                 "nombre_completo", "email", "telefono",
                 "rol", "empresa_nombre", "created_at"
             ]
-
+        
         # Filtrar solo las columnas que existen en df
         columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
-
+    
+        # ✅ Asegurar que 'nombre_completo' siempre esté presente y primero
+        if "nombre_completo" not in columnas_mostrar and "nombre_completo" in df_usuarios.columns:
+            columnas_mostrar.insert(0, "nombre_completo")
+        else:
+            columnas_mostrar = ["nombre_completo"] + [c for c in columnas_mostrar if c != "nombre_completo"]
+    
         # =========================
         # Configuración de columnas visibles (solo admin)
         # =========================
         if session_state.role == "admin":
             st.subheader("⚙️ Configuración de columnas visibles")
-
+    
             columnas_disponibles = df_usuarios.columns.tolist()
-
+    
+            # ✅ Siempre forzar 'nombre_completo' en el multiselect (no editable)
+            columnas_opciones = [c for c in columnas_disponibles if c != "nombre_completo"]
+    
             columnas_seleccionadas = st.multiselect(
                 "Selecciona las columnas a mostrar",
-                options=columnas_disponibles,
-                default=columnas_mostrar if columnas_mostrar else columnas_disponibles
+                options=columnas_opciones,
+                default=[c for c in columnas_mostrar if c != "nombre_completo"]
             )
-
+    
+            # Reconstruir con 'nombre_completo' fijo + seleccionadas
+            columnas_final = ["nombre_completo"] + columnas_seleccionadas
+    
             if st.button("💾 Guardar columnas", type="primary"):
                 if not columnas_seleccionadas:
-                    st.warning("⚠️ Debes seleccionar al menos una columna")
+                    st.warning("⚠️ Debes seleccionar al menos una columna además de nombre")
                 else:
                     from utils import update_ajustes_app
-                    update_ajustes_app(supabase, {"columnas_usuarios": columnas_seleccionadas})
+                    update_ajustes_app(supabase, {"columnas_usuarios": columnas_final})
                     st.success("✅ Columnas guardadas correctamente")
                     st.rerun()
-
-        # =========================
-        # Mostrar tabla con columnas dinámicas
-        # =========================
-        try:
-            df_filtered = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])].copy()
-            seleccionado, df_paged = mostrar_tabla_usuarios(df_filtered, session_state, columnas_mostrar)
 
     # =========================
     # TAB LISTADO
