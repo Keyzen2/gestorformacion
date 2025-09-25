@@ -677,6 +677,7 @@ def route():
                 "Grupos": "grupos",
                 "Participantes": "participantes",
                 "Tutores": "tutores",
+                "Aulas": "aulas",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
@@ -687,6 +688,7 @@ def route():
                 "Grupos": "grupos",
                 "Participantes": "participantes",
                 "Tutores": "tutores",
+                "Aulas": "aulas",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
