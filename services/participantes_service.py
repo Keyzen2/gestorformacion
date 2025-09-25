@@ -167,7 +167,126 @@ class ParticipantesService:
             
         except Exception as e:
             st.error(f"Error al cargar empresas para participantes: {e}")
-            return {}    
+            return {}   
+
+    # =========================
+    # SECCIÓN DE GRUPOS N:N PARA PARTICIPANTES
+    # =========================
+    
+    def mostrar_seccion_grupos_participante_nn(participantes_service, participante_id, empresa_id, session_state):
+        """Gestión de grupos del participante usando relación N:N."""
+        st.markdown("### 🎓 Grupos de Formación")
+        st.caption("Un participante puede estar inscrito en múltiples grupos a lo largo del tiempo")
+        
+        if not participante_id:
+            st.info("💡 Guarda el participante primero para poder asignar grupos")
+            return
+        
+        try:
+            # Mostrar grupos actuales del participante usando los métodos del servicio
+            df_grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
+            
+            if not df_grupos_participante.empty:
+                st.markdown("#### 📚 Grupos Asignados")
+                for _, grupo in df_grupos_participante.iterrows():
+                    
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([3, 2, 1])
+                        
+                        with col1:
+                            codigo = grupo.get('codigo_grupo', 'Sin código')
+                            accion = grupo.get('accion_nombre', 'Sin acción formativa')
+                            st.write(f"**{codigo}**")
+                            st.caption(f"📖 {accion}")
+                            
+                            # Mostrar horas si están disponibles
+                            horas = grupo.get('accion_horas', 0)
+                            if horas > 0:
+                                st.caption(f"⏱️ {horas}h")
+                        
+                        with col2:
+                            # Fechas del grupo
+                            fecha_inicio = grupo.get("fecha_inicio")
+                            fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
+                            
+                            if fecha_inicio:
+                                inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y')
+                                st.write(f"📅 Inicio: {inicio_str}")
+                            
+                            if fecha_fin:
+                                fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                                st.write(f"🏁 Fin: {fin_str}")
+                                
+                                # Estado basado en fechas
+                                hoy = pd.Timestamp.now().date()
+                                fecha_fin_dt = pd.to_datetime(fecha_fin).date()
+                                
+                                if fecha_fin_dt < hoy:
+                                    st.success("✅ Finalizado")
+                                elif fecha_inicio and pd.to_datetime(fecha_inicio).date() <= hoy <= fecha_fin_dt:
+                                    st.info("🟡 En curso")
+                                else:
+                                    st.warning("⏳ Pendiente")
+                            
+                            # Modalidad
+                            modalidad = grupo.get('modalidad', '')
+                            if modalidad:
+                                st.caption(f"📍 {modalidad}")
+                        
+                        with col3:
+                            # Botón para desasignar
+                            if st.button("🗑️ Quitar", key=f"quitar_grupo_{grupo['relacion_id']}", 
+                                       help="Desasignar del grupo", use_container_width=True):
+                                confirmar_key = f"confirmar_quitar_{grupo['relacion_id']}"
+                                if st.session_state.get(confirmar_key):
+                                    success = participantes_service.desasignar_participante_de_grupo(
+                                        participante_id, grupo["grupo_id"]
+                                    )
+                                    if success:
+                                        st.success("✅ Participante desasignado del grupo")
+                                        del st.session_state[confirmar_key]
+                                        st.rerun()
+                                else:
+                                    st.session_state[confirmar_key] = True
+                                    st.warning("⚠️ Confirmar eliminación")
+            else:
+                st.info("📭 Este participante no está asignado a ningún grupo")
+            
+            # Sección para añadir nuevos grupos
+            st.markdown("#### ➕ Asignar a Nuevo Grupo")
+            
+            # Cargar grupos disponibles usando el método del servicio
+            grupos_disponibles = participantes_service.get_grupos_disponibles_para_participante(participante_id)
+            
+            if grupos_disponibles:
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    grupo_seleccionado = st.selectbox(
+                        "Seleccionar grupo",
+                        options=list(grupos_disponibles.keys()),
+                        key=f"nuevo_grupo_{participante_id}",
+                        help="Solo se muestran grupos disponibles de la empresa del participante"
+                    )
+                
+                with col2:
+                    if st.button("➕ Asignar", type="primary", key=f"asignar_grupo_{participante_id}", use_container_width=True):
+                        if grupo_seleccionado:
+                            grupo_id = grupos_disponibles[grupo_seleccionado]
+                            
+                            success = participantes_service.asignar_participante_a_grupo(
+                                participante_id, grupo_id
+                            )
+                            
+                            if success:
+                                st.success("✅ Participante asignado al grupo")
+                                st.rerun()
+            else:
+                st.info("📭 No hay grupos disponibles para asignar (o ya está en todos los grupos de su empresa)")
+        
+        except Exception as e:
+            st.error(f"❌ Error gestionando grupos del participante: {e}")
+        
     # =========================
     # MÉTODOS CON JERARQUÍA DE EMPRESAS
     # =========================
