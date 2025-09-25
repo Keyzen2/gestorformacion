@@ -1454,6 +1454,18 @@ def determinar_empresa_responsable_diploma(supabase, grupo_empresa_id, participa
             return gestora_res.data[0]
         
         raise ValueError(f"No se pudo determinar empresa responsable: {e}")
+
+def limpiar_para_archivo(texto):
+    """Limpia texto para uso seguro en nombres de archivo."""
+    if not texto:
+        return "VACIO"
+    
+    import re
+    # Reemplazar caracteres problemáticos
+    texto_limpio = re.sub(r'[^\w\-_]', '_', str(texto))
+    # Limitar longitud
+    return texto_limpio[:50] if len(texto_limpio) > 50 else texto_limpio
+    
 def obtener_estructura_diplomas_empresa(supabase, empresa_id):
     """
     Obtiene la estructura completa de diplomas de una empresa.
