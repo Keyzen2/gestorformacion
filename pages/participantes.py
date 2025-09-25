@@ -1332,7 +1332,8 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
                         "empresa_responsable": empresa_responsable["nombre"],
                         "accion_nombre": accion_formativa.get("nombre", ""),
                         "año_formacion": str(año),
-                        "fecha_subida": datetime.now().isoformat()
+                        "fecha_subida": datetime.now().isoformat(),
+                        "ruta_archivo": filename  # puedes guardarlo solo como metadato
                     }
                 }
             )
@@ -1346,17 +1347,14 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             
             # =====================================
             # GUARDAR REFERENCIA EN BASE DE DATOS
+            # SOLO CAMPOS EXISTENTES EN LA TABLA
             # =====================================
             diploma_data = {
                 "participante_id": participante["id"],
                 "grupo_id": grupo_id,
                 "url": public_url,
                 "archivo_nombre": diploma_file.name,
-                "fecha_subida": datetime.now().isoformat(),
-                "ruta_archivo": filename,
-                "empresa_responsable_id": gestora_id,
-                "accion_formativa_id": grupo_completo["accion_formativa_id"],
-                "año_formacion": año
+                "fecha_subida": datetime.now().isoformat()
             }
             
             diploma_insert = supabase.table("diplomas").insert(diploma_data).execute()
@@ -1367,6 +1365,7 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
                 except:
                     pass
                 raise Exception(f"Error de base de datos: {diploma_insert.error}")
+
             
             # =====================================
             # CONFIRMACIÓN Y LOGGING
