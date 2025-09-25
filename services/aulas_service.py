@@ -70,7 +70,7 @@ class AulasService:
             return pd.DataFrame()
             
         except Exception as e:
-            print(f"Error cargando aulas: {e}")  # Cambiar st.error por print
+            print(f"Error cargando aulas: {e}")
             return pd.DataFrame()
 
     def _get_empresas_gestionadas(self) -> List[str]:
@@ -78,11 +78,6 @@ class AulasService:
         try:
             if self.role != "gestor" or not self.empresa_id:
                 return []
-
-
-def get_aulas_service(supabase, session_state) -> AulasService:
-    """Factory function para obtener instancia del servicio de aulas"""
-    return AulasService(supabase, session_state)
             
             # Obtener empresa propia + empresas cliente
             result = self.supabase.table("empresas").select("id").or_(
@@ -252,7 +247,7 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return pd.DataFrame()
             
         except Exception as e:
-            st.error(f"Error cargando reservas: {e}")
+            print(f"Error cargando reservas: {e}")
             return pd.DataFrame()
 
     def get_reservas_proximas(self, dias: int = 30) -> pd.DataFrame:
@@ -261,40 +256,10 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             fecha_inicio = datetime.utcnow().isoformat()
             fecha_fin = (datetime.utcnow() + timedelta(days=dias)).isoformat()
             
-            query = self.supabase.table("aula_reservas").select("""
-                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado, responsable,
-                aulas!inner(id, nombre, empresa_id),
-                grupos(id, codigo_grupo)
-            """).gte("fecha_inicio", fecha_inicio).lte("fecha_inicio", fecha_fin)
-            
-            # Filtrar según rol
-            if self.role == "gestor" and self.empresa_id:
-                empresas_gestionadas = self._get_empresas_gestionadas()
-                # Aplicar filtro a través de la relación con aulas
-                query = query.in_("aulas.empresa_id", empresas_gestionadas)
-            
-            result = query.order("fecha_inicio").execute()
-            
-            if result.data:
-                reservas = []
-                for reserva in result.data:
-                    reserva_flat = {
-                        **reserva,
-                        "aula_nombre": reserva["aulas"]["nombre"],
-                        "aula_id": reserva["aulas"]["id"],
-                        "grupo_codigo": reserva.get("grupos", {}).get("codigo_grupo") if reserva.get("grupos") else None
-                    }
-                    # Remover objetos anidados
-                    reserva_flat.pop("aulas", None)
-                    reserva_flat.pop("grupos", None)
-                    reservas.append(reserva_flat)
-                
-                return pd.DataFrame(reservas)
-            
-            return pd.DataFrame()
+            return self.get_reservas_periodo(fecha_inicio, fecha_fin)
             
         except Exception as e:
-            st.error(f"Error cargando reservas: {e}")
+            print(f"Error cargando reservas próximas: {e}")
             return pd.DataFrame()
 
     def crear_reserva(self, datos_reserva: Dict) -> Tuple[bool, Optional[str]]:
@@ -310,8 +275,7 @@ def get_aulas_service(supabase, session_state) -> AulasService:
                 datos_reserva["fecha_inicio"], 
                 datos_reserva["fecha_fin"]
             ):
-                st.error("El aula no está disponible en esas fechas")
-                return False, None
+                return False, "El aula no está disponible en esas fechas"
             
             # Generar ID
             reserva_id = str(uuid.uuid4())
@@ -326,8 +290,7 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return False, None
             
         except Exception as e:
-            st.error(f"Error creando reserva: {e}")
-            return False, None
+            return False, f"Error creando reserva: {e}"
 
     def verificar_disponibilidad_aula(self, aula_id: str, fecha_inicio: str, fecha_fin: str, 
                                     reserva_excluir: Optional[str] = None) -> bool:
@@ -347,8 +310,43 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return len(result.data) == 0
             
         except Exception as e:
-            st.error(f"Error verificando disponibilidad: {e}")
             return False
+
+    def obtener_conflictos_detallados(self, aula_id: str, fecha_inicio: str, fecha_fin: str, 
+                                    reserva_excluir: Optional[str] = None) -> List[Dict]:
+        """Obtiene detalles de los conflictos de disponibilidad"""
+        try:
+            query = self.supabase.table("aula_reservas").select("""
+                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado,
+                grupos(codigo_grupo)
+            """).eq("aula_id", aula_id).neq("estado", "CANCELADA").or_(
+                f"and(fecha_inicio.lte.{fecha_fin},fecha_fin.gte.{fecha_inicio})"
+            )
+            
+            if reserva_excluir:
+                query = query.neq("id", reserva_excluir)
+            
+            result = query.execute()
+            
+            conflictos = []
+            for reserva in result.data or []:
+                inicio_dt = pd.to_datetime(reserva["fecha_inicio"])
+                fin_dt = pd.to_datetime(reserva["fecha_fin"])
+                
+                conflicto = {
+                    "id": reserva["id"],
+                    "titulo": reserva["titulo"],
+                    "tipo_reserva": reserva["tipo_reserva"],
+                    "fecha_inicio": inicio_dt.strftime('%d/%m/%Y %H:%M'),
+                    "fecha_fin": fin_dt.strftime('%d/%m/%Y %H:%M'),
+                    "grupo_codigo": reserva.get("grupos", {}).get("codigo_grupo") if reserva.get("grupos") else None
+                }
+                conflictos.append(conflicto)
+            
+            return conflictos
+            
+        except Exception as e:
+            return []
 
     def _validar_datos_reserva(self, datos: Dict) -> bool:
         """Valida datos de reserva"""
@@ -356,7 +354,6 @@ def get_aulas_service(supabase, session_state) -> AulasService:
         
         for campo in campos_obligatorios:
             if not datos.get(campo):
-                st.error(f"Campo {campo} es obligatorio")
                 return False
         
         # Validar fechas
@@ -365,47 +362,67 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             fin = datetime.fromisoformat(datos["fecha_fin"].replace('Z', '+00:00'))
             
             if inicio >= fin:
-                st.error("La fecha de inicio debe ser anterior a la fecha de fin")
                 return False
                 
         except ValueError:
-            st.error("Formato de fecha inválido")
             return False
         
         return True
 
-    def asignar_grupo_a_aula(self, grupo_id: str, aula_id: str) -> bool:
-        """Asigna un grupo formativo a un aula automáticamente"""
+    def actualizar_reserva(self, reserva_id: str, datos_actualizacion: Dict) -> bool:
+        """Actualiza una reserva existente"""
         try:
-            # Obtener datos del grupo
-            grupo = self.supabase.table("grupos").select(
-                "id, codigo_grupo, fecha_inicio, fecha_fin_prevista, horario"
-            ).eq("id", grupo_id).execute()
+            datos_actualizacion["updated_at"] = datetime.utcnow().isoformat()
             
-            if not grupo.data:
-                st.error("Grupo no encontrado")
-                return False
+            result = self.supabase.table("aula_reservas").update(
+                datos_actualizacion
+            ).eq("id", reserva_id).execute()
             
-            grupo_data = grupo.data[0]
-            
-            # Crear reserva automática
-            datos_reserva = {
-                "aula_id": aula_id,
-                "grupo_id": grupo_id,
-                "titulo": f"Formación - {grupo_data['codigo_grupo']}",
-                "fecha_inicio": grupo_data["fecha_inicio"] + "T08:00:00Z",  # Hora por defecto
-                "fecha_fin": (grupo_data.get("fecha_fin_prevista") or grupo_data["fecha_inicio"]) + "T18:00:00Z",
-                "tipo_reserva": "GRUPO",
-                "estado": "CONFIRMADA",
-                "responsable": "Sistema automático"
-            }
-            
-            success, reserva_id = self.crear_reserva(datos_reserva)
-            return success
+            return bool(result.data)
             
         except Exception as e:
-            st.error(f"Error asignando grupo a aula: {e}")
             return False
+
+    def eliminar_reserva(self, reserva_id: str) -> bool:
+        """Elimina una reserva"""
+        try:
+            result = self.supabase.table("aula_reservas").delete().eq("id", reserva_id).execute()
+            return bool(result.data)
+            
+        except Exception as e:
+            return False
+
+    def get_grupos_basicos(self):
+        """Método temporal para obtener grupos - debería usar grupos_service"""
+        try:
+            query = self.supabase.table("grupos").select("""
+                id, codigo_grupo, fecha_inicio, fecha_fin_prevista, estado,
+                acciones_formativas(nombre)
+            """)
+            
+            # Filtrar según rol
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                query = query.in_("empresa_id", empresas_gestionadas)
+            
+            result = query.execute()
+            
+            if result.data:
+                grupos = []
+                for grupo in result.data:
+                    grupo_flat = {
+                        **grupo,
+                        "accion_nombre": grupo.get("acciones_formativas", {}).get("nombre", "Sin acción") if grupo.get("acciones_formativas") else "Sin acción"
+                    }
+                    grupo_flat.pop("acciones_formativas", None)
+                    grupos.append(grupo_flat)
+                
+                return pd.DataFrame(grupos)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            return pd.DataFrame()
 
     # =========================
     # MÉTRICAS Y ESTADÍSTICAS
@@ -453,7 +470,6 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return stats
             
         except Exception as e:
-            st.error(f"Error calculando estadísticas: {e}")
             return {
                 "total_aulas": 0,
                 "aulas_activas": 0,
@@ -466,7 +482,6 @@ def get_aulas_service(supabase, session_state) -> AulasService:
         """Calcula la ocupación promedio de las aulas"""
         try:
             # Esto es una implementación simplificada
-            # En un caso real calcularías horas ocupadas vs horas disponibles
             fecha_inicio = (datetime.now() - timedelta(days=30)).isoformat()
             fecha_fin = datetime.now().isoformat()
             
@@ -533,9 +548,12 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return pd.DataFrame(ocupacion_data)
             
         except Exception as e:
-            st.error(f"Error calculando ocupación por aula: {e}")
             return pd.DataFrame()
 
+    # =========================
+    # FUNCIONES DE CRONOGRAMA
+    # =========================
+    
     def get_eventos_cronograma(self, fecha_inicio: str, fecha_fin: str, 
                              aulas_ids: Optional[List[str]] = None) -> List[Dict]:
         """Obtiene eventos para el componente de cronograma"""
@@ -590,55 +608,7 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return eventos
             
         except Exception as e:
-            st.error(f"Error obteniendo eventos de cronograma: {e}")
-            return []
-        """Obtiene eventos para el componente de cronograma"""
-        try:
-            query = self.supabase.table("aula_reservas").select("""
-                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado,
-                aulas!inner(id, nombre, color_cronograma, empresa_id),
-                grupos(codigo_grupo)
-            """).gte("fecha_inicio", fecha_inicio).lte("fecha_fin", fecha_fin)
-            
-            # Filtrar por aulas específicas
-            if aulas_ids:
-                query = query.in_("aula_id", aulas_ids)
-            
-            # Filtrar según rol
-            if self.role == "gestor" and self.empresa_id:
-                empresas_gestionadas = self._get_empresas_gestionadas()
-                query = query.in_("aulas.empresa_id", empresas_gestionadas)
-            
-            result = query.execute()
-            
-            eventos = []
-            for reserva in result.data or []:
-                aula = reserva["aulas"]
-                grupo = reserva.get("grupos")
-                
-                # Determinar color según tipo
-                color = self._get_color_evento(reserva["tipo_reserva"], aula.get("color_cronograma"))
-                
-                evento = {
-                    "id": reserva["id"],
-                    "title": f"{aula['nombre']}: {reserva['titulo']}",
-                    "start": reserva["fecha_inicio"],
-                    "end": reserva["fecha_fin"],
-                    "color": color,
-                    "extendedProps": {
-                        "aula_id": aula["id"],
-                        "aula_nombre": aula["nombre"],
-                        "tipo_reserva": reserva["tipo_reserva"],
-                        "estado": reserva["estado"],
-                        "grupo_codigo": grupo.get("codigo_grupo") if grupo else None
-                    }
-                }
-                eventos.append(evento)
-            
-            return eventos
-            
-        except Exception as e:
-            st.error(f"Error obteniendo eventos de cronograma: {e}")
+            print(f"Error obteniendo eventos de cronograma: {e}")
             return []
 
     def _get_color_evento(self, tipo_reserva: str, color_aula: Optional[str] = None) -> str:
@@ -676,87 +646,9 @@ def get_aulas_service(supabase, session_state) -> AulasService:
             return aulas_disponibles
             
         except Exception as e:
-            st.error(f"Error obteniendo aulas disponibles: {e}")
             return []
 
 
-    def actualizar_reserva(self, reserva_id: str, datos_actualizacion: Dict) -> bool:
-        """Actualiza una reserva existente"""
-        try:
-            datos_actualizacion["updated_at"] = datetime.utcnow().isoformat()
-            
-            result = self.supabase.table("aula_reservas").update(
-                datos_actualizacion
-            ).eq("id", reserva_id).execute()
-            
-            return bool(result.data)
-            
-        except Exception as e:
-            return False
-
-    def eliminar_reserva(self, reserva_id: str) -> bool:
-        """Elimina una reserva"""
-        try:
-            result = self.supabase.table("aula_reservas").delete().eq("id", reserva_id).execute()
-            return bool(result.data)
-            
-        except Exception as e:
-            return False
-
-    def get_grupos_basicos(self):
-        """Método temporal para obtener grupos - debería usar grupos_service"""
-        try:
-            query = self.supabase.table("grupos").select("""
-                id, codigo_grupo, fecha_inicio, fecha_fin_prevista, estado,
-                acciones_formativas(nombre)
-            """)
-            
-            # Filtrar según rol
-            if self.role == "gestor" and self.empresa_id:
-                empresas_gestionadas = self._get_empresas_gestionadas()
-                query = query.in_("empresa_id", empresas_gestionadas)
-            
-            result = query.execute()
-            
-            if result.data:
-                grupos = []
-                for grupo in result.data:
-                    grupo_flat = {
-                        **grupo,
-                        "accion_nombre": grupo.get("acciones_formativas", {}).get("nombre", "Sin acción") if grupo.get("acciones_formativas") else "Sin acción"
-                    }
-                    grupo_flat.pop("acciones_formativas", None)
-                    grupos.append(grupo_flat)
-                
-                return pd.DataFrame(grupos)
-            
-            return pd.DataFrame()
-            
-        except Exception as e:
-            return pd.DataFrame()
-
-    def get_aulas_disponibles_periodo(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
-        """Obtiene aulas disponibles en un periodo específico"""
-        try:
-            # Obtener todas las aulas activas
-            aulas_query = self.supabase.table("aulas").select(
-                "id, nombre, capacidad_maxima, ubicacion"
-            ).eq("activa", True)
-            
-            if self.role == "gestor" and self.empresa_id:
-                empresas_gestionadas = self._get_empresas_gestionadas()
-                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
-            
-            aulas_result = aulas_query.execute()
-            aulas = aulas_result.data or []
-            
-            # Filtrar aulas disponibles
-            aulas_disponibles = []
-            for aula in aulas:
-                if self.verificar_disponibilidad_aula(aula["id"], fecha_inicio, fecha_fin):
-                    aulas_disponibles.append(aula)
-            
-            return aulas_disponibles
-            
-        except Exception as e:
-            return []
+def get_aulas_service(supabase, session_state) -> AulasService:
+    """Factory function para obtener instancia del servicio de aulas"""
+    return AulasService(supabase, session_state)
