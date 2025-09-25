@@ -1210,35 +1210,31 @@ def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
         st.error(f"Error al cargar sección de empresas: {e}")
 
 def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
-    """Sección de participantes corregida y simplificada."""
+    """CORREGIDO: Usando tabla participantes_grupos (N:N) con validacion de UUIDs."""
     st.markdown("**Participantes del Grupo con Jerarquía**")
     
     grupo_id_limpio = validar_uuid_seguro(grupo_id)
     if not grupo_id_limpio:
         st.error("ID de grupo no válido")
         return
-
+    
     try:
-        # Obtener participantes del grupo usando tabla de relación
+        # CORRECCIÓN: Usar tabla de relación participantes_grupos
         participantes_res = grupos_service.supabase.table("participantes_grupos").select("""
             id, participante_id, fecha_asignacion,
-            participante:participantes(id, nif, nombre, apellidos, email, telefono, empresa_id,
-                empresa:empresas(nombre))
+            participante:participantes(id, nif, nombre, apellidos, email, telefono)
         """).eq("grupo_id", grupo_id_limpio).execute()
         
         df_participantes = pd.DataFrame(participantes_res.data or [])
         
-        # === MOSTRAR PARTICIPANTES ACTUALES ===
         if not df_participantes.empty:
-            st.markdown("##### 👥 Participantes Asignados")
+            st.markdown("##### Participantes Asignados")
             
+            # Procesar datos de participantes
             participantes_data = []
             for _, row in df_participantes.iterrows():
                 participante = row.get("participante", {})
                 if isinstance(participante, dict):
-                    empresa_info = participante.get("empresa", {})
-                    empresa_nombre = empresa_info.get("nombre", "Sin empresa") if isinstance(empresa_info, dict) else "Sin empresa"
-                    
                     participantes_data.append({
                         "relacion_id": row.get("id"),
                         "nif": participante.get("nif", ""),
@@ -1246,16 +1242,13 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         "apellidos": participante.get("apellidos", ""),
                         "email": participante.get("email", ""),
                         "telefono": participante.get("telefono", ""),
-                        "empresa": empresa_nombre,
                         "fecha_asignacion": row.get("fecha_asignacion", "")
                     })
             
             if participantes_data:
-                # Mostrar tabla moderna
                 df_display = pd.DataFrame(participantes_data)
-                
                 st.dataframe(
-                    df_display[["nif", "nombre", "apellidos", "email", "empresa"]],
+                    df_display[["nif", "nombre", "apellidos", "email", "telefono"]],
                     use_container_width=True,
                     hide_index=True,
                     column_config={
@@ -1263,146 +1256,128 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
                         "apellidos": st.column_config.TextColumn("👤 Apellidos", width="medium"),
                         "email": st.column_config.TextColumn("📧 Email", width="large"),
-                        "empresa": st.column_config.TextColumn("🏢 Empresa", width="medium")
+                        "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium")
                     }
                 )
                 
-                # Opción para desasignar
-                with st.expander("❌ Desasignar Participantes", expanded=False):
+                # Desasignar participantes
+                with st.expander("❌ Desasignar Participantes"):
                     for _, row in df_display.iterrows():
-                        col1, col2 = st.columns([4, 1])
+                        col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.write(f"**{row['nif']}** - {row['nombre']} {row['apellidos']} ({row['empresa']})")
+                            st.write(f"{row['nif']} - {row['nombre']} {row['apellidos']}")
                         with col2:
-                            if st.button("❌ Quitar", key=f"quitar_part_{row['relacion_id']}", type="secondary"):
+                            if st.button("Quitar", key=f"quitar_part_{row['relacion_id']}", type="secondary"):
                                 try:
+                                    # CORRECCIÓN: Eliminar de tabla de relación
                                     grupos_service.supabase.table("participantes_grupos").delete().eq("id", row['relacion_id']).execute()
-                                    st.success("✅ Participante desasignado")
+                                    st.success("Participante desasignado")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Error: {e}")
         else:
             st.info("📋 No hay participantes asignados")
         
-        # === ASIGNAR NUEVOS PARTICIPANTES ===
-        st.markdown("##### ➕ Asignar Nuevos Participantes")
+        # Asignar nuevos participantes
+        st.markdown("##### Asignar Participantes")
         
-        # Pestañas para diferentes métodos de asignación
-        tab1, tab2 = st.tabs(["👤 Selección Individual", "📊 Importación Masiva"])
+        try:
+            # CORRECCIÓN: Buscar participantes disponibles (sin grupo asignado en la relación)
+            participantes_con_grupo = grupos_service.supabase.table("participantes_grupos").select("participante_id").execute()
+            participantes_asignados_raw = [p["participante_id"] for p in (participantes_con_grupo.data or [])]
+            
+            # ✅ VALIDAR UUIDs - Filtrar solo UUIDs válidos
+            participantes_asignados = []
+            for uuid_str in participantes_asignados_raw:
+                uuid_limpio = validar_uuid_seguro(uuid_str)
+                if uuid_limpio:
+                    participantes_asignados.append(uuid_limpio)
+            
+            # Obtener empresas participantes del grupo
+            empresas_grupo = grupos_service.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id_limpio).execute()
+            empresas_participantes_raw = [e["empresa_id"] for e in (empresas_grupo.data or [])]
+            
+            # ✅ VALIDAR UUIDs - Filtrar solo UUIDs válidos
+            empresas_participantes = []
+            for uuid_str in empresas_participantes_raw:
+                uuid_limpio = validar_uuid_seguro(uuid_str)
+                if uuid_limpio:
+                    empresas_participantes.append(uuid_limpio)
+            
+            if empresas_participantes:
+                # ✅ CONSTRUIR CONSULTA CON UUIDs VALIDADOS
+                query = grupos_service.supabase.table("participantes").select("""
+                    id, nif, nombre, apellidos, email, empresa_id,
+                    empresa:empresas(nombre)
+                """).in_("empresa_id", empresas_participantes)
+                
+                if participantes_asignados:
+                    query = query.not_.in_("id", participantes_asignados)
+                
+                disponibles_res = query.execute()
+                df_disponibles = pd.DataFrame(disponibles_res.data or [])
+                
+                if not df_disponibles.empty:
+                    opciones_participantes = {}
+                    for _, row in df_disponibles.iterrows():
+                        empresa_nombre = row.get("empresa", {}).get("nombre", "Sin empresa") if isinstance(row.get("empresa"), dict) else "Sin empresa"
+                        nombre_completo = f"{row.get('nif', 'Sin NIF')} - {row.get('nombre', '')} {row.get('apellidos', '')} ({empresa_nombre})"
+                        opciones_participantes[nombre_completo] = row["id"]
+                    
+                    participantes_seleccionados = st.multiselect(
+                        "Seleccionar participantes:",
+                        opciones_participantes.keys(),
+                        key=f"participantes_add_{grupo_id_limpio}"
+                    )
+                    
+                    if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
+                        exitos = 0
+                        for participante_nombre in participantes_seleccionados:
+                            participante_id = opciones_participantes[participante_nombre]
+                            try:
+                                # CORRECCIÓN: Insertar en tabla de relación N:N
+                                grupos_service.supabase.table("participantes_grupos").insert({
+                                    "grupo_id": grupo_id_limpio,
+                                    "participante_id": participante_id,
+                                    "fecha_asignacion": datetime.utcnow().isoformat()
+                                }).execute()
+                                exitos += 1
+                            except Exception as e:
+                                st.error(f"Error al asignar {participante_nombre}: {e}")
+                        
+                        if exitos > 0:
+                            st.success(f"Se asignaron {exitos} participantes")
+                            st.rerun()
+                else:
+                    st.info("No hay participantes disponibles")
+            else:
+                st.warning("Primero asigna empresas participantes al grupo")
+                
+        except Exception as e:
+            # ✅ DEBUGGING MEJORADO
+            st.error(f"Error cargando participantes disponibles: {e}")
+            
+            # Solo para debugging - quitar después de solucionar
+            with st.expander("🔧 Debug Info", expanded=False):
+                st.write("Empresas participantes raw:", empresas_participantes_raw if 'empresas_participantes_raw' in locals() else "No disponible")
+                st.write("Empresas válidas:", empresas_participantes if 'empresas_participantes' in locals() else "No disponible") 
+                st.write("Participantes asignados raw:", participantes_asignados_raw if 'participantes_asignados_raw' in locals() else "No disponible")
+                st.write("Participantes válidos:", participantes_asignados if 'participantes_asignados' in locals() else "No disponible")
+        
+        # Importación masiva desde Excel
+        st.divider()
+        st.markdown("##### 📊 Importación Masiva")
+        
+        tab1, tab2 = st.tabs(["📤 Instrucciones", "📁 Subir Archivo"])
         
         with tab1:
-            # Obtener participantes disponibles
-            participantes_disponibles = grupos_service.get_participantes_disponibles_jerarquia(grupo_id)
-            
-            if not participantes_disponibles.empty:
-                opciones_participantes = {}
-                for _, row in participantes_disponibles.iterrows():
-                    nombre_completo = f"{row.get('nif', 'Sin NIF')} - {row.get('nombre', '')} {row.get('apellidos', '')} ({row.get('empresa_nombre', 'Sin empresa')})"
-                    opciones_participantes[nombre_completo] = row["id"]
-                
-                participantes_seleccionados = st.multiselect(
-                    "Seleccionar participantes:",
-                    opciones_participantes.keys(),
-                    key=f"participantes_add_{grupo_id_limpio}",
-                    help="Solo se muestran participantes disponibles en tu ámbito jerárquico"
-                )
-                
-                if participantes_seleccionados and st.button("➕ Asignar Seleccionados", type="primary"):
-                    exitos = 0
-                    for participante_nombre in participantes_seleccionados:
-                        participante_id = opciones_participantes[participante_nombre]
-                        try:
-                            grupos_service.supabase.table("participantes_grupos").insert({
-                                "grupo_id": grupo_id_limpio,
-                                "participante_id": participante_id,
-                                "fecha_asignacion": datetime.utcnow().isoformat()
-                            }).execute()
-                            exitos += 1
-                        except Exception as e:
-                            st.error(f"Error al asignar {participante_nombre}: {e}")
-                    
-                    if exitos > 0:
-                        st.success(f"✅ Se asignaron {exitos} participantes")
-                        st.rerun()
-            else:
-                st.info("📋 No hay participantes disponibles para asignar")
-        
-        with tab2:
-            # Importación masiva Excel
-            st.markdown("**📊 Importación masiva desde Excel**")
-            st.info("💡 Sube un archivo Excel con columnas: 'nif' o 'dni' para buscar automáticamente participantes existentes")
-            
-            archivo_excel = st.file_uploader(
-                "Subir archivo Excel",
-                type=["xlsx"],
-                key=f"excel_participantes_{grupo_id}"
-            )
-            
-            if archivo_excel:
-                try:
-                    df_import = pd.read_excel(archivo_excel)
-                    
-                    # Detectar columna de NIF
-                    col_nif = None
-                    for col in ["dni", "nif", "DNI", "NIF"]:
-                        if col in df_import.columns:
-                            col_nif = col
-                            break
-                    
-                    if not col_nif:
-                        st.error("❌ El archivo debe contener una columna 'dni' o 'nif'")
-                    else:
-                        st.markdown("**Vista previa del archivo:**")
-                        st.dataframe(df_import.head(), use_container_width=True)
-                        
-                        if st.button("🔄 Procesar Archivo", type="primary"):
-                            # Procesar NIFs y asignar participantes
-                            nifs = [str(d).strip() for d in df_import[col_nif] if pd.notna(d)]
-                            nifs_validos = [d for d in nifs if validar_dni_cif(d)]
-                            
-                            disponibles_dict = {p["nif"]: p["id"] for _, p in participantes_disponibles.iterrows()}
-                            
-                            asignados = 0
-                            errores = []
-                            
-                            for nif in nifs_validos:
-                                participante_id = disponibles_dict.get(nif)
-                                if participante_id:
-                                    try:
-                                        grupos_service.supabase.table("participantes_grupos").insert({
-                                            "grupo_id": grupo_id_limpio,
-                                            "participante_id": participante_id,
-                                            "fecha_asignacion": datetime.utcnow().isoformat()
-                                        }).execute()
-                                        asignados += 1
-                                    except Exception as e:
-                                        errores.append(f"NIF {nif}: {str(e)}")
-                                else:
-                                    errores.append(f"NIF {nif} no encontrado o ya asignado")
-                            
-                            if asignados > 0:
-                                st.success(f"✅ Se asignaron {asignados} participantes")
-                            if errores:
-                                st.warning("⚠️ Errores encontrados:")
-                                for error in errores[:5]:  # Mostrar solo primeros 5
-                                    st.warning(f"• {error}")
-                            
-                            if asignados > 0:
-                                st.rerun()
-                
-                except Exception as e:
-                    st.error(f"❌ Error al leer archivo Excel: {e}")
-                    
-    except Exception as e:
-        st.error(f"Error al cargar sección de participantes: {e}")
-        
-        with tab2:
             st.markdown("**📊 Importación masiva desde Excel**")
             with st.container(border=True):
                 st.markdown("1. 📁 Sube un archivo Excel con una columna 'dni' o 'nif'")
                 st.markdown("2. 🔍 Se buscarán automáticamente en el sistema")
                 st.markdown("3. ✅ Solo se asignarán participantes disponibles")
-            
+        
+        with tab2:
             archivo_excel = st.file_uploader(
                 "Subir archivo Excel",
                 type=["xlsx"],
