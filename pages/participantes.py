@@ -853,7 +853,7 @@ def main(supabase, session_state):
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
 # =========================
-def mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service):
+def mostrar_gestion_diplomas_participantes_optimizada(supabase, session_state, participantes_service):
     """
     Versión optimizada de gestión de diplomas con nueva estructura de archivos.
     """
@@ -923,16 +923,235 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                 st.markdown(f"      👥 {grupo} ({len(archivos)} diplomas)")
                 else:
                     st.markdown("    📭 Sin diplomas")
+
+        # Obtener participantes de grupos finalizados
+        grupos_finalizados_ids = [g["id"] for g in grupos_finalizados]
         
-        # =====================================
-        # RESTO DE LA FUNCIONALIDAD ORIGINAL
-        # (mismos filtros, métricas, etc.)
-        # =====================================
+        participantes_res = supabase.table("participantes").select("""
+            id, nombre, apellidos, email, grupo_id, nif, empresa_id
+        """).in_("grupo_id", grupos_finalizados_ids).in_("empresa_id", empresas_permitidas).execute()
         
-        # Continuar con el código original de participantes, filtros, etc.
-        # pero usando subir_diploma_participante_optimizado en lugar de la función original
+        participantes_finalizados = participantes_res.data or []
         
-        # ... [resto del código de la función original] ...
+        if not participantes_finalizados:
+            st.info("No hay participantes en grupos finalizados de tus empresas.")
+            return
+
+        # Crear diccionario de grupos para mapeo
+        grupos_dict_completo = {g["id"]: g for g in grupos_finalizados}
+        
+        # Obtener diplomas existentes
+        participantes_ids = [p["id"] for p in participantes_finalizados]
+        diplomas_res = supabase.table("diplomas").select("participante_id, id").in_(
+            "participante_id", participantes_ids
+        ).execute()
+        participantes_con_diploma = {d["participante_id"] for d in diplomas_res.data or []}
+        
+        # Métricas principales
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("👥 Participantes", len(participantes_finalizados))
+        with col2:
+            st.metric("📚 Grupos Finalizados", len(grupos_finalizados))
+        with col3:
+            diplomas_count = len(participantes_con_diploma)
+            st.metric("🏅 Diplomas Subidos", diplomas_count)
+        with col4:
+            pendientes = len(participantes_finalizados) - diplomas_count
+            st.metric("⏳ Pendientes", pendientes)
+
+        # FILTROS DE BÚSQUEDA
+        st.markdown("#### 🔍 Filtros de Búsqueda")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            buscar_participante = st.text_input(
+                "🔍 Buscar participante",
+                placeholder="Nombre, email o NIF...",
+                key="buscar_diploma_participante"
+            )
+        
+        with col2:
+            grupos_opciones = ["Todos"] + [g["codigo_grupo"] for g in grupos_finalizados]
+            grupo_filtro = st.selectbox(
+                "Filtrar por grupo",
+                grupos_opciones,
+                key="filtro_grupo_diplomas"
+            )
+        
+        with col3:
+            estado_diploma = st.selectbox(
+                "Estado diploma",
+                ["Todos", "Con diploma", "Sin diploma"],
+                key="filtro_estado_diploma"
+            )
+
+        # Aplicar filtros
+        participantes_filtrados = participantes_finalizados.copy()
+        
+        # Filtro de búsqueda
+        if buscar_participante:
+            buscar_lower = buscar_participante.lower()
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if (buscar_lower in p.get("nombre", "").lower() or 
+                    buscar_lower in p.get("apellidos", "").lower() or 
+                    buscar_lower in p.get("email", "").lower() or
+                    buscar_lower in p.get("nif", "").lower())
+            ]
+        
+        # Filtro por grupo
+        if grupo_filtro != "Todos":
+            grupo_id_filtro = None
+            for g in grupos_finalizados:
+                if g["codigo_grupo"] == grupo_filtro:
+                    grupo_id_filtro = g["id"]
+                    break
+            if grupo_id_filtro:
+                participantes_filtrados = [
+                    p for p in participantes_filtrados 
+                    if p["grupo_id"] == grupo_id_filtro
+                ]
+        
+        # Filtro por estado de diploma
+        if estado_diploma == "Con diploma":
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if p["id"] in participantes_con_diploma
+            ]
+        elif estado_diploma == "Sin diploma":
+            participantes_filtrados = [
+                p for p in participantes_filtrados 
+                if p["id"] not in participantes_con_diploma
+            ]
+
+        st.markdown(f"#### 🎯 Participantes encontrados: {len(participantes_filtrados)}")
+
+        if not participantes_filtrados:
+            st.warning("🔍 No se encontraron participantes con los filtros aplicados.")
+            return
+
+        # PAGINACIÓN
+        items_por_pagina = 10
+        total_paginas = (len(participantes_filtrados) + items_por_pagina - 1) // items_por_pagina
+        
+        if total_paginas > 1:
+            pagina_actual = st.selectbox(
+                "Página",
+                range(1, total_paginas + 1),
+                key="pagina_diplomas"
+            )
+            inicio = (pagina_actual - 1) * items_por_pagina
+            fin = inicio + items_por_pagina
+            participantes_pagina = participantes_filtrados[inicio:fin]
+        else:
+            participantes_pagina = participantes_filtrados
+
+        # GESTIÓN INDIVIDUAL DE DIPLOMAS
+        for i, participante in enumerate(participantes_pagina):
+            grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
+            tiene_diploma = participante["id"] in participantes_con_diploma
+            
+            # Crear expander con información del participante
+            accion_nombre = grupo_info.get("accion_formativa", {}).get("nombre", "Sin acción") if grupo_info.get("accion_formativa") else "Sin acción"
+            nombre_completo = f"{participante['nombre']} {participante.get('apellidos', '')}".strip()
+            
+            status_emoji = "✅" if tiene_diploma else "⏳"
+            status_text = "Con diploma" if tiene_diploma else "Pendiente"
+            
+            with st.expander(
+                f"{status_emoji} {nombre_completo} - {grupo_info.get('codigo_grupo', 'Sin código')} ({status_text})",
+                expanded=False
+            ):
+                col_info, col_actions = st.columns([2, 1])
+                
+                with col_info:
+                    st.markdown(f"**📧 Email:** {participante['email']}")
+                    st.markdown(f"**🆔 NIF:** {participante.get('nif', 'No disponible')}")
+                    st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
+                    st.markdown(f"**📖 Acción:** {accion_nombre}")
+                    
+                    fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
+                    if fecha_fin:
+                        fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                        st.markdown(f"**📅 Finalizado:** {fecha_str}")
+                
+                with col_actions:
+                    if tiene_diploma:
+                        # Mostrar diploma existente
+                        diplomas_part = supabase.table("diplomas").select("*").eq(
+                            "participante_id", participante["id"]
+                        ).execute()
+                        
+                        if diplomas_part.data:
+                            diploma = diplomas_part.data[0]
+                            st.markdown("**🏅 Diploma:**")
+                            if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}"):
+                                st.markdown(f"[🔗 Abrir diploma]({diploma['url']})")
+                            
+                            if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}"):
+                                confirmar_key = f"confirm_delete_{participante['id']}"
+                                if st.session_state.get(confirmar_key, False):
+                                    supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
+                                    st.success("✅ Diploma eliminado.")
+                                    st.rerun()
+                                else:
+                                    st.session_state[confirmar_key] = True
+                                    st.warning("⚠️ Confirmar eliminación")
+                    else:
+                        # Subir diploma
+                        st.markdown("**📤 Subir Diploma**")
+                        
+                        st.info("📱 **Para móviles:** Asegúrate de que el archivo PDF esté guardado en tu dispositivo")
+                        
+                        diploma_file = st.file_uploader(
+                            "Seleccionar diploma (PDF)",
+                            type=["pdf"],
+                            key=f"upload_diploma_{participante['id']}",
+                            help="Solo archivos PDF, máximo 10MB"
+                        )
+                        
+                        if diploma_file is not None:
+                            file_size_mb = diploma_file.size / (1024 * 1024)
+                            
+                            col_info_file, col_size_file = st.columns(2)
+                            with col_info_file:
+                                st.success(f"✅ **Archivo:** {diploma_file.name}")
+                            with col_size_file:
+                                color = "🔴" if file_size_mb > 10 else "🟢"
+                                st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
+                            
+                            if file_size_mb > 10:
+                                st.error("❌ Archivo muy grande. Máximo 10MB.")
+                            else:
+                                if st.button(
+                                    f"📤 Subir diploma de {participante['nombre']}", 
+                                    key=f"btn_upload_{participante['id']}", 
+                                    type="primary",
+                                    use_container_width=True
+                                ):
+                                    subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
+                        else:
+                            st.info("📂 Selecciona un archivo PDF para continuar")
+
+        # Estadísticas finales
+        if participantes_filtrados:
+            st.markdown("#### 📊 Estadísticas")
+            total_mostrados = len(participantes_filtrados)
+            con_diploma_filtrados = sum(1 for p in participantes_filtrados if p["id"] in participantes_con_diploma)
+            sin_diploma_filtrados = total_mostrados - con_diploma_filtrados
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("👥 Mostrados", total_mostrados)
+            with col2:
+                st.metric("✅ Con diploma", con_diploma_filtrados)
+            with col3:
+                st.metric("⏳ Sin diploma", sin_diploma_filtrados)
+            
+            if total_mostrados > 0:
+                progreso = (con_diploma_filtrados / total_mostrados) * 100
+                st.progress(con_diploma_filtrados / total_mostrados, f"Progreso: {progreso:.1f}%")
         
     except Exception as e:
         st.error(f"❌ Error en gestión optimizada de diplomas: {e}")
