@@ -17,10 +17,10 @@ st.set_page_config(
 # =========================
 
 @st.cache_data(ttl=300)
-def cargar_cursos_alumno(supabase, email: str):
+def cargar_cursos_alumno(_supabase, email: str):
     """Carga los cursos del alumno usando la vista existente."""
     try:
-        part_res = supabase.table("vw_participantes_completo").select("*").eq("email", email).execute()
+        part_res = _supabase.table("vw_participantes_completo").select("*").eq("email", email).execute()
         df = pd.DataFrame(part_res.data or [])
         
         if df.empty:
