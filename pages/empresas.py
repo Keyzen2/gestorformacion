@@ -1202,14 +1202,12 @@ def main(supabase, session_state):
     st.title("🏢 Gestión de Empresas")
     
     if session_state.role == "admin":
-        tab1, tab2, tab3 = st.tabs(["📊 Métricas", "🏢 Empresas", "➕ Nueva Empresa"])
+        tab1, tab2, tab3 = st.tabs(["🏢 Empresas", "📊 Métricas", "➕ Nueva Empresa"])
     else:
         tab1, tab2, tab3 = st.tabs(["📊 Mi Empresa", "👥 Empresas Cliente", "➕ Nueva Empresa"])
     
     if session_state.role == "admin":
         with tab1:
-            mostrar_metricas_empresas(empresas_service, session_state)
-        with tab2:
             df_empresas = empresas_service.get_empresas_con_jerarquia()
             empresa_sel = mostrar_tabla_empresas(df_empresas, session_state)
             if empresa_sel is not None:
@@ -1221,6 +1219,8 @@ def main(supabase, session_state):
                 mostrar_formulario_empresa(
                     empresa_sel, empresas_service, session_state, es_creacion=False
                 )
+        with tab2:
+            mostrar_metricas_empresas(empresas_service, session_state)
         with tab3:
             # 🔄 Limpiar session_state para nueva empresa
             st.session_state.pop("cuentas_empresa_nueva", None)
