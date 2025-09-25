@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from streamlit_calendar import calendar
 from services.aulas_service import get_aulas_service
-from utils import validar_texto_obligatorio, export_excel
+from utils import export_excel
 
 def mostrar_cronograma_interactivo(aulas_service, session_state):
     """Cronograma visual interactivo usando streamlit-calendar"""
