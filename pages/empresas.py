@@ -936,7 +936,15 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             crm_activo = crm_data.get("crm_activo", False)
             crm_inicio, crm_fin = crm_data.get("crm_inicio"), crm_data.get("crm_fin")
 
-        
+        if not solo_datos_basicos:
+            st.markdown("### 🏢 Funcionalidades Adicionales")
+            
+            es_centro_gestor = st.checkbox(
+                "📍 Puede actuar como Centro Gestor",
+                value=datos.get("es_centro_gestor", False),
+                key=f"{form_id}_centro_gestor",
+                help="Para grupos de Teleformación/Mixta según normativa FUNDAE"
+            )
         # =========================
         # VALIDACIONES
         # =========================
@@ -1083,6 +1091,7 @@ def procesar_guardado_empresa(
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
             "ciudad": localidad_sel if localidad_sel else None,
+            "es_centro_gestor": es_centro_gestor,
         }
 
         # AGREGAR tipo_empresa solo en creación si es admin
