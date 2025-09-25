@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 import re
+import unicodedata
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils import validar_dni_cif, export_csv
@@ -1297,14 +1298,19 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             año = grupo_completo.get("ano_inicio") or accion_formativa.get("ano_fundae", datetime.now().year)
             
             accion_codigo = limpiar_para_archivo(accion_formativa.get("codigo_accion", "SIN_CODIGO"))
-            accion_id = grupo_completo["accion_formativa_id"]
+            accion_id = limpiar_para_archivo(grupo_completo["accion_formativa_id"])
             
             grupo_codigo = limpiar_para_archivo(grupo_completo.get("codigo_grupo", "SIN_CODIGO"))
-            grupo_id_corto = str(grupo_id)[:8]
+            grupo_id_corto = limpiar_para_archivo(str(grupo_id)[:8])
             
+            participante_slug = limpiar_para_archivo(
+                participante.get("nif") or participante.get("dni") or participante.get("documento") or str(participante["id"])
+            )
+            
+            # Usamos 'ano_' en vez de 'año_' para evitar caracteres inválidos
             filename = (
-                f"gestora_{gestora_id}/"
-                f"año_{año}/"
+                f"gestora_{limpiar_para_archivo(gestora_id)}/"
+                f"ano_{año}/"
                 f"accion_{accion_codigo}_{accion_id}/"
                 f"grupo_{grupo_codigo}_{grupo_id_corto}/"
                 f"diploma_{participante_slug}_{timestamp}.pdf"
@@ -1449,16 +1455,27 @@ def determinar_empresa_responsable_diploma(supabase, grupo_empresa_id, participa
         
         raise ValueError(f"No se pudo determinar empresa responsable: {e}")
 
-def limpiar_para_archivo(texto):
-    """Limpia texto para uso seguro en nombres de archivo."""
+def limpiar_para_archivo(texto: str) -> str:
+    """
+    Normaliza texto para usar en nombres de archivo/rutas en Supabase.
+    - Elimina acentos y caracteres especiales
+    - Sustituye espacios por '_'
+    - Permite solo [a-zA-Z0-9_-]
+    """
     if not texto:
-        return "VACIO"
+        return "SIN_VALOR"
     
-    import re
-    # Reemplazar caracteres problemáticos
-    texto_limpio = re.sub(r'[^\w\-_]', '_', str(texto))
-    # Limitar longitud
-    return texto_limpio[:50] if len(texto_limpio) > 50 else texto_limpio
+    # Normalizar a ASCII sin acentos
+    texto = unicodedata.normalize("NFKD", str(texto))
+    texto = texto.encode("ascii", "ignore").decode("ascii")
+    
+    # Sustituir espacios por guion bajo
+    texto = texto.replace(" ", "_")
+    
+    # Eliminar caracteres no permitidos
+    texto = re.sub(r"[^a-zA-Z0-9_-]", "", texto)
+    
+    return texto or "SIN_VALOR"
     
 def obtener_estructura_diplomas_empresa(supabase, empresa_id):
     """
