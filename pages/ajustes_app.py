@@ -21,7 +21,7 @@ def main(supabase, session_state):
         ajustes = {}
 
     # Tabs principales para mejor organización
-    tabs = st.tabs(["🎨 Apariencia", "📝 Textos", "📊 Sistema", "🔧 Herramientas"])
+    tabs = st.tabs(["🎨 Apariencia", "📝 Textos", "📊 Sistema", "🔧 Herramientas", 📊 Tablas])
 
     # =========================
     # TAB APARIENCIA
