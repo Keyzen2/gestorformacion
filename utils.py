@@ -686,7 +686,7 @@ def export_csv(df: pd.DataFrame, filename: str = "export.csv"):
 
 def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar a Excel"):
     """
-    Genera un botón para exportar un DataFrame a Excel con estilo nativo de Streamlit.
+    Genera un botón para exportar un DataFrame a Excel con estilo nativo consistente.
     
     Args:
         df: DataFrame a exportar
@@ -714,14 +714,14 @@ def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "
     # Preparar datos binarios
     excel_data = output.getvalue()
 
-    # Botón nativo de Streamlit (con mismo diseño que Crear/Actualizar)
+    # ✅ CORRECCIÓN: Botón nativo SIN type="primary" para mantener consistencia
     st.download_button(
         label=label,
         data=excel_data,
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        type="primary"
+        use_container_width=True
+        # ❌ Eliminamos type="primary" para que tenga el diseño estándar
     )
 
 
