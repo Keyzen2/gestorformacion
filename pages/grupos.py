@@ -1752,86 +1752,60 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
 # 2. IMPLEMENTAR FILTROS AVANZADOS STREAMLIT 1.49
 # =========================
 
-def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
-    """
-    Tabla con filtros avanzados Y exportación de datos filtrados.
-    Retorna el DataFrame filtrado para uso posterior.
-    """
-    
-    st.markdown("### 📊 Listado de Grupos")
-    
-    if df_grupos.empty:
-        st.info("📋 No hay grupos registrados en tu ámbito.")
-        return pd.DataFrame()
-    
-    # Preparar datos
+def mostrar_tabla_grupos(df_grupos, session_state, grupos_service):
+    """Muestra tabla de grupos con filtros avanzados, selección y exportación."""
     df_display = df_grupos.copy()
-    df_display["Estado"] = df_display.apply(
-        lambda row: determinar_estado_grupo(row.to_dict()), axis=1
-    )
-    
-    # === SECCIÓN DE FILTROS ===
-    with st.expander("🔍 Filtros Avanzados", expanded=True):
+    df_display["Estado"] = df_display.apply(lambda row: determinar_estado_grupo(row.to_dict()), axis=1)
+
+    # === FILTROS AVANZADOS ===
+    with st.expander("🔍 Filtros Avanzados", expanded=False):
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
             modalidades = ["Todas"] + sorted(df_display["modalidad"].dropna().unique().tolist())
-            modalidad_filtro = st.selectbox("🎯 Modalidad", modalidades)
-        
+            modalidad_filtro = st.selectbox("🎯 Modalidad", modalidades, key="filtro_modalidad")
+
         with col2:
             estados = ["Todos"] + sorted(df_display["Estado"].dropna().unique().tolist())
-            estado_filtro = st.selectbox("📊 Estado", estados)
-        
+            estado_filtro = st.selectbox("📊 Estado", estados, key="filtro_estado")
+
         with col3:
             localidades = ["Todas"] + sorted(df_display["localidad"].dropna().unique().tolist())
-            localidad_filtro = st.selectbox("🏙️ Localidad", localidades)
-        
+            localidad_filtro = st.selectbox("🏙️ Localidad", localidades, key="filtro_localidad")
+
         with col4:
             if session_state.role == "admin":
                 empresas = ["Todas"] + sorted(df_display["empresa_nombre"].dropna().unique().tolist())
-                empresa_filtro = st.selectbox("🏢 Empresa", empresas)
+                empresa_filtro = st.selectbox("🏢 Empresa", empresas, key="filtro_empresa")
             else:
                 empresa_filtro = "Todas"
-        
-        # Filtro de búsqueda
+
         busqueda = st.text_input(
-            "🔍 Buscar en código, acción formativa...",
+            "🔍 Buscar en código, acción formativa o empresa",
             placeholder="Escribe para filtrar...",
             key="busqueda_grupos"
         )
-        
-        # Filtro de fechas
+
         col_fecha1, col_fecha2 = st.columns(2)
         with col_fecha1:
-            fecha_desde = st.date_input("📅 Fecha inicio desde", value=None)
+            fecha_desde = st.date_input("📅 Fecha inicio desde", value=None, key="fecha_desde")
         with col_fecha2:
-            fecha_hasta = st.date_input("📅 Fecha inicio hasta", value=None)
-    
+            fecha_hasta = st.date_input("📅 Fecha inicio hasta", value=None, key="fecha_hasta")
+
     # === APLICAR FILTROS ===
     df_filtrado = df_display.copy()
-    
     if modalidad_filtro != "Todas":
         df_filtrado = df_filtrado[df_filtrado["modalidad"] == modalidad_filtro]
-    
     if estado_filtro != "Todos":
         df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filtro]
-        
     if localidad_filtro != "Todas":
         df_filtrado = df_filtrado[df_filtrado["localidad"] == localidad_filtro]
-    
     if session_state.role == "admin" and empresa_filtro != "Todas":
         df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filtro]
-    
     if fecha_desde:
-        df_filtrado = df_filtrado[
-            pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date >= fecha_desde
-        ]
-    
+        df_filtrado = df_filtrado[pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date >= fecha_desde]
     if fecha_hasta:
-        df_filtrado = df_filtrado[
-            pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date <= fecha_hasta
-        ]
-    
+        df_filtrado = df_filtrado[pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date <= fecha_hasta]
     if busqueda:
         mascara_busqueda = (
             df_filtrado["codigo_grupo"].str.contains(busqueda, case=False, na=False) |
@@ -1839,172 +1813,120 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
         )
         if "empresa_nombre" in df_filtrado.columns:
             mascara_busqueda |= df_filtrado["empresa_nombre"].str.contains(busqueda, case=False, na=False)
-        
         df_filtrado = df_filtrado[mascara_busqueda]
-    
-    # === MOSTRAR RESULTADOS DE FILTROS ===
-    total_original = len(df_display)
-    total_filtrado = len(df_filtrado)
-    
+
+    # === TABLA ===
+    total_original, total_filtrado = len(df_display), len(df_filtrado)
     if total_filtrado != total_original:
         st.info(f"📊 Mostrando {total_filtrado} de {total_original} grupos")
-    
-    # === BOTONES DE ACCIÓN (ANTES DE LA TABLA) ===
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-    
-    with col1:
-        if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
-            st.session_state.grupo_seleccionado = {}
-            st.rerun()
-    
-    with col2:
-        # ✅ EXPORTAR DATOS FILTRADOS
-        if not df_filtrado.empty:
-            fecha_str = datetime.now().strftime("%Y%m%d")
-            filename = f"grupos_filtrados_{fecha_str}.xlsx"
-            
-            # Preparar datos para exportación (sin columnas internas)
-            columnas_export = [
-                "codigo_grupo", "accion_nombre", "modalidad",
-                "fecha_inicio", "fecha_fin_prevista", "localidad", "provincia",
-                "n_participantes_previstos", "Estado", "responsable", 
-                "telefono_contacto", "lugar_imparticion"
-            ]
-            
-            if session_state.role == "admin":
-                columnas_export.insert(-1, "empresa_nombre")
-            
-            # Solo columnas que existen
-            columnas_disponibles = [col for col in columnas_export if col in df_filtrado.columns]
-            df_export = df_filtrado[columnas_disponibles].copy()
-            
-            export_excel(
-                df_export, 
-                filename=filename, 
-                label="📥 Exportar Filtrados"
-            )
+
+    grupo_seleccionado = None
+    if df_filtrado.empty:
+        st.warning("⚠️ No se encontraron grupos con los filtros aplicados")
+    else:
+        columnas_mostrar = [
+            "codigo_grupo", "accion_nombre", "modalidad",
+            "fecha_inicio", "fecha_fin_prevista", "localidad",
+            "n_participantes_previstos", "Estado"
+        ]
+        if session_state.role == "admin":
+            columnas_mostrar.insert(-1, "empresa_nombre")
+
+        columnas_disponibles = [c for c in columnas_mostrar if c in df_filtrado.columns]
+        column_config = {
+            "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="medium"),
+            "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
+            "modalidad": st.column_config.TextColumn("🎯 Modalidad", width="small"),
+            "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
+            "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
+            "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+            "n_participantes_previstos": st.column_config.NumberColumn("👥 Participantes", width="small"),
+            "Estado": st.column_config.TextColumn("📊 Estado", width="small"),
+            "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
+        }
+
+        event = st.dataframe(
+            df_filtrado[columnas_disponibles],
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            column_config=column_config,
+            height=400
+        )
+
+        if event.selection.rows:
+            selected_idx = event.selection.rows[0]
+            grupo_original_idx = df_filtrado.iloc[selected_idx].name
+            grupo_seleccionado = df_grupos.loc[grupo_original_idx].to_dict()
+            st.session_state.grupo_seleccionado = grupo_seleccionado
         else:
-            st.warning("⚠️ No hay datos para exportar")
-    
-    with col3:
-        # Exportar TODO (original)
+            grupo_seleccionado = st.session_state.grupo_seleccionado
+
+    # === BOTONES DE EXPORTACIÓN ===
+    st.markdown("### 📤 Exportación de Grupos")
+    col1, col2, col3 = st.columns(3)
+
+    fecha_str = datetime.now().strftime("%Y%m%d")
+
+    with col1:
+        if not df_filtrado.empty and len(df_filtrado) != len(df_grupos):
+            filename_filtrado = f"grupos_filtrados_{fecha_str}.xlsx"
+            export_excel(df_filtrado, filename=filename_filtrado, label=f"📥 Exportar Filtrados ({len(df_filtrado)})")
+        else:
+            st.button("⚠️ Sin filtros aplicados", disabled=True, use_container_width=True)
+
+    with col2:
         if not df_grupos.empty:
-            fecha_str = datetime.now().strftime("%Y%m%d")
-            filename_completo = f"grupos_completo_{fecha_str}.xlsx"
-            
-            export_excel(
-                df_grupos, 
-                filename=filename_completo, 
-                label="📥 Exportar Todo"
-            )
-    
-    with col4:
+            filename_todo = f"grupos_completos_{fecha_str}.xlsx"
+            export_excel(df_grupos, filename=filename_todo, label=f"📊 Exportar Todo ({len(df_grupos)})")
+        else:
+            st.button("⚠️ Sin datos", disabled=True, use_container_width=True)
+
+    with col3:
         if st.button("🔄 Actualizar", use_container_width=True):
             grupos_service.limpiar_cache_grupos()
             st.rerun()
-    
-    # === MOSTRAR TABLA ===
-    if df_filtrado.empty:
-        st.warning("⚠️ No se encontraron grupos con los filtros aplicados")
-        return df_filtrado
-    
-    # Columnas para mostrar
-    columnas_mostrar = [
-        "codigo_grupo", "accion_nombre", "modalidad", 
-        "fecha_inicio", "fecha_fin_prevista", "localidad", 
-        "n_participantes_previstos", "Estado"
-    ]
-    
-    if session_state.role == "admin":
-        columnas_mostrar.insert(-1, "empresa_nombre")
-    
-    columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
-    
-    # Configuración de columnas
-    column_config = {
-        "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="medium"),
-        "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
-        "modalidad": st.column_config.SelectboxColumn(
-            "🎯 Modalidad", 
-            width="small",
-            options=["PRESENCIAL", "TELEFORMACION", "MIXTA"]
-        ),
-        "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
-        "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
-        "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
-        "n_participantes_previstos": st.column_config.NumberColumn(
-            "👥 Participantes", 
-            width="small", 
-            format="%d"
-        ),
-        "Estado": st.column_config.SelectboxColumn(
-            "📊 Estado", 
-            width="small",
-            options=["ABIERTO", "FINALIZAR", "FINALIZADO"]
-        )
-    }
-    
-    if session_state.role == "admin":
-        column_config["empresa_nombre"] = st.column_config.TextColumn("🏢 Empresa", width="medium")
-    
-    # Tabla con selección
-    event = st.dataframe(
-        df_filtrado[columnas_disponibles],
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        column_config=column_config,
-        height=400
-    )
-    
-    # Procesar selección
-    if event.selection.rows:
-        selected_idx = event.selection.rows[0]
-        # IMPORTANTE: usar índice del DataFrame original, no filtrado
-        grupo_seleccionado = df_grupos[df_grupos.index.isin(df_filtrado.iloc[event.selection.rows].index)].iloc[0].to_dict()
-        st.session_state.grupo_seleccionado = grupo_seleccionado
-    
-    return df_filtrado
+
+    return df_filtrado, grupo_seleccionado
+
 # =========================
 # FUNCIÓN PRINCIPAL
 # =========================
 
 def main(supabase, session_state):
-    """Función principal de gestión de grupos con jerarquía mejorada - CORREGIDA."""
+    """Función principal de gestión de grupos con tabla y filtros mejorados."""
     st.title("👥 Gestión de Grupos FUNDAE")
     st.caption("🎯 Creación y administración de grupos formativos con jerarquía empresarial")
-    
+
     if "grupo_seleccionado" not in st.session_state:
         st.session_state.grupo_seleccionado = None
-        
+
     # Verificar permisos
     if session_state.role not in ["admin", "gestor"]:
         st.warning("🔒 No tienes permisos para acceder a esta sección")
         return
-    
+
     # Inicializar servicio
     grupos_service = get_grupos_service(supabase, session_state)
-    
+
     # Cargar datos
     try:
         df_grupos = grupos_service.get_grupos_completos()
     except Exception as e:
         st.error(f"❌ Error al cargar datos: {e}")
         return
-    
-    # Mostrar métricas con información jerárquica
+
+    # Mostrar métricas
     mostrar_metricas_grupos(df_grupos, session_state)
-    
-    # Mostrar avisos de grupos pendientes
+
+    # Avisos de grupos pendientes
     grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
     mostrar_avisos_grupos(grupos_pendientes)
-    
+
     st.divider()
-    
-    # === SECCIÓN PRINCIPAL: FILTROS Y TABLA UNIFICADA ===
-    st.markdown("### 📊 Listado de Grupos")  # UN SOLO TÍTULO
-    
+    st.markdown("### 📊 Listado de Grupos")
+
     if df_grupos.empty:
         with st.container(border=True):
             st.info("📋 No hay grupos registrados en tu ámbito.")
@@ -2012,213 +1934,43 @@ def main(supabase, session_state):
                 st.markdown("Como **gestor**, puedes crear grupos para tu empresa y empresas clientes.")
             elif session_state.role == "admin":
                 st.markdown("Como **administrador**, puedes crear grupos para cualquier empresa.")
-    else:
-        # Preparar datos para mostrar
-        df_display = df_grupos.copy()
-        df_display["Estado"] = df_display.apply(lambda row: determinar_estado_grupo(row.to_dict()), axis=1)
-        
-        # === FILTROS AVANZADOS ===
-        with st.expander("🔍 Filtros Avanzados", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                modalidades = ["Todas"] + sorted(df_display["modalidad"].dropna().unique().tolist())
-                modalidad_filtro = st.selectbox("🎯 Modalidad", modalidades, key="filtro_modalidad")
-            
-            with col2:
-                estados = ["Todos"] + sorted(df_display["Estado"].dropna().unique().tolist())
-                estado_filtro = st.selectbox("📊 Estado", estados, key="filtro_estado")
-            
-            with col3:
-                localidades = ["Todas"] + sorted(df_display["localidad"].dropna().unique().tolist())
-                localidad_filtro = st.selectbox("🏙️ Localidad", localidades, key="filtro_localidad")
-            
-            with col4:
-                if session_state.role == "admin":
-                    empresas = ["Todas"] + sorted(df_display["empresa_nombre"].dropna().unique().tolist())
-                    empresa_filtro = st.selectbox("🏢 Empresa", empresas, key="filtro_empresa")
-                else:
-                    empresa_filtro = "Todas"
-            
-            # Filtro de búsqueda
-            busqueda = st.text_input(
-                "🔍 Buscar en código, acción formativa o empresa",
-                placeholder="Escribe para filtrar...",
-                key="busqueda_grupos"
-            )
-            
-            # Filtros de fecha
-            col_fecha1, col_fecha2 = st.columns(2)
-            with col_fecha1:
-                fecha_desde = st.date_input("📅 Fecha inicio desde", value=None, key="fecha_desde")
-            with col_fecha2:
-                fecha_hasta = st.date_input("📅 Fecha inicio hasta", value=None, key="fecha_hasta")
-        
-        # === APLICAR FILTROS ===
-        df_filtrado = df_display.copy()
-        
-        if modalidad_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["modalidad"] == modalidad_filtro]
-        
-        if estado_filtro != "Todos":
-            df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filtro]
-            
-        if localidad_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["localidad"] == localidad_filtro]
-        
-        if session_state.role == "admin" and empresa_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filtro]
-        
-        if fecha_desde:
-            df_filtrado = df_filtrado[
-                pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date >= fecha_desde
-            ]
-        
-        if fecha_hasta:
-            df_filtrado = df_filtrado[
-                pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date <= fecha_hasta
-            ]
-        
-        if busqueda:
-            mascara_busqueda = (
-                df_filtrado["codigo_grupo"].str.contains(busqueda, case=False, na=False) |
-                df_filtrado["accion_nombre"].str.contains(busqueda, case=False, na=False)
-            )
-            if "empresa_nombre" in df_filtrado.columns:
-                mascara_busqueda |= df_filtrado["empresa_nombre"].str.contains(busqueda, case=False, na=False)
-            
-            df_filtrado = df_filtrado[mascara_busqueda]
-        
-        # === MOSTRAR RESULTADO DE FILTROS ===
-        total_original = len(df_display)
-        total_filtrado = len(df_filtrado)
-        
-        if total_filtrado != total_original:
-            st.info(f"📊 Mostrando {total_filtrado} de {total_original} grupos")
-        
-        # === UNA SOLA TABLA CON CONFIGURACIÓN CORRECTA ===
-        if df_filtrado.empty:
-            st.warning("⚠️ No se encontraron grupos con los filtros aplicados")
-            grupo_seleccionado = None
-        else:
-            # Seleccionar columnas para mostrar
-            columnas_mostrar = [
-                "codigo_grupo", "accion_nombre", "modalidad", 
-                "fecha_inicio", "fecha_fin_prevista", "localidad", 
-                "n_participantes_previstos", "Estado"
-            ]
-            
-            if session_state.role == "admin":
-                columnas_mostrar.insert(-1, "empresa_nombre")
-            
-            columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
-            
-            # Configuración de columnas moderna
-            column_config = {
-                "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="medium"),
-                "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
-                "modalidad": st.column_config.TextColumn("🎯 Modalidad", width="small"),
-                "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
-                "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
-                "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
-                "n_participantes_previstos": st.column_config.NumberColumn("👥 Participantes", width="small"),
-                "Estado": st.column_config.TextColumn("📊 Estado", width="small"),
-                "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
-            }
-            
-            # Mostrar tabla con selección
-            event = st.dataframe(
-                df_filtrado[columnas_disponibles],
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                column_config=column_config,
-                height=400  # Altura fija para evitar filas fantasma
-            )
-            
-            # Procesar selección
-            if event.selection.rows:
-                selected_idx = event.selection.rows[0]
-                # CORRECCIÓN: Usar índice correcto del DataFrame original
-                grupo_original_idx = df_filtrado.iloc[selected_idx].name
-                grupo_seleccionado = df_grupos.loc[grupo_original_idx].to_dict()
-                st.session_state.grupo_seleccionado = grupo_seleccionado
-            else:
-                grupo_seleccionado = st.session_state.grupo_seleccionado
-    
+        return
+
+    # =========================
+    # TABLA PRINCIPAL DE GRUPOS
+    # =========================
+    df_filtrado, grupo_seleccionado = mostrar_tabla_grupos(df_grupos, session_state, grupos_service)
+
     st.divider()
-    
-    # === BOTONES DE ACCIÓN CON DISEÑO CONSISTENTE ===
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-    
+
+    # === BOTONES DE ACCIÓN ===
+    col1, col2 = st.columns([2, 1])
+
     with col1:
         if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
             st.session_state.grupo_seleccionado = {}
             st.session_state.grupo_editando = "nuevo"
             st.rerun()
-    
+
     with col2:
-        if not df_grupos.empty:
-            # === BOTÓN EXPORTAR FILTRADOS (si hay filtros aplicados) ===
-            if 'df_filtrado' in locals() and not df_filtrado.empty and len(df_filtrado) != len(df_grupos):
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename_filtrado = f"grupos_filtrados_{fecha_str}.xlsx"
-                
-                # Preparar datos para exportación
-                columnas_export = [
-                    "codigo_grupo", "accion_nombre", "modalidad",
-                    "fecha_inicio", "fecha_fin_prevista", "localidad", "provincia",
-                    "n_participantes_previstos", "Estado", "responsable", 
-                    "telefono_contacto", "lugar_imparticion"
-                ]
-                
-                if session_state.role == "admin":
-                    columnas_export.insert(-1, "empresa_nombre")
-                
-                columnas_disponibles_export = [col for col in columnas_export if col in df_filtrado.columns]
-                df_export = df_filtrado[columnas_disponibles_export].copy()
-                
-                # === USAR FUNCIÓN PERSONALIZADA CON TEMA MORADO ===
-                if st.button(f"📥 Exportar Filtrados ({len(df_filtrado)})", use_container_width=True, help="Exportar solo los grupos mostrados con filtros"):
-                    export_excel(df_export, filename=filename_filtrado, label="📥 Exportar Filtrados")
-            else:
-                # === BOTÓN EXPORTAR TODO ===
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename = f"grupos_fundae_{fecha_str}.xlsx"
-                
-                if st.button(f"📥 Exportar Excel ({len(df_grupos)})", use_container_width=True, help="Exportar todos los grupos"):
-                    export_excel(df_grupos, filename=filename, label="📥 Exportar Excel")
-        else:
-            st.button("⚠️ Sin datos", disabled=True, use_container_width=True)
-    
-    with col3:
-        # === BOTÓN EXPORTAR TODO (siempre disponible si hay datos) ===
-        if not df_grupos.empty and 'df_filtrado' in locals() and len(df_filtrado) != len(df_grupos):
-            fecha_str = datetime.now().strftime("%Y%m%d")
-            filename_completo = f"grupos_completo_{fecha_str}.xlsx"
-            
-            if st.button(f"📊 Exportar Todo ({len(df_grupos)})", use_container_width=True, help="Exportar todos los grupos sin filtros"):
-                export_excel(df_grupos, filename=filename_completo, label="📊 Exportar Todo")
-        else:
-            st.empty()  # Espacio vacío si no se necesita
-    
-    with col4:
-        if st.button("🔄 Actualizar", use_container_width=True):
+        if st.button("🔄 Recargar Vista", use_container_width=True):
             grupos_service.limpiar_cache_grupos()
             st.rerun()
-    
-    # === MOSTRAR FORMULARIO SEGÚN ESTADO ===
+
+    # =========================
+    # FORMULARIO DE GRUPOS
+    # =========================
     if st.session_state.grupo_seleccionado == {}:
         # Creación de grupo
         mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
-    
+
     elif st.session_state.grupo_seleccionado:
         # Edición de grupo existente
         grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
         if grupo_id:
             st.divider()
             mostrar_secciones_adicionales(grupos_service, grupo_id)
+
 
 # =========================
 # PUNTO DE ENTRADA
