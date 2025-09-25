@@ -1280,9 +1280,6 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             # Estructura propuesta: 
             # gestora_{id}/año_{año}/accion_{codigo}_{id}/grupo_{codigo}_{id}/participante_{nif}_{timestamp}.pdf
             
-            # Limpiar datos para nombres de archivo seguros
-            import re
-            
             # Datos básicos
             gestora_id = empresa_responsable["id"]
             año = grupo_completo.get("ano_inicio") or accion_formativa.get("ano_fundae", datetime.now().year)
