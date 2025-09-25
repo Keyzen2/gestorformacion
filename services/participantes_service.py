@@ -595,7 +595,8 @@ class ParticipantesService:
                     "modalidad": grupo.get("modalidad", "") if isinstance(grupo, dict) else "",
                     "lugar_imparticion": grupo.get("lugar_imparticion", "") if isinstance(grupo, dict) else "",
                     "accion_nombre": accion.get("nombre", "") if isinstance(accion, dict) else "",
-                    "accion_horas": accion.get("horas", 0) if isinstance(accion, dict) else 0
+                    # 🔧 fuerza a int siempre, aunque venga None
+                    "accion_horas": int(accion.get("horas") or 0) if isinstance(accion, dict) else 0
                 })
             
             return pd.DataFrame(grupos_data)
