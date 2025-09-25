@@ -2049,7 +2049,7 @@ def main(supabase, session_state):
         try:
             df_grupos = grupos_service.get_grupos_completos()
             mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service)
-        except Exception e:
+        except Exception as e:
             st.error(f"❌ Error cargando métricas: {e}")
 
     # =========================
