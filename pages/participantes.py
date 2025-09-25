@@ -365,7 +365,7 @@ def mostrar_seccion_grupos_participante_nn(participantes_service, participante_i
     
     try:
         # Mostrar grupos actuales del participante usando los métodos del servicio
-        df_grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
+        df_grupos_participante = participantes_service.get_grupos_de_participante_nn(participante_id)
         
         if not df_grupos_participante.empty:
             st.markdown("#### 📚 Grupos Asignados")
