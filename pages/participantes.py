@@ -763,7 +763,6 @@ def importar_participantes(auth_service, empresas_service, session_state):
 # MAIN PARTICIPANTES
 # =========================
 def main(supabase, session_state):
-    return main_con_diplomas(supabase, session_state)
     st.title("👥 Gestión de Participantes")
 
     participantes_service = get_participantes_service(supabase, session_state)
