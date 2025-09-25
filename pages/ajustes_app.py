@@ -439,35 +439,35 @@ def main(supabase, session_state):
                     except Exception as e:
                         st.error(f"Error al restablecer: {e}")
 
-    # =========================
-    # 📊 CONFIGURACIÓN DE TABLAS
-    # =========================
-     with tabs[4]:
-        st.subheader("📊 Configuración de Tablas")
-    
-        # Posibles columnas de usuarios
-        columnas_posibles_usuarios = [
-            "nombre_completo", "email", "telefono", "rol",
-            "nif", "empresa_nombre", "created_at"
-        ]
-    
-        # Cargar ajustes actuales
-        columnas_seleccionadas = ajustes.get("columnas_usuarios", columnas_posibles_usuarios)
-    
-        columnas_seleccionadas = st.multiselect(
-            "Columnas visibles en la tabla de Usuarios",
-            options=columnas_posibles_usuarios,
-            default=columnas_seleccionadas
-        )
-    
-        if st.button("💾 Guardar configuración de columnas"):
-            update_ajustes_app(supabase, {
-                "columnas_usuarios": columnas_seleccionadas
-            })
-            st.success("✅ Configuración guardada")
-            st.rerun()
-            
-    st.divider()
+        # =========================
+        # 📊 CONFIGURACIÓN DE TABLAS
+        # =========================
+         with tabs[4]:
+            st.subheader("📊 Configuración de Tablas")
+        
+            # Posibles columnas de usuarios
+            columnas_posibles_usuarios = [
+                "nombre_completo", "email", "telefono", "rol",
+                "nif", "empresa_nombre", "created_at"
+            ]
+        
+            # Cargar ajustes actuales
+            columnas_seleccionadas = ajustes.get("columnas_usuarios", columnas_posibles_usuarios)
+        
+            columnas_seleccionadas = st.multiselect(
+                "Columnas visibles en la tabla de Usuarios",
+                options=columnas_posibles_usuarios,
+                default=columnas_seleccionadas
+            )
+        
+            if st.button("💾 Guardar configuración de columnas"):
+                update_ajustes_app(supabase, {
+                    "columnas_usuarios": columnas_seleccionadas
+                })
+                st.success("✅ Configuración guardada")
+                st.rerun()
+                
+        st.divider()
     # =========================
     # INFORMACIÓN FINAL
     # =========================
