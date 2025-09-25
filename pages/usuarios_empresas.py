@@ -467,14 +467,14 @@ def main(supabase, session_state):
             # =========================
             ajustes = get_ajustes_app(supabase, campos=["columnas_usuarios"])
             columnas_mostrar = ajustes.get("columnas_usuarios")
-            
+        
             # ✅ Fallback si viene None
             if not columnas_mostrar:
                 columnas_mostrar = [
                     "nombre_completo", "email", "telefono",
                     "rol", "empresa_nombre", "created_at"
                 ]
-            
+        
             # Filtrar solo las columnas que existen en df
             columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
         
