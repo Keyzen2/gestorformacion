@@ -354,7 +354,6 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
 # =========================
 # SECCIÓN DE GRUPOS N:N PARA PARTICIPANTES
 # =========================
-
 def mostrar_seccion_grupos_participante_nn(participantes_service, participante_id, empresa_id, session_state):
     """Gestión de grupos del participante usando relación N:N."""
     st.markdown("### 🎓 Grupos de Formación")
@@ -366,7 +365,7 @@ def mostrar_seccion_grupos_participante_nn(participantes_service, participante_i
     
     try:
         # Mostrar grupos actuales del participante usando los métodos del servicio
-        df_grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
+        df_grupos_participante = participantes_service.get_grupos_de_participante_nn(participante_id)
         
         if not df_grupos_participante.empty:
             st.markdown("#### 📚 Grupos Asignados")
@@ -473,7 +472,6 @@ def mostrar_seccion_grupos_participante_nn(participantes_service, participante_i
 # =========================
 # FORMULARIO MODIFICADO DE PARTICIPANTE
 # =========================
-
 def mostrar_formulario_participante_nn(
     participante_data,
     participantes_service,
@@ -625,11 +623,20 @@ def mostrar_formulario_participante_nn(
                 use_container_width=True
             )
         with col2:
-            eliminar = st.form_submit_button(
-                "🗑️ Eliminar" if not es_creacion and session_state.role == "admin" else "❌ Cancelar",
-                type="secondary",
-                use_container_width=True
-            ) if not es_creacion else False
+            eliminar, cancelar = False, False
+            if not es_creacion:
+                if session_state.role == "admin":
+                    eliminar = st.form_submit_button(
+                        "🗑️ Eliminar",
+                        type="secondary",
+                        use_container_width=True
+                    )
+                else:
+                    cancelar = st.form_submit_button(
+                        "❌ Cancelar",
+                        type="secondary",
+                        use_container_width=True
+                    )
 
         # =========================
         # PROCESAMIENTO
@@ -697,23 +704,31 @@ def mostrar_formulario_participante_nn(
                         st.success("✅ Cambios guardados correctamente")
                         st.rerun()
 
-        if eliminar and not es_creacion:
-            if st.session_state.get("confirmar_eliminar_participante"):
-                try:
-                    ok = auth_service.eliminar_usuario_con_auth(
-                        tabla="participantes",
-                        registro_id=datos["id"]
-                    )
-                    
-                    if ok:
-                        st.success("✅ Participante eliminado correctamente")
-                        del st.session_state["confirmar_eliminar_participante"]
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error eliminando participante: {e}")
-            else:
-                st.session_state["confirmar_eliminar_participante"] = True
-                st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
+        # =========================
+        # ELIMINAR O CANCELAR
+        # =========================
+        if not es_creacion:
+            if session_state.role == "admin" and eliminar:
+                if st.session_state.get("confirmar_eliminar_participante"):
+                    try:
+                        ok = auth_service.eliminar_usuario_con_auth(
+                            tabla="participantes",
+                            registro_id=datos["id"]
+                        )
+                        
+                        if ok:
+                            st.success("✅ Participante eliminado correctamente")
+                            del st.session_state["confirmar_eliminar_participante"]
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error eliminando participante: {e}")
+                else:
+                    st.session_state["confirmar_eliminar_participante"] = True
+                    st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
+            
+            elif session_state.role != "admin" and cancelar:
+                st.info("❌ Edición cancelada")
+                st.rerun()
 
     # =========================
     # GESTIÓN DE GRUPOS N:N (FUERA DEL FORMULARIO)
