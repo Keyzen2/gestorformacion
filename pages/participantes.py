@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import io
+import re
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from utils import validar_dni_cif, export_csv
