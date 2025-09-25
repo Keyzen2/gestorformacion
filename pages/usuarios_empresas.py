@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from datetime import datetime, date
 from io import BytesIO
-from utils import validar_dni_cif, validar_email
+from utils import validar_dni_cif, validar_email, get_ajustes_app
 from services.data_service import get_data_service
 from services.auth_service import get_auth_service
 
@@ -455,6 +455,29 @@ def main(supabase, session_state):
 
     # Tabs principales (títulos simplificados como participantes)
     tabs = st.tabs(["Listado", "Crear", "Métricas"])
+
+    with tabs[0]:
+        st.markdown("### 📊 Listado de Usuarios")
+
+        # =========================
+        # Leer columnas dinámicas desde ajustes
+        # =========================
+        ajustes = get_ajustes_app(supabase)
+
+        columnas_mostrar = ajustes.get(
+            "columnas_usuarios",
+            ["nombre_completo", "email", "telefono", "rol", "empresa_nombre", "created_at"]
+        )
+
+        # Asegurar que las columnas existen en el dataframe
+        columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
+
+        # Mostrar tabla
+        st.dataframe(
+            df_usuarios[columnas_mostrar],
+            use_container_width=True,
+            hide_index=True
+        )
 
     # =========================
     # TAB LISTADO
