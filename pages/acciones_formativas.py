@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import export_csv
+from utils import export_csv, export_excel
 from services.data_service import get_data_service
 
 def main(supabase, session_state):
