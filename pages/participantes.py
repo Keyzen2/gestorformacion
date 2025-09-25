@@ -212,11 +212,11 @@ def mostrar_metricas_participantes(participantes_service, session_state):
 # TABLA GENERAL
 # =========================
 def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="📋 Lista de Participantes"):
-    """Muestra tabla de participantes con filtros, paginación y selección de fila."""
+    """Muestra tabla de participantes con filtros, paginación y selección de fila - VERSIÓN N:N."""
     if df_participantes.empty:
         st.info("📋 No hay participantes para mostrar")
-        return None
-
+        return None, pd.DataFrame()
+    
     st.markdown(f"### {titulo_tabla}")
 
     # 🔎 Filtros avanzados (fijos arriba)
@@ -228,57 +228,97 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     with col3:
         filtro_empresa = st.text_input("🏢 Empresa contiene", key="filtro_tabla_empresa")
 
+    # Aplicar filtros
+    df_filtrado = df_participantes.copy()
+    
     if filtro_nombre:
-        df_participantes = df_participantes[
-            df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False) |
-            df_participantes["apellidos"].str.contains(filtro_nombre, case=False, na=False)
-        ]
+        mask_nombre = (
+            df_filtrado["nombre"].str.contains(filtro_nombre, case=False, na=False) |
+            df_filtrado["apellidos"].str.contains(filtro_nombre, case=False, na=False)
+        )
+        df_filtrado = df_filtrado[mask_nombre]
+    
     if filtro_nif:
-        df_participantes = df_participantes[df_participantes["nif"].str.contains(filtro_nif, case=False, na=False)]
+        df_filtrado = df_filtrado[df_filtrado["nif"].str.contains(filtro_nif, case=False, na=False)]
+    
     if filtro_empresa:
-        df_participantes = df_participantes[df_participantes["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
+        df_filtrado = df_filtrado[df_filtrado["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
     # 📢 Selector de registros por página
     page_size = st.selectbox("📊 Registros por página", [10, 20, 50, 100], index=1, key="page_size_tabla")
 
     # 📄 Paginación
-    total_rows = len(df_participantes)
+    total_rows = len(df_filtrado)
     total_pages = (total_rows // page_size) + (1 if total_rows % page_size else 0)
     page_number = st.number_input("Página", min_value=1, max_value=max(total_pages, 1), step=1, value=1, key="page_num_tabla")
 
     start_idx = (page_number - 1) * page_size
     end_idx = start_idx + page_size
-    df_paged = df_participantes.iloc[start_idx:end_idx]
+    df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    # Configuración columnas
-    columnas = ["nombre", "apellidos", "nif", "email", "telefono", "empresa_nombre"]
+    # NUEVA: Configuración de columnas para versión N:N
+    columnas = ["nombre", "apellidos", "nif", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    
+    # Asegurar que las columnas existen en el DataFrame
+    columnas_disponibles = []
+    for col in columnas:
+        if col in df_paged.columns:
+            columnas_disponibles.append(col)
+        elif col == "num_grupos" and "num_grupos" not in df_paged.columns:
+            # Si no existe la columna, crearla dinámicamente
+            if "grupos_codigos" in df_paged.columns:
+                df_paged["num_grupos"] = df_paged["grupos_codigos"].apply(
+                    lambda x: len(x.split(", ")) if isinstance(x, str) and x.strip() else 0
+                )
+            else:
+                df_paged["num_grupos"] = 0
+            columnas_disponibles.append(col)
+        elif col == "grupos_codigos" and "grupos_codigos" not in df_paged.columns:
+            # Si no existe, crear columna vacía
+            df_paged["grupos_codigos"] = ""
+            columnas_disponibles.append(col)
+
+    # Configuración de columnas mejorada
     column_config = {
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
-        "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large")
+        "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
+        "num_grupos": st.column_config.NumberColumn("🎓 Grupos", width="small", help="Número de grupos asignados"),
+        "grupos_codigos": st.column_config.TextColumn("📚 Códigos", width="large", help="Códigos de grupos separados por comas")
     }
 
-    # Mostrar tabla
-    evento = st.dataframe(
-        df_paged[columnas],
-        column_config=column_config,
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row"
-    )
+    # Mostrar información sobre los resultados
+    if total_rows != len(df_participantes):
+        st.info(f"📊 Mostrando {total_rows} de {len(df_participantes)} participantes (filtrados)")
 
-    if evento.selection.rows:
-        return df_paged.iloc[evento.selection.rows[0]], df_paged
-    return None, df_paged
+    # Mostrar tabla con las columnas disponibles
+    try:
+        evento = st.dataframe(
+            df_paged[columnas_disponibles],
+            column_config={k: v for k, v in column_config.items() if k in columnas_disponibles},
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+
+        if evento.selection.rows:
+            return df_paged.iloc[evento.selection.rows[0]], df_paged
+        return None, df_paged
+        
+    except Exception as e:
+        st.error(f"❌ Error mostrando tabla: {e}")
+        st.write("Columnas disponibles:", df_paged.columns.tolist())
+        st.write("Columnas solicitadas:", columnas_disponibles)
+        return None, df_paged
 
 # =========================
 # FORMULARIO DE PARTICIPANTE INTEGRADO
 # =========================
-def mostrar_formulario_participante(
+def mostrar_formulario_participante_nn(
     participante_data,
     participantes_service,
     empresas_service,
@@ -287,7 +327,7 @@ def mostrar_formulario_participante(
     session_state,
     es_creacion=False
 ):
-    """CORREGIDO: Formulario completamente integrado con todos los campos dentro."""
+    """MODIFICADO: Formulario de participante con gestión N:N de grupos."""
 
     if es_creacion:
         st.subheader("➕ Crear Participante")
@@ -301,9 +341,6 @@ def mostrar_formulario_participante(
     # Cargar datos para selectboxes
     df_empresas = cargar_empresas_disponibles(empresas_service, session_state)
     empresa_options = {row["nombre"]: row["id"] for _, row in df_empresas.iterrows()}
-    
-    df_grupos = cargar_grupos(grupos_service, session_state)
-    grupos_completos = {f"{row['codigo_grupo']} - {row.get('accion_formativa_titulo', 'Sin título')}": row["id"] for _, row in df_grupos.iterrows()}
 
     with st.form(form_id, clear_on_submit=es_creacion):
         
@@ -341,137 +378,45 @@ def mostrar_formulario_participante(
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
 
         # =========================
-        # EMPRESA Y GRUPO (INTEGRADO Y CORREGIDO)
+        # EMPRESA (SIN GRUPO - AHORA SE GESTIONA SEPARADO)
         # =========================
-        st.markdown("### 🏢 Empresa y Formación")
-        col1, col2 = st.columns(2)
+        st.markdown("### 🏢 Empresa")
         
-        with col1:
-            # Empresa - Manejo robusto de opciones
-            try:
-                empresa_actual_id = datos.get("empresa_id")
-                empresa_actual_nombre = ""
-                
-                # Buscar nombre actual de forma segura
-                if empresa_actual_id and empresa_options:
-                    empresa_actual_nombre = next(
-                        (k for k, v in empresa_options.items() if v == empresa_actual_id), 
-                        ""
-                    )
+        try:
+            empresa_actual_id = datos.get("empresa_id")
+            empresa_actual_nombre = ""
             
-                empresa_sel = st.selectbox(
-                    "🏢 Empresa",
-                    options=[""] + list(empresa_options.keys()) if empresa_options else ["Sin empresas disponibles"],
-                    index=list(empresa_options.keys()).index(empresa_actual_nombre) + 1 if empresa_actual_nombre and empresa_actual_nombre in empresa_options else 0,
-                    key=f"{form_id}_empresa",
-                    help="Empresa a la que pertenece el participante",
-                    disabled=not empresa_options  # Deshabilitar si no hay opciones
+            # Buscar nombre actual de forma segura
+            if empresa_actual_id and empresa_options:
+                empresa_actual_nombre = next(
+                    (k for k, v in empresa_options.items() if v == empresa_actual_id), 
+                    ""
                 )
-                
-                # Obtener empresa_id de forma segura
-                if empresa_sel and empresa_sel != "Sin empresas disponibles":
-                    empresa_id = empresa_options.get(empresa_sel)
-                else:
-                    empresa_id = None
-                    if not empresa_options:
-                        st.warning("⚠️ No hay empresas disponibles para tu rol")
-                        
-            except Exception as e:
-                st.error(f"❌ Error cargando empresas: {e}")
+        
+            empresa_sel = st.selectbox(
+                "🏢 Empresa",
+                options=[""] + list(empresa_options.keys()) if empresa_options else ["Sin empresas disponibles"],
+                index=list(empresa_options.keys()).index(empresa_actual_nombre) + 1 if empresa_actual_nombre and empresa_actual_nombre in empresa_options else 0,
+                key=f"{form_id}_empresa",
+                help="Empresa a la que pertenece el participante",
+                disabled=not empresa_options
+            )
+            
+            # Obtener empresa_id de forma segura
+            if empresa_sel and empresa_sel != "Sin empresas disponibles":
+                empresa_id = empresa_options.get(empresa_sel)
+            else:
                 empresa_id = None
-        
-        with col2:
-            # Grupo (filtrado por empresa) - CORREGIDO
-            try:
-                if empresa_id and grupos_completos:
-                    # NUEVA LÓGICA: Filtrar grupos por empresa de forma más robusta
-                    grupos_empresa = {}
-                    
-                    for grupo_nombre, grupo_id_val in grupos_completos.items():
-                        # Buscar el grupo en el DataFrame original
-                        grupo_row = df_grupos[df_grupos["id"] == grupo_id_val]
+                if not empresa_options:
+                    st.warning("⚠️ No hay empresas disponibles para tu rol")
                         
-                        if not grupo_row.empty:
-                            grupo_data = grupo_row.iloc[0]
-                            grupo_empresa_id = None
-                            
-                            # Extraer empresa_id de diferentes formatos posibles
-                            if "empresa_id" in grupo_data and pd.notna(grupo_data["empresa_id"]):
-                                grupo_empresa_id = grupo_data["empresa_id"]
-                            elif "empresa" in grupo_data and isinstance(grupo_data["empresa"], dict):
-                                grupo_empresa_id = grupo_data["empresa"].get("id")
-                            elif "empresa" in grupo_data and pd.notna(grupo_data["empresa"]):
-                                # Caso de empresa como string o ID directo
-                                try:
-                                    grupo_empresa_id = str(grupo_data["empresa"])
-                                except:
-                                    pass
-                            
-                            # También verificar en empresas_grupos (relación N:N)
-                            if not grupo_empresa_id:
-                                try:
-                                    empresas_grupo_check = grupos_service.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id_val).execute()
-                                    if empresas_grupo_check.data:
-                                        grupo_empresas_ids = [eg["empresa_id"] for eg in empresas_grupo_check.data]
-                                        if empresa_id in grupo_empresas_ids:
-                                            grupos_empresa[grupo_nombre] = grupo_id_val
-                                except:
-                                    pass
-                            elif str(grupo_empresa_id) == str(empresa_id):
-                                grupos_empresa[grupo_nombre] = grupo_id_val
-                    
-                    # Mostrar selector de grupo
-                    if grupos_empresa:
-                        grupo_actual_id = datos.get("grupo_id")
-                        grupo_actual_nombre = next((k for k, v in grupos_empresa.items() if v == grupo_actual_id), "")
-                
-                        grupo_sel = st.selectbox(
-                            "🎓 Grupo de Formación",
-                            options=[""] + list(grupos_empresa.keys()),
-                            index=list(grupos_empresa.keys()).index(grupo_actual_nombre) + 1 if grupo_actual_nombre else 0,
-                            key=f"{form_id}_grupo",
-                            help="Grupo de formación (opcional)"
-                        )
-                        grupo_id = grupos_empresa.get(grupo_sel) if grupo_sel else None
-                    else:
-                        st.selectbox(
-                            "🎓 Grupo de Formación",
-                            options=["No hay grupos disponibles para esta empresa"],
-                            disabled=True,
-                            key=f"{form_id}_grupo_no_disponible"
-                        )
-                        grupo_id = None
-                        
-                elif empresa_id:
-                    # Tiene empresa pero no hay grupos cargados
-                    st.selectbox(
-                        "🎓 Grupo de Formación", 
-                        options=["Cargando grupos..."],
-                        disabled=True,
-                        key=f"{form_id}_grupo_cargando"
-                    )
-                    grupo_id = None
-                else:
-                    # No tiene empresa seleccionada
-                    st.selectbox(
-                        "🎓 Grupo de Formación",
-                        options=["Seleccione empresa primero"],
-                        disabled=True,
-                        key=f"{form_id}_grupo_disabled"
-                    )
-                    grupo_id = None
-                    
-            except Exception as e:
-                st.error(f"❌ Error procesando grupos: {e}")
-                st.selectbox(
-                    "🎓 Grupo de Formación",
-                    options=["Error cargando grupos"],
-                    disabled=True,
-                    key=f"{form_id}_grupo_error"
-                )
-                grupo_id = None
+        except Exception as e:
+            st.error(f"❌ Error cargando empresas: {e}")
+            empresa_id = None
         
-        # Credenciales Auth (solo en creación)
+        # =========================
+        # CREDENCIALES AUTH
+        # =========================
         if es_creacion:
             st.markdown("### 🔐 Credenciales de acceso")
             password = st.text_input(
@@ -490,7 +435,7 @@ def mostrar_formulario_participante(
                 help="Marca para generar nueva contraseña automática"
             ):
                 st.info("Se generará una nueva contraseña al guardar los cambios")
-                password = "NUEVA_PASSWORD_AUTO"  # Flag para generar nueva
+                password = "NUEVA_PASSWORD_AUTO"
 
         # =========================
         # VALIDACIONES
@@ -542,18 +487,17 @@ def mostrar_formulario_participante(
                     "nombre": nombre,
                     "apellidos": apellidos,
                     "tipo_documento": tipo_documento or None,
-                    "nif": documento or None,  # Guardamos el documento en el campo nif
+                    "nif": documento or None,
                     "niss": niss or None,
                     "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
                     "sexo": sexo or None,
                     "telefono": telefono or None,
                     "email": email or None,
                     "empresa_id": empresa_id,
-                    "grupo_id": grupo_id or None,
+                    # IMPORTANTE: NO incluir grupo_id aquí, se gestiona por separado
                 }
 
                 if es_creacion:
-                    # USAR AUTHSERVICE CENTRALIZADO
                     password_final = password if password and password != "" else None
                     
                     ok, participante_id = auth_service.crear_usuario_con_auth(
@@ -564,9 +508,10 @@ def mostrar_formulario_participante(
                     
                     if ok:
                         st.success("✅ Participante creado correctamente con acceso al portal")
+                        st.session_state[f"participante_creado_{form_id}"] = participante_id
                         st.rerun()
                 else:
-                    # ACTUALIZAR USANDO AUTHSERVICE
+                    # Actualización
                     password_final = None
                     if password == "NUEVA_PASSWORD_AUTO":
                         # Generar nueva contraseña
@@ -596,10 +541,9 @@ def mostrar_formulario_participante(
                         st.success("✅ Cambios guardados correctamente")
                         st.rerun()
 
-        if eliminar:
+        if eliminar and not es_creacion:
             if st.session_state.get("confirmar_eliminar_participante"):
                 try:
-                    # ELIMINAR USANDO AUTHSERVICE
                     ok = auth_service.eliminar_usuario_con_auth(
                         tabla="participantes",
                         registro_id=datos["id"]
@@ -614,6 +558,34 @@ def mostrar_formulario_participante(
             else:
                 st.session_state["confirmar_eliminar_participante"] = True
                 st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
+
+    # =========================
+    # GESTIÓN DE GRUPOS N:N (FUERA DEL FORMULARIO)
+    # =========================
+    
+    # Solo mostrar si es edición o si acabamos de crear el participante
+    mostrar_grupos = False
+    participante_id_para_grupos = None
+    
+    if not es_creacion:
+        # Modo edición - usar ID existente
+        mostrar_grupos = True
+        participante_id_para_grupos = datos.get("id")
+    else:
+        # Modo creación - ver si acabamos de crear
+        participante_creado_key = f"participante_creado_{form_id}"
+        if st.session_state.get(participante_creado_key):
+            mostrar_grupos = True
+            participante_id_para_grupos = st.session_state[participante_creado_key]
+    
+    if mostrar_grupos and participante_id_para_grupos and empresa_id:
+        st.markdown("---")
+        mostrar_seccion_grupos_participante_nn(
+            participantes_service, 
+            participante_id_para_grupos, 
+            empresa_id, 
+            session_state
+        )
 
 # =========================
 # EXPORTACIÓN DE PARTICIPANTES
@@ -825,7 +797,7 @@ def main(supabase, session_state):
 
             if seleccionado is not None:
                 with st.container(border=True):
-                    mostrar_formulario_participante(
+                    mostrar_formulario_participante_nn(
                         seleccionado, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=False
                     )
         except Exception as e:
@@ -836,7 +808,7 @@ def main(supabase, session_state):
     # =========================
     with tabs[1]:
         with st.container(border=True):
-            mostrar_formulario_participante(
+            mostrar_formulario_participante_nn(
                 {}, participantes_service, empresas_service, grupos_service, auth_service, session_state, es_creacion=True
             )
 
@@ -901,7 +873,44 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         if not grupos_finalizados:
             st.info("No hay grupos finalizados en las empresas que gestionas.")
             return
-
+            
+    def preparar_datos_tabla_nn(participantes_service, session_state):
+        """
+        Prepara los datos de participantes con información de grupos N:N para la tabla.
+        """
+        try:
+            # Obtener datos usando el método N:N
+            df_participantes = participantes_service.get_participantes_con_grupos_nn()
+            
+            # Si el DataFrame está vacío, crear estructura básica
+            if df_participantes.empty:
+                return pd.DataFrame(columns=[
+                    'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+                    'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
+                ])
+            
+            # Verificar si las columnas N:N existen, si no, usar método alternativo
+            if 'num_grupos' not in df_participantes.columns or 'grupos_codigos' not in df_participantes.columns:
+                # Fallback: usar método tradicional y simular estructura N:N
+                df_tradicional = participantes_service.get_participantes_completos()
+                
+                if not df_tradicional.empty:
+                    # Crear columnas simuladas para compatibilidad
+                    df_tradicional['num_grupos'] = df_tradicional['grupo_id'].apply(lambda x: 1 if pd.notna(x) else 0)
+                    df_tradicional['grupos_codigos'] = df_tradicional.get('grupo_codigo', '')
+                    
+                    return df_tradicional
+            
+            return df_participantes
+            
+        except Exception as e:
+            st.error(f"❌ Error preparando datos de participantes: {e}")
+            # Crear DataFrame vacío con estructura correcta
+            return pd.DataFrame(columns=[
+                'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+                'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
+            ])
+            
         # =====================================
         # NUEVA SECCIÓN: ESTRUCTURA DE ARCHIVOS
         # =====================================
