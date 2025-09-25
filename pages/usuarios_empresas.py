@@ -162,11 +162,12 @@ def mostrar_metricas_usuarios(df_usuarios):
 # =========================
 # TABLA GENERAL
 # =========================
-def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista de Usuarios"):
+def mostrar_tabla_usuarios(df_usuarios, session_state, columnas_mostrar, titulo_tabla="📋 Lista de Usuarios"):
     """Muestra tabla de usuarios con filtros y selección de fila."""
+
     if df_usuarios.empty:
         st.info("📋 No hay usuarios para mostrar")
-        return None
+        return None, df_usuarios  # <- devolvemos también df vacío para consistencia
 
     st.markdown(f"### {titulo_tabla}")
 
@@ -181,7 +182,7 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista 
 
     # Aplicar filtros
     df_filtered = df_usuarios.copy()
-    
+
     if filtro_nombre:
         df_filtered = df_filtered[
             df_filtered["nombre_completo"].str.contains(filtro_nombre, case=False, na=False) |
@@ -192,10 +193,12 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, titulo_tabla="📋 Lista 
     if filtro_empresa and "empresa_nombre" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
-    # Configuración columnas - USAR CAMPOS CORRECTOS
-    columnas = ["nombre_completo", "email", "telefono", "rol", "nif", "empresa_nombre", "created_at"]
-    columnas_existentes = [col for col in columnas if col in df_filtered.columns]
-    df_display = df_filtered[columnas_existentes] if not df_filtered.empty else pd.DataFrame(columns=columnas_existentes)
+    # ✅ Usar columnas dinámicas desde ajustes_app
+    columnas_existentes = [col for col in columnas_mostrar if col in df_filtered.columns]
+    df_display = (
+        df_filtered[columnas_existentes] if not df_filtered.empty
+        else pd.DataFrame(columns=columnas_existentes)
+    )
 
     # Mostrar tabla
     evento = st.dataframe(
@@ -456,7 +459,7 @@ def main(supabase, session_state):
     # Tabs principales (títulos simplificados como participantes)
     tabs = st.tabs(["Listado", "Crear", "Métricas"])
 
-    with tabs[0]:
+        with tabs[0]:
         st.markdown("### 📊 Listado de Usuarios")
 
         # =========================
@@ -464,16 +467,17 @@ def main(supabase, session_state):
         # =========================
         ajustes = get_ajustes_app(supabase, campos=["columnas_usuarios"])
         columnas_mostrar = ajustes.get("columnas_usuarios")
-        
-        # ✅ Fallback si viene None
+
+        # ✅ Fallback si viene None o vacío
         if not columnas_mostrar:
             columnas_mostrar = [
                 "nombre_completo", "email", "telefono",
                 "rol", "empresa_nombre", "created_at"
             ]
-        
+
         # Filtrar solo las columnas que existen en df
         columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
+
         # =========================
         # Configuración de columnas visibles (solo admin)
         # =========================
@@ -496,6 +500,14 @@ def main(supabase, session_state):
                     update_ajustes_app(supabase, {"columnas_usuarios": columnas_seleccionadas})
                     st.success("✅ Columnas guardadas correctamente")
                     st.rerun()
+
+        # =========================
+        # Mostrar tabla con columnas dinámicas
+        # =========================
+        try:
+            df_filtered = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])].copy()
+            seleccionado, df_paged = mostrar_tabla_usuarios(df_filtered, session_state, columnas_mostrar)
+
     # =========================
     # TAB LISTADO
     # =========================
