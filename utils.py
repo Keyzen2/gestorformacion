@@ -239,35 +239,35 @@ def preparar_df_export_grupos(df: pd.DataFrame) -> pd.DataFrame:
 # FUNCIONES XML FUNDAE CORREGIDAS
 # =========================
 
-def preparar_datos_xml_inicio_simple(grupo_id, supabase):
+def preparar_datos_xml_inicio_simple(grupo_id, supabase, session_state=None):
     """
-    Prepara datos para XML FUNDAE con estructura corregida.
-    VERSIÓN CORREGIDA con nombres de campos correctos.
+    Prepara datos para XML FUNDAE con estructura actual.
+    VERSIÓN UNIFICADA que acepta session_state opcional para jerarquía.
     """
     try:
-        # ✅ CORRECCIÓN 1: Campos correctos de acciones_formativas
-        grupo_res = supabase.table("grupos").select("""
+        # Datos del grupo con acción
+        grupo = supabase.table("grupos").select("""
             *, 
-            accion_formativa:acciones_formativas(codigo_accion, nombre, num_horas, modalidad)
-        """).eq("id", grupo_id).execute()
+            accion_formativa:acciones_formativas(codigo_accion, nombre, num_horas)
+        """).eq("id", grupo_id).single().execute()
         
-        if not grupo_res.data:
+        if not grupo.data:
             return None, ["Grupo no encontrado"]
             
-        grupo_data = grupo_res.data[0]
+        grupo_data = grupo.data
         
-        # Validar completitud básica
+        # Validar completitud
         es_valido, errores = validar_grupo_fundae_completo(grupo_data)
         if not es_valido:
             return None, errores
         
-        # ✅ CORRECCIÓN 2: Usar tabla de relaciones para tutores
-        tutores_res = supabase.table("tutores_grupos").select("""
+        # Tutores con tipos de documento automáticos usando tabla de relación
+        tutores = supabase.table("tutores_grupos").select("""
             tutor:tutores(*)
         """).eq("grupo_id", grupo_id).execute()
         
         tutores_fundae = []
-        for tg in tutores_res.data or []:
+        for tg in tutores.data or []:
             tutor = tg.get("tutor")
             if tutor:
                 # Detectar tipo automáticamente si no está definido
@@ -282,33 +282,45 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
                 tutor_fundae = {**tutor, "tipo_documento_fundae": tipo_doc}
                 tutores_fundae.append(tutor_fundae)
         
-        # ✅ CORRECCIÓN 3: Usar tabla de relaciones para participantes
-        participantes_res = supabase.table("participantes_grupos").select("""
+        # CORRECCIÓN: Participantes usando tabla de relación participantes_grupos
+        participantes_data = []
+        
+        # Intentar primero con relación N:N
+        participantes_rel = supabase.table("participantes_grupos").select("""
             participante:participantes(*)
         """).eq("grupo_id", grupo_id).execute()
         
-        participantes_fundae = []
-        for rel in participantes_res.data or []:
-            part = rel.get("participante")
-            if part:
-                # Detectar tipo automáticamente si no está definido
-                tipo_doc = part.get("tipo_documento")
-                if not tipo_doc or tipo_doc == "":
-                    tipo_doc = detectar_tipo_documento_fundae(part.get("nif", ""))
-                else:
-                    # Convertir texto a código si es necesario
-                    tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
-                    tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(part.get("nif", "")))
-                
-                part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
-                participantes_fundae.append(part_fundae)
+        if participantes_rel.data:
+            # Usar relación N:N
+            for rel in participantes_rel.data:
+                part = rel.get("participante")
+                if part:
+                    participantes_data.append(part)
+        else:
+            # Fallback: buscar por grupo_id directo (si aún existe)
+            participantes_directo = supabase.table("participantes").select("*").eq("grupo_id", grupo_id).execute()
+            participantes_data = participantes_directo.data or []
         
-        # ✅ CORRECCIÓN 4: Usar tabla de relaciones para empresas
-        empresas_res = supabase.table("empresas_grupos").select("""
+        participantes_fundae = []
+        for part in participantes_data:
+            # Detectar tipo automáticamente si no está definido
+            tipo_doc = part.get("tipo_documento")
+            if not tipo_doc or tipo_doc == "":
+                tipo_doc = detectar_tipo_documento_fundae(part.get("nif", ""))
+            else:
+                # Convertir texto a código si es necesario
+                tipo_map = {"NIF": 10, "NIE": 60, "Pasaporte": 20}
+                tipo_doc = tipo_map.get(tipo_doc, detectar_tipo_documento_fundae(part.get("nif", "")))
+            
+            part_fundae = {**part, "tipo_documento_fundae": tipo_doc}
+            participantes_fundae.append(part_fundae)
+        
+        # Empresas participantes usando tabla de relación
+        empresas = supabase.table("empresas_grupos").select("""
             empresa:empresas(cif, nombre)
         """).eq("grupo_id", grupo_id).execute()
         
-        empresas_fundae = [eg["empresa"] for eg in empresas_res.data or [] if eg.get("empresa")]
+        empresas_fundae = [eg["empresa"] for eg in empresas.data or [] if eg.get("empresa")]
         
         # Validar que hay datos mínimos requeridos
         errores_adicionales = []
@@ -323,26 +335,41 @@ def preparar_datos_xml_inicio_simple(grupo_id, supabase):
         for i, part in enumerate(participantes_fundae):
             if not part.get("nif"):
                 errores_adicionales.append(f"Participante {i+1}: falta NIF/documento")
-            if not part.get("nombre"):
-                errores_adicionales.append(f"Participante {i+1}: falta nombre")
-            if not part.get("apellidos"):
-                errores_adicionales.append(f"Participante {i+1}: falta apellidos")
-            if not part.get("email"):
-                errores_adicionales.append(f"Participante {i+1}: falta email")
+            if not part.get("sexo"):
+                errores_adicionales.append(f"Participante {i+1}: falta sexo")
+            if not part.get("fecha_nacimiento"):
+                errores_adicionales.append(f"Participante {i+1}: falta fecha de nacimiento")
         
         if errores_adicionales:
             return None, errores_adicionales
         
-        return {
+        # Si tenemos session_state, añadir información de jerarquía
+        datos_resultado = {
             "grupo": grupo_data,
             "tutores": tutores_fundae,
             "empresas": empresas_fundae,
             "participantes": participantes_fundae
-        }, []
+        }
+        
+        # Añadir información de empresa responsable si es posible
+        if session_state:
+            try:
+                empresa_responsable = get_empresa_responsable_fundae(supabase, grupo_id)
+                if empresa_responsable and len(empresa_responsable) == 2:
+                    empresa_resp, error_empresa = empresa_responsable
+                    if not error_empresa and empresa_resp:
+                        datos_resultado["empresa_responsable"] = empresa_resp
+                        datos_resultado["grupo"]["empresa_responsable_cif"] = empresa_resp.get("cif")
+                        datos_resultado["grupo"]["empresa_responsable_nombre"] = empresa_resp.get("nombre")
+            except:
+                # Si falla, continuar sin información de empresa responsable
+                pass
+        
+        return datos_resultado, []
         
     except Exception as e:
         return None, [f"Error: {str(e)}"]
-
+        
 def detectar_tipo_documento_fundae(nif: str) -> int:
     """Devuelve 10=NIF, 60=NIE, 20=Pasaporte (fallback)."""
     if not nif:
@@ -355,39 +382,53 @@ def detectar_tipo_documento_fundae(nif: str) -> int:
     else:
         return 20  # Pasaporte
 
-def validar_grupo_fundae_completo(datos_grupo):
-    """Validación completa para XML FUNDAE."""
+def validar_grupo_fundae_completo(grupo_data):
+    """Valida que un grupo tenga todos los datos necesarios para FUNDAE."""
     errores = []
     
     # Campos obligatorios básicos
-    campos_requeridos = [
-        ("codigo_grupo", "Código del grupo"),
-        ("fecha_inicio", "Fecha de inicio"), 
-        ("fecha_fin_prevista", "Fecha fin prevista"),
-        ("localidad", "Localidad"),
-        ("responsable", "Responsable"),
-        ("telefono_contacto", "Teléfono de contacto"),
-        ("n_participantes_previstos", "Participantes previstos")
-    ]
+    campos_obligatorios = {
+        "codigo_grupo": "Código del grupo",
+        "fecha_inicio": "Fecha de inicio",
+        "fecha_fin_prevista": "Fecha fin prevista",
+        "localidad": "Localidad",
+        "provincia": "Provincia",
+        "modalidad": "Modalidad",
+        "n_participantes_previstos": "Número de participantes previstos"
+    }
     
-    for campo, nombre in campos_requeridos:
-        if not datos_grupo.get(campo):
-            errores.append(f"❌ {nombre} es obligatorio")
+    for campo, descripcion in campos_obligatorios.items():
+        if not grupo_data.get(campo):
+            errores.append(f"Falta {descripcion}")
     
-    # Validar teléfono formato FUNDAE
-    tel = datos_grupo.get("telefono_contacto", "")
-    if tel:
-        tel_norm = tel.replace(' ', '').replace('-', '')
-        if not re.match(r'^\d{9,12}$', tel_norm):
-            errores.append("❌ Teléfono debe tener entre 9 y 12 dígitos")
+    # Validar acción formativa
+    if not grupo_data.get("accion_formativa_id"):
+        errores.append("Falta acción formativa asociada")
     
-    # Validar participantes
+    # Validar empresa
+    if not grupo_data.get("empresa_id"):
+        errores.append("Falta empresa propietaria")
+    
+    # Validar fechas
+    if grupo_data.get("fecha_inicio") and grupo_data.get("fecha_fin_prevista"):
+        try:
+            fecha_inicio = datetime.fromisoformat(str(grupo_data["fecha_inicio"]).replace('Z', '+00:00'))
+            fecha_fin = datetime.fromisoformat(str(grupo_data["fecha_fin_prevista"]).replace('Z', '+00:00'))
+            
+            if fecha_fin <= fecha_inicio:
+                errores.append("La fecha de fin debe ser posterior a la fecha de inicio")
+        except:
+            errores.append("Formato de fechas inválido")
+    
+    # Validar número de participantes
     try:
-        n_part = int(datos_grupo.get("n_participantes_previstos", 0))
-        if not (1 <= n_part <= 9999):
-            errores.append("❌ Participantes debe estar entre 1 y 9999")
+        n_participantes = int(grupo_data.get("n_participantes_previstos", 0))
+        if n_participantes <= 0:
+            errores.append("Debe haber al menos 1 participante previsto")
+        elif n_participantes > 30:
+            errores.append("Máximo 30 participantes por grupo según normativa FUNDAE")
     except:
-        errores.append("❌ Participantes debe ser un número válido")
+        errores.append("Número de participantes inválido")
     
     return len(errores) == 0, errores
 
@@ -1701,48 +1742,44 @@ def get_empresa_responsable_fundae(supabase, grupo_id):
     except Exception as e:
         return None, f"Error al determinar empresa responsable: {e}"
 
-def preparar_datos_xml_con_jerarquia(grupo_id, supabase):
+def preparar_datos_xml_con_jerarquia(grupo_id, supabase, session_state):
     """
     Prepara datos XML asegurando coherencia con jerarquía empresarial FUNDAE.
-    Versión mejorada de preparar_datos_xml_inicio_simple.
+    VERSIÓN SIMPLIFICADA que usa la función base unificada.
     """
     try:
-        # Validar grupo FUNDAE completo
-        datos_xml, errores = preparar_datos_xml_inicio_simple(grupo_id, supabase)
+        # Usar la función base con session_state
+        datos_xml, errores = preparar_datos_xml_inicio_simple(grupo_id, supabase, session_state)
         
         if errores:
             return None, errores
         
-        # Obtener empresa responsable ante FUNDAE
-        empresa_responsable, error_empresa = get_empresa_responsable_fundae(supabase, grupo_id)
-        
-        if error_empresa:
-            errores.append(f"Error empresa responsable: {error_empresa}")
-            return None, errores
-        
-        # Validar códigos FUNDAE
-        grupo_info = datos_xml["grupo"]
-        codigo_grupo = grupo_info.get("codigo_grupo")
-        accion_formativa_id = grupo_info.get("accion_formativa_id")
-        
-        if codigo_grupo and accion_formativa_id:
-            es_valido, error_codigo = validar_codigo_grupo_fundae(
-                supabase, codigo_grupo, accion_formativa_id, grupo_id
-            )
+        # Validaciones adicionales específicas para jerarquía
+        if session_state:
+            # Validar códigos FUNDAE si tenemos la información necesaria
+            grupo_info = datos_xml["grupo"]
+            codigo_grupo = grupo_info.get("codigo_grupo")
+            accion_formativa_id = grupo_info.get("accion_formativa_id")
             
-            if not es_valido:
-                errores.append(f"Código de grupo inválido: {error_codigo}")
-                return None, errores
-        
-        # Enriquecer datos con información de empresa responsable
-        datos_xml["empresa_responsable"] = empresa_responsable
-        datos_xml["grupo"]["empresa_responsable_cif"] = empresa_responsable.get("cif")
-        datos_xml["grupo"]["empresa_responsable_nombre"] = empresa_responsable.get("nombre")
+            if codigo_grupo and accion_formativa_id:
+                try:
+                    # Importar la función de validación desde documentos.py si existe
+                    es_valido, error_codigo = validar_codigo_grupo_fundae(
+                        supabase, session_state, codigo_grupo, accion_formativa_id, grupo_id
+                    )
+                    
+                    if not es_valido:
+                        errores.append(f"Código de grupo inválido: {error_codigo}")
+                        return None, errores
+                        
+                except Exception:
+                    # Si falla la validación, continuar sin ella
+                    pass
         
         return datos_xml, []
         
     except Exception as e:
-        return None, [f"Error al preparar datos XML: {e}"]
+        return None, [f"Error al preparar datos XML con jerarquía: {e}"]
 
 # =========================
 # ACTUALIZAR FUNCIONES EXISTENTES XML
@@ -2197,18 +2234,23 @@ def safe_int_conversion(valor, default=0):
     except (ValueError, TypeError):
         return default
       
-def detectar_tipo_documento_fundae(nif):
-    """Detecta automáticamente el tipo de documento para XML FUNDAE."""
-    if not nif:
-        return 20  # Pasaporte por defecto
+def detectar_tipo_documento_fundae(documento):
+    """Detecta automáticamente el tipo de documento FUNDAE según su formato."""
+    if not documento:
+        return 10  # NIF por defecto
     
-    nif = nif.upper().strip()
-    if re.match(r'^[0-9]{8}[A-Z]$', nif):
-        return 10  # NIF
-    elif re.match(r'^[XYZ][0-9]{7}[A-Z]$', nif):
-        return 60  # NIE
-    else:
-        return 20  # Pasaporte
+    doc = str(documento).strip().upper()
+    
+    # NIE: Empieza con X, Y o Z seguido de 7 dígitos y una letra
+    if len(doc) == 9 and doc[0] in 'XYZ' and doc[1:8].isdigit() and doc[8].isalpha():
+        return 60
+    
+    # NIF: 8 dígitos seguidos de una letra
+    if len(doc) == 9 and doc[:8].isdigit() and doc[8].isalpha():
+        return 10
+    
+    # Si no coincide con ningún patrón, asumir pasaporte
+    return 20
 
 def migrar_horarios_existentes(supabase):
     """
