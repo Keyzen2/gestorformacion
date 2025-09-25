@@ -480,76 +480,77 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error al eliminar participante: {e}")
             return False
+            
     def get_participantes_con_grupos_nn(self) -> pd.DataFrame:
-    """NUEVO: Obtiene participantes con todos sus grupos usando tabla N:N."""
-    try:
-        query = self.supabase.table("participantes").select("""
-            id, nif, nombre, apellidos, email, telefono, 
-            fecha_nacimiento, sexo, created_at, updated_at, empresa_id,
-            empresa:empresas(id, nombre, cif),
-            participantes_grupos(
-                id, grupo_id, fecha_asignacion,
-                grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
-                           accion_formativa:acciones_formativas(nombre))
-            )
-        """)
-        
-        # Aplicar filtro según rol
-        query = self._apply_empresa_filter(query)
-        
-        res = query.order("created_at", desc=True).execute()
-        
-        if not res or not res.data:
-            return pd.DataFrame(columns=[
-                'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
-                'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
-                'empresa_id', 'empresa_nombre', 'grupos_ids', 'grupos_codigos'
-            ])
-        
-        # Procesar datos N:N
-        participantes_procesados = []
-        for participante in res.data:
-            grupos_participante = participante.get("participantes_grupos", [])
+        """NUEVO: Obtiene participantes con todos sus grupos usando tabla N:N."""
+        try:
+            query = self.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, 
+                fecha_nacimiento, sexo, created_at, updated_at, empresa_id,
+                empresa:empresas(id, nombre, cif),
+                participantes_grupos(
+                    id, grupo_id, fecha_asignacion,
+                    grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
+                               accion_formativa:acciones_formativas(nombre))
+                )
+            """)
             
-            # Extraer empresa
-            empresa_data = participante.get("empresa", {})
-            empresa_nombre = empresa_data.get("nombre", "") if isinstance(empresa_data, dict) else ""
+            # Aplicar filtro según rol
+            query = self._apply_empresa_filter(query)
             
-            # Procesar grupos
-            grupos_ids = []
-            grupos_codigos = []
+            res = query.order("created_at", desc=True).execute()
             
-            for grupo_rel in grupos_participante:
-                grupo_data = grupo_rel.get("grupo", {})
-                if isinstance(grupo_data, dict):
-                    grupos_ids.append(grupo_data.get("id", ""))
-                    grupos_codigos.append(grupo_data.get("codigo_grupo", ""))
+            if not res or not res.data:
+                return pd.DataFrame(columns=[
+                    'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+                    'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
+                    'empresa_id', 'empresa_nombre', 'grupos_ids', 'grupos_codigos'
+                ])
             
-            # Crear fila del participante
-            participante_row = {
-                "id": participante.get("id"),
-                "nif": participante.get("nif", ""),
-                "nombre": participante.get("nombre", ""),
-                "apellidos": participante.get("apellidos", ""),
-                "email": participante.get("email", ""),
-                "telefono": participante.get("telefono", ""),
-                "fecha_nacimiento": participante.get("fecha_nacimiento"),
-                "sexo": participante.get("sexo", ""),
-                "created_at": participante.get("created_at"),
-                "updated_at": participante.get("updated_at"),
-                "empresa_id": participante.get("empresa_id"),
-                "empresa_nombre": empresa_nombre,
-                "grupos_ids": ", ".join(grupos_ids),
-                "grupos_codigos": ", ".join(grupos_codigos),
-                "num_grupos": len(grupos_ids)
-            }
+            # Procesar datos N:N
+            participantes_procesados = []
+            for participante in res.data:
+                grupos_participante = participante.get("participantes_grupos", [])
+                
+                # Extraer empresa
+                empresa_data = participante.get("empresa", {})
+                empresa_nombre = empresa_data.get("nombre", "") if isinstance(empresa_data, dict) else ""
+                
+                # Procesar grupos
+                grupos_ids = []
+                grupos_codigos = []
+                
+                for grupo_rel in grupos_participante:
+                    grupo_data = grupo_rel.get("grupo", {})
+                    if isinstance(grupo_data, dict):
+                        grupos_ids.append(grupo_data.get("id", ""))
+                        grupos_codigos.append(grupo_data.get("codigo_grupo", ""))
+                
+                # Crear fila del participante
+                participante_row = {
+                    "id": participante.get("id"),
+                    "nif": participante.get("nif", ""),
+                    "nombre": participante.get("nombre", ""),
+                    "apellidos": participante.get("apellidos", ""),
+                    "email": participante.get("email", ""),
+                    "telefono": participante.get("telefono", ""),
+                    "fecha_nacimiento": participante.get("fecha_nacimiento"),
+                    "sexo": participante.get("sexo", ""),
+                    "created_at": participante.get("created_at"),
+                    "updated_at": participante.get("updated_at"),
+                    "empresa_id": participante.get("empresa_id"),
+                    "empresa_nombre": empresa_nombre,
+                    "grupos_ids": ", ".join(grupos_ids),
+                    "grupos_codigos": ", ".join(grupos_codigos),
+                    "num_grupos": len(grupos_ids)
+                }
+                
+                participantes_procesados.append(participante_row)
             
-            participantes_procesados.append(participante_row)
-        
-        return pd.DataFrame(participantes_procesados)
-        
-    except Exception as e:
-        return self._handle_query_error("participantes con grupos N:N", e)
+            return pd.DataFrame(participantes_procesados)
+            
+        except Exception as e:
+            return self._handle_query_error("participantes con grupos N:N", e)
 
 def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
     """NUEVO: Obtiene todos los grupos de un participante específico."""
