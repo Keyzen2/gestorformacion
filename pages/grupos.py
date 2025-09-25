@@ -2058,15 +2058,18 @@ def main(supabase, session_state):
     try:
         df_grupos = grupos_service.get_grupos_completos()
     except Exception as e:
-        st.error(f"❌ Error al cargar datos: {e}")
+        st.error(f"Error al cargar datos: {e}")
         return
     
-    # Mostrar métricas con información jerárquica
+    # Mostrar métricas
     mostrar_metricas_grupos(df_grupos, session_state)
-    
-    # Mostrar avisos de grupos pendientes
     grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
     mostrar_avisos_grupos(grupos_pendientes)
+    
+    st.divider()
+    
+    # ✅ NUEVA IMPLEMENTACIÓN: Tabla con filtros y datos filtrados
+    df_filtrado = mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state)
     
     st.divider()
     
