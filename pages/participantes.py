@@ -874,42 +874,42 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
             st.info("No hay grupos finalizados en las empresas que gestionas.")
             return
             
-    def preparar_datos_tabla_nn(participantes_service, session_state):
-        """
-        Prepara los datos de participantes con información de grupos N:N para la tabla.
-        """
-        try:
-            # Obtener datos usando el método N:N
-            df_participantes = participantes_service.get_participantes_con_grupos_nn()
-            
-            # Si el DataFrame está vacío, crear estructura básica
-            if df_participantes.empty:
-                return pd.DataFrame(columns=[
-                    'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
-                    'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
-                ])
-            
-            # Verificar si las columnas N:N existen, si no, usar método alternativo
-            if 'num_grupos' not in df_participantes.columns or 'grupos_codigos' not in df_participantes.columns:
-                # Fallback: usar método tradicional y simular estructura N:N
-                df_tradicional = participantes_service.get_participantes_completos()
-                
-                if not df_tradicional.empty:
-                    # Crear columnas simuladas para compatibilidad
-                    df_tradicional['num_grupos'] = df_tradicional['grupo_id'].apply(lambda x: 1 if pd.notna(x) else 0)
-                    df_tradicional['grupos_codigos'] = df_tradicional.get('grupo_codigo', '')
-                    
-                    return df_tradicional
-            
-            return df_participantes
-            
-        except Exception as e:
-            st.error(f"❌ Error preparando datos de participantes: {e}")
-            # Crear DataFrame vacío con estructura correcta
+def preparar_datos_tabla_nn(participantes_service, session_state):
+    """
+    Prepara los datos de participantes con información de grupos N:N para la tabla.
+    """
+    try:
+        # Obtener datos usando el método N:N
+        df_participantes = participantes_service.get_participantes_con_grupos_nn()
+        
+        # Si el DataFrame está vacío, crear estructura básica
+        if df_participantes.empty:
             return pd.DataFrame(columns=[
                 'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                 'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
             ])
+        
+        # Verificar si las columnas N:N existen, si no, usar método alternativo
+        if 'num_grupos' not in df_participantes.columns or 'grupos_codigos' not in df_participantes.columns:
+            # Fallback: usar método tradicional y simular estructura N:N
+            df_tradicional = participantes_service.get_participantes_completos()
+            
+            if not df_tradicional.empty:
+                # Crear columnas simuladas para compatibilidad
+                df_tradicional['num_grupos'] = df_tradicional['grupo_id'].apply(lambda x: 1 if pd.notna(x) else 0)
+                df_tradicional['grupos_codigos'] = df_tradicional.get('grupo_codigo', '')
+                
+                return df_tradicional
+        
+        return df_participantes
+        
+    except Exception as e:
+        st.error(f"❌ Error preparando datos de participantes: {e}")
+        # Crear DataFrame vacío con estructura correcta
+        return pd.DataFrame(columns=[
+            'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+            'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
+        ])
             
         # =====================================
         # NUEVA SECCIÓN: ESTRUCTURA DE ARCHIVOS
