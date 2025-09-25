@@ -445,7 +445,7 @@ def main(supabase, session_state):
     with tabs[4]:
         st.subheader("📊 Configuración de Tablas")
     
-        # Posibles columnas de usuarios
+        # Posibles columnas de usuarios (las que realmente existen en tu modelo)
         columnas_posibles_usuarios = [
             "nombre_completo", "email", "telefono", "rol",
             "nif", "empresa_nombre", "created_at"
@@ -454,6 +454,10 @@ def main(supabase, session_state):
         # Cargar ajustes actuales
         columnas_seleccionadas = ajustes.get("columnas_usuarios", columnas_posibles_usuarios)
     
+        # ✅ Limpiar defaults que ya no existan en las opciones
+        columnas_seleccionadas = [c for c in columnas_seleccionadas if c in columnas_posibles_usuarios]
+    
+        # Multiselect con defaults válidos
         columnas_seleccionadas = st.multiselect(
             "Columnas visibles en la tabla de Usuarios",
             options=columnas_posibles_usuarios,
@@ -466,7 +470,7 @@ def main(supabase, session_state):
             })
             st.success("✅ Configuración guardada")
             st.rerun()
-            
+    
     st.divider()
     # =========================
     # INFORMACIÓN FINAL
