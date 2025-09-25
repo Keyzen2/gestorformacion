@@ -468,10 +468,12 @@ def mostrar_seccion_grupos_participante_nn(participantes_service, participante_i
     
     except Exception as e:
         st.error(f"❌ Error gestionando grupos del participante: {e}")
-        
+
+
 # =========================
-# FORMULARIO DE PARTICIPANTE INTEGRADO
+# FORMULARIO MODIFICADO DE PARTICIPANTE
 # =========================
+
 def mostrar_formulario_participante_nn(
     participante_data,
     participantes_service,
