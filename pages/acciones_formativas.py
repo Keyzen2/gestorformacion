@@ -82,15 +82,13 @@ def main(supabase, session_state):
                 key="modalidad_filter"
             )
         with col3:
-            if st.button("📊 Exportar CSV", use_container_width=True):
-                csv_data = export_csv(df_acciones)
-                st.download_button(
-                    label="⬇️ Descargar",
-                    data=csv_data,
-                    file_name=f"acciones_formativas_{datetime.now().strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
+            if not df_acciones.empty:
+                # Exportar a Excel lo filtrado o toda la tabla
+                export_excel(
+                    df_filtered if 'df_filtered' in locals() and not df_filtered.empty else df_acciones,
+                    filename=f"acciones_formativas_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                    label="📥 Exportar a Excel"
                 )
-
         # Aplicar filtros
         df_filtered = df_acciones.copy()
         
