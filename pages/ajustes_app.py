@@ -442,7 +442,7 @@ def main(supabase, session_state):
     # =========================
     # 📊 CONFIGURACIÓN DE TABLAS
     # =========================
-    with st.tab("📊 Tablas"):
+     with tabs[4]:
         st.subheader("📊 Configuración de Tablas")
     
         # Posibles columnas de usuarios
