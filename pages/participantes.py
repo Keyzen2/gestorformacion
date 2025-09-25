@@ -1228,7 +1228,7 @@ def mostrar_gestion_diploma_individual(supabase, participante, tiene_diploma, di
 def subir_diploma_participante(supabase, participante, grupo_info, diploma_file):
     """
     Función optimizada para subir diploma con estructura única e inequívoca.
-    Basada en el análisis del esquema de base de datos.
+    CORREGIDA: evita 'VACIO' usando nif/dni/documento o fallback al id.
     """
     try:
         with st.spinner("📤 Subiendo diploma..."):
@@ -1244,8 +1244,6 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             # =====================================
             # OBTENER DATOS COMPLETOS DEL CONTEXTO
             # =====================================
-            
-            # 1. Datos del grupo (incluyendo año y empresa)
             grupo_id = participante["grupo_id"]
             grupo_res = supabase.table("grupos").select("""
                 id, codigo_grupo, empresa_id, ano_inicio,
@@ -1262,7 +1260,7 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             grupo_completo = grupo_res.data[0]
             accion_formativa = grupo_completo.get("accion_formativa", {})
             
-            # 2. Determinar empresa responsable (gestora) usando jerarquía
+            # Empresa responsable
             empresa_responsable = determinar_empresa_responsable_diploma(
                 supabase, 
                 grupo_completo["empresa_id"], 
@@ -1270,45 +1268,51 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
                 accion_formativa.get("empresa_id")
             )
             
-            # 3. Generar timestamp único
+            # Timestamp único
             timestamp = int(datetime.now().timestamp())
+            
+            # =====================================
+            # IDENTIFICADOR DE PARTICIPANTE
+            # =====================================
+            raw_doc = (
+                participante.get("nif") or
+                participante.get("dni") or
+                participante.get("documento") or
+                ""
+            )
+            try:
+                raw_doc = raw_doc.strip()
+            except Exception:
+                raw_doc = ""
+            
+            if raw_doc:
+                participante_slug = limpiar_para_archivo(raw_doc)
+            else:
+                participante_slug = f"id{str(participante['id'])[:8]}"
             
             # =====================================
             # CONSTRUIR RUTA ÚNICA E INEQUÍVOCA
             # =====================================
-            
-            # Estructura propuesta: 
-            # gestora_{id}/año_{año}/accion_{codigo}_{id}/grupo_{codigo}_{id}/participante_{nif}_{timestamp}.pdf
-            
-            # Datos básicos
             gestora_id = empresa_responsable["id"]
             año = grupo_completo.get("ano_inicio") or accion_formativa.get("ano_fundae", datetime.now().year)
             
-            # Acción formativa (código + ID para unicidad)
             accion_codigo = limpiar_para_archivo(accion_formativa.get("codigo_accion", "SIN_CODIGO"))
             accion_id = grupo_completo["accion_formativa_id"]
             
-            # Grupo (código + ID para unicidad)
             grupo_codigo = limpiar_para_archivo(grupo_completo.get("codigo_grupo", "SIN_CODIGO"))
-            grupo_id_corto = str(grupo_id)[:8]  # Primeros 8 caracteres del UUID
+            grupo_id_corto = str(grupo_id)[:8]
             
-            # Participante
-            participante_nif = limpiar_para_archivo(participante.get('nif', participante['id']))
-            
-            # RUTA FINAL ÚNICA
             filename = (
                 f"gestora_{gestora_id}/"
                 f"año_{año}/"
                 f"accion_{accion_codigo}_{accion_id}/"
                 f"grupo_{grupo_codigo}_{grupo_id_corto}/"
-                f"diploma_{participante_nif}_{timestamp}.pdf"
+                f"diploma_{participante_slug}_{timestamp}.pdf"
             )
             
             # =====================================
-            # SUBIR ARCHIVO CON METADATA COMPLETA
+            # SUBIR ARCHIVO A SUPABASE
             # =====================================
-            
-            # Subir a bucket de Supabase con metadata
             upload_res = supabase.storage.from_("diplomas").upload(
                 filename, 
                 file_bytes, 
@@ -1327,11 +1331,9 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
                 }
             )
             
-            # Verificar subida exitosa
             if hasattr(upload_res, 'error') and upload_res.error:
                 raise Exception(f"Error de subida: {upload_res.error}")
             
-            # Obtener URL pública
             public_url = supabase.storage.from_("diplomas").get_public_url(filename)
             if not public_url:
                 raise Exception("No se pudo generar URL pública")
@@ -1339,14 +1341,12 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             # =====================================
             # GUARDAR REFERENCIA EN BASE DE DATOS
             # =====================================
-            
             diploma_data = {
                 "participante_id": participante["id"],
                 "grupo_id": grupo_id,
                 "url": public_url,
                 "archivo_nombre": diploma_file.name,
                 "fecha_subida": datetime.now().isoformat(),
-                # Campos adicionales para trazabilidad
                 "ruta_archivo": filename,
                 "empresa_responsable_id": gestora_id,
                 "accion_formativa_id": grupo_completo["accion_formativa_id"],
@@ -1356,7 +1356,6 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             diploma_insert = supabase.table("diplomas").insert(diploma_data).execute()
             
             if hasattr(diploma_insert, 'error') and diploma_insert.error:
-                # Si falla la BD, eliminar archivo subido
                 try:
                     supabase.storage.from_("diplomas").remove([filename])
                 except:
@@ -1366,10 +1365,7 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             # =====================================
             # CONFIRMACIÓN Y LOGGING
             # =====================================
-            
             st.success("✅ Diploma subido correctamente!")
-            
-            # Información detallada para el usuario
             with st.expander("📋 Detalles de la subida", expanded=False):
                 st.write(f"**📁 Ruta:** `{filename}`")
                 st.write(f"**🏢 Empresa responsable:** {empresa_responsable['nombre']}")
@@ -1382,9 +1378,9 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
                 
     except Exception as e:
         st.error(f"❌ Error general: {e}")
-        # Log detallado para debugging
         st.error(f"Contexto: Participante {participante.get('nombre', 'desconocido')}, "
-                f"Grupo {participante.get('grupo_id', 'sin grupo')}")
+                 f"Grupo {participante.get('grupo_id', 'sin grupo')}")
+
 
 def eliminar_diploma(supabase, diploma, participante_id):
     """Elimina diploma de participante."""
