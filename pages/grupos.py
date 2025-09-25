@@ -58,49 +58,6 @@ def validar_uuid_seguro(uuid_str):
     except (ValueError, TypeError):
         return None
         
-def limpiar_encoding_archivo():
-    """
-    Lista de correcciones de encoding para aplicar al archivo grupos.py
-    
-    ANTES -> DESPUÉS:
-    """
-    correcciones = {
-        # Caracteres especiales españoles
-        "CONFIGURACIÃ"N": "CONFIGURACIÓN",
-        "FUNCIÃ"N": "FUNCIÓN", 
-        "SECCIÃ"N": "SECCIÓN",
-        "INFORMACIÃ"N": "INFORMACIÓN",
-        "VALIDACIÃ"N": "VALIDACIÓN",
-        "CREACIÃ"N": "CREACIÓN",
-        "FINALIZACIÃ"N": "FINALIZACIÓN",
-        "GESTIÃ"N": "GESTIÓN",
-        "IMPORTACIÃ"N": "IMPORTACIÓN",
-        "BONIFICACIÃ"N": "BONIFICACIÓN",
-        "ORGANIZACIÃ"N": "ORGANIZACIÓN",
-        
-        # Vocales con acentos
-        "Ã¡": "á",
-        "Ã©": "é", 
-        "Ã­": "í",
-        "Ã³": "ó",
-        "Ãº": "ú",
-        "Ã±": "ñ",
-        
-        # Palabras específicas detectadas
-        "MaÃ±ana": "Mañana",
-        "DÃ­as": "Días",
-        "MiÃ©rcoles": "Miércoles",
-        "SÃ¡bado": "Sábado",
-        "TelÃ©fono": "Teléfono",
-        "CÃ³digo": "Código",
-        "mÃ¡ximo": "máximo",
-        "nÃºmero": "número",
-        "mÃ©tricas": "métricas",
-        "jerÃ¡rquico": "jerárquico",
-        "jerÃ¡rquica": "jerárquica"
-    }
-    
-    return correcciones
 # =========================
 # FUNCIONES DE ESTADO AUTOMÁTICO
 # =========================
