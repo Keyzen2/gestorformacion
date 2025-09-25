@@ -53,7 +53,65 @@ def formatear_fecha(fecha) -> str:
     except:
         return "Fecha inválida"
 
-def obtener_color_estado(estado: str) -> str:
+def mostrar_diploma_alumno(curso_row):
+    """Función para mostrar y gestionar diplomas del alumno."""
+    try:
+        grupo_id = curso_row.get("grupo_id")
+        if not grupo_id:
+            st.error("No se puede acceder al diploma: información de grupo no disponible")
+            return
+        
+        # Necesitamos acceder a supabase, pero no está disponible aquí
+        # Esta función necesita modificarse para recibir supabase como parámetro
+        st.info("🔗 Para acceder al diploma, contacta con tu centro de formación")
+        st.markdown("""
+        **Información del curso:**
+        - Código: {}
+        - Curso: {}
+        - Estado: Finalizado ✅
+        
+        Tu diploma está disponible. Si no puedes acceder, contacta con:
+        - Tu departamento de formación
+        - El centro que impartió el curso
+        - Soporte técnico de la plataforma
+        """.format(
+            curso_row.get("codigo_grupo", "N/A"),
+            curso_row.get("accion_nombre", "N/A")
+        ))
+        
+    except Exception as e:
+        st.error(f"Error accediendo al diploma: {e}")
+
+def obtener_diploma_real(_supabase, grupo_id, email):
+    """Obtiene la URL real del diploma desde la base de datos."""
+    try:
+        # Primero obtener el participante_id del email
+        participante_res = _supabase.table("participantes").select("id").eq("email", email).execute()
+        if not participante_res.data:
+            return None
+            
+        participante_id = participante_res.data[0]["id"]
+        
+        # Buscar diploma
+        diploma_res = _supabase.table("diplomas").select("url, archivo_nombre, fecha_subida").eq(
+            "grupo_id", grupo_id
+        ).eq("participante_id", participante_id).execute()
+        
+        if diploma_res.data:
+            diploma_data = diploma_res.data[0]
+            # Limpiar URL (remover ? al final si existe)
+            url = diploma_data.get("url", "").rstrip("?")
+            return {
+                "url": url,
+                "archivo_nombre": diploma_data.get("archivo_nombre"),
+                "fecha_subida": diploma_data.get("fecha_subida")
+            }
+        
+        return None
+        
+    except Exception as e:
+        st.error(f"Error buscando diploma: {e}")
+        return None
     """Devuelve el emoji apropiado para cada estado."""
     colores = {
         "Pendiente de inicio": "🟡",
@@ -201,8 +259,8 @@ def mostrar_filtros_cursos(df_cursos: pd.DataFrame):
     
     return {"texto": filtro_texto, "año": filtro_año, "estado": filtro_estado}, df_filtrado
 
-def mostrar_tarjeta_curso(curso_row):
-    """Muestra una tarjeta individual para cada curso."""
+def mostrar_tarjeta_curso_funcional(curso_row, _supabase, email):
+    """Muestra una tarjeta individual para cada curso con descarga funcional de diploma."""
     
     # Obtener datos de la fila
     nombre_curso = curso_row.get("accion_nombre", "Sin nombre")
@@ -214,6 +272,7 @@ def mostrar_tarjeta_curso(curso_row):
     fecha_inicio = curso_row.get("grupo_fecha_inicio")
     fecha_fin = curso_row.get("grupo_fecha_fin_prevista")
     tiene_diploma = curso_row.get("tiene_diploma", False)
+    grupo_id = curso_row.get("grupo_id")
     
     # Color del estado
     color_estado = obtener_color_estado(estado)
@@ -245,28 +304,31 @@ def mostrar_tarjeta_curso(curso_row):
             st.markdown("**🎯 Acciones:**")
             
             # Botón de diploma si está disponible
-            if tiene_diploma:
-                # Construir URL del diploma si no está en los datos
-                # Asumo que necesitarás obtener la URL real del diploma
+            if tiene_diploma and grupo_id:
                 if st.button(
-                    "🏆 Descargar Diploma",
-                    key=f"diploma_{curso_row.get('grupo_id', codigo_grupo)}",
+                    "🏆 Ver Diploma",
+                    key=f"diploma_{grupo_id}",
                     type="primary",
                     use_container_width=True
                 ):
-                    # Aquí necesitarías obtener la URL real del diploma
-                    # desde la tabla diplomas usando grupo_id y participante
-                    try:
-                        # Buscar diploma en la base de datos
-                        grupo_id = curso_row.get("grupo_id")
-                        if grupo_id:
-                            # Esta parte necesitaría acceso a supabase
-                            # Placeholder para mostrar funcionalidad
-                            st.success("🎉 Descargando diploma...")
-                            st.balloons()
-                            st.info("💡 En implementación real, aquí se abriría el diploma")
-                    except Exception as e:
-                        st.error(f"Error accediendo al diploma: {e}")
+                    diploma_info = obtener_diploma_real(_supabase, grupo_id, email)
+                    if diploma_info and diploma_info.get("url"):
+                        st.success("✅ Diploma encontrado!")
+                        st.markdown(f"**📄 Archivo:** {diploma_info.get('archivo_nombre', 'diploma.pdf')}")
+                        if diploma_info.get("fecha_subida"):
+                            fecha_subida_fmt = formatear_fecha(diploma_info["fecha_subida"])
+                            st.caption(f"Subido el: {fecha_subida_fmt}")
+                        
+                        # Botón para abrir el diploma
+                        st.link_button(
+                            "🔗 Abrir diploma", 
+                            diploma_info["url"],
+                            use_container_width=True
+                        )
+                        st.balloons()
+                    else:
+                        st.warning("⚠️ Diploma no encontrado o en proceso")
+                        st.info("Contacta con tu centro de formación si el problema persiste")
             else:
                 if estado in ["Curso finalizado", "Finalizado"]:
                     st.info("🕐 Diploma pendiente")
@@ -411,7 +473,7 @@ def main(supabase, session_state):
     with tab1:
         # Vista en tarjetas detalladas
         for _, curso in df_filtrado.iterrows():
-            mostrar_tarjeta_curso(curso.to_dict())
+            mostrar_tarjeta_curso_funcional(curso.to_dict(), supabase, email)
     
     with tab2:
         # Vista en tabla compacta
