@@ -57,7 +57,50 @@ def validar_uuid_seguro(uuid_str):
         return str(uuid_str)
     except (ValueError, TypeError):
         return None
-
+        
+def limpiar_encoding_archivo():
+    """
+    Lista de correcciones de encoding para aplicar al archivo grupos.py
+    
+    ANTES -> DESPUÉS:
+    """
+    correcciones = {
+        # Caracteres especiales españoles
+        "CONFIGURACIÃ"N": "CONFIGURACIÓN",
+        "FUNCIÃ"N": "FUNCIÓN", 
+        "SECCIÃ"N": "SECCIÓN",
+        "INFORMACIÃ"N": "INFORMACIÓN",
+        "VALIDACIÃ"N": "VALIDACIÓN",
+        "CREACIÃ"N": "CREACIÓN",
+        "FINALIZACIÃ"N": "FINALIZACIÓN",
+        "GESTIÃ"N": "GESTIÓN",
+        "IMPORTACIÃ"N": "IMPORTACIÓN",
+        "BONIFICACIÃ"N": "BONIFICACIÓN",
+        "ORGANIZACIÃ"N": "ORGANIZACIÓN",
+        
+        # Vocales con acentos
+        "Ã¡": "á",
+        "Ã©": "é", 
+        "Ã­": "í",
+        "Ã³": "ó",
+        "Ãº": "ú",
+        "Ã±": "ñ",
+        
+        # Palabras específicas detectadas
+        "MaÃ±ana": "Mañana",
+        "DÃ­as": "Días",
+        "MiÃ©rcoles": "Miércoles",
+        "SÃ¡bado": "Sábado",
+        "TelÃ©fono": "Teléfono",
+        "CÃ³digo": "Código",
+        "mÃ¡ximo": "máximo",
+        "nÃºmero": "número",
+        "mÃ©tricas": "métricas",
+        "jerÃ¡rquico": "jerárquico",
+        "jerÃ¡rquica": "jerárquica"
+    }
+    
+    return correcciones
 # =========================
 # FUNCIONES DE ESTADO AUTOMÁTICO
 # =========================
@@ -1209,32 +1252,36 @@ def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
     except Exception as e:
         st.error(f"Error al cargar sección de empresas: {e}")
 
-def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
-    """CORREGIDO: Usando tabla participantes_grupos (N:N)."""
+def mostrar_seccion_participantes_jerarquia_corregida(grupos_service, grupo_id):
+    """Sección de participantes corregida y simplificada."""
     st.markdown("**Participantes del Grupo con Jerarquía**")
     
     grupo_id_limpio = validar_uuid_seguro(grupo_id)
     if not grupo_id_limpio:
         st.error("ID de grupo no válido")
         return
-    
+
     try:
-        # CORRECCIÓN: Usar tabla de relación participantes_grupos
+        # Obtener participantes del grupo usando tabla de relación
         participantes_res = grupos_service.supabase.table("participantes_grupos").select("""
             id, participante_id, fecha_asignacion,
-            participante:participantes(id, nif, nombre, apellidos, email, telefono)
+            participante:participantes(id, nif, nombre, apellidos, email, telefono, empresa_id,
+                empresa:empresas(nombre))
         """).eq("grupo_id", grupo_id_limpio).execute()
         
         df_participantes = pd.DataFrame(participantes_res.data or [])
         
+        # === MOSTRAR PARTICIPANTES ACTUALES ===
         if not df_participantes.empty:
-            st.markdown("##### Participantes Asignados")
+            st.markdown("##### 👥 Participantes Asignados")
             
-            # Procesar datos de participantes
             participantes_data = []
             for _, row in df_participantes.iterrows():
                 participante = row.get("participante", {})
                 if isinstance(participante, dict):
+                    empresa_info = participante.get("empresa", {})
+                    empresa_nombre = empresa_info.get("nombre", "Sin empresa") if isinstance(empresa_info, dict) else "Sin empresa"
+                    
                     participantes_data.append({
                         "relacion_id": row.get("id"),
                         "nif": participante.get("nif", ""),
@@ -1242,13 +1289,16 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         "apellidos": participante.get("apellidos", ""),
                         "email": participante.get("email", ""),
                         "telefono": participante.get("telefono", ""),
+                        "empresa": empresa_nombre,
                         "fecha_asignacion": row.get("fecha_asignacion", "")
                     })
             
             if participantes_data:
+                # Mostrar tabla moderna
                 df_display = pd.DataFrame(participantes_data)
+                
                 st.dataframe(
-                    df_display[["nif", "nombre", "apellidos", "email", "telefono"]],
+                    df_display[["nif", "nombre", "apellidos", "email", "empresa"]],
                     use_container_width=True,
                     hide_index=True,
                     column_config={
@@ -1256,94 +1306,138 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
                         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
                         "apellidos": st.column_config.TextColumn("👤 Apellidos", width="medium"),
                         "email": st.column_config.TextColumn("📧 Email", width="large"),
-                        "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium")
+                        "empresa": st.column_config.TextColumn("🏢 Empresa", width="medium")
                     }
                 )
                 
-                # Desasignar participantes
-                with st.expander("❌ Desasignar Participantes"):
+                # Opción para desasignar
+                with st.expander("❌ Desasignar Participantes", expanded=False):
                     for _, row in df_display.iterrows():
-                        col1, col2 = st.columns([3, 1])
+                        col1, col2 = st.columns([4, 1])
                         with col1:
-                            st.write(f"{row['nif']} - {row['nombre']} {row['apellidos']}")
+                            st.write(f"**{row['nif']}** - {row['nombre']} {row['apellidos']} ({row['empresa']})")
                         with col2:
-                            if st.button("Quitar", key=f"quitar_part_{row['relacion_id']}", type="secondary"):
+                            if st.button("❌ Quitar", key=f"quitar_part_{row['relacion_id']}", type="secondary"):
                                 try:
-                                    # CORRECCIÓN: Eliminar de tabla de relación
                                     grupos_service.supabase.table("participantes_grupos").delete().eq("id", row['relacion_id']).execute()
-                                    st.success("Participante desasignado")
+                                    st.success("✅ Participante desasignado")
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"Error: {e}")
         else:
             st.info("📋 No hay participantes asignados")
         
-        # Asignar nuevos participantes
-        st.markdown("##### Asignar Participantes")
+        # === ASIGNAR NUEVOS PARTICIPANTES ===
+        st.markdown("##### ➕ Asignar Nuevos Participantes")
         
-        try:
-            # CORRECCIÓN: Buscar participantes disponibles (sin grupo asignado en la relación)
-            participantes_con_grupo = grupos_service.supabase.table("participantes_grupos").select("participante_id").execute()
-            participantes_asignados = [p["participante_id"] for p in (participantes_con_grupo.data or [])]
+        # Pestañas para diferentes métodos de asignación
+        tab1, tab2 = st.tabs(["👤 Selección Individual", "📊 Importación Masiva"])
+        
+        with tab1:
+            # Obtener participantes disponibles
+            participantes_disponibles = grupos_service.get_participantes_disponibles_jerarquia(grupo_id)
             
-            # Obtener empresas participantes del grupo
-            empresas_grupo = grupos_service.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id_limpio).execute()
-            empresas_participantes = [e["empresa_id"] for e in (empresas_grupo.data or [])]
-            
-            if empresas_participantes:
-                # Participantes de empresas participantes que no están en ningún grupo
-                query = grupos_service.supabase.table("participantes").select("""
-                    id, nif, nombre, apellidos, email, empresa_id,
-                    empresa:empresas(nombre)
-                """).in_("empresa_id", empresas_participantes)
+            if not participantes_disponibles.empty:
+                opciones_participantes = {}
+                for _, row in participantes_disponibles.iterrows():
+                    nombre_completo = f"{row.get('nif', 'Sin NIF')} - {row.get('nombre', '')} {row.get('apellidos', '')} ({row.get('empresa_nombre', 'Sin empresa')})"
+                    opciones_participantes[nombre_completo] = row["id"]
                 
-                if participantes_asignados:
-                    query = query.not_.in_("id", participantes_asignados)
+                participantes_seleccionados = st.multiselect(
+                    "Seleccionar participantes:",
+                    opciones_participantes.keys(),
+                    key=f"participantes_add_{grupo_id_limpio}",
+                    help="Solo se muestran participantes disponibles en tu ámbito jerárquico"
+                )
                 
-                disponibles_res = query.execute()
-                df_disponibles = pd.DataFrame(disponibles_res.data or [])
-                
-                if not df_disponibles.empty:
-                    opciones_participantes = {}
-                    for _, row in df_disponibles.iterrows():
-                        empresa_nombre = row.get("empresa", {}).get("nombre", "Sin empresa") if isinstance(row.get("empresa"), dict) else "Sin empresa"
-                        nombre_completo = f"{row.get('nif', 'Sin NIF')} - {row.get('nombre', '')} {row.get('apellidos', '')} ({empresa_nombre})"
-                        opciones_participantes[nombre_completo] = row["id"]
+                if participantes_seleccionados and st.button("➕ Asignar Seleccionados", type="primary"):
+                    exitos = 0
+                    for participante_nombre in participantes_seleccionados:
+                        participante_id = opciones_participantes[participante_nombre]
+                        try:
+                            grupos_service.supabase.table("participantes_grupos").insert({
+                                "grupo_id": grupo_id_limpio,
+                                "participante_id": participante_id,
+                                "fecha_asignacion": datetime.utcnow().isoformat()
+                            }).execute()
+                            exitos += 1
+                        except Exception as e:
+                            st.error(f"Error al asignar {participante_nombre}: {e}")
                     
-                    participantes_seleccionados = st.multiselect(
-                        "Seleccionar participantes:",
-                        opciones_participantes.keys(),
-                        key=f"participantes_add_{grupo_id_limpio}"
-                    )
-                    
-                    if participantes_seleccionados and st.button("Asignar Seleccionados", type="primary"):
-                        exitos = 0
-                        for participante_nombre in participantes_seleccionados:
-                            participante_id = opciones_participantes[participante_nombre]
-                            try:
-                                # CORRECCIÓN: Insertar en tabla de relación N:N
-                                grupos_service.supabase.table("participantes_grupos").insert({
-                                    "grupo_id": grupo_id_limpio,
-                                    "participante_id": participante_id,
-                                    "fecha_asignacion": datetime.utcnow().isoformat()
-                                }).execute()
-                                exitos += 1
-                            except Exception as e:
-                                st.error(f"Error al asignar {participante_nombre}: {e}")
-                        
-                        if exitos > 0:
-                            st.success(f"Se asignaron {exitos} participantes")
-                            st.rerun()
-                else:
-                    st.info("No hay participantes disponibles")
+                    if exitos > 0:
+                        st.success(f"✅ Se asignaron {exitos} participantes")
+                        st.rerun()
             else:
-                st.warning("Primero asigna empresas participantes al grupo")
-                
-        except Exception as e:
-            st.error(f"Error cargando participantes disponibles: {e}")
+                st.info("📋 No hay participantes disponibles para asignar")
+        
+        with tab2:
+            # Importación masiva Excel
+            st.markdown("**📊 Importación masiva desde Excel**")
+            st.info("💡 Sube un archivo Excel con columnas: 'nif' o 'dni' para buscar automáticamente participantes existentes")
             
+            archivo_excel = st.file_uploader(
+                "Subir archivo Excel",
+                type=["xlsx"],
+                key=f"excel_participantes_{grupo_id}"
+            )
+            
+            if archivo_excel:
+                try:
+                    df_import = pd.read_excel(archivo_excel)
+                    
+                    # Detectar columna de NIF
+                    col_nif = None
+                    for col in ["dni", "nif", "DNI", "NIF"]:
+                        if col in df_import.columns:
+                            col_nif = col
+                            break
+                    
+                    if not col_nif:
+                        st.error("❌ El archivo debe contener una columna 'dni' o 'nif'")
+                    else:
+                        st.markdown("**Vista previa del archivo:**")
+                        st.dataframe(df_import.head(), use_container_width=True)
+                        
+                        if st.button("🔄 Procesar Archivo", type="primary"):
+                            # Procesar NIFs y asignar participantes
+                            nifs = [str(d).strip() for d in df_import[col_nif] if pd.notna(d)]
+                            nifs_validos = [d for d in nifs if validar_dni_cif(d)]
+                            
+                            disponibles_dict = {p["nif"]: p["id"] for _, p in participantes_disponibles.iterrows()}
+                            
+                            asignados = 0
+                            errores = []
+                            
+                            for nif in nifs_validos:
+                                participante_id = disponibles_dict.get(nif)
+                                if participante_id:
+                                    try:
+                                        grupos_service.supabase.table("participantes_grupos").insert({
+                                            "grupo_id": grupo_id_limpio,
+                                            "participante_id": participante_id,
+                                            "fecha_asignacion": datetime.utcnow().isoformat()
+                                        }).execute()
+                                        asignados += 1
+                                    except Exception as e:
+                                        errores.append(f"NIF {nif}: {str(e)}")
+                                else:
+                                    errores.append(f"NIF {nif} no encontrado o ya asignado")
+                            
+                            if asignados > 0:
+                                st.success(f"✅ Se asignaron {asignados} participantes")
+                            if errores:
+                                st.warning("⚠️ Errores encontrados:")
+                                for error in errores[:5]:  # Mostrar solo primeros 5
+                                    st.warning(f"• {error}")
+                            
+                            if asignados > 0:
+                                st.rerun()
+                
+                except Exception as e:
+                    st.error(f"❌ Error al leer archivo Excel: {e}")
+                    
     except Exception as e:
-        st.error(f"Error en sección de participantes: {e}")
+        st.error(f"Error al cargar sección de participantes: {e}")
         
         with tab2:
             st.markdown("**📊 Importación masiva desde Excel**")
@@ -1722,7 +1816,224 @@ def mostrar_seccion_costes(grupos_service, grupo_id):
     except Exception as e:
         st.error(f"Error al cargar bonificaciones: {e}")
 
+# =========================
+# 2. IMPLEMENTAR FILTROS AVANZADOS STREAMLIT 1.49
+# =========================
 
+def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
+    """
+    Tabla con filtros avanzados Y exportación de datos filtrados.
+    Retorna el DataFrame filtrado para uso posterior.
+    """
+    
+    st.markdown("### 📊 Listado de Grupos")
+    
+    if df_grupos.empty:
+        st.info("📋 No hay grupos registrados en tu ámbito.")
+        return pd.DataFrame()
+    
+    # Preparar datos
+    df_display = df_grupos.copy()
+    df_display["Estado"] = df_display.apply(
+        lambda row: determinar_estado_grupo(row.to_dict()), axis=1
+    )
+    
+    # === SECCIÓN DE FILTROS ===
+    with st.expander("🔍 Filtros Avanzados", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            modalidades = ["Todas"] + sorted(df_display["modalidad"].dropna().unique().tolist())
+            modalidad_filtro = st.selectbox("🎯 Modalidad", modalidades)
+        
+        with col2:
+            estados = ["Todos"] + sorted(df_display["Estado"].dropna().unique().tolist())
+            estado_filtro = st.selectbox("📊 Estado", estados)
+        
+        with col3:
+            localidades = ["Todas"] + sorted(df_display["localidad"].dropna().unique().tolist())
+            localidad_filtro = st.selectbox("🏙️ Localidad", localidades)
+        
+        with col4:
+            if session_state.role == "admin":
+                empresas = ["Todas"] + sorted(df_display["empresa_nombre"].dropna().unique().tolist())
+                empresa_filtro = st.selectbox("🏢 Empresa", empresas)
+            else:
+                empresa_filtro = "Todas"
+        
+        # Filtro de búsqueda
+        busqueda = st.text_input(
+            "🔍 Buscar en código, acción formativa...",
+            placeholder="Escribe para filtrar...",
+            key="busqueda_grupos"
+        )
+        
+        # Filtro de fechas
+        col_fecha1, col_fecha2 = st.columns(2)
+        with col_fecha1:
+            fecha_desde = st.date_input("📅 Fecha inicio desde", value=None)
+        with col_fecha2:
+            fecha_hasta = st.date_input("📅 Fecha inicio hasta", value=None)
+    
+    # === APLICAR FILTROS ===
+    df_filtrado = df_display.copy()
+    
+    if modalidad_filtro != "Todas":
+        df_filtrado = df_filtrado[df_filtrado["modalidad"] == modalidad_filtro]
+    
+    if estado_filtro != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filtro]
+        
+    if localidad_filtro != "Todas":
+        df_filtrado = df_filtrado[df_filtrado["localidad"] == localidad_filtro]
+    
+    if session_state.role == "admin" and empresa_filtro != "Todas":
+        df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filtro]
+    
+    if fecha_desde:
+        df_filtrado = df_filtrado[
+            pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date >= fecha_desde
+        ]
+    
+    if fecha_hasta:
+        df_filtrado = df_filtrado[
+            pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date <= fecha_hasta
+        ]
+    
+    if busqueda:
+        mascara_busqueda = (
+            df_filtrado["codigo_grupo"].str.contains(busqueda, case=False, na=False) |
+            df_filtrado["accion_nombre"].str.contains(busqueda, case=False, na=False)
+        )
+        if "empresa_nombre" in df_filtrado.columns:
+            mascara_busqueda |= df_filtrado["empresa_nombre"].str.contains(busqueda, case=False, na=False)
+        
+        df_filtrado = df_filtrado[mascara_busqueda]
+    
+    # === MOSTRAR RESULTADOS DE FILTROS ===
+    total_original = len(df_display)
+    total_filtrado = len(df_filtrado)
+    
+    if total_filtrado != total_original:
+        st.info(f"📊 Mostrando {total_filtrado} de {total_original} grupos")
+    
+    # === BOTONES DE ACCIÓN (ANTES DE LA TABLA) ===
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    
+    with col1:
+        if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
+            st.session_state.grupo_seleccionado = {}
+            st.rerun()
+    
+    with col2:
+        # ✅ EXPORTAR DATOS FILTRADOS
+        if not df_filtrado.empty:
+            fecha_str = datetime.now().strftime("%Y%m%d")
+            filename = f"grupos_filtrados_{fecha_str}.xlsx"
+            
+            # Preparar datos para exportación (sin columnas internas)
+            columnas_export = [
+                "codigo_grupo", "accion_nombre", "modalidad",
+                "fecha_inicio", "fecha_fin_prevista", "localidad", "provincia",
+                "n_participantes_previstos", "Estado", "responsable", 
+                "telefono_contacto", "lugar_imparticion"
+            ]
+            
+            if session_state.role == "admin":
+                columnas_export.insert(-1, "empresa_nombre")
+            
+            # Solo columnas que existen
+            columnas_disponibles = [col for col in columnas_export if col in df_filtrado.columns]
+            df_export = df_filtrado[columnas_disponibles].copy()
+            
+            export_excel(
+                df_export, 
+                filename=filename, 
+                label="📥 Exportar Filtrados"
+            )
+        else:
+            st.warning("⚠️ No hay datos para exportar")
+    
+    with col3:
+        # Exportar TODO (original)
+        if not df_grupos.empty:
+            fecha_str = datetime.now().strftime("%Y%m%d")
+            filename_completo = f"grupos_completo_{fecha_str}.xlsx"
+            
+            export_excel(
+                df_grupos, 
+                filename=filename_completo, 
+                label="📥 Exportar Todo"
+            )
+    
+    with col4:
+        if st.button("🔄 Actualizar", use_container_width=True):
+            grupos_service.limpiar_cache_grupos()
+            st.rerun()
+    
+    # === MOSTRAR TABLA ===
+    if df_filtrado.empty:
+        st.warning("⚠️ No se encontraron grupos con los filtros aplicados")
+        return df_filtrado
+    
+    # Columnas para mostrar
+    columnas_mostrar = [
+        "codigo_grupo", "accion_nombre", "modalidad", 
+        "fecha_inicio", "fecha_fin_prevista", "localidad", 
+        "n_participantes_previstos", "Estado"
+    ]
+    
+    if session_state.role == "admin":
+        columnas_mostrar.insert(-1, "empresa_nombre")
+    
+    columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
+    
+    # Configuración de columnas
+    column_config = {
+        "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="medium"),
+        "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
+        "modalidad": st.column_config.SelectboxColumn(
+            "🎯 Modalidad", 
+            width="small",
+            options=["PRESENCIAL", "TELEFORMACION", "MIXTA"]
+        ),
+        "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
+        "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
+        "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+        "n_participantes_previstos": st.column_config.NumberColumn(
+            "👥 Participantes", 
+            width="small", 
+            format="%d"
+        ),
+        "Estado": st.column_config.SelectboxColumn(
+            "📊 Estado", 
+            width="small",
+            options=["ABIERTO", "FINALIZAR", "FINALIZADO"]
+        )
+    }
+    
+    if session_state.role == "admin":
+        column_config["empresa_nombre"] = st.column_config.TextColumn("🏢 Empresa", width="medium")
+    
+    # Tabla con selección
+    event = st.dataframe(
+        df_filtrado[columnas_disponibles],
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        column_config=column_config,
+        height=400
+    )
+    
+    # Procesar selección
+    if event.selection.rows:
+        selected_idx = event.selection.rows[0]
+        # IMPORTANTE: usar índice del DataFrame original, no filtrado
+        grupo_seleccionado = df_grupos[df_grupos.index.isin(df_filtrado.iloc[event.selection.rows].index)].iloc[0].to_dict()
+        st.session_state.grupo_seleccionado = grupo_seleccionado
+    
+    return df_filtrado
 # =========================
 # FUNCIÓN PRINCIPAL
 # =========================
