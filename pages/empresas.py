@@ -1088,12 +1088,12 @@ def procesar_guardado_empresa(
             "docu_avanzada_activo": docu_avanzada_activo,
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
+            "es_centro_gestor": es_centro_gestor,
             "updated_at": datetime.utcnow().isoformat(),
             "provincia_id": provincia_id,
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
-            "ciudad": localidad_sel if localidad_sel else None,
-            "es_centro_gestor": es_centro_gestor,
+            "ciudad": localidad_sel if localidad_sel else None
         }
         # Solo añadir es_centro_gestor si está disponible (admin y no solo_datos_basicos)
         if 'es_centro_gestor' in locals():
