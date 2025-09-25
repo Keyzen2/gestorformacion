@@ -529,84 +529,7 @@ def main(supabase, session_state):
         st.divider()
 
         # =========================
-        # CREAR NUEVO TUTOR
-        # =========================
-        if puede_modificar:
-            with st.expander("➕ Crear Nuevo Tutor", expanded=False):
-                with st.form("crear_tutor_form", clear_on_submit=True):
-                    st.markdown("**Datos del nuevo tutor**")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        nombre = st.text_input("Nombre *", key="nuevo_nombre")
-                        email = st.text_input("Email", key="nuevo_email")
-                        tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], key="nuevo_tipo")
-                        
-                        # ORDEN CORREGIDO: Tipo documento ANTES que NIF
-                        tipo_documento = st.selectbox(
-                            "Tipo documento", 
-                            [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")],
-                            format_func=lambda x: x[1],
-                            key="nuevo_tipo_doc"
-                        )
-                        nif = st.text_input("NIF/DNI/NIE/CIF", key="nuevo_nif")
-                        direccion = st.text_input("Dirección", key="nuevo_direccion")
-                    
-                    with col2:
-                        apellidos = st.text_input("Apellidos *", key="nuevo_apellidos")
-                        telefono = st.text_input("Teléfono", key="nuevo_telefono")
-                        especialidad = st.selectbox("Especialidad", especialidades_opciones, key="nuevo_especialidad")
-                        
-                        # CAMPOS CONECTADOS: Provincia → Localidad
-                        provincia = st.selectbox("Provincia", provincias_opciones, key="nueva_provincia_select")
-                        
-                        if provincia:
-                            localidades_dict = get_localidades_por_provincia_optimizado(provincia)
-                            if localidades_dict:
-                                localidades_opciones = [""] + list(localidades_dict.keys())
-                                ciudad = st.selectbox("Localidad", localidades_opciones, key="nueva_ciudad")
-                            else:
-                                st.selectbox("Localidad", options=["Sin localidades"], disabled=True, key="nueva_ciudad_empty")
-                                ciudad = ""
-                        else:
-                            st.selectbox("Localidad", options=["Seleccione provincia"], disabled=True, key="nueva_ciudad_disabled")  
-                            ciudad = ""
-                    
-                    col3, col4 = st.columns(2)
-                    with col3:
-                        codigo_postal = st.text_input("Código postal", key="nuevo_cp")
-                        titulacion = st.text_area("Titulación", key="nuevo_titulacion")
-                    with col4:
-                        if session_state.role == "admin" and empresas_dict:
-                            empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), key="nuevo_empresa")
-                    
-                    if st.form_submit_button("✅ Crear Tutor", type="primary"):
-                        datos_nuevos = {
-                            "nombre": nombre,
-                            "apellidos": apellidos,
-                            "email": email,
-                            "telefono": telefono,
-                            "nif": nif,
-                            "tipo_tutor": tipo_tutor,
-                            "especialidad": especialidad,
-                            "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None,
-                            "direccion": direccion,
-                            "ciudad": ciudad,
-                            "provincia": provincia,
-                            "codigo_postal": codigo_postal,
-                            "titulacion": titulacion
-                        }
-                        
-                        if session_state.role == "admin" and empresas_dict:
-                            datos_nuevos["empresa_sel"] = empresa_sel
-                        
-                        if crear_tutor(datos_nuevos):
-                            st.rerun()
-
-        st.divider()
-
-        # =========================
-        # GESTIÓN DE CURRÍCULUMS
+        # GESTIÓN DE CURRÍCULUMS (SOLO SI HAY TUTORES)
         # =========================
         st.markdown("### 📄 Gestión de Currículums")
         st.caption("Subir y gestionar currículums (filtros aplicados)")
@@ -683,7 +606,83 @@ def main(supabase, session_state):
                                     st.rerun()
 
     # =========================
-    # EXPORTACIÓN Y RESUMEN
+    # CREAR NUEVO TUTOR (SIEMPRE VISIBLE)
+    # 🔧 FIX: Movido FUERA del condicional df_filtrado.empty para que siempre esté visible
+    # =========================
+    if puede_modificar:
+        with st.expander("➕ Crear Nuevo Tutor", expanded=df_tutores.empty):  # Expandido si no hay tutores
+            with st.form("crear_tutor_form", clear_on_submit=True):
+                st.markdown("**Datos del nuevo tutor**")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    nombre = st.text_input("Nombre *", key="nuevo_nombre")
+                    email = st.text_input("Email", key="nuevo_email")
+                    tipo_tutor = st.selectbox("Tipo de tutor *", ["", "interno", "externo"], key="nuevo_tipo")
+                    
+                    # ORDEN CORREGIDO: Tipo documento ANTES que NIF
+                    tipo_documento = st.selectbox(
+                        "Tipo documento", 
+                        [("", "Seleccionar tipo"), (10, "NIF"), (20, "Pasaporte"), (60, "NIE")],
+                        format_func=lambda x: x[1],
+                        key="nuevo_tipo_doc"
+                    )
+                    nif = st.text_input("NIF/DNI/NIE/CIF", key="nuevo_nif")
+                    direccion = st.text_input("Dirección", key="nuevo_direccion")
+                
+                with col2:
+                    apellidos = st.text_input("Apellidos *", key="nuevo_apellidos")
+                    telefono = st.text_input("Teléfono", key="nuevo_telefono")
+                    especialidad = st.selectbox("Especialidad", especialidades_opciones, key="nuevo_especialidad")
+                    
+                    # CAMPOS CONECTADOS: Provincia → Localidad
+                    provincia = st.selectbox("Provincia", provincias_opciones, key="nueva_provincia_select")
+                    
+                    if provincia:
+                        localidades_dict = get_localidades_por_provincia_optimizado(provincia)
+                        if localidades_dict:
+                            localidades_opciones = [""] + list(localidades_dict.keys())
+                            ciudad = st.selectbox("Localidad", localidades_opciones, key="nueva_ciudad")
+                        else:
+                            st.selectbox("Localidad", options=["Sin localidades"], disabled=True, key="nueva_ciudad_empty")
+                            ciudad = ""
+                    else:
+                        st.selectbox("Localidad", options=["Seleccione provincia"], disabled=True, key="nueva_ciudad_disabled")  
+                        ciudad = ""
+                
+                col3, col4 = st.columns(2)
+                with col3:
+                    codigo_postal = st.text_input("Código postal", key="nuevo_cp")
+                    titulacion = st.text_area("Titulación", key="nuevo_titulacion")
+                with col4:
+                    if session_state.role == "admin" and empresas_dict:
+                        empresa_sel = st.selectbox("Empresa", [""] + sorted(empresas_dict.keys()), key="nuevo_empresa")
+                
+                if st.form_submit_button("✅ Crear Tutor", type="primary"):
+                    datos_nuevos = {
+                        "nombre": nombre,
+                        "apellidos": apellidos,
+                        "email": email,
+                        "telefono": telefono,
+                        "nif": nif,
+                        "tipo_tutor": tipo_tutor,
+                        "especialidad": especialidad,
+                        "tipo_documento": tipo_documento[0] if tipo_documento and tipo_documento[0] != "" else None,
+                        "direccion": direccion,
+                        "ciudad": ciudad,
+                        "provincia": provincia,
+                        "codigo_postal": codigo_postal,
+                        "titulacion": titulacion
+                    }
+                    
+                    if session_state.role == "admin" and empresas_dict:
+                        datos_nuevos["empresa_sel"] = empresa_sel
+                    
+                    if crear_tutor(datos_nuevos):
+                        st.rerun()
+
+    # =========================
+    # EXPORTACIÓN Y RESUMEN (SOLO SI HAY TUTORES FILTRADOS)
     # =========================
     if not df_filtrado.empty:
         with st.expander("📊 Exportar y Resumen", expanded=False):
