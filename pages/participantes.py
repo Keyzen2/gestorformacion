@@ -224,7 +224,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     with col1:
         filtro_nombre = st.text_input("👤 Nombre/Apellidos contiene", key="filtro_tabla_nombre")
     with col2:
-        filtro_dni = st.text_input("🆔 Documento contiene", key="filtro_tabla_dni")
+        filtro_nif = st.text_input("🆔 Documento contiene", key="filtro_tabla_nif")
     with col3:
         filtro_empresa = st.text_input("🏢 Empresa contiene", key="filtro_tabla_empresa")
 
@@ -233,8 +233,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
             df_participantes["nombre"].str.contains(filtro_nombre, case=False, na=False) |
             df_participantes["apellidos"].str.contains(filtro_nombre, case=False, na=False)
         ]
-    if filtro_dni:
-        df_participantes = df_participantes[df_participantes["dni"].str.contains(filtro_dni, case=False, na=False)]
+    if filtro_nif:
+        df_participantes = df_participantes[df_participantes["nif"].str.contains(filtro_nif, case=False, na=False)]
     if filtro_empresa:
         df_participantes = df_participantes[df_participantes["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
@@ -251,11 +251,11 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     df_paged = df_participantes.iloc[start_idx:end_idx]
 
     # Configuración columnas
-    columnas = ["nombre", "apellidos", "dni", "email", "telefono", "empresa_nombre"]
+    columnas = ["nombre", "apellidos", "nif", "email", "telefono", "empresa_nombre"]
     column_config = {
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
-        "dni": st.column_config.TextColumn("🆔 Documento", width="small"),
+        "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large")
@@ -322,7 +322,7 @@ def mostrar_formulario_participante(
                 index=["","DNI","NIE","PASAPORTE"].index(datos.get("tipo_documento","")) if datos.get("tipo_documento","") in ["","DNI","NIE","PASAPORTE"] else 0,
                 key=f"{form_id}_tipo_doc"
             )
-            documento = st.text_input("Número de Documento", value=datos.get("dni",""), key=f"{form_id}_documento", help="DNI, NIE, CIF o Pasaporte")
+            documento = st.text_input("Número de Documento", value=datos.get("nif",""), key=f"{form_id}_documento", help="DNI, NIE, CIF o Pasaporte")
             niss = st.text_input("NISS", value=datos.get("niss",""), key=f"{form_id}_niss", help="Número de la Seguridad Social")
         
         with col2:
@@ -542,7 +542,7 @@ def mostrar_formulario_participante(
                     "nombre": nombre,
                     "apellidos": apellidos,
                     "tipo_documento": tipo_documento or None,
-                    "dni": documento or None,  # Guardamos el documento en el campo dni
+                    "nif": documento or None,  # Guardamos el documento en el campo nif
                     "niss": niss or None,
                     "fecha_nacimiento": fecha_nacimiento.isoformat() if fecha_nacimiento else None,
                     "sexo": sexo or None,
@@ -673,7 +673,7 @@ def importar_participantes(auth_service, empresas_service, session_state):
     ejemplo_df = pd.DataFrame([{
         "nombre": "Juan",
         "apellidos": "Pérez Gómez",
-        "dni": "12345678A",
+        "nif": "12345678A",
         "email": "juan.perez@correo.com",
         "telefono": "600123456",
         "empresa_id": "",
@@ -728,7 +728,7 @@ def importar_participantes(auth_service, empresas_service, session_state):
                     datos = {
                         "nombre": fila.get("nombre"),
                         "apellidos": fila.get("apellidos"),
-                        "dni": fila.get("dni") or fila.get("documento"),  # Compatibilidad con ambos nombres
+                        "nif": fila.get("nif") or fila.get("documento"),  # Compatibilidad con ambos nombres
                         "email": fila.get("email"),
                         "telefono": fila.get("telefono"),
                         "empresa_id": empresa_id,
@@ -1168,7 +1168,7 @@ def mostrar_gestion_diploma_individual(supabase, participante, tiene_diploma, di
     
     with col_info:
         st.write(f"**👤 Participante:** {nombre_completo}")
-        st.write(f"**📄 Documento:** {participante.get('dni', participante.get('nif', 'Sin documento'))}")
+        st.write(f"**📄 Documento:** {participante.get('nif', participante.get('dni', 'Sin documento'))}")
         st.write(f"**🏢 Empresa:** {participante.get('empresa_nombre', 'Sin empresa')}")
         if "grupo_codigo" in participante:
             st.write(f"**👥 Grupo:** {participante.get('grupo_codigo', 'Sin grupo')}")
@@ -1304,7 +1304,7 @@ def subir_diploma_participante(supabase, participante, grupo_info, diploma_file)
             grupo_id_corto = limpiar_para_archivo(str(grupo_id)[:8])
             
             participante_slug = limpiar_para_archivo(
-                participante.get("nif") or participante.get("dni") or participante.get("documento") or str(participante["id"])
+                participante.get("nif") or participante.get("dni") or str(participante["id"])
             )
             
             # Usamos 'ano_' en vez de 'año_' para evitar caracteres inválidos
