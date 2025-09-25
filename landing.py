@@ -2,6 +2,9 @@ import streamlit as st
 from supabase import create_client
 from utils import get_ajustes_app
 
+st.cache_data.clear()
+st.cache_resource.clear()
+
 # =========================
 # Configuración de la página
 # =========================
