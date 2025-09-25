@@ -17,6 +17,9 @@ st.set_page_config(
     }
 )
 
+st.cache_data.clear()
+st.cache_resource.clear()
+
 def landing_page():
     st.markdown("""
     <style>
