@@ -439,7 +439,6 @@ def main(supabase, session_state):
                     except Exception as e:
                         st.error(f"Error al restablecer: {e}")
 
-    st.divider()
     # =========================
     # 📊 CONFIGURACIÓN DE TABLAS
     # =========================
@@ -467,7 +466,8 @@ def main(supabase, session_state):
             })
             st.success("✅ Configuración guardada")
             st.rerun()
-
+            
+    st.divider()
     # =========================
     # INFORMACIÓN FINAL
     # =========================
