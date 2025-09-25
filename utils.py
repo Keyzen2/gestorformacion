@@ -684,46 +684,47 @@ def export_csv(df: pd.DataFrame, filename: str = "export.csv"):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Descargar CSV</a>'
     st.markdown(href, unsafe_allow_html=True)
 
-def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar a Excel"):
+def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar", descripcion: str = ""):
     """
-    Genera un botón para exportar un DataFrame a Excel con estilo nativo consistente.
+    Función de exportación mejorada con información sobre los datos exportados.
     
     Args:
         df: DataFrame a exportar
-        filename: Nombre del archivo a generar
+        filename: Nombre del archivo
         label: Texto del botón
-        
-    Returns:
-        None
+        descripcion: Descripción adicional de qué se está exportando
     """
     if df is None or df.empty:
-        st.warning("⚠ No hay datos para exportar")
+        st.warning("⚠️ No hay datos para exportar")
         return
 
-    # Crear buffer y guardar Excel
+    # Información sobre los datos
+    info_text = f"Exportar {len(df)} registro(s)"
+    if descripcion:
+        info_text += f" ({descripcion})"
+
+    # Crear buffer Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Sheet1")
-
+        df.to_excel(writer, index=False, sheet_name="Grupos")
+        
         # Autoajustar columnas
-        worksheet = writer.sheets["Sheet1"]
+        worksheet = writer.sheets["Grupos"]
         for i, col in enumerate(df.columns):
             max_len = max(df[col].astype(str).str.len().max(), len(str(col))) + 2
             worksheet.set_column(i, i, max_len)
 
-    # Preparar datos binarios
     excel_data = output.getvalue()
 
-    # ✅ CORRECCIÓN: Botón nativo SIN type="primary" para mantener consistencia
+    # Botón de descarga con información
     st.download_button(
-        label=label,
+        label=f"{label} ({len(df)} filas)",
         data=excel_data,
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-        # ❌ Eliminamos type="primary" para que tenga el diseño estándar
+        use_container_width=True,
+        help=info_text
     )
-
 
 # =========================
 # SUPABASE STORAGE
