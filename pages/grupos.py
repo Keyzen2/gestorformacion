@@ -1073,7 +1073,7 @@ def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
         st.error(f"Error en sección de tutores: {e}")
         
 def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
-    """Gestión de Centro Gestor con validaciones jerárquicas."""
+    """Centro Gestor simplificado usando empresas marcadas."""
     st.markdown("**Centro Gestor (solo Teleformación/Mixta)**")
     
     try:
@@ -1087,47 +1087,43 @@ def mostrar_seccion_centro_gestor(grupos_service, grupo_id):
             modalidad_norm = info_mod.data[0].get("modalidad", "PRESENCIAL")
         
         if modalidad_norm in ["TELEFORMACION", "MIXTA"]:
-            centro_actual = grupos_service.get_centro_gestor_grupo(grupo_id)
+            # Ver centro actual
+            centro_actual = grupos_service.get_centro_gestor_empresa(grupo_id)
             
-            if centro_actual and centro_actual.get("centro"):
-                c = centro_actual["centro"]
-                with st.container(border=True):
-                    st.success(f"✅ Centro gestor actual: **{c.get('razon_social','(sin nombre)')}**")
-                    st.caption(f"CIF: {c.get('cif','N/A')} | CP: {c.get('codigo_postal','N/A')}")
-
-            df_centros = grupos_service.get_centros_gestores_jerarquia(grupo_id)
+            if centro_actual:
+                st.success(f"✅ Centro gestor actual: **{centro_actual['nombre']}**")
+                st.caption(f"CIF: {centro_actual['cif']}")
             
-            if df_centros.empty:
-                st.warning("⚠️ No hay centros gestores disponibles para este grupo.")
-            else:
-                opciones = {}
-                for _, row in df_centros.iterrows():
-                    nombre_centro = str(row.get("razon_social") or row.get("nombre_comercial") or row.get("cif") or row.get("id"))
-                    opciones[nombre_centro] = row["id"]
-                
-                sel = st.selectbox(
-                    "Seleccionar centro gestor", 
-                    list(opciones.keys()),
-                    help="Solo se muestran centros de empresas en tu ámbito jerárquico"
+            # Obtener empresas que pueden ser centro gestor
+            empresas_centro = grupos_service.get_empresas_centro_gestor_disponibles()
+            
+            if empresas_centro:
+                empresa_sel = st.selectbox(
+                    "Seleccionar empresa como Centro Gestor",
+                    options=list(empresas_centro.keys()),
+                    help="Solo empresas marcadas como 'Centro Gestor'"
                 )
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("✅ Asignar centro gestor", type="primary"):
-                        ok = grupos_service.assign_centro_gestor_a_grupo(grupo_id, opciones[sel])
+                    if st.button("✅ Asignar Centro Gestor", type="primary"):
+                        empresa_id = empresas_centro[empresa_sel]
+                        ok = grupos_service.asignar_empresa_como_centro_gestor(grupo_id, empresa_id)
                         if ok:
-                            st.success("✅ Centro gestor asignado correctamente.")
+                            st.success("Centro gestor asignado")
                             st.rerun()
                 
                 with col2:
-                    if centro_actual and st.button("❌ Desasignar centro gestor"):
-                        ok = grupos_service.unassign_centro_gestor_de_grupo(grupo_id)
+                    if centro_actual and st.button("❌ Quitar Centro Gestor"):
+                        ok = grupos_service.quitar_centro_gestor(grupo_id)
                         if ok:
-                            st.success("✅ Centro gestor desasignado.")
+                            st.success("Centro gestor eliminado")
                             st.rerun()
+            else:
+                st.warning("No hay empresas marcadas como Centro Gestor disponibles")
         else:
-            st.info("ℹ️ Centro gestor solo requerido para modalidades Teleformación y Mixta")
-                                
+            st.info("Centro gestor solo para Teleformación y Mixta")
+            
     except Exception as e:
         st.error(f"Error en sección Centro Gestor: {e}")
 
