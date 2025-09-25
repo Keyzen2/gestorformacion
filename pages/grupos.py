@@ -1209,7 +1209,7 @@ def mostrar_seccion_empresas_jerarquia(grupos_service, grupo_id):
     except Exception as e:
         st.error(f"Error al cargar sección de empresas: {e}")
 
-def mostrar_seccion_participantes_jerarquia_corregida(grupos_service, grupo_id):
+def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
     """Sección de participantes corregida y simplificada."""
     st.markdown("**Participantes del Grupo con Jerarquía**")
     
