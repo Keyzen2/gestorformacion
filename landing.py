@@ -6,7 +6,7 @@ from utils import get_ajustes_app
 # Configuración de la página
 # =========================
 st.set_page_config(
-    page_title="Gestor de Formación - Plataforma SaaS",
+    page_title="Gestor de Formación - Plataforma SaaS ERP",
     layout="wide",
     initial_sidebar_state="collapsed",
     page_icon="🚀",
@@ -16,9 +16,6 @@ st.set_page_config(
         'About': None
     }
 )
-
-st.cache_data.clear()
-st.cache_resource.clear()
 
 def landing_page():
     st.markdown("""
