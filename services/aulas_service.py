@@ -78,6 +78,11 @@ class AulasService:
         try:
             if self.role != "gestor" or not self.empresa_id:
                 return []
+
+
+def get_aulas_service(supabase, session_state) -> AulasService:
+    """Factory function para obtener instancia del servicio de aulas"""
+    return AulasService(supabase, session_state)
             
             # Obtener empresa propia + empresas cliente
             result = self.supabase.table("empresas").select("id").or_(
@@ -675,6 +680,83 @@ class AulasService:
             return []
 
 
-def get_aulas_service(supabase, session_state) -> AulasService:
-    """Factory function para obtener instancia del servicio de aulas"""
-    return AulasService(supabase, session_state)
+    def actualizar_reserva(self, reserva_id: str, datos_actualizacion: Dict) -> bool:
+        """Actualiza una reserva existente"""
+        try:
+            datos_actualizacion["updated_at"] = datetime.utcnow().isoformat()
+            
+            result = self.supabase.table("aula_reservas").update(
+                datos_actualizacion
+            ).eq("id", reserva_id).execute()
+            
+            return bool(result.data)
+            
+        except Exception as e:
+            return False
+
+    def eliminar_reserva(self, reserva_id: str) -> bool:
+        """Elimina una reserva"""
+        try:
+            result = self.supabase.table("aula_reservas").delete().eq("id", reserva_id).execute()
+            return bool(result.data)
+            
+        except Exception as e:
+            return False
+
+    def get_grupos_basicos(self):
+        """Método temporal para obtener grupos - debería usar grupos_service"""
+        try:
+            query = self.supabase.table("grupos").select("""
+                id, codigo_grupo, fecha_inicio, fecha_fin_prevista, estado,
+                acciones_formativas(nombre)
+            """)
+            
+            # Filtrar según rol
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                query = query.in_("empresa_id", empresas_gestionadas)
+            
+            result = query.execute()
+            
+            if result.data:
+                grupos = []
+                for grupo in result.data:
+                    grupo_flat = {
+                        **grupo,
+                        "accion_nombre": grupo.get("acciones_formativas", {}).get("nombre", "Sin acción") if grupo.get("acciones_formativas") else "Sin acción"
+                    }
+                    grupo_flat.pop("acciones_formativas", None)
+                    grupos.append(grupo_flat)
+                
+                return pd.DataFrame(grupos)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            return pd.DataFrame()
+
+    def get_aulas_disponibles_periodo(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
+        """Obtiene aulas disponibles en un periodo específico"""
+        try:
+            # Obtener todas las aulas activas
+            aulas_query = self.supabase.table("aulas").select(
+                "id, nombre, capacidad_maxima, ubicacion"
+            ).eq("activa", True)
+            
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            aulas = aulas_result.data or []
+            
+            # Filtrar aulas disponibles
+            aulas_disponibles = []
+            for aula in aulas:
+                if self.verificar_disponibilidad_aula(aula["id"], fecha_inicio, fecha_fin):
+                    aulas_disponibles.append(aula)
+            
+            return aulas_disponibles
+            
+        except Exception as e:
+            return []
