@@ -751,7 +751,7 @@ def mostrar_formulario_participante_nn(
     
     if mostrar_grupos and participante_id_para_grupos and empresa_id:
         st.markdown("---")
-        mostrar_seccion_grupos_participante_nn(
+        mostrar_seccion_grupos_participante(
             participantes_service, 
             participante_id_para_grupos, 
             empresa_id, 
