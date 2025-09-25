@@ -222,6 +222,44 @@ class AulasService:
     # GESTIÓN DE RESERVAS
     # =========================
     
+    def get_reservas_periodo(self, fecha_inicio: str, fecha_fin: str) -> pd.DataFrame:
+        """Obtiene reservas en un período específico"""
+        try:
+            query = self.supabase.table("aula_reservas").select("""
+                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado, responsable,
+                aulas!inner(id, nombre, empresa_id),
+                grupos(id, codigo_grupo)
+            """).gte("fecha_inicio", fecha_inicio).lte("fecha_fin", fecha_fin)
+            
+            # Filtrar según rol
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                query = query.in_("aulas.empresa_id", empresas_gestionadas)
+            
+            result = query.order("fecha_inicio").execute()
+            
+            if result.data:
+                reservas = []
+                for reserva in result.data:
+                    reserva_flat = {
+                        **reserva,
+                        "aula_nombre": reserva["aulas"]["nombre"],
+                        "aula_id": reserva["aulas"]["id"],
+                        "grupo_codigo": reserva.get("grupos", {}).get("codigo_grupo") if reserva.get("grupos") else None
+                    }
+                    # Remover objetos anidados
+                    reserva_flat.pop("aulas", None)
+                    reserva_flat.pop("grupos", None)
+                    reservas.append(reserva_flat)
+                
+                return pd.DataFrame(reservas)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            st.error(f"Error cargando reservas: {e}")
+            return pd.DataFrame()
+
     def get_reservas_proximas(self, dias: int = 30) -> pd.DataFrame:
         """Obtiene reservas próximas según rol"""
         try:
