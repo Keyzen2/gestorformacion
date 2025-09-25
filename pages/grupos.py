@@ -1971,7 +1971,7 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
 # =========================
 
 def main(supabase, session_state):
-    """Función principal de gestión de grupos con jerarquía mejorada - CORREGIDA."""
+    """Función principal de gestión de grupos con diseño consistente a participantes/empresas."""
     st.title("👥 Gestión de Grupos FUNDAE")
     st.caption("🎯 Creación y administración de grupos formativos con jerarquía empresarial")
     
@@ -1986,240 +1986,313 @@ def main(supabase, session_state):
     # Inicializar servicio
     grupos_service = get_grupos_service(supabase, session_state)
     
-    # Cargar datos
-    try:
-        df_grupos = grupos_service.get_grupos_completos()
-    except Exception as e:
-        st.error(f"❌ Error al cargar datos: {e}")
-        return
+    # Crear tabs principales siguiendo el patrón de participantes
+    tabs = st.tabs(["📋 Listado", "➕ Crear", "📊 Métricas", "📄 Documentos"])
     
-    # Mostrar métricas con información jerárquica
-    mostrar_metricas_grupos(df_grupos, session_state)
-    
-    # Mostrar avisos de grupos pendientes
-    grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
-    mostrar_avisos_grupos(grupos_pendientes)
-    
-    st.divider()
-    
-    # === SECCIÓN PRINCIPAL: FILTROS Y TABLA UNIFICADA ===
-    st.markdown("### 📊 Listado de Grupos")  # UN SOLO TÍTULO
+    # ========================= 
+    # TAB 1: LISTADO (Estilo consistente)
+    # =========================
+    with tabs[0]:
+        try:
+            df_grupos = grupos_service.get_grupos_completos()
+            
+            # Preparar datos con estado automático
+            if not df_grupos.empty:
+                df_grupos["Estado"] = df_grupos.apply(
+                    lambda row: determinar_estado_grupo(row.to_dict()), axis=1
+                )
+            
+            # Mostrar tabla con el estilo de participantes
+            resultado = mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service)
+            if resultado is not None and len(resultado) == 2:
+                seleccionado, df_paged = resultado
+            else:
+                seleccionado, df_paged = None, pd.DataFrame()
+
+            # Exportación e importación en expanders (como participantes)
+            st.divider()
+            
+            with st.expander("📥 Exportar Grupos"):
+                exportar_grupos(df_grupos, df_paged, session_state)
+            
+            with st.expander("📋 Herramientas Administrativas"):
+                mostrar_herramientas_grupos(grupos_service, session_state)
+
+            with st.expander("ℹ️ Ayuda sobre Grupos FUNDAE"):
+                mostrar_ayuda_grupos()
+
+            # Mostrar formulario de edición si hay selección
+            if seleccionado is not None:
+                with st.container(border=True):
+                    # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
+                    grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
+                    if grupo_id:
+                        st.divider()
+                        # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
+                        mostrar_secciones_adicionales(grupos_service, grupo_id)
+                        
+        except Exception as e:
+            st.error(f"❌ Error cargando grupos: {e}")
+
+    # =========================
+    # TAB 2: CREAR (Estilo consistente) 
+    # =========================
+    with tabs[1]:
+        with st.container(border=True):
+            # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
+            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
+
+    # =========================
+    # TAB 3: MÉTRICAS (Estilo consistente)
+    # =========================
+    with tabs[2]:
+        try:
+            df_grupos = grupos_service.get_grupos_completos()
+            mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service)
+        except Exception e:
+            st.error(f"❌ Error cargando métricas: {e}")
+
+    # =========================
+    # TAB 4: DOCUMENTOS (Nuevo)
+    # =========================
+    with tabs[3]:
+        mostrar_gestion_documentos_grupos(grupos_service, session_state)
+        
+def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
+    """Tabla de grupos consistente con el estilo de participantes/empresas."""
     
     if df_grupos.empty:
-        with st.container(border=True):
-            st.info("📋 No hay grupos registrados en tu ámbito.")
-            if session_state.role == "gestor":
-                st.markdown("Como **gestor**, puedes crear grupos para tu empresa y empresas clientes.")
-            elif session_state.role == "admin":
-                st.markdown("Como **administrador**, puedes crear grupos para cualquier empresa.")
-    else:
-        # Preparar datos para mostrar
-        df_display = df_grupos.copy()
-        df_display["Estado"] = df_display.apply(lambda row: determinar_estado_grupo(row.to_dict()), axis=1)
-        
-        # === FILTROS AVANZADOS ===
-        with st.expander("🔍 Filtros Avanzados", expanded=False):
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                modalidades = ["Todas"] + sorted(df_display["modalidad"].dropna().unique().tolist())
-                modalidad_filtro = st.selectbox("🎯 Modalidad", modalidades, key="filtro_modalidad")
-            
-            with col2:
-                estados = ["Todos"] + sorted(df_display["Estado"].dropna().unique().tolist())
-                estado_filtro = st.selectbox("📊 Estado", estados, key="filtro_estado")
-            
-            with col3:
-                localidades = ["Todas"] + sorted(df_display["localidad"].dropna().unique().tolist())
-                localidad_filtro = st.selectbox("🏙️ Localidad", localidades, key="filtro_localidad")
-            
-            with col4:
-                if session_state.role == "admin":
-                    empresas = ["Todas"] + sorted(df_display["empresa_nombre"].dropna().unique().tolist())
-                    empresa_filtro = st.selectbox("🏢 Empresa", empresas, key="filtro_empresa")
-                else:
-                    empresa_filtro = "Todas"
-            
-            # Filtro de búsqueda
-            busqueda = st.text_input(
-                "🔍 Buscar en código, acción formativa o empresa",
-                placeholder="Escribe para filtrar...",
-                key="busqueda_grupos"
-            )
-            
-            # Filtros de fecha
-            col_fecha1, col_fecha2 = st.columns(2)
-            with col_fecha1:
-                fecha_desde = st.date_input("📅 Fecha inicio desde", value=None, key="fecha_desde")
-            with col_fecha2:
-                fecha_hasta = st.date_input("📅 Fecha inicio hasta", value=None, key="fecha_hasta")
-        
-        # === APLICAR FILTROS ===
-        df_filtrado = df_display.copy()
-        
-        if modalidad_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["modalidad"] == modalidad_filtro]
-        
-        if estado_filtro != "Todos":
-            df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filtro]
-            
-        if localidad_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["localidad"] == localidad_filtro]
-        
-        if session_state.role == "admin" and empresa_filtro != "Todas":
-            df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filtro]
-        
-        if fecha_desde:
-            df_filtrado = df_filtrado[
-                pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date >= fecha_desde
-            ]
-        
-        if fecha_hasta:
-            df_filtrado = df_filtrado[
-                pd.to_datetime(df_filtrado["fecha_inicio"]).dt.date <= fecha_hasta
-            ]
-        
-        if busqueda:
-            mascara_busqueda = (
-                df_filtrado["codigo_grupo"].str.contains(busqueda, case=False, na=False) |
-                df_filtrado["accion_nombre"].str.contains(busqueda, case=False, na=False)
-            )
-            if "empresa_nombre" in df_filtrado.columns:
-                mascara_busqueda |= df_filtrado["empresa_nombre"].str.contains(busqueda, case=False, na=False)
-            
-            df_filtrado = df_filtrado[mascara_busqueda]
-        
-        # === MOSTRAR RESULTADO DE FILTROS ===
-        total_original = len(df_display)
-        total_filtrado = len(df_filtrado)
-        
-        if total_filtrado != total_original:
-            st.info(f"📊 Mostrando {total_filtrado} de {total_original} grupos")
-        
-        # === UNA SOLA TABLA CON CONFIGURACIÓN CORRECTA ===
-        if df_filtrado.empty:
-            st.warning("⚠️ No se encontraron grupos con los filtros aplicados")
-            grupo_seleccionado = None
-        else:
-            # Seleccionar columnas para mostrar
-            columnas_mostrar = [
-                "codigo_grupo", "accion_nombre", "modalidad", 
-                "fecha_inicio", "fecha_fin_prevista", "localidad", 
-                "n_participantes_previstos", "Estado"
-            ]
-            
-            if session_state.role == "admin":
-                columnas_mostrar.insert(-1, "empresa_nombre")
-            
-            columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
-            
-            # Configuración de columnas moderna
-            column_config = {
-                "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="medium"),
-                "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
-                "modalidad": st.column_config.TextColumn("🎯 Modalidad", width="small"),
-                "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
-                "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
-                "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
-                "n_participantes_previstos": st.column_config.NumberColumn("👥 Participantes", width="small"),
-                "Estado": st.column_config.TextColumn("📊 Estado", width="small"),
-                "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
-            }
-            
-            # Mostrar tabla con selección
-            event = st.dataframe(
-                df_filtrado[columnas_disponibles],
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                column_config=column_config,
-                height=400  # Altura fija para evitar filas fantasma
-            )
-            
-            # Procesar selección
-            if event.selection.rows:
-                selected_idx = event.selection.rows[0]
-                # CORRECCIÓN: Usar índice correcto del DataFrame original
-                grupo_original_idx = df_filtrado.iloc[selected_idx].name
-                grupo_seleccionado = df_grupos.loc[grupo_original_idx].to_dict()
-                st.session_state.grupo_seleccionado = grupo_seleccionado
-            else:
-                grupo_seleccionado = st.session_state.grupo_seleccionado
+        st.info("📋 No hay grupos registrados en tu ámbito.")
+        return None, pd.DataFrame()
     
-    st.divider()
+    # Métricas compactas (como participantes)
+    mostrar_metricas_grupos_compactas(df_grupos, session_state)
     
-    # === BOTONES DE ACCIÓN CON DISEÑO CONSISTENTE ===
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    # Avisos importantes
+    grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
+    if grupos_pendientes:
+        st.warning(f"⚠️ {len(grupos_pendientes)} grupo(s) pendiente(s) de finalización")
+        with st.expander("Ver grupos pendientes", expanded=False):
+            for grupo in grupos_pendientes[:3]:
+                st.markdown(f"- **{grupo.get('codigo_grupo')}** - Fin previsto: {grupo.get('fecha_fin_prevista')}")
+    
+    # Filtros de búsqueda (estilo participantes - más compactos)
+    st.markdown("### 🔍 Buscar y Filtrar")
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("➕ Crear Nuevo Grupo", type="primary", use_container_width=True):
-            st.session_state.grupo_seleccionado = {}
-            st.session_state.grupo_editando = "nuevo"
+        query = st.text_input("🔍 Buscar por código o acción", key="buscar_grupo")
+    
+    with col2:
+        modalidades = ["Todas"] + sorted(df_grupos["modalidad"].dropna().unique().tolist())
+        modalidad_filter = st.selectbox("Modalidad", modalidades, key="filtro_modalidad")
+    
+    with col3:
+        estados_unicos = sorted(df_grupos["Estado"].dropna().unique().tolist()) if "Estado" in df_grupos.columns else []
+        estado_filter = st.selectbox("Estado", ["Todos"] + estados_unicos, key="filtro_estado")
+    
+    with col4:
+        if session_state.role == "admin":
+            empresas = sorted(df_grupos["empresa_nombre"].dropna().unique().tolist()) if "empresa_nombre" in df_grupos.columns else []
+            empresa_filter = st.selectbox("Empresa", ["Todas"] + empresas, key="filtro_empresa")
+        else:
+            empresa_filter = "Todas"
+
+    # Aplicar filtros
+    df_filtrado = aplicar_filtros_grupos(df_grupos, query, modalidad_filter, estado_filter, empresa_filter, session_state)
+
+    # Tabla principal (estilo participantes con configuración moderna)
+    st.markdown("### 📊 Listado de Grupos")
+    
+    if df_filtrado.empty:
+        st.info("🔍 No hay grupos que coincidan con los filtros aplicados.")
+        return None, df_filtrado
+    
+    # Seleccionar columnas para mostrar
+    columnas_mostrar = [
+        "codigo_grupo", "accion_nombre", "modalidad", 
+        "fecha_inicio", "fecha_fin_prevista", "localidad", 
+        "n_participantes_previstos", "Estado"
+    ]
+    
+    if session_state.role == "admin" and "empresa_nombre" in df_filtrado.columns:
+        columnas_mostrar.insert(-1, "empresa_nombre")
+    
+    columnas_disponibles = [col for col in columnas_mostrar if col in df_filtrado.columns]
+    
+    # Configuración moderna de columnas
+    column_config = {
+        "codigo_grupo": st.column_config.TextColumn("🏷️ Código", width="small"),
+        "accion_nombre": st.column_config.TextColumn("📚 Acción Formativa", width="large"),
+        "modalidad": st.column_config.TextColumn("🎯 Modalidad", width="small"),
+        "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
+        "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
+        "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+        "n_participantes_previstos": st.column_config.NumberColumn("👥 Participantes", width="small"),
+        "Estado": st.column_config.TextColumn("📊 Estado", width="small"),
+        "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
+    }
+    
+    # Mostrar tabla con selección (estilo moderno de participantes)
+    event = st.dataframe(
+        df_filtrado[columnas_disponibles],
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        column_config=column_config
+    )
+
+    # Procesar selección
+    if event.selection.rows:
+        selected_idx = event.selection.rows[0]
+        grupo_seleccionado = df_filtrado.iloc[selected_idx]
+        st.session_state.grupo_seleccionado = grupo_seleccionado.to_dict()
+        return grupo_seleccionado.to_dict(), df_filtrado
+    
+    return None, df_filtrado
+
+def mostrar_metricas_grupos_compactas(df_grupos, session_state):
+    """Métricas compactas estilo participantes."""
+    if df_grupos.empty:
+        return
+    
+    # Calcular estados
+    total = len(df_grupos)
+    abiertos = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "ABIERTO")
+    por_finalizar = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "FINALIZAR")
+    finalizados = sum(1 for _, g in df_grupos.iterrows() if determinar_estado_grupo(g.to_dict()) == "FINALIZADO")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📊 Total Grupos", total)
+    with col2:
+        st.metric("🟢 Abiertos", abiertos)
+    with col3:
+        if por_finalizar > 0:
+            st.metric("🟡 Por Finalizar", por_finalizar, delta=f"+{por_finalizar}")
+        else:
+            st.metric("🟡 Por Finalizar", por_finalizar)
+    with col4:
+        st.metric("✅ Finalizados", finalizados)
+
+def aplicar_filtros_grupos(df_grupos, query, modalidad_filter, estado_filter, empresa_filter, session_state):
+    """Aplica filtros al DataFrame de grupos."""
+    df_filtrado = df_grupos.copy()
+    
+    if query:
+        mascara = (
+            df_filtrado["codigo_grupo"].str.contains(query, case=False, na=False) |
+            df_filtrado["accion_nombre"].str.contains(query, case=False, na=False)
+        )
+        df_filtrado = df_filtrado[mascara]
+    
+    if modalidad_filter != "Todas":
+        df_filtrado = df_filtrado[df_filtrado["modalidad"] == modalidad_filter]
+    
+    if estado_filter != "Todos":
+        df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filter]
+    
+    if session_state.role == "admin" and empresa_filter != "Todas":
+        df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filter]
+    
+    return df_filtrado
+
+def exportar_grupos(df_grupos, df_filtrado, session_state):
+    """Sección de exportación estilo participantes."""
+    if df_grupos.empty:
+        st.warning("⚠️ No hay datos para exportar.")
+        return
+    
+    export_scope = st.radio(
+        "¿Qué quieres exportar?",
+        ["📄 Solo registros visibles", "🌐 Todos los grupos"],
+        horizontal=True
+    )
+    
+    df_export = df_filtrado if export_scope == "📄 Solo registros visibles" else df_grupos
+    
+    if not df_export.empty:
+        fecha_str = datetime.now().strftime("%Y%m%d")
+        filename = f"grupos_fundae_{fecha_str}.xlsx"
+        
+        # Usar tu función de exportación existente
+        export_excel(df_export, filename=filename, label="📥 Exportar a Excel")
+
+def mostrar_herramientas_grupos(grupos_service, session_state):
+    """Herramientas administrativas."""
+    st.markdown("**🔧 Herramientas Administrativas**")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔄 Limpiar Cache", use_container_width=True):
+            grupos_service.limpiar_cache_grupos()
+            st.success("✅ Cache limpiado")
             st.rerun()
     
     with col2:
-        if not df_grupos.empty:
-            # === BOTÓN EXPORTAR FILTRADOS (si hay filtros aplicados) ===
-            if 'df_filtrado' in locals() and not df_filtrado.empty and len(df_filtrado) != len(df_grupos):
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename_filtrado = f"grupos_filtrados_{fecha_str}.xlsx"
-                
-                # Preparar datos para exportación
-                columnas_export = [
-                    "codigo_grupo", "accion_nombre", "modalidad",
-                    "fecha_inicio", "fecha_fin_prevista", "localidad", "provincia",
-                    "n_participantes_previstos", "Estado", "responsable", 
-                    "telefono_contacto", "lugar_imparticion"
-                ]
-                
-                if session_state.role == "admin":
-                    columnas_export.insert(-1, "empresa_nombre")
-                
-                columnas_disponibles_export = [col for col in columnas_export if col in df_filtrado.columns]
-                df_export = df_filtrado[columnas_disponibles_export].copy()
-                
-                # === USAR FUNCIÓN PERSONALIZADA CON TEMA MORADO ===
-                if st.button(f"📥 Exportar Filtrados ({len(df_filtrado)})", use_container_width=True, help="Exportar solo los grupos mostrados con filtros"):
-                    export_excel(df_export, filename=filename_filtrado, label="📥 Exportar Filtrados")
-            else:
-                # === BOTÓN EXPORTAR TODO ===
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename = f"grupos_fundae_{fecha_str}.xlsx"
-                
-                if st.button(f"📥 Exportar Excel ({len(df_grupos)})", use_container_width=True, help="Exportar todos los grupos"):
-                    export_excel(df_grupos, filename=filename, label="📥 Exportar Excel")
-        else:
-            st.button("⚠️ Sin datos", disabled=True, use_container_width=True)
-    
-    with col3:
-        # === BOTÓN EXPORTAR TODO (siempre disponible si hay datos) ===
-        if not df_grupos.empty and 'df_filtrado' in locals() and len(df_filtrado) != len(df_grupos):
-            fecha_str = datetime.now().strftime("%Y%m%d")
-            filename_completo = f"grupos_completo_{fecha_str}.xlsx"
-            
-            if st.button(f"📊 Exportar Todo ({len(df_grupos)})", use_container_width=True, help="Exportar todos los grupos sin filtros"):
-                export_excel(df_grupos, filename=filename_completo, label="📊 Exportar Todo")
-        else:
-            st.empty()  # Espacio vacío si no se necesita
-    
-    with col4:
-        if st.button("🔄 Actualizar", use_container_width=True):
-            grupos_service.limpiar_cache_grupos()
-            st.rerun()
-    
-    # === MOSTRAR FORMULARIO SEGÚN ESTADO ===
-    if st.session_state.grupo_seleccionado == {}:
-        # Creación de grupo
-        mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
-    
-    elif st.session_state.grupo_seleccionado:
-        # Edición de grupo existente
-        grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
-        if grupo_id:
-            st.divider()
-            mostrar_secciones_adicionales(grupos_service, grupo_id)
+        if st.button("📊 Recalcular Estados", use_container_width=True):
+            st.info("🔧 Funcionalidad en desarrollo")
 
+def mostrar_ayuda_grupos():
+    """Información de ayuda estilo participantes."""
+    st.markdown("""
+    **Funcionalidades principales:**
+    - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar grupos rápidamente
+    - ✏️ **Edición**: Haz clic en una fila para editar un grupo
+    - 📊 **Estados automáticos**: Los estados se calculan según las fechas
+    - 👥 **Gestión completa**: Tutores, empresas, participantes y costes
+    
+    **Estados de grupos:**
+    - 🟢 **ABIERTO**: Grupo en proceso de configuración
+    - 🟡 **FINALIZAR**: Fecha prevista superada, requiere finalización
+    - ✅ **FINALIZADO**: Completado con todos los datos FUNDAE
+    
+    **Permisos por rol:**
+    - 👑 **Admin**: Ve todos los grupos de todas las empresas
+    - 👨‍💼 **Gestor**: Solo ve grupos de su empresa y empresas clientes
+    
+    **Flujo recomendado:**
+    1. Crear grupo con datos básicos
+    2. Asignar tutores y centro gestor (si aplica)
+    3. Añadir empresas participantes
+    4. Inscribir participantes
+    5. Configurar costes FUNDAE
+    6. Finalizar cuando corresponda
+    """)
+
+def mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service):
+    """Tab de métricas detalladas."""
+    if df_grupos.empty:
+        st.info("📋 No hay datos para mostrar métricas.")
+        return
+    
+    # Usar tu función existente pero mejorada
+    mostrar_metricas_grupos(df_grupos, session_state)
+    
+    st.divider()
+    st.markdown("### 📊 Análisis Adicional")
+    
+    # Aquí puedes añadir más métricas en el futuro
+    st.info("Métricas adicionales en desarrollo...")
+
+def mostrar_gestion_documentos_grupos(grupos_service, session_state):
+    """Tab para gestión de documentos relacionados con grupos."""
+    st.markdown("### 📄 Gestión de Documentos FUNDAE")
+    st.caption("Generación y gestión de documentación oficial FUNDAE")
+    
+    st.info("🔧 Funcionalidad de documentos en desarrollo...")
+    
+    st.markdown("""
+    **Documentos FUNDAE disponibles:**
+    - 📋 XML Inicio de Grupo
+    - ✅ XML Finalización de Grupo  
+    - 📊 Informes de seguimiento
+    - 📑 Certificados de participación
+    
+    Esta sección estará disponible próximamente.
+    """)
 # =========================
 # PUNTO DE ENTRADA
 # =========================
