@@ -763,6 +763,7 @@ def importar_participantes(auth_service, empresas_service, session_state):
 # MAIN PARTICIPANTES
 # =========================
 def main(supabase, session_state):
+    return main_con_diplomas(supabase, session_state)
     st.title("👥 Gestión de Participantes")
 
     participantes_service = get_participantes_service(supabase, session_state)
@@ -771,7 +772,7 @@ def main(supabase, session_state):
     auth_service = get_auth_service(supabase, session_state)  # NUEVO: AuthService centralizado
 
     # Tabs principales (títulos simplificados)
-    tabs = st.tabs(["Listado", "Crear", "Métricas"])
+    tabs = st.tabs(["Listado", "Crear", "Métricas", "Diplomas"])
 
     # =========================
     # TAB LISTADO
@@ -809,6 +810,7 @@ def main(supabase, session_state):
                 - ✏️ **Edición**: Haz clic en una fila para editar un participante
                 - 📊 **Exportar/Importar**: Gestión masiva de datos en los expanders superiores
                 - 🏢 **Empresas y grupos**: Los selectores están conectados - primero empresa, luego grupo
+                - 🎓 **Diplomas**: Nueva pestaña para gestionar certificados
                 
                 **Permisos por rol:**
                 - 👑 **Admin**: Ve todos los participantes de todas las empresas
@@ -842,7 +844,317 @@ def main(supabase, session_state):
     # =========================
     with tabs[2]:
         mostrar_metricas_participantes(participantes_service, session_state)
+        
+    # =========================
+    # NUEVO TAB DIPLOMAS
+    # =========================
+    with tabs[3]:
+        mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service)   
+def mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service):
+    """
+    Gestión completa de diplomas por participante con Streamlit 1.49.
+    Integrada con la nueva arquitectura de servicios.
+    """
+    st.divider()
+    st.markdown("### 🎓 Gestión de Diplomas por Participante")
+    st.caption("Subir, gestionar y descargar diplomas organizados por estructura empresarial")
 
+    # Verificar permisos
+    puede_gestionar = session_state.role in ["admin", "gestor"]
+    if not puede_gestionar:
+        st.warning("🔒 No tienes permisos para gestionar diplomas")
+        return
+
+    try:
+        # Cargar participantes según rol
+        df_participantes = participantes_service.get_participantes_completos()
+        
+        if session_state.role == "gestor":
+            empresa_id = session_state.user.get("empresa_id")
+            df_participantes = df_participantes[df_participantes["empresa_id"] == empresa_id]
+
+        if df_participantes.empty:
+            st.info("📋 No hay participantes para gestionar diplomas")
+            return
+
+        # Verificar conexión con Supabase Storage
+        try:
+            # Test de conexión al bucket 'diplomas'
+            bucket_list = supabase.storage.from_("diplomas").list("", {"limit": 1})
+            conexion_storage = True
+        except Exception as e:
+            st.error(f"❌ Error conectando con Supabase Storage: {e}")
+            st.info("💡 Verifica que el bucket 'diplomas' existe y tiene permisos configurados")
+            return
+
+        # Obtener información de diplomas existentes
+        participantes_con_diploma = set()
+        diplomas_info = {}
+        
+        for _, participante in df_participantes.iterrows():
+            participante_id = participante.get("id")
+            if participante_id:
+                try:
+                    # Buscar diplomas en tabla de diplomas si existe
+                    diplomas_res = supabase.table("diplomas").select("*").eq("participante_id", participante_id).execute()
+                    
+                    if diplomas_res.data:
+                        participantes_con_diploma.add(participante_id)
+                        diplomas_info[participante_id] = diplomas_res.data
+                except:
+                    # Si no existe tabla de diplomas, buscar directamente en storage
+                    try:
+                        empresa_id_part = participante.get("empresa_id", "sin_empresa")
+                        files = supabase.storage.from_("diplomas").list(f"empresa_{empresa_id_part}/")
+                        
+                        participante_files = []
+                        for file_info in files or []:
+                            if isinstance(file_info, dict) and str(participante_id) in file_info.get("name", ""):
+                                participante_files.append(file_info)
+                        
+                        if participante_files:
+                            participantes_con_diploma.add(participante_id)
+                            diplomas_info[participante_id] = participante_files
+                    except:
+                        continue
+
+        # Filtros para gestión
+        st.markdown("#### 🔍 Filtros de Gestión")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            filtro_diploma = st.selectbox(
+                "📊 Estado Diploma",
+                ["Todos", "Con Diploma", "Sin Diploma"],
+                key="filtro_diploma_gestion"
+            )
+        
+        with col2:
+            # Filtro por grupo si hay información de grupos
+            grupos_disponibles = df_participantes["grupo_codigo"].dropna().unique() if "grupo_codigo" in df_participantes.columns else []
+            if len(grupos_disponibles) > 0:
+                filtro_grupo = st.selectbox(
+                    "👥 Filtrar por Grupo", 
+                    ["Todos"] + sorted(grupos_disponibles),
+                    key="filtro_grupo_diploma"
+                )
+            else:
+                filtro_grupo = "Todos"
+                st.selectbox("👥 Filtrar por Grupo", ["No hay grupos"], disabled=True)
+        
+        with col3:
+            # Filtro por empresa (solo admin)
+            if session_state.role == "admin":
+                empresas_disponibles = sorted(df_participantes["empresa_nombre"].dropna().unique())
+                filtro_empresa = st.selectbox(
+                    "🏢 Filtrar por Empresa",
+                    ["Todas"] + empresas_disponibles,
+                    key="filtro_empresa_diploma"
+                )
+            else:
+                filtro_empresa = "Todas"
+
+        # Aplicar filtros
+        df_filtrado = df_participantes.copy()
+        
+        if filtro_diploma == "Con Diploma":
+            df_filtrado = df_filtrado[df_filtrado["id"].isin(participantes_con_diploma)]
+        elif filtro_diploma == "Sin Diploma":
+            df_filtrado = df_filtrado[~df_filtrado["id"].isin(participantes_con_diploma)]
+        
+        if filtro_grupo != "Todos" and "grupo_codigo" in df_filtrado.columns:
+            df_filtrado = df_filtrado[df_filtrado["grupo_codigo"] == filtro_grupo]
+        
+        if filtro_empresa != "Todas":
+            df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == filtro_empresa]
+
+        # Estadísticas de diplomas
+        total_participantes = len(df_filtrado)
+        con_diploma = len([p for p in df_filtrado["id"] if p in participantes_con_diploma])
+        sin_diploma = total_participantes - con_diploma
+        
+        # Métricas con diseño moderno
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("👥 Total Filtrados", total_participantes)
+        with col2:
+            st.metric("✅ Con Diploma", con_diploma)
+        with col3:
+            st.metric("⏳ Sin Diploma", sin_diploma)
+        with col4:
+            progreso = (con_diploma / total_participantes * 100) if total_participantes > 0 else 0
+            st.metric("📊 Progreso", f"{progreso:.1f}%")
+
+        # Barra de progreso
+        if total_participantes > 0:
+            st.progress(con_diploma / total_participantes, f"Progreso general: {progreso:.1f}%")
+
+        # Gestión individual de diplomas
+        if not df_filtrado.empty:
+            st.markdown("#### 📋 Participantes para Gestión de Diplomas")
+            
+            for _, participante in df_filtrado.iterrows():
+                participante_id = participante["id"]
+                nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}"
+                nif = participante.get("dni", participante.get("nif", "Sin documento"))
+                empresa = participante.get("empresa_nombre", "Sin empresa")
+                grupo = participante.get("grupo_codigo", "Sin grupo") if "grupo_codigo" in participante else "Sin grupo"
+                
+                # Estado del diploma
+                tiene_diploma = participante_id in participantes_con_diploma
+                estado_icon = "✅" if tiene_diploma else "⏳"
+                
+                with st.expander(f"{estado_icon} {nombre_completo} - {nif} ({empresa})", expanded=False):
+                    mostrar_gestion_diploma_individual(
+                        supabase, participante, tiene_diploma, 
+                        diplomas_info.get(participante_id, []), session_state
+                    )
+
+    except Exception as e:
+        st.error(f"❌ Error en gestión de diplomas: {e}")
+
+def mostrar_gestion_diploma_individual(supabase, participante, tiene_diploma, diplomas_existentes, session_state):
+    """Gestión de diploma para un participante individual."""
+    
+    participante_id = participante["id"]
+    nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}"
+    
+    col_info, col_accion = st.columns([2, 1])
+    
+    with col_info:
+        st.write(f"**👤 Participante:** {nombre_completo}")
+        st.write(f"**📄 Documento:** {participante.get('dni', participante.get('nif', 'Sin documento'))}")
+        st.write(f"**🏢 Empresa:** {participante.get('empresa_nombre', 'Sin empresa')}")
+        if "grupo_codigo" in participante:
+            st.write(f"**👥 Grupo:** {participante.get('grupo_codigo', 'Sin grupo')}")
+    
+    with col_accion:
+        if tiene_diploma and diplomas_existentes:
+            # Mostrar diplomas existentes
+            st.success(f"📜 {len(diplomas_existentes)} diploma(s)")
+            
+            for i, diploma in enumerate(diplomas_existentes):
+                if isinstance(diploma, dict):
+                    col_ver, col_del = st.columns(2)
+                    
+                    with col_ver:
+                        # Botón para ver/descargar diploma
+                        if diploma.get("url"):
+                            st.link_button("👀 Ver", diploma["url"], use_container_width=True)
+                        elif diploma.get("name"):
+                            try:
+                                public_url = supabase.storage.from_("diplomas").get_public_url(diploma["name"])
+                                st.link_button("👀 Ver", public_url, use_container_width=True)
+                            except:
+                                st.button("❌ Error", disabled=True, use_container_width=True)
+                    
+                    with col_del:
+                        if st.button("🗑️ Eliminar", key=f"del_diploma_{participante_id}_{i}", use_container_width=True):
+                            if eliminar_diploma(supabase, diploma, participante_id):
+                                st.success("✅ Diploma eliminado")
+                                st.rerun()
+        
+        # Subida de nuevo diploma
+        st.markdown("**📤 Subir Diploma**")
+        
+        diploma_file = st.file_uploader(
+            "Seleccionar PDF",
+            type=["pdf"],
+            key=f"upload_diploma_{participante_id}",
+            help="Solo archivos PDF, máximo 10MB"
+        )
+        
+        if diploma_file:
+            file_size_mb = diploma_file.size / (1024 * 1024)
+            
+            col_size, col_btn = st.columns([1, 1])
+            with col_size:
+                color = "🔴" if file_size_mb > 10 else "🟢"
+                st.caption(f"{color} {file_size_mb:.2f} MB")
+            
+            with col_btn:
+                if file_size_mb <= 10:
+                    if st.button("📤 Subir", key=f"btn_upload_{participante_id}", type="primary", use_container_width=True):
+                        if subir_diploma_participante(supabase, diploma_file, participante, session_state):
+                            st.success("✅ Diploma subido")
+                            st.rerun()
+                else:
+                    st.error("Archivo muy grande")
+
+def subir_diploma_participante(supabase, diploma_file, participante, session_state):
+    """Sube diploma de participante con estructura organizacional."""
+    try:
+        with st.spinner("📤 Subiendo diploma..."):
+            # Validar archivo
+            file_bytes = diploma_file.getvalue()
+            if len(file_bytes) == 0:
+                st.error("❌ El archivo está vacío")
+                return False
+            
+            # Generar estructura de carpetas organizadas
+            timestamp = int(datetime.now().timestamp())
+            empresa_id = participante.get("empresa_id", "sin_empresa")
+            participante_doc = participante.get("dni", participante.get("nif", participante["id"]))
+            
+            # Limpiar nombre para archivo seguro
+            participante_doc_limpio = "".join(c for c in str(participante_doc) if c.isalnum() or c in "_-")
+            
+            # Estructura: empresa_{id}/diplomas/participante_{doc}_{timestamp}.pdf
+            filename = f"empresa_{empresa_id}/diplomas/diploma_{participante_doc_limpio}_{timestamp}.pdf"
+            
+            # Subir a Supabase Storage
+            upload_result = supabase.storage.from_("diplomas").upload(filename, file_bytes)
+            
+            if hasattr(upload_result, 'error') and upload_result.error:
+                st.error(f"❌ Error al subir: {upload_result.error}")
+                return False
+            
+            # Obtener URL pública
+            public_url = supabase.storage.from_("diplomas").get_public_url(filename)
+            
+            # Guardar referencia en tabla diplomas (si existe)
+            try:
+                supabase.table("diplomas").insert({
+                    "participante_id": participante["id"],
+                    "grupo_id": participante.get("grupo_id"),
+                    "url": public_url,
+                    "filename": filename,
+                    "archivo_nombre": diploma_file.name,
+                    "fecha_subida": datetime.now().isoformat(),
+                    "subido_por": session_state.user.get("email", "sistema")
+                }).execute()
+            except Exception as e:
+                # Si no existe tabla diplomas, continuar sin error
+                st.info(f"💡 Diploma subido. Referencia no guardada en BD: {e}")
+            
+            st.success(f"✅ Diploma subido correctamente para {participante.get('nombre', 'participante')}")
+            return True
+            
+    except Exception as e:
+        st.error(f"❌ Error subiendo diploma: {e}")
+        return False
+
+def eliminar_diploma(supabase, diploma, participante_id):
+    """Elimina diploma de participante."""
+    try:
+        # Eliminar del storage
+        if diploma.get("filename"):
+            supabase.storage.from_("diplomas").remove([diploma["filename"]])
+        elif diploma.get("name"):
+            supabase.storage.from_("diplomas").remove([diploma["name"]])
+        
+        # Eliminar de tabla diplomas si existe
+        try:
+            if diploma.get("id"):
+                supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
+        except:
+            pass
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"❌ Error eliminando diploma: {e}")
+        return False
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
 # =========================
