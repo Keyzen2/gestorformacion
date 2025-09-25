@@ -1120,7 +1120,10 @@ def route():
 # Ejecución principal
 # =========================
 if not st.session_state.role:
-    login_view()
+    if st.session_state.show_login:
+        login_view()
+    else:
+        landing_page()
 else:
     try:
         route()
