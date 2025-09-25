@@ -480,7 +480,325 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error al eliminar participante: {e}")
             return False
-    
+    def get_participantes_con_grupos_nn(self) -> pd.DataFrame:
+    """NUEVO: Obtiene participantes con todos sus grupos usando tabla N:N."""
+    try:
+        query = self.supabase.table("participantes").select("""
+            id, nif, nombre, apellidos, email, telefono, 
+            fecha_nacimiento, sexo, created_at, updated_at, empresa_id,
+            empresa:empresas(id, nombre, cif),
+            participantes_grupos(
+                id, grupo_id, fecha_asignacion,
+                grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
+                           accion_formativa:acciones_formativas(nombre))
+            )
+        """)
+        
+        # Aplicar filtro según rol
+        query = self._apply_empresa_filter(query)
+        
+        res = query.order("created_at", desc=True).execute()
+        
+        if not res or not res.data:
+            return pd.DataFrame(columns=[
+                'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+                'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
+                'empresa_id', 'empresa_nombre', 'grupos_ids', 'grupos_codigos'
+            ])
+        
+        # Procesar datos N:N
+        participantes_procesados = []
+        for participante in res.data:
+            grupos_participante = participante.get("participantes_grupos", [])
+            
+            # Extraer empresa
+            empresa_data = participante.get("empresa", {})
+            empresa_nombre = empresa_data.get("nombre", "") if isinstance(empresa_data, dict) else ""
+            
+            # Procesar grupos
+            grupos_ids = []
+            grupos_codigos = []
+            
+            for grupo_rel in grupos_participante:
+                grupo_data = grupo_rel.get("grupo", {})
+                if isinstance(grupo_data, dict):
+                    grupos_ids.append(grupo_data.get("id", ""))
+                    grupos_codigos.append(grupo_data.get("codigo_grupo", ""))
+            
+            # Crear fila del participante
+            participante_row = {
+                "id": participante.get("id"),
+                "nif": participante.get("nif", ""),
+                "nombre": participante.get("nombre", ""),
+                "apellidos": participante.get("apellidos", ""),
+                "email": participante.get("email", ""),
+                "telefono": participante.get("telefono", ""),
+                "fecha_nacimiento": participante.get("fecha_nacimiento"),
+                "sexo": participante.get("sexo", ""),
+                "created_at": participante.get("created_at"),
+                "updated_at": participante.get("updated_at"),
+                "empresa_id": participante.get("empresa_id"),
+                "empresa_nombre": empresa_nombre,
+                "grupos_ids": ", ".join(grupos_ids),
+                "grupos_codigos": ", ".join(grupos_codigos),
+                "num_grupos": len(grupos_ids)
+            }
+            
+            participantes_procesados.append(participante_row)
+        
+        return pd.DataFrame(participantes_procesados)
+        
+    except Exception as e:
+        return self._handle_query_error("participantes con grupos N:N", e)
+
+def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
+    """NUEVO: Obtiene todos los grupos de un participante específico."""
+    try:
+        # Verificar permisos
+        participante_check = self.supabase.table("participantes").select(
+            "empresa_id"
+        ).eq("id", participante_id).execute()
+        
+        if not participante_check.data:
+            return pd.DataFrame()
+        
+        empresa_id = participante_check.data[0]["empresa_id"]
+        empresas_permitidas = self._get_empresas_gestionables()
+        
+        if empresa_id not in empresas_permitidas:
+            return pd.DataFrame()
+        
+        # Obtener grupos del participante
+        res = self.supabase.table("participantes_grupos").select("""
+            id, grupo_id, fecha_asignacion,
+            grupo:grupos(
+                id, codigo_grupo, fecha_inicio, fecha_fin_prevista, fecha_fin,
+                modalidad, lugar_imparticion,
+                accion_formativa:acciones_formativas(nombre, horas)
+            )
+        """).eq("participante_id", participante_id).execute()
+        
+        grupos_data = []
+        for rel in res.data or []:
+            grupo = rel.get("grupo", {})
+            accion = grupo.get("accion_formativa", {}) if isinstance(grupo, dict) else {}
+            
+            grupos_data.append({
+                "relacion_id": rel.get("id"),
+                "grupo_id": rel.get("grupo_id"),
+                "fecha_asignacion": rel.get("fecha_asignacion"),
+                "codigo_grupo": grupo.get("codigo_grupo", "") if isinstance(grupo, dict) else "",
+                "fecha_inicio": grupo.get("fecha_inicio") if isinstance(grupo, dict) else None,
+                "fecha_fin_prevista": grupo.get("fecha_fin_prevista") if isinstance(grupo, dict) else None,
+                "fecha_fin": grupo.get("fecha_fin") if isinstance(grupo, dict) else None,
+                "modalidad": grupo.get("modalidad", "") if isinstance(grupo, dict) else "",
+                "lugar_imparticion": grupo.get("lugar_imparticion", "") if isinstance(grupo, dict) else "",
+                "accion_nombre": accion.get("nombre", "") if isinstance(accion, dict) else "",
+                "accion_horas": accion.get("horas", 0) if isinstance(accion, dict) else 0
+            })
+        
+        return pd.DataFrame(grupos_data)
+        
+    except Exception as e:
+        return self._handle_query_error("grupos del participante", e)
+
+def asignar_participante_a_grupo(self, participante_id: str, grupo_id: str) -> bool:
+    """NUEVO: Asigna participante a grupo usando tabla N:N."""
+    try:
+        # Verificar permisos sobre el participante
+        participante_check = self.supabase.table("participantes").select(
+            "empresa_id"
+        ).eq("id", participante_id).execute()
+        
+        if not participante_check.data:
+            st.error("Participante no encontrado")
+            return False
+        
+        empresa_id = participante_check.data[0]["empresa_id"]
+        empresas_permitidas = self._get_empresas_gestionables()
+        
+        if empresa_id not in empresas_permitidas:
+            st.error("No tienes permisos para gestionar este participante")
+            return False
+        
+        # Verificar que el grupo existe y es accesible
+        grupo_check = self.supabase.table("grupos").select("id, empresa_id").eq("id", grupo_id).execute()
+        if not grupo_check.data:
+            st.error("Grupo no encontrado")
+            return False
+        
+        # Verificar si ya existe la relación
+        relacion_existe = self.supabase.table("participantes_grupos").select("id").match({
+            "participante_id": participante_id,
+            "grupo_id": grupo_id
+        }).execute()
+        
+        if relacion_existe.data:
+            st.warning("El participante ya está asignado a este grupo")
+            return False
+        
+        # Crear relación
+        self.supabase.table("participantes_grupos").insert({
+            "participante_id": participante_id,
+            "grupo_id": grupo_id,
+            "fecha_asignacion": datetime.utcnow().isoformat()
+        }).execute()
+        
+        # Limpiar caches
+        self.get_participantes_con_grupos_nn.clear()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error asignando participante a grupo: {e}")
+        return False
+
+def desasignar_participante_de_grupo(self, participante_id: str, grupo_id: str) -> bool:
+    """NUEVO: Desasigna participante de grupo."""
+    try:
+        # Verificar permisos
+        participante_check = self.supabase.table("participantes").select(
+            "empresa_id"
+        ).eq("id", participante_id).execute()
+        
+        if not participante_check.data:
+            st.error("Participante no encontrado")
+            return False
+        
+        empresa_id = participante_check.data[0]["empresa_id"]
+        empresas_permitidas = self._get_empresas_gestionables()
+        
+        if empresa_id not in empresas_permitidas:
+            st.error("No tienes permisos para gestionar este participante")
+            return False
+        
+        # Eliminar relación
+        self.supabase.table("participantes_grupos").delete().match({
+            "participante_id": participante_id,
+            "grupo_id": grupo_id
+        }).execute()
+        
+        # Limpiar caches
+        self.get_participantes_con_grupos_nn.clear()
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error desasignando participante: {e}")
+        return False
+
+def get_grupos_disponibles_para_participante(self, participante_id: str) -> Dict[str, str]:
+    """NUEVO: Obtiene grupos disponibles para asignar a un participante."""
+    try:
+        # Verificar participante y obtener su empresa
+        participante = self.supabase.table("participantes").select(
+            "empresa_id"
+        ).eq("id", participante_id).execute()
+        
+        if not participante.data:
+            return {}
+        
+        empresa_id = participante.data[0]["empresa_id"]
+        empresas_permitidas = self._get_empresas_gestionables()
+        
+        if empresa_id not in empresas_permitidas:
+            return {}
+        
+        # Obtener grupos ya asignados al participante
+        grupos_asignados = self.supabase.table("participantes_grupos").select(
+            "grupo_id"
+        ).eq("participante_id", participante_id).execute()
+        
+        grupos_asignados_ids = [g["grupo_id"] for g in grupos_asignados.data or []]
+        
+        # Obtener grupos de la empresa donde participa el participante
+        empresas_grupos = self.supabase.table("empresas_grupos").select(
+            "grupo_id"
+        ).eq("empresa_id", empresa_id).execute()
+        
+        grupos_empresa_ids = [eg["grupo_id"] for eg in empresas_grupos.data or []]
+        
+        if not grupos_empresa_ids:
+            return {}
+        
+        # Filtrar grupos no asignados
+        grupos_disponibles_ids = [g_id for g_id in grupos_empresa_ids if g_id not in grupos_asignados_ids]
+        
+        if not grupos_disponibles_ids:
+            return {}
+        
+        # Obtener información de grupos disponibles
+        grupos_res = self.supabase.table("grupos").select("""
+            id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
+            accion_formativa:acciones_formativas(nombre)
+        """).in_("id", grupos_disponibles_ids).execute()
+        
+        grupos_options = {}
+        for grupo in grupos_res.data or []:
+            accion_nombre = ""
+            if isinstance(grupo.get("accion_formativa"), dict):
+                accion_nombre = grupo["accion_formativa"].get("nombre", "Sin acción")
+            
+            fecha_inicio = grupo.get("fecha_inicio")
+            fecha_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else "Sin fecha"
+            
+            display_name = f"{grupo['codigo_grupo']} - {accion_nombre} ({fecha_str})"
+            grupos_options[display_name] = grupo["id"]
+        
+        return grupos_options
+        
+    except Exception as e:
+        st.error(f"Error cargando grupos disponibles: {e}")
+        return {}
+
+def migrar_campo_grupo_id_a_nn(self) -> bool:
+    """MIGRACIÓN: Convierte datos del campo grupo_id a tabla participantes_grupos."""
+    try:
+        if self.rol != "admin":
+            st.error("Solo administradores pueden ejecutar migraciones")
+            return False
+        
+        # Obtener participantes con grupo_id
+        participantes_con_grupo = self.supabase.table("participantes").select(
+            "id, grupo_id"
+        ).not_.is_("grupo_id", "null").execute()
+        
+        migrados = 0
+        errores = []
+        
+        for participante in participantes_con_grupo.data or []:
+            try:
+                # Verificar si ya existe en participantes_grupos
+                existe = self.supabase.table("participantes_grupos").select("id").match({
+                    "participante_id": participante["id"],
+                    "grupo_id": participante["grupo_id"]
+                }).execute()
+                
+                if not existe.data:
+                    # Crear entrada en participantes_grupos
+                    self.supabase.table("participantes_grupos").insert({
+                        "participante_id": participante["id"],
+                        "grupo_id": participante["grupo_id"],
+                        "fecha_asignacion": datetime.utcnow().isoformat()
+                    }).execute()
+                    
+                    migrados += 1
+                
+            except Exception as e:
+                errores.append(f"Participante {participante['id']}: {e}")
+        
+        st.success(f"Migración completada: {migrados} relaciones creadas")
+        if errores:
+            st.error(f"Errores: {len(errores)}")
+            for error in errores[:5]:  # Mostrar solo los primeros 5
+                st.write(error)
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"Error en migración: {e}")
+        return False
+        
     def get_participantes_por_empresa(_self, empresa_id: str) -> pd.DataFrame:
         """Obtiene participantes de una empresa específica."""
         try:
