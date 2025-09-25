@@ -1093,7 +1093,10 @@ def procesar_guardado_empresa(
             "ciudad": localidad_sel if localidad_sel else None,
             "es_centro_gestor": es_centro_gestor,
         }
-
+        # Solo añadir es_centro_gestor si está disponible (admin y no solo_datos_basicos)
+        if 'es_centro_gestor' in locals():
+            datos_empresa["es_centro_gestor"] = es_centro_gestor
+            
         # AGREGAR tipo_empresa solo en creación si es admin
         if es_creacion and session_state.role == "admin":
             datos_empresa["tipo_empresa"] = tipo_empresa
