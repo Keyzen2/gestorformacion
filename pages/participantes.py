@@ -853,7 +853,7 @@ def main(supabase, session_state):
 # =========================
 # HELPERS DE ESTADO Y VALIDACIÓN
 # =========================
-def mostrar_gestion_diplomas_participantes_optimizada(supabase, session_state, participantes_service):
+def mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service):
     """
     Versión optimizada de gestión de diplomas con nueva estructura de archivos.
     """
