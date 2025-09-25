@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import re
 import base64
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from io import BytesIO
 from typing import Optional, List, Dict, Any
 from reportlab.pdfgen import canvas
@@ -235,6 +235,326 @@ def preparar_df_export_grupos(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return df_export[columnas_finales]
+# ========================================
+# UTILIDADES PARA MÓDULO AULAS
+# Añadir al archivo utils.py existente
+# ========================================
+def validar_color_hex(color: str) -> bool:
+    """Valida que un string sea un color hexadecimal válido"""
+    if not color:
+        return False
+    
+    patron = r'^#[0-9A-Fa-f]{6}$'
+    return bool(re.match(patron, color))
+
+def validar_capacidad_aula(capacidad: int) -> tuple[bool, str]:
+    """Valida la capacidad de un aula"""
+    if capacidad is None or capacidad < 1:
+        return False, "La capacidad debe ser mayor a 0"
+    
+    if capacidad > 500:
+        return False, "La capacidad no puede ser mayor a 500 personas"
+    
+    return True, ""
+
+def validar_equipamiento_aula(equipamiento: List[str]) -> tuple[bool, str]:
+    """Valida el equipamiento seleccionado para un aula"""
+    equipamiento_valido = [
+        "PROYECTOR", "PIZARRA_DIGITAL", "ORDENADORES", "AUDIO",
+        "AIRE_ACONDICIONADO", "CALEFACCION", "WIFI", "TELEVISION",
+        "FLIPCHART", "IMPRESORA", "ESCANER"
+    ]
+    
+    for item in equipamiento:
+        if item not in equipamiento_valido:
+            return False, f"Equipamiento '{item}' no válido"
+    
+    return True, ""
+
+def validar_fechas_reserva(fecha_inicio: str, fecha_fin: str) -> tuple[bool, str]:
+    """Valida las fechas de una reserva de aula"""
+    try:
+        # Convertir a datetime
+        if isinstance(fecha_inicio, str):
+            dt_inicio = datetime.fromisoformat(fecha_inicio.replace('Z', '+00:00'))
+        else:
+            dt_inicio = fecha_inicio
+            
+        if isinstance(fecha_fin, str):
+            dt_fin = datetime.fromisoformat(fecha_fin.replace('Z', '+00:00'))
+        else:
+            dt_fin = fecha_fin
+        
+        # Validar que inicio sea antes que fin
+        if dt_inicio >= dt_fin:
+            return False, "La fecha de inicio debe ser anterior a la fecha de fin"
+        
+        # Validar que no sea en el pasado (con margen de 1 hora)
+        ahora = datetime.now()
+        if dt_inicio < ahora - timedelta(hours=1):
+            return False, "No se pueden crear reservas en el pasado"
+        
+        # Validar duración mínima (30 minutos)
+        if (dt_fin - dt_inicio).total_seconds() < 1800:
+            return False, "La reserva debe tener una duración mínima de 30 minutos"
+        
+        # Validar duración máxima (12 horas por reserva)
+        if (dt_fin - dt_inicio).total_seconds() > 43200:
+            return False, "La reserva no puede durar más de 12 horas"
+        
+        return True, ""
+        
+    except ValueError as e:
+        return False, f"Formato de fecha inválido: {str(e)}"
+
+def generar_colores_aulas() -> List[str]:
+    """Genera una lista de colores predefinidos para aulas"""
+    return [
+        "#3498db",  # Azul
+        "#e74c3c",  # Rojo
+        "#2ecc71",  # Verde
+        "#f39c12",  # Naranja
+        "#9b59b6",  # Morado
+        "#1abc9c",  # Turquesa
+        "#34495e",  # Gris oscuro
+        "#e67e22",  # Naranja oscuro
+        "#8e44ad",  # Morado oscuro
+        "#27ae60",  # Verde oscuro
+        "#2980b9",  # Azul oscuro
+        "#c0392b",  # Rojo oscuro
+    ]
+
+def formatear_equipamiento_aula(equipamiento: List[str]) -> str:
+    """Formatea la lista de equipamiento para mostrar en UI"""
+    if not equipamiento:
+        return "Sin equipamiento especificado"
+    
+    # Mapeo de códigos a nombres amigables
+    nombres_equipamiento = {
+        "PROYECTOR": "📽️ Proyector",
+        "PIZARRA_DIGITAL": "📋 Pizarra Digital",
+        "ORDENADORES": "💻 Ordenadores",
+        "AUDIO": "🔊 Sistema de Audio",
+        "AIRE_ACONDICIONADO": "❄️ Aire Acondicionado",
+        "CALEFACCION": "🔥 Calefacción",
+        "WIFI": "📶 WiFi",
+        "TELEVISION": "📺 Televisión",
+        "FLIPCHART": "📄 Rotafolio",
+        "IMPRESORA": "🖨️ Impresora",
+        "ESCANER": "📠 Escáner"
+    }
+    
+    equipos_formateados = [
+        nombres_equipamiento.get(equipo, equipo) 
+        for equipo in equipamiento
+    ]
+    
+    return " • ".join(equipos_formateados)
+
+def calcular_estadisticas_ocupacion(reservas_df: pd.DataFrame, 
+                                  aulas_df: pd.DataFrame, 
+                                  fecha_inicio: datetime, 
+                                  fecha_fin: datetime) -> Dict:
+    """Calcula estadísticas de ocupación de aulas"""
+    if reservas_df.empty or aulas_df.empty:
+        return {
+            "ocupacion_promedio": 0.0,
+            "aula_mas_ocupada": "N/A",
+            "total_horas_reservadas": 0.0,
+            "reservas_por_tipo": {}
+        }
+    
+    # Calcular horas totales del período
+    total_dias = (fecha_fin - fecha_inicio).days
+    horas_laborables_dia = 10  # 8:00 - 18:00
+    total_horas_disponibles = total_dias * horas_laborables_dia * len(aulas_df)
+    
+    # Calcular horas reservadas
+    reservas_df['duracion_horas'] = pd.to_datetime(reservas_df['fecha_fin']) - pd.to_datetime(reservas_df['fecha_inicio'])
+    reservas_df['duracion_horas'] = reservas_df['duracion_horas'].dt.total_seconds() / 3600
+    
+    total_horas_reservadas = reservas_df['duracion_horas'].sum()
+    ocupacion_promedio = (total_horas_reservadas / total_horas_disponibles * 100) if total_horas_disponibles > 0 else 0
+    
+    # Aula más ocupada
+    ocupacion_por_aula = reservas_df.groupby('aula_id')['duracion_horas'].sum()
+    aula_mas_ocupada_id = ocupacion_por_aula.idxmax() if not ocupacion_por_aula.empty else None
+    
+    if aula_mas_ocupada_id and not aulas_df.empty:
+        aula_mas_ocupada = aulas_df[aulas_df['id'] == aula_mas_ocupada_id]['nombre'].iloc[0]
+    else:
+        aula_mas_ocupada = "N/A"
+    
+    # Reservas por tipo
+    reservas_por_tipo = reservas_df['tipo_reserva'].value_counts().to_dict()
+    
+    return {
+        "ocupacion_promedio": round(ocupacion_promedio, 1),
+        "aula_mas_ocupada": aula_mas_ocupada,
+        "total_horas_reservadas": round(total_horas_reservadas, 1),
+        "reservas_por_tipo": reservas_por_tipo
+    }
+
+def validar_nombre_aula(nombre: str, empresa_id: str, aulas_existentes: pd.DataFrame, 
+                       aula_id_excluir: Optional[str] = None) -> tuple[bool, str]:
+    """Valida que el nombre del aula sea único en la empresa"""
+    if not nombre or not nombre.strip():
+        return False, "El nombre del aula es obligatorio"
+    
+    nombre = nombre.strip()
+    
+    if len(nombre) < 2:
+        return False, "El nombre debe tener al menos 2 caracteres"
+    
+    if len(nombre) > 100:
+        return False, "El nombre no puede tener más de 100 caracteres"
+    
+    # Verificar unicidad en la empresa
+    if not aulas_existentes.empty:
+        aulas_misma_empresa = aulas_existentes[aulas_existentes['empresa_id'] == empresa_id]
+        
+        if aula_id_excluir:
+            aulas_misma_empresa = aulas_misma_empresa[aulas_misma_empresa['id'] != aula_id_excluir]
+        
+        nombres_existentes = aulas_misma_empresa['nombre'].str.lower().tolist()
+        
+        if nombre.lower() in nombres_existentes:
+            return False, "Ya existe un aula con ese nombre en la empresa"
+    
+    return True, ""
+
+def generar_eventos_calendario(reservas_df: pd.DataFrame, aulas_df: pd.DataFrame) -> List[Dict]:
+    """Convierte reservas en eventos para componente de calendario"""
+    if reservas_df.empty:
+        return []
+    
+    eventos = []
+    
+    # Mapear colores por tipo de reserva
+    colores_tipo = {
+        'GRUPO': '#28a745',
+        'MANTENIMIENTO': '#ffc107', 
+        'EVENTO': '#17a2b8',
+        'BLOQUEADA': '#dc3545'
+    }
+    
+    for _, reserva in reservas_df.iterrows():
+        # Obtener información del aula
+        aula_info = aulas_df[aulas_df['id'] == reserva['aula_id']]
+        aula_nombre = aula_info['nombre'].iloc[0] if not aula_info.empty else 'Aula desconocida'
+        
+        # Color del evento
+        color_tipo = colores_tipo.get(reserva.get('tipo_reserva', 'GRUPO'), '#6c757d')
+        color_aula = aula_info['color_cronograma'].iloc[0] if not aula_info.empty else None
+        color_final = color_tipo if reserva.get('tipo_reserva') != 'GRUPO' else (color_aula or color_tipo)
+        
+        evento = {
+            'id': reserva['id'],
+            'title': f"{aula_nombre}: {reserva['titulo']}",
+            'start': reserva['fecha_inicio'],
+            'end': reserva['fecha_fin'],
+            'backgroundColor': color_final,
+            'borderColor': color_final,
+            'textColor': '#ffffff',
+            'extendedProps': {
+                'aula_id': reserva['aula_id'],
+                'aula_nombre': aula_nombre,
+                'tipo_reserva': reserva.get('tipo_reserva', 'GRUPO'),
+                'estado': reserva.get('estado', 'CONFIRMADA'),
+                'responsable': reserva.get('responsable', ''),
+                'observaciones': reserva.get('observaciones', '')
+            }
+        }
+        
+        eventos.append(evento)
+    
+    return eventos
+
+def exportar_ocupacion_excel(ocupacion_df: pd.DataFrame, filename: str = None) -> bytes:
+    """Exporta estadísticas de ocupación a Excel"""
+    if filename is None:
+        fecha_str = datetime.now().strftime("%Y%m%d")
+        filename = f"ocupacion_aulas_{fecha_str}.xlsx"
+    
+    # Preparar datos para exportar
+    df_export = ocupacion_df.copy()
+    
+    # Añadir columnas calculadas
+    if not df_export.empty:
+        df_export['Ocupación %'] = df_export.get('ocupacion_porcentaje', 0).apply(lambda x: f"{x:.1f}%")
+        df_export['Total Reservas'] = df_export.get('total_reservas', 0)
+        df_export['Horas Ocupadas'] = df_export.get('horas_ocupadas', 0).apply(lambda x: f"{x:.1f}h")
+    
+    # Seleccionar columnas para exportar
+    columnas_export = ['nombre', 'ubicacion', 'capacidad_maxima', 'Total Reservas', 'Horas Ocupadas', 'Ocupación %']
+    columnas_disponibles = [col for col in columnas_export if col in df_export.columns]
+    
+    if columnas_disponibles:
+        df_final = df_export[columnas_disponibles]
+    else:
+        df_final = df_export
+    
+    # Renombrar columnas para el export
+    rename_map = {
+        'nombre': 'Aula',
+        'ubicacion': 'Ubicación', 
+        'capacidad_maxima': 'Capacidad Máxima'
+    }
+    
+    df_final = df_final.rename(columns=rename_map)
+    
+    return df_final.to_excel(index=False, engine='openpyxl')
+
+def obtener_horarios_sugeridos() -> List[Dict[str, str]]:
+    """Obtiene horarios sugeridos para reservas de aula"""
+    return [
+        {"label": "Mañana completa (9:00 - 13:00)", "inicio": "09:00", "fin": "13:00"},
+        {"label": "Tarde completa (14:00 - 18:00)", "inicio": "14:00", "fin": "18:00"},
+        {"label": "Día completo (9:00 - 18:00)", "inicio": "09:00", "fin": "18:00"},
+        {"label": "Media mañana (9:00 - 11:00)", "inicio": "09:00", "fin": "11:00"},
+        {"label": "Media mañana (11:00 - 13:00)", "inicio": "11:00", "fin": "13:00"},
+        {"label": "Media tarde (14:00 - 16:00)", "inicio": "14:00", "fin": "16:00"},
+        {"label": "Media tarde (16:00 - 18:00)", "inicio": "16:00", "fin": "18:00"},
+        {"label": "Personalizado", "inicio": "", "fin": ""}
+    ]
+
+def validar_conflictos_reserva(nueva_reserva: Dict, reservas_existentes: pd.DataFrame,
+                              aula_id: str, reserva_id_excluir: Optional[str] = None) -> tuple[bool, List[str]]:
+    """Valida conflictos con reservas existentes"""
+    if reservas_existentes.empty:
+        return True, []
+    
+    # Filtrar reservas del aula específica
+    reservas_aula = reservas_existentes[
+        (reservas_existentes['aula_id'] == aula_id) &
+        (reservas_existentes['estado'] != 'CANCELADA')
+    ]
+    
+    if reserva_id_excluir:
+        reservas_aula = reservas_aula[reservas_aula['id'] != reserva_id_excluir]
+    
+    if reservas_aula.empty:
+        return True, []
+    
+    # Convertir fechas
+    nueva_inicio = pd.to_datetime(nueva_reserva['fecha_inicio'])
+    nueva_fin = pd.to_datetime(nueva_reserva['fecha_fin'])
+    
+    conflictos = []
+    
+    for _, reserva in reservas_aula.iterrows():
+        reserva_inicio = pd.to_datetime(reserva['fecha_inicio'])
+        reserva_fin = pd.to_datetime(reserva['fecha_fin'])
+        
+        # Verificar solapamiento
+        if (nueva_inicio < reserva_fin) and (nueva_fin > reserva_inicio):
+            conflictos.append(
+                f"Conflicto con '{reserva['titulo']}' "
+                f"({reserva_inicio.strftime('%d/%m %H:%M')} - {reserva_fin.strftime('%d/%m %H:%M')})"
+            )
+    
+    return len(conflictos) == 0, conflictos
+                                  
 # =========================
 # FUNCIONES XML FUNDAE CORREGIDAS
 # =========================
