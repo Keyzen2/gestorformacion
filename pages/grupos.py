@@ -1987,7 +1987,7 @@ def main(supabase, session_state):
     grupos_service = get_grupos_service(supabase, session_state)
     
     # Crear tabs principales siguiendo el patrón de participantes
-    tabs = st.tabs(["📋 Listado", "➕ Crear", "📊 Métricas", "📄 Documentos"])
+    tabs = st.tabs(["📋 Listado", "➕ Crear"])
     
     # ========================= 
     # TAB 1: LISTADO (Estilo consistente)
@@ -2015,20 +2015,43 @@ def main(supabase, session_state):
             with st.expander("📥 Exportar Grupos"):
                 exportar_grupos(df_grupos, df_paged, session_state)
             
-            with st.expander("📋 Herramientas Administrativas"):
-                mostrar_herramientas_grupos(grupos_service, session_state)
+            with st.expander("🔧 Herramientas Administrativas"):
+                # Solo limpiar cache
+                if st.button("🔄 Limpiar Cache", use_container_width=True):
+                    grupos_service.limpiar_cache_grupos()
+                    st.success("✅ Cache limpiado")
+                    st.rerun()
 
             with st.expander("ℹ️ Ayuda sobre Grupos FUNDAE"):
-                mostrar_ayuda_grupos()
+                st.markdown("""
+                **Funcionalidades principales:**
+                - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar grupos rápidamente
+                - ✏️ **Edición**: Haz clic en una fila para editar un grupo
+                - 📊 **Estados automáticos**: Los estados se calculan según las fechas
+                - 👥 **Gestión completa**: Tutores, empresas, participantes y costes
+                
+                **Estados de grupos:**
+                - 🟢 **ABIERTO**: Grupo en proceso de configuración
+                - 🟡 **FINALIZAR**: Fecha prevista superada, requiere finalización
+                - ✅ **FINALIZADO**: Completado con todos los datos FUNDAE
+                
+                **Flujo recomendado:**
+                1. Crear grupo con datos básicos
+                2. Asignar tutores y centro gestor (si aplica)
+                3. Añadir empresas participantes
+                4. Inscribir participantes
+                5. Configurar costes FUNDAE
+                6. Finalizar cuando corresponda
+                """)
 
             # Mostrar formulario de edición si hay selección
             if seleccionado is not None:
                 with st.container(border=True):
-                    # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
-                    grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, context="_editar")
+                    grupo_id = mostrar_formulario_grupo_corregido(
+                        grupos_service, es_creacion=False, context="_editar"
+                    )
                     if grupo_id:
                         st.divider()
-                        # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
                         mostrar_secciones_adicionales(grupos_service, grupo_id)
                         
         except Exception as e:
@@ -2039,44 +2062,26 @@ def main(supabase, session_state):
     # =========================
     with tabs[1]:
         with st.container(border=True):
-            # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
-            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True, context="_crear")
-
-    # =========================
-    # TAB 3: MÉTRICAS (Estilo consistente)
-    # =========================
-    with tabs[2]:
-        try:
-            df_grupos = grupos_service.get_grupos_completos()
-            mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service)
-        except Exception as e:
-            st.error(f"❌ Error cargando métricas: {e}")
-
-    # =========================
-    # TAB 4: DOCUMENTOS (Nuevo)
-    # =========================
-    with tabs[3]:
-        mostrar_gestion_documentos_grupos(grupos_service, session_state)
+            mostrar_formulario_grupo_corregido(
+                grupos_service, es_creacion=True, context="_crear"
+            )
         
 def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
-    """Tabla de grupos consistente con el estilo de participantes/empresas."""
+    """Tabla de grupos usando las métricas y funcionalidad existente."""
     
     if df_grupos.empty:
         st.info("📋 No hay grupos registrados en tu ámbito.")
         return None, pd.DataFrame()
     
-    # Métricas compactas (como participantes)
-    mostrar_metricas_grupos_compactas(df_grupos, session_state)
+    # Usar tu función de métricas existente en lugar de crear una nueva
+    mostrar_metricas_grupos(df_grupos, session_state)
     
-    # Avisos importantes
+    # Avisos de grupos pendientes (mantener tu lógica existente)
     grupos_pendientes = get_grupos_pendientes_finalizacion(df_grupos)
     if grupos_pendientes:
-        st.warning(f"⚠️ {len(grupos_pendientes)} grupo(s) pendiente(s) de finalización")
-        with st.expander("Ver grupos pendientes", expanded=False):
-            for grupo in grupos_pendientes[:3]:
-                st.markdown(f"- **{grupo.get('codigo_grupo')}** - Fin previsto: {grupo.get('fecha_fin_prevista')}")
+        mostrar_avisos_grupos(grupos_pendientes)
     
-    # Filtros de búsqueda (estilo participantes - más compactos)
+    # Filtros compactos (estilo participantes)
     st.markdown("### 🔍 Buscar y Filtrar")
     col1, col2, col3, col4 = st.columns(4)
     
@@ -2101,7 +2106,7 @@ def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
     # Aplicar filtros
     df_filtrado = aplicar_filtros_grupos(df_grupos, query, modalidad_filter, estado_filter, empresa_filter, session_state)
 
-    # Tabla principal (estilo participantes con configuración moderna)
+    # Tabla principal
     st.markdown("### 📊 Listado de Grupos")
     
     if df_filtrado.empty:
@@ -2133,7 +2138,7 @@ def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
     }
     
-    # Mostrar tabla con selección (estilo moderno de participantes)
+    # Mostrar tabla con selección
     event = st.dataframe(
         df_filtrado[columnas_disponibles],
         use_container_width=True,
@@ -2219,48 +2224,6 @@ def exportar_grupos(df_grupos, df_filtrado, session_state):
         # Usar tu función de exportación existente
         export_excel(df_export, filename=filename, label="📥 Exportar a Excel")
 
-def mostrar_herramientas_grupos(grupos_service, session_state):
-    """Herramientas administrativas."""
-    st.markdown("**🔧 Herramientas Administrativas**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("🔄 Limpiar Cache", use_container_width=True):
-            grupos_service.limpiar_cache_grupos()
-            st.success("✅ Cache limpiado")
-            st.rerun()
-    
-    with col2:
-        if st.button("📊 Recalcular Estados", use_container_width=True):
-            st.info("🔧 Funcionalidad en desarrollo")
-
-def mostrar_ayuda_grupos():
-    """Información de ayuda estilo participantes."""
-    st.markdown("""
-    **Funcionalidades principales:**
-    - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar grupos rápidamente
-    - ✏️ **Edición**: Haz clic en una fila para editar un grupo
-    - 📊 **Estados automáticos**: Los estados se calculan según las fechas
-    - 👥 **Gestión completa**: Tutores, empresas, participantes y costes
-    
-    **Estados de grupos:**
-    - 🟢 **ABIERTO**: Grupo en proceso de configuración
-    - 🟡 **FINALIZAR**: Fecha prevista superada, requiere finalización
-    - ✅ **FINALIZADO**: Completado con todos los datos FUNDAE
-    
-    **Permisos por rol:**
-    - 👑 **Admin**: Ve todos los grupos de todas las empresas
-    - 👨‍💼 **Gestor**: Solo ve grupos de su empresa y empresas clientes
-    
-    **Flujo recomendado:**
-    1. Crear grupo con datos básicos
-    2. Asignar tutores y centro gestor (si aplica)
-    3. Añadir empresas participantes
-    4. Inscribir participantes
-    5. Configurar costes FUNDAE
-    6. Finalizar cuando corresponda
-    """)
 
 def mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service):
     """Tab de métricas detalladas."""
@@ -2277,22 +2240,6 @@ def mostrar_metricas_grupos_detalladas(df_grupos, session_state, grupos_service)
     # Aquí puedes añadir más métricas en el futuro
     st.info("Métricas adicionales en desarrollo...")
 
-def mostrar_gestion_documentos_grupos(grupos_service, session_state):
-    """Tab para gestión de documentos relacionados con grupos."""
-    st.markdown("### 📄 Gestión de Documentos FUNDAE")
-    st.caption("Generación y gestión de documentación oficial FUNDAE")
-    
-    st.info("🔧 Funcionalidad de documentos en desarrollo...")
-    
-    st.markdown("""
-    **Documentos FUNDAE disponibles:**
-    - 📋 XML Inicio de Grupo
-    - ✅ XML Finalización de Grupo  
-    - 📊 Informes de seguimiento
-    - 📑 Certificados de participación
-    
-    Esta sección estará disponible próximamente.
-    """)
 # =========================
 # PUNTO DE ENTRADA
 # =========================
