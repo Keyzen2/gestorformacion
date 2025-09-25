@@ -1,8 +1,207 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date, timedelta
+from streamlit_calendar import calendar
 from services.aulas_service import get_aulas_service
 from utils.utils import validar_texto_obligatorio, export_excel
+
+def mostrar_cronograma_interactivo(aulas_service, session_state):
+    """Cronograma visual interactivo usando streamlit-calendar"""
+    
+    st.markdown("### 📅 Cronograma Interactivo de Aulas")
+    
+    # Controles superiores
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        fecha_inicio = st.date_input(
+            "📅 Desde", 
+            value=datetime.now().date(),
+            key="cronograma_inicio"
+        )
+    
+    with col2:
+        fecha_fin = st.date_input(
+            "📅 Hasta", 
+            value=datetime.now().date() + timedelta(days=14),
+            key="cronograma_fin"
+        )
+    
+    with col3:
+        vista_inicial = st.selectbox(
+            "👁️ Vista inicial",
+            ["dayGridMonth", "timeGridWeek", "timeGridDay", "listWeek"],
+            index=1,
+            key="cronograma_vista_inicial"
+        )
+    
+    with col4:
+        if st.button("🔄 Actualizar", key="cronograma_refresh"):
+            st.rerun()
+    
+    # Filtros de aulas
+    try:
+        df_aulas = aulas_service.get_aulas_con_empresa()
+        if not df_aulas.empty:
+            aulas_disponibles = df_aulas['nombre'].tolist()
+            aulas_seleccionadas = st.multiselect(
+                "🏢 Filtrar por aulas específicas (vacío = todas)",
+                aulas_disponibles,
+                key="cronograma_filtro_aulas"
+            )
+            
+            # Filtrar aulas si es necesario
+            if aulas_seleccionadas:
+                aulas_ids = df_aulas[df_aulas['nombre'].isin(aulas_seleccionadas)]['id'].tolist()
+            else:
+                aulas_ids = df_aulas['id'].tolist()
+        else:
+            st.warning("⚠️ No hay aulas disponibles")
+            return
+    except Exception as e:
+        st.error(f"❌ Error cargando aulas: {e}")
+        return
+    
+    # Obtener eventos para el cronograma
+    try:
+        eventos = aulas_service.get_eventos_cronograma(
+            fecha_inicio.isoformat() + "T00:00:00Z",
+            fecha_fin.isoformat() + "T23:59:59Z", 
+            aulas_ids
+        )
+        
+        # Configuración del calendario
+        calendar_options = {
+            "editable": True,
+            "selectable": True,
+            "selectMirror": True,
+            "dayMaxEvents": 3,
+            "weekends": True,
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+            },
+            "initialView": vista_inicial,
+            "initialDate": fecha_inicio.isoformat(),
+            "validRange": {
+                "start": fecha_inicio.isoformat(),
+                "end": fecha_fin.isoformat()
+            },
+            "height": 600,
+            "slotMinTime": "07:00:00",
+            "slotMaxTime": "22:00:00",
+            "businessHours": {
+                "daysOfWeek": [1, 2, 3, 4, 5],  # Lunes a Viernes
+                "startTime": "08:00",
+                "endTime": "19:00"
+            },
+            "eventDisplay": "block",
+            "displayEventEnd": True,
+            "nowIndicator": True,
+            "locale": "es"
+        }
+        
+        # CSS personalizado para el calendario
+        calendar_css = """
+        .fc-event-grupo { 
+            border-left: 5px solid #28a745 !important;
+            background-color: #d4edda !important;
+            color: #155724 !important;
+        }
+        .fc-event-mantenimiento { 
+            border-left: 5px solid #ffc107 !important;
+            background-color: #fff3cd !important;
+            color: #856404 !important;
+        }
+        .fc-event-evento { 
+            border-left: 5px solid #17a2b8 !important;
+            background-color: #d1ecf1 !important;
+            color: #0c5460 !important;
+        }
+        .fc-event-bloqueada { 
+            border-left: 5px solid #dc3545 !important;
+            background-color: #f8d7da !important;
+            color: #721c24 !important;
+        }
+        .fc-toolbar-title {
+            font-size: 1.2em !important;
+            font-weight: 600 !important;
+        }
+        .fc-button-primary {
+            background-color: #0066cc !important;
+            border-color: #0066cc !important;
+        }
+        """
+        
+        # Renderizar calendario
+        calendar_result = calendar(
+            events=eventos,
+            options=calendar_options,
+            custom_css=calendar_css,
+            key="aulas_calendar"
+        )
+        
+        # Mostrar información del evento seleccionado/clickeado
+        if calendar_result.get("eventClick"):
+            evento_info = calendar_result["eventClick"]["event"]
+            st.markdown("---")
+            st.markdown("### 📋 Detalle de Reserva Seleccionada")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.info(f"**🏢 Aula:** {evento_info['extendedProps']['aula_nombre']}")
+                st.info(f"**📝 Título:** {evento_info['title'].split(': ', 1)[-1]}")
+            
+            with col2:
+                fecha_inicio_evento = pd.to_datetime(evento_info['start']).strftime('%d/%m/%Y %H:%M')
+                fecha_fin_evento = pd.to_datetime(evento_info['end']).strftime('%d/%m/%Y %H:%M')
+                st.info(f"**📅 Inicio:** {fecha_inicio_evento}")
+                st.info(f"**📅 Fin:** {fecha_fin_evento}")
+            
+            with col3:
+                tipo_reserva = evento_info['extendedProps']['tipo_reserva']
+                estado = evento_info['extendedProps']['estado']
+                st.info(f"**🏷️ Tipo:** {tipo_reserva}")
+                st.info(f"**📊 Estado:** {estado}")
+            
+            # Mostrar código de grupo si existe
+            if evento_info['extendedProps'].get('grupo_codigo'):
+                st.success(f"**📚 Grupo:** {evento_info['extendedProps']['grupo_codigo']}")
+        
+        # Información adicional sobre clicks en fechas
+        if calendar_result.get("dateClick"):
+            fecha_click = calendar_result["dateClick"]["date"]
+            st.info(f"📅 Fecha seleccionada: {pd.to_datetime(fecha_click).strftime('%d/%m/%Y')}")
+            
+            # Aquí podrías añadir lógica para crear nueva reserva
+            if st.button("➕ Crear reserva en esta fecha", key="crear_reserva_fecha"):
+                st.session_state["crear_reserva_fecha"] = fecha_click
+                st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ Error generando cronograma: {e}")
+    
+    # Leyenda de colores
+    with st.expander("🎨 Leyenda de Colores"):
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.markdown("**🟢 Formación (GRUPO)**")
+            st.markdown("Grupos formativos programados")
+        
+        with col2:
+            st.markdown("**🟡 Mantenimiento**")
+            st.markdown("Tareas de mantenimiento")
+        
+        with col3:
+            st.markdown("**🔵 Eventos**")
+            st.markdown("Eventos especiales")
+        
+        with col4:
+            st.markdown("**🔴 Bloqueada**")
+            st.markdown("Aula no disponible")
 
 def mostrar_tabla_aulas(df_aulas, session_state, aulas_service, titulo_tabla="🏢 Lista de Aulas"):
     """Tabla de aulas siguiendo el patrón de Streamlit 1.49"""
@@ -362,13 +561,7 @@ def main(supabase, session_state):
             mostrar_formulario_aula(aula_seleccionada, aulas_service, session_state)
     
     with tab2:
-        st.markdown("### 📅 Cronograma de Aulas")
-        st.info("🚧 El cronograma visual se implementará en la siguiente fase usando el componente de calendario.")
-        
-        # Placeholder para mostrar reservas en tabla
-        df_reservas = aulas_service.get_reservas_proximas()
-        if not df_reservas.empty:
-            st.dataframe(df_reservas, use_container_width=True)
+        mostrar_cronograma_interactivo(aulas_service, session_state)
     
     with tab3:
         st.markdown("### 📝 Gestión de Reservas")
