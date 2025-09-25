@@ -70,7 +70,7 @@ class AulasService:
             return pd.DataFrame()
             
         except Exception as e:
-            st.error(f"Error cargando aulas: {e}")
+            print(f"Error cargando aulas: {e}")  # Cambiar st.error por print
             return pd.DataFrame()
 
     def _get_empresas_gestionadas(self) -> List[str]:
@@ -87,7 +87,7 @@ class AulasService:
             return [emp["id"] for emp in result.data or []]
             
         except Exception as e:
-            st.error(f"Error obteniendo empresas gestionadas: {e}")
+            print(f"Error obteniendo empresas gestionadas: {e}")
             return [self.empresa_id] if self.empresa_id else []
 
     def crear_aula(self, datos_aula: Dict) -> Tuple[bool, Optional[str]]:
@@ -103,12 +103,10 @@ class AulasService:
             
             # Validaciones
             if not datos_aula.get("nombre"):
-                st.error("El nombre del aula es obligatorio")
-                return False, None
+                return False, "El nombre del aula es obligatorio"
                 
             if not datos_aula.get("empresa_id"):
-                st.error("Empresa requerida")
-                return False, None
+                return False, "Empresa requerida"
             
             # Verificar nombre único en la empresa
             existing = self.supabase.table("aulas").select("id").eq(
@@ -116,8 +114,7 @@ class AulasService:
             ).eq("nombre", datos_aula["nombre"]).execute()
             
             if existing.data:
-                st.error("Ya existe un aula con ese nombre en la empresa")
-                return False, None
+                return False, "Ya existe un aula con ese nombre en la empresa"
             
             # Crear aula
             result = self.supabase.table("aulas").insert(datos_aula).execute()
@@ -129,15 +126,13 @@ class AulasService:
             return False, None
             
         except Exception as e:
-            st.error(f"Error creando aula: {e}")
-            return False, None
+            return False, f"Error creando aula: {e}"
 
     def actualizar_aula(self, aula_id: str, datos_aula: Dict) -> bool:
         """Actualiza un aula existente"""
         try:
             # Verificar permisos
             if not self._puede_modificar_aula(aula_id):
-                st.error("No tienes permisos para modificar esta aula")
                 return False
             
             # Verificar nombre único (excluyendo el aula actual)
@@ -150,7 +145,6 @@ class AulasService:
                     # Verificar si es de la misma empresa
                     aula_actual = self.supabase.table("aulas").select("empresa_id").eq("id", aula_id).execute()
                     if (aula_actual.data and existing.data[0]["empresa_id"] == aula_actual.data[0]["empresa_id"]):
-                        st.error("Ya existe un aula con ese nombre en la empresa")
                         return False
             
             # Actualizar
@@ -163,7 +157,6 @@ class AulasService:
             return False
             
         except Exception as e:
-            st.error(f"Error actualizando aula: {e}")
             return False
 
     def eliminar_aula(self, aula_id: str) -> bool:
@@ -171,7 +164,6 @@ class AulasService:
         try:
             # Verificar permisos
             if not self._puede_modificar_aula(aula_id):
-                st.error("No tienes permisos para eliminar esta aula")
                 return False
             
             # Verificar que no tenga reservas futuras
@@ -181,7 +173,6 @@ class AulasService:
             ).gte("fecha_fin", ahora).execute()
             
             if reservas_futuras.data:
-                st.error("No se puede eliminar el aula porque tiene reservas futuras")
                 return False
             
             # Eliminar reservas pasadas primero
@@ -197,7 +188,6 @@ class AulasService:
             return False
             
         except Exception as e:
-            st.error(f"Error eliminando aula: {e}")
             return False
 
     def _puede_modificar_aula(self, aula_id: str) -> bool:
