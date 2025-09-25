@@ -163,11 +163,11 @@ def mostrar_metricas_usuarios(df_usuarios):
 # TABLA GENERAL
 # =========================
 def mostrar_tabla_usuarios(df_usuarios, session_state, columnas_mostrar, titulo_tabla="📋 Lista de Usuarios"):
-    """Muestra tabla de usuarios con filtros y selección de fila."""
+    """Muestra tabla de usuarios con filtros, columnas dinámicas y selección de fila."""
 
     if df_usuarios.empty:
         st.info("📋 No hay usuarios para mostrar")
-        return None, df_usuarios  # <- devolvemos también df vacío para consistencia
+        return None, df_usuarios
 
     st.markdown(f"### {titulo_tabla}")
 
@@ -193,12 +193,13 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, columnas_mostrar, titulo_
     if filtro_empresa and "empresa_nombre" in df_filtered.columns:
         df_filtered = df_filtered[df_filtered["empresa_nombre"].str.contains(filtro_empresa, case=False, na=False)]
 
-    # ✅ Usar columnas dinámicas desde ajustes_app
+    # ✅ Filtrar columnas dinámicas
     columnas_existentes = [col for col in columnas_mostrar if col in df_filtered.columns]
-    df_display = (
-        df_filtered[columnas_existentes] if not df_filtered.empty
-        else pd.DataFrame(columns=columnas_existentes)
-    )
+    if not columnas_existentes:
+        st.warning("⚠️ No hay columnas configuradas que existan en los datos, usando fallback mínimo.")
+        columnas_existentes = ["nombre_completo"] if "nombre_completo" in df_filtered.columns else df_filtered.columns.tolist()
+
+    df_display = df_filtered[columnas_existentes] if not df_filtered.empty else pd.DataFrame(columns=columnas_existentes)
 
     # Mostrar tabla
     evento = st.dataframe(
@@ -211,6 +212,7 @@ def mostrar_tabla_usuarios(df_usuarios, session_state, columnas_mostrar, titulo_
 
     if evento.selection.rows:
         return df_filtered.iloc[evento.selection.rows[0]], df_filtered
+
     return None, df_filtered
 
 # =========================
@@ -461,49 +463,47 @@ def main(supabase, session_state):
 
     with tabs[0]:
         st.markdown("### 📊 Listado de Usuarios")
-    
+
         # =========================
         # Leer columnas dinámicas desde ajustes
         # =========================
         ajustes = get_ajustes_app(supabase, campos=["columnas_usuarios"])
         columnas_mostrar = ajustes.get("columnas_usuarios")
-    
+
         # ✅ Fallback si viene None
         if not columnas_mostrar:
             columnas_mostrar = [
                 "nombre_completo", "email", "telefono",
                 "rol", "empresa_nombre", "created_at"
             ]
-    
+
         # Filtrar solo las columnas que existen en df
         columnas_mostrar = [col for col in columnas_mostrar if col in df_usuarios.columns]
-    
+
         # ✅ Asegurar que 'nombre_completo' siempre esté presente y primero
         if "nombre_completo" not in columnas_mostrar and "nombre_completo" in df_usuarios.columns:
             columnas_mostrar.insert(0, "nombre_completo")
         else:
             columnas_mostrar = ["nombre_completo"] + [c for c in columnas_mostrar if c != "nombre_completo"]
-    
+
         # =========================
         # Configuración de columnas visibles (solo admin)
         # =========================
         if session_state.role == "admin":
             st.subheader("⚙️ Configuración de columnas visibles")
-    
+
             columnas_disponibles = df_usuarios.columns.tolist()
-    
-            # ✅ Siempre forzar 'nombre_completo' en el multiselect (no editable)
             columnas_opciones = [c for c in columnas_disponibles if c != "nombre_completo"]
-    
+
             columnas_seleccionadas = st.multiselect(
                 "Selecciona las columnas a mostrar",
                 options=columnas_opciones,
                 default=[c for c in columnas_mostrar if c != "nombre_completo"]
             )
-    
+
             # Reconstruir con 'nombre_completo' fijo + seleccionadas
             columnas_final = ["nombre_completo"] + columnas_seleccionadas
-    
+
             if st.button("💾 Guardar columnas", type="primary"):
                 if not columnas_seleccionadas:
                     st.warning("⚠️ Debes seleccionar al menos una columna además de nombre")
@@ -513,20 +513,18 @@ def main(supabase, session_state):
                     st.success("✅ Columnas guardadas correctamente")
                     st.rerun()
 
-    # =========================
-    # TAB LISTADO
-    # =========================
-    with tabs[0]:
+        # =========================
+        # Mostrar tabla con columnas dinámicas
+        # =========================
         try:
-            # Filtrar solo usuarios del sistema (no alumnos)
             df_filtered = df_usuarios[df_usuarios["rol"].isin(["admin", "gestor", "comercial"])].copy()
-            
-            # Mostrar tabla
-            seleccionado, df_paged = mostrar_tabla_usuarios(df_filtered, session_state)
 
-            # Exportación en expander (como participantes)
+            seleccionado, df_paged = mostrar_tabla_usuarios(
+                df_filtered, session_state, columnas_mostrar
+            )
+
             st.divider()
-            
+
             with st.expander("📥 Exportar Usuarios"):
                 exportar_usuarios(df_filtered)
 
@@ -537,16 +535,6 @@ def main(supabase, session_state):
                 - ✏️ **Edición**: Haz clic en una fila para editar un usuario
                 - 📊 **Exportar**: Gestión de datos en el expander superior
                 - 🏢 **Empresa integrada**: Selección dentro del formulario
-
-                **Roles disponibles:**
-                - 👑 **Admin**: Acceso total al sistema, puede gestionar todas las empresas
-                - 👨‍💼 **Gestor**: Administra una empresa específica (requiere empresa asignada)
-                - 💼 **Comercial**: Gestión de CRM y clientes (requiere empresa asignada)
-
-                **Importante:**
-                - 🎓 **Los alumnos NO se crean aquí** - se crean desde "Participantes"
-                - Los gestores y comerciales deben tener empresa asignada obligatoriamente
-                - Las contraseñas se generan automáticamente de forma segura
                 """)
 
             if seleccionado is not None:
@@ -556,18 +544,16 @@ def main(supabase, session_state):
         except Exception as e:
             st.error(f"❌ Error cargando usuarios: {e}")
 
-    # =========================
-    # TAB CREAR
-    # =========================
     with tabs[1]:
         with st.container(border=True):
             mostrar_formulario_usuario({}, data_service, auth_service, empresas_dict, es_creacion=True)
 
-    # =========================
-    # TAB MÉTRICAS
-    # =========================
     with tabs[2]:
         mostrar_metricas_usuarios(df_usuarios)
+
+    st.divider()
+    st.caption("💡 Gestiona usuarios administrativos del sistema desde esta interfaz centralizada.")
+
 
     st.divider()
     st.caption("💡 Gestiona usuarios administrativos del sistema desde esta interfaz centralizada.")
