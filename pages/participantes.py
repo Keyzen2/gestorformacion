@@ -354,7 +354,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
 # =========================
 # SECCIÓN DE GRUPOS N:N PARA PARTICIPANTES
 # =========================
-def mostrar_seccion_grupos_participante_nn(participantes_service, participante_id, empresa_id, session_state):
+def mostrar_seccion_grupos_participante(participantes_service, participante_id, empresa_id, session_state):
     """Gestión de grupos del participante usando relación N:N."""
     st.markdown("### 🎓 Grupos de Formación")
     st.caption("Un participante puede estar inscrito en múltiples grupos a lo largo del tiempo")
@@ -365,7 +365,7 @@ def mostrar_seccion_grupos_participante_nn(participantes_service, participante_i
     
     try:
         # Mostrar grupos actuales del participante usando los métodos del servicio
-        df_grupos_participante = participantes_service.get_grupos_de_participante_nn(participante_id)
+        df_grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
         
         if not df_grupos_participante.empty:
             st.markdown("#### 📚 Grupos Asignados")
