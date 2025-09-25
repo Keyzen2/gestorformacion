@@ -290,7 +290,66 @@ class GruposService:
             
         except Exception as e:
             return False, f"Error al validar código: {e}"
-
+            
+    def get_empresas_centro_gestor_disponibles(self) -> Dict[str, str]:
+        """Obtiene empresas marcadas como centro gestor según jerarquía."""
+        try:
+            if self.rol == "admin":
+                query = self.supabase.table("empresas").select("id, nombre").eq("es_centro_gestor", True)
+            elif self.rol == "gestor" and self.empresa_id:
+                # Gestor: su empresa + clientes que sean centro gestor
+                empresas_permitidas = [self.empresa_id]
+                clientes = self.supabase.table("empresas").select("id").eq("empresa_matriz_id", self.empresa_id).execute()
+                empresas_permitidas.extend([c["id"] for c in (clientes.data or [])])
+                
+                query = self.supabase.table("empresas").select("id, nombre").eq("es_centro_gestor", True).in_("id", empresas_permitidas)
+            else:
+                return {}
+            
+            res = query.order("nombre").execute()
+            return {emp["nombre"]: emp["id"] for emp in (res.data or [])}
+        
+        except Exception as e:
+            st.error(f"Error cargando centros gestores: {e}")
+            return {}
+    
+    def get_centro_gestor_empresa(self, grupo_id: str) -> dict:
+        """Obtiene empresa asignada como centro gestor del grupo."""
+        try:
+            res = self.supabase.table("grupos").select(
+                "centro_gestor_empresa_id, centro_empresa:empresas!centro_gestor_empresa_id(nombre, cif)"
+            ).eq("id", grupo_id).execute()
+            
+            if res.data and res.data[0].get("centro_gestor_empresa_id"):
+                return res.data[0]["centro_empresa"]
+            return None
+        except Exception as e:
+            return None
+    
+    def asignar_empresa_como_centro_gestor(self, grupo_id: str, empresa_id: str) -> bool:
+        """Asigna una empresa como centro gestor del grupo."""
+        try:
+            self.supabase.table("grupos").update({
+                "centro_gestor_empresa_id": empresa_id,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", grupo_id).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error asignando centro gestor: {e}")
+            return False
+    
+    def quitar_centro_gestor(self, grupo_id: str) -> bool:
+        """Quita el centro gestor del grupo."""
+        try:
+            self.supabase.table("grupos").update({
+                "centro_gestor_empresa_id": None,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", grupo_id).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error quitando centro gestor: {e}")
+            return False
+        
     def determinar_empresa_gestora_responsable(self, accion_formativa_id, empresa_propietaria_id):
         """
         Determina qué empresa es responsable ante FUNDAE según jerarquía:
