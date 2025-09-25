@@ -850,6 +850,10 @@ def main(supabase, session_state):
     # =========================
     with tabs[3]:
         mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service)   
+
+# =========================
+# HELPERS DE ESTADO Y VALIDACIÓN
+# =========================
 def mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service):
     """
     Gestión completa de diplomas por participante con Streamlit 1.49.
@@ -1155,9 +1159,7 @@ def eliminar_diploma(supabase, diploma, participante_id):
     except Exception as e:
         st.error(f"❌ Error eliminando diploma: {e}")
         return False
-# =========================
-# HELPERS DE ESTADO Y VALIDACIÓN
-# =========================
+        
 def formatear_estado_participante(fila: dict) -> str:
     """Devuelve el estado de formación de un participante según fechas."""
     if not fila.get("grupo_fecha_inicio"):
