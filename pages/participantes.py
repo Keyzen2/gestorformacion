@@ -1203,7 +1203,7 @@ def mostrar_gestion_diploma_individual(supabase, participante, tiene_diploma, di
                 else:
                     st.error("Archivo muy grande")
 
-def subir_diploma_participante_optimizado(supabase, participante, grupo_info, diploma_file):
+def subir_diploma_participante(supabase, participante, grupo_info, diploma_file):
     """
     Función optimizada para subir diploma con estructura única e inequívoca.
     Basada en el análisis del esquema de base de datos.
