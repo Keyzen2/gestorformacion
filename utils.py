@@ -684,47 +684,52 @@ def export_csv(df: pd.DataFrame, filename: str = "export.csv"):
     href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">📥 Descargar CSV</a>'
     st.markdown(href, unsafe_allow_html=True)
 
-def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar", descripcion: str = ""):
+def export_excel(df: pd.DataFrame, filename: str = "export.xlsx", label: str = "📥 Exportar a Excel"):
     """
-    Función de exportación mejorada con información sobre los datos exportados.
-    
-    Args:
-        df: DataFrame a exportar
-        filename: Nombre del archivo
-        label: Texto del botón
-        descripcion: Descripción adicional de qué se está exportando
+    Genera un botón para exportar un DataFrame a Excel con tema personalizado morado.
     """
     if df is None or df.empty:
         st.warning("⚠️ No hay datos para exportar")
         return
 
-    # Información sobre los datos
-    info_text = f"Exportar {len(df)} registro(s)"
-    if descripcion:
-        info_text += f" ({descripcion})"
-
-    # Crear buffer Excel
+    # Crear buffer y guardar Excel
     output = BytesIO()
     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Grupos")
-        
-        # Autoajustar columnas
-        worksheet = writer.sheets["Grupos"]
+        df.to_excel(writer, index=False, sheet_name="Sheet1")
+        worksheet = writer.sheets["Sheet1"]
         for i, col in enumerate(df.columns):
             max_len = max(df[col].astype(str).str.len().max(), len(str(col))) + 2
             worksheet.set_column(i, i, max_len)
 
     excel_data = output.getvalue()
+    
+    # Codificar en base64 para el enlace de descarga
+    import base64
+    b64 = base64.b64encode(excel_data).decode()
 
-    # Botón de descarga con información
-    st.download_button(
-        label=f"{label} ({len(df)} filas)",
-        data=excel_data,
-        file_name=filename,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True,
-        help=info_text
-    )
+    # Botón personalizado con tema morado
+    st.markdown(f"""
+    <a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" 
+       download="{filename}"
+       style="
+           background: linear-gradient(135deg, #667eea, #764ba2);
+           color: white;
+           text-decoration: none;
+           padding: 0.6rem 1.2rem;
+           border-radius: 8px;
+           font-weight: 500;
+           display: inline-block;
+           width: 100%;
+           text-align: center;
+           transition: all 0.3s ease;
+           border: none;
+           cursor: pointer;
+       "
+       onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 25px rgba(102, 126, 234, 0.3)'"
+       onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none'">
+        {label}
+    </a>
+    """, unsafe_allow_html=True)
 
 # =========================
 # SUPABASE STORAGE
