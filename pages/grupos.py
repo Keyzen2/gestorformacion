@@ -375,7 +375,7 @@ def crear_selector_horario_manual(key_suffix="", horario_inicial=""):
 # FUNCIÓN MOSTRAR_FORMULARIO_GRUPO CORREGIDA COMPLETA
 # =========================
 
-def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
+def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, context=""):
     """Formulario con horarios manuales y botones submit correctos."""
 
     # ✅ Obtener grupo desde session_state
@@ -449,7 +449,7 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False):
                     acciones_nombres,
                     index=indice_actual,
                     help="Selecciona la acción formativa asociada",
-                    key="accion_formativa_select"
+                    key=f"accion_formativa_select{context}"
                 )
                 accion_id = acciones_dict[accion_formativa]
         
@@ -2025,7 +2025,7 @@ def main(supabase, session_state):
             if seleccionado is not None:
                 with st.container(border=True):
                     # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
-                    grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False)
+                    grupo_id = mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, context="_editar")
                     if grupo_id:
                         st.divider()
                         # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
@@ -2040,7 +2040,7 @@ def main(supabase, session_state):
     with tabs[1]:
         with st.container(border=True):
             # USAR TU FUNCIÓN EXISTENTE - NO CAMBIAR
-            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True)
+            mostrar_formulario_grupo_corregido(grupos_service, es_creacion=True, context="_crear")
 
     # =========================
     # TAB 3: MÉTRICAS (Estilo consistente)
