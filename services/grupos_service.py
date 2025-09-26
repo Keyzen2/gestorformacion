@@ -699,7 +699,292 @@ class GruposService:
             })
     
         return avisos
+        
+    # =========================
+    # MÉTODOS NUEVOS PARA COSTES POR EMPRESA
+    # Agregar al final de la clase GruposService en grupos_service.py
+    # =========================
+    
+    def get_empresa_costes(self, empresa_grupo_id: str) -> Dict[str, Any]:
+        """Obtiene costes de una empresa específica en un grupo."""
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return {}
+            
+            res = self.supabase.table("empresa_grupo_costes").select("*").eq("empresa_grupo_id", empresa_grupo_id_limpio).execute()
+            return res.data[0] if res.data else {}
+        except Exception as e:
+            st.error(f"Error al cargar costes de empresa: {e}")
+            return {}
+    
+    def create_empresa_coste(self, datos_coste: Dict[str, Any]) -> bool:
+        """Crea registro de costes para una empresa en un grupo."""
+        try:
+            datos_coste["created_at"] = datetime.utcnow().isoformat()
+            datos_coste["updated_at"] = datetime.utcnow().isoformat()
+            self.supabase.table("empresa_grupo_costes").insert(datos_coste).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear costes de empresa: {e}")
+            return False
+    
+    def update_empresa_coste(self, empresa_grupo_id: str, datos_coste: Dict[str, Any]) -> bool:
+        """Actualiza costes de una empresa en un grupo."""
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return False
+                
+            datos_coste["updated_at"] = datetime.utcnow().isoformat()
+            self.supabase.table("empresa_grupo_costes").update(datos_coste).eq("empresa_grupo_id", empresa_grupo_id_limpio).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar costes de empresa: {e}")
+            return False
+    
+    def delete_empresa_coste(self, empresa_grupo_id: str) -> bool:
+        """Elimina costes de una empresa en un grupo."""
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return False
+                
+            self.supabase.table("empresa_grupo_costes").delete().eq("empresa_grupo_id", empresa_grupo_id_limpio).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar costes de empresa: {e}")
+            return False
 
+    # =========================
+    # MÉTODOS PARA BONIFICACIONES POR EMPRESA
+    # =========================
+    
+    def get_empresa_bonificaciones(self, empresa_grupo_id: str) -> pd.DataFrame:
+        """Obtiene bonificaciones de una empresa específica en un grupo."""
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return pd.DataFrame()
+            
+            res = self.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id_limpio).order("mes").execute()
+            return pd.DataFrame(res.data or [])
+        except Exception as e:
+            st.error(f"Error al cargar bonificaciones de empresa: {e}")
+            return pd.DataFrame()
+    
+    def create_empresa_bonificacion(self, datos_bonif: Dict[str, Any]) -> bool:
+        """Crea una bonificación mensual para una empresa en un grupo."""
+        try:
+            # Validar empresa_grupo_id
+            empresa_grupo_id_limpio = validar_uuid_seguro(datos_bonif.get("empresa_grupo_id"))
+            if not empresa_grupo_id_limpio:
+                st.error("ID de empresa-grupo no válido")
+                return False
+            
+            datos_bonif["empresa_grupo_id"] = empresa_grupo_id_limpio
+            datos_bonif["id"] = str(uuid.uuid4())
+            datos_bonif["created_at"] = datetime.utcnow().isoformat()
+            
+            self.supabase.table("empresa_grupo_bonificaciones").insert(datos_bonif).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al crear bonificación de empresa: {e}")
+            return False
+    
+    def update_empresa_bonificacion(self, bonificacion_id: str, datos_edit: Dict[str, Any]) -> bool:
+        """Actualiza una bonificación mensual de una empresa."""
+        try:
+            bonificacion_id_limpio = validar_uuid_seguro(bonificacion_id)
+            if not bonificacion_id_limpio:
+                return False
+                
+            datos_edit["updated_at"] = datetime.utcnow().isoformat()
+            self.supabase.table("empresa_grupo_bonificaciones").update(datos_edit).eq("id", bonificacion_id_limpio).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al actualizar bonificación de empresa: {e}")
+            return False
+    
+    def delete_empresa_bonificacion(self, bonificacion_id: str) -> bool:
+        """Elimina una bonificación de una empresa."""
+        try:
+            bonificacion_id_limpio = validar_uuid_seguro(bonificacion_id)
+            if not bonificacion_id_limpio:
+                return False
+                
+            self.supabase.table("empresa_grupo_bonificaciones").delete().eq("id", bonificacion_id_limpio).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error al eliminar bonificación de empresa: {e}")
+            return False
+    
+    # =========================
+    # VALIDACIONES Y ESTADÍSTICAS POR EMPRESA
+    # =========================
+    
+    def validar_limites_bonificacion_empresa(self, empresa_grupo_id: str, mes: int, importe: float, bonificacion_id: str = None) -> Tuple[bool, str]:
+        """
+        Valida que una bonificación no supere los límites de la empresa específica.
+        
+        Args:
+            empresa_grupo_id: ID de la relación empresa-grupo
+            mes: Mes de la bonificación (1-12)
+            importe: Importe a validar
+            bonificacion_id: ID de bonificación existente (para edición)
+        
+        Returns:
+            Tuple (es_válido, mensaje_error)
+        """
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return False, "ID de empresa-grupo no válido"
+            
+            # 1. Obtener costes de esta empresa
+            costes_empresa = self.get_empresa_costes(empresa_grupo_id_limpio)
+            total_costes = float(costes_empresa.get("total_costes_formacion", 0))
+            
+            if total_costes <= 0:
+                return False, "Esta empresa no tiene costes definidos"
+            
+            # 2. Obtener bonificaciones existentes de esta empresa
+            df_bonif = self.get_empresa_bonificaciones(empresa_grupo_id_limpio)
+            
+            # Excluir bonificación actual si estamos editando
+            if bonificacion_id:
+                df_bonif = df_bonif[df_bonif["id"] != bonificacion_id]
+            
+            # 3. Calcular total bonificado (excluyendo el mes actual)
+            total_bonificado_otros_meses = df_bonif[df_bonif["mes"] != mes]["importe"].sum() if not df_bonif.empty else 0
+            
+            # 4. Calcular disponible para este importe
+            disponible = total_costes - float(total_bonificado_otros_meses)
+            
+            if importe > disponible:
+                return False, f"Importe ({importe:.2f}€) supera el disponible ({disponible:.2f}€) para esta empresa"
+            
+            # 5. Validar que el mes no esté ocupado por otra bonificación
+            mes_ocupado = not df_bonif[df_bonif["mes"] == mes].empty
+            if mes_ocupado:
+                return False, f"Ya existe una bonificación para el mes {mes} en esta empresa"
+            
+            return True, ""
+            
+        except Exception as e:
+            return False, f"Error al validar bonificación: {e}"
+    
+    def get_estadisticas_empresa_grupo(self, empresa_grupo_id: str) -> Dict[str, Any]:
+        """Obtiene estadísticas completas de una empresa específica en un grupo."""
+        try:
+            empresa_grupo_id_limpio = validar_uuid_seguro(empresa_grupo_id)
+            if not empresa_grupo_id_limpio:
+                return {}
+            
+            # Información de la empresa en el grupo
+            empresa_info = self.supabase.table("empresas_grupos").select("""
+                id, fecha_asignacion,
+                empresa:empresas(id, nombre, cif, tipo_empresa)
+            """).eq("id", empresa_grupo_id_limpio).execute()
+            
+            if not empresa_info.data:
+                return {}
+            
+            empresa_data = empresa_info.data[0]
+            
+            # Costes de la empresa
+            costes_empresa = self.get_empresa_costes(empresa_grupo_id_limpio)
+            total_costes = float(costes_empresa.get("total_costes_formacion", 0))
+            
+            # Bonificaciones de la empresa
+            df_bonif_empresa = self.get_empresa_bonificaciones(empresa_grupo_id_limpio)
+            total_bonificado = float(df_bonif_empresa["importe"].sum()) if not df_bonif_empresa.empty else 0.0
+            
+            # Disponible
+            disponible = total_costes - total_bonificado
+            
+            # Meses con bonificación
+            meses_con_bonificacion = df_bonif_empresa["mes"].tolist() if not df_bonif_empresa.empty else []
+            meses_disponibles = [m for m in range(1, 13) if m not in meses_con_bonificacion]
+            
+            return {
+                "empresa_grupo_id": empresa_grupo_id_limpio,
+                "empresa": empresa_data["empresa"],
+                "fecha_asignacion": empresa_data["fecha_asignacion"],
+                "costes": costes_empresa,
+                "total_costes": total_costes,
+                "total_bonificado": total_bonificado,
+                "disponible": disponible,
+                "porcentaje_bonificado": (total_bonificado / total_costes * 100) if total_costes > 0 else 0,
+                "bonificaciones": df_bonif_empresa.to_dict("records") if not df_bonif_empresa.empty else [],
+                "meses_con_bonificacion": meses_con_bonificacion,
+                "meses_disponibles": meses_disponibles,
+                "tiene_costes": bool(costes_empresa),
+                "puede_bonificar": total_costes > 0 and len(meses_disponibles) > 0 and disponible > 0
+            }
+            
+        except Exception as e:
+            st.error(f"Error al obtener estadísticas de empresa: {e}")
+            return {}
+    
+    def get_resumen_todas_empresas_grupo(self, grupo_id: str) -> Dict[str, Any]:
+        """
+        Obtiene resumen consolidado de todas las empresas de un grupo.
+        Útil para reportes y validaciones generales.
+        """
+        try:
+            grupo_id_limpio = validar_uuid_seguro(grupo_id)
+            if not grupo_id_limpio:
+                return {}
+            
+            # Obtener todas las empresas del grupo
+            empresas_grupo = self.supabase.table("empresas_grupos").select("id").eq("grupo_id", grupo_id_limpio).execute()
+            
+            if not empresas_grupo.data:
+                return {"empresas": [], "totales": {"costes": 0, "bonificado": 0, "disponible": 0}}
+            
+            resumen_empresas = []
+            totales = {"costes": 0, "bonificado": 0, "disponible": 0, "empresas_count": 0}
+            
+            for empresa_grupo in empresas_grupo.data:
+                estadisticas = self.get_estadisticas_empresa_grupo(empresa_grupo["id"])
+                
+                if estadisticas:
+                    resumen_empresas.append(estadisticas)
+                    totales["costes"] += estadisticas["total_costes"]
+                    totales["bonificado"] += estadisticas["total_bonificado"]
+                    totales["disponible"] += estadisticas["disponible"]
+                    totales["empresas_count"] += 1
+            
+            return {
+                "grupo_id": grupo_id_limpio,
+                "empresas": resumen_empresas,
+                "totales": totales,
+                "empresas_con_costes": len([e for e in resumen_empresas if e["tiene_costes"]]),
+                "empresas_pueden_bonificar": len([e for e in resumen_empresas if e["puede_bonificar"]])
+            }
+            
+        except Exception as e:
+            st.error(f"Error al obtener resumen de todas las empresas: {e}")
+            return {}
+    
+    # =========================
+    # LIMPIAR CACHE CON NUEVOS MÉTODOS
+    # =========================
+    
+    def limpiar_cache_grupos_empresa(self):
+        """Limpia caches relacionados con costes y bonificaciones por empresa."""
+        try:
+            # Cache original
+            self.limpiar_cache_grupos()
+            
+            # Aquí se podrían añadir caches específicos de empresa cuando se implementen
+            # por ejemplo: @st.cache_data para get_empresa_costes, etc.
+            
+        except Exception:
+            # Fallar silenciosamente
+            pass
+        
     # =========================
     # ACTUALIZACIÓN DEL MÉTODO CREATE_GRUPO_CON_JERARQUIA EXISTENTE
     # =========================
