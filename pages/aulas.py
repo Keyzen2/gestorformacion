@@ -352,36 +352,15 @@ def mostrar_cronograma_interactivo(aulas_service, session_state):
         else:
             st.info("No se encontraron eventos para mostrar en el cronograma")
         
-        # Configuración del calendario
+        # Configuración simplificada del calendario
         calendar_options = {
-            "editable": True,
-            "selectable": True,
-            "selectMirror": True,
-            "dayMaxEvents": 3,
-            "weekends": True,
+            "initialView": "dayGridMonth",
             "headerToolbar": {
-                "left": "prev,next today",
+                "left": "prev,next",
                 "center": "title",
-                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+                "right": "dayGridMonth,listWeek"
             },
-            "initialView": vista_inicial,
-            "initialDate": fecha_inicio.isoformat(),
-            "validRange": {
-                "start": fecha_inicio.isoformat(),
-                "end": fecha_fin.isoformat()
-            },
-            "height": 600,
-            "slotMinTime": "07:00:00",
-            "slotMaxTime": "22:00:00",
-            "businessHours": {
-                "daysOfWeek": [1, 2, 3, 4, 5],  # Lunes a Viernes
-                "startTime": "08:00",
-                "endTime": "19:00"
-            },
-            "eventDisplay": "block",
-            "displayEventEnd": True,
-            "nowIndicator": True,
-            "locale": "es"
+            "height": 600
         }
         
         # CSS personalizado para el calendario
@@ -424,11 +403,29 @@ def mostrar_cronograma_interactivo(aulas_service, session_state):
                 custom_css=calendar_css,
                 key="aulas_calendar"
             )
+            
+            # Si llegamos aquí, el calendario se renderizó correctamente
+            calendar_loaded = True
+            
         except Exception as e:
             st.error(f"Error renderizando calendario: {e}")
-            st.markdown("### Alternativa: Vista de Lista")
-            mostrar_vista_alternativa_cronograma(eventos)
+            calendar_loaded = False
+            calendar_result = None
+        
+        # Si el calendario no se cargó, mostrar vista alternativa
+        if not calendar_loaded or calendar_result is None:
+            col_warn1, col_warn2 = st.columns([3, 1])
+            with col_warn1:
+                st.warning("⚠️ El calendario no se pudo cargar. Mostrando vista alternativa.")
+            with col_warn2:
+                if st.button("🔄 Reintentar Calendario", key="retry_calendar"):
+                    st.rerun()
+            
+            mostrar_vista_cronograma_alternativa(eventos, aulas_service)
             return
+        
+        # El calendario se cargó correctamente - procesar eventos del calendario
+        if calendar_result:
         
         # Mostrar información del evento seleccionado/clickeado
         if calendar_result.get("eventClick"):
@@ -490,6 +487,113 @@ def mostrar_cronograma_interactivo(aulas_service, session_state):
         with col4:
             st.markdown("**🔴 Bloqueada**")
             st.markdown("Aula no disponible")
+
+def mostrar_vista_cronograma_alternativa(eventos, aulas_service):
+    """Vista de cronograma alternativa cuando streamlit-calendar no funciona"""
+    
+    st.markdown("### 📅 Vista de Cronograma (Alternativa)")
+    
+    if not eventos:
+        st.info("No hay reservas para mostrar en el período seleccionado")
+        st.markdown("**💡 Sugerencia:** Crea algunas reservas en la pestaña 'Reservas' para ver el cronograma.")
+        return
+    
+    # Convertir eventos a DataFrame
+    eventos_data = []
+    for evento in eventos:
+        fecha_inicio = pd.to_datetime(evento['start'])
+        fecha_fin = pd.to_datetime(evento['end'])
+        
+        eventos_data.append({
+            'Fecha': fecha_inicio.date(),
+            'Día': fecha_inicio.strftime('%A'),
+            'Hora Inicio': fecha_inicio.strftime('%H:%M'),
+            'Hora Fin': fecha_fin.strftime('%H:%M'),
+            'Aula': evento['extendedProps']['aula_nombre'],
+            'Título': evento['title'].split(': ', 1)[-1],
+            'Tipo': evento['extendedProps']['tipo_reserva'],
+            'Estado': evento['extendedProps']['estado'],
+            'Color': evento['backgroundColor']
+        })
+    
+    df_eventos = pd.DataFrame(eventos_data)
+    
+    # Agrupar por fecha
+    fechas_unicas = sorted(df_eventos['Fecha'].unique())
+    
+    # Mostrar cronograma por días
+    for fecha in fechas_unicas:
+        eventos_dia = df_eventos[df_eventos['Fecha'] == fecha].sort_values('Hora Inicio')
+        
+        st.markdown(f"#### 📅 {fecha.strftime('%A, %d de %B %Y')}")
+        
+        if eventos_dia.empty:
+            st.info("Sin reservas para este día")
+        else:
+            # Crear vista visual de horarios
+            for _, evento in eventos_dia.iterrows():
+                # Color según tipo
+                color_map = {
+                    'GRUPO': '🟢',
+                    'EVENTO': '🔵', 
+                    'MANTENIMIENTO': '🟡',
+                    'BLOQUEADA': '🔴'
+                }
+                emoji = color_map.get(evento['Tipo'], '⚪')
+                
+                # Mostrar cada evento como una tarjeta
+                with st.container():
+                    col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{evento['Hora Inicio']} - {evento['Hora Fin']}**")
+                    
+                    with col2:
+                        st.markdown(f"**{evento['Aula']}**")
+                    
+                    with col3:
+                        st.markdown(f"{emoji} {evento['Título']}")
+                    
+                    with col4:
+                        estado_emoji = "✅" if evento['Estado'] == 'CONFIRMADA' else "⏳"
+                        st.markdown(f"{estado_emoji} {evento['Estado']}")
+        
+        st.divider()
+    
+    # Resumen de estadísticas
+    st.markdown("### 📊 Resumen del Período")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Reservas", len(df_eventos))
+    
+    with col2:
+        aulas_ocupadas = df_eventos['Aula'].nunique()
+        st.metric("Aulas Utilizadas", aulas_ocupadas)
+    
+    with col3:
+        reservas_por_tipo = df_eventos['Tipo'].value_counts()
+        tipo_principal = reservas_por_tipo.index[0] if not reservas_por_tipo.empty else "N/A"
+        st.metric("Tipo Principal", tipo_principal)
+    
+    with col4:
+        dias_con_actividad = df_eventos['Fecha'].nunique()
+        st.metric("Días con Actividad", dias_con_actividad)
+    
+    # Gráfico de barras por tipo
+    if not df_eventos.empty:
+        st.markdown("### 📈 Reservas por Tipo")
+        tipo_counts = df_eventos['Tipo'].value_counts()
+        st.bar_chart(tipo_counts)
+        
+        # Tabla detallada
+        with st.expander("📋 Ver Tabla Detallada"):
+            st.dataframe(
+                df_eventos[['Fecha', 'Hora Inicio', 'Hora Fin', 'Aula', 'Título', 'Tipo', 'Estado']],
+                use_container_width=True,
+                hide_index=True
+            )
 
 def mostrar_vista_alternativa_cronograma(eventos):
     """Vista alternativa cuando el calendario no funciona"""
