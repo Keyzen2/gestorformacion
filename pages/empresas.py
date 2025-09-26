@@ -659,8 +659,7 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             datos.get("id") if not es_creacion else None
         )
 
-    with st.form(form_id, clear_on_submit=es_creacion):
-        
+    with st.form(form_id, clear_on_submit=False):        
         # =========================
         # BLOQUE IDENTIFICACIÓN
         # =========================
@@ -1091,16 +1090,14 @@ def procesar_guardado_empresa(
             "docu_avanzada_activo": docu_avanzada_activo,
             "email": email_notificaciones,
             "direccion": f"{calle} {numero}".strip() if calle or numero else "",
-            "es_centro_gestor": es_centro_gestor,
             "updated_at": datetime.utcnow().isoformat(),
             "provincia_id": provincia_id,
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
             "ciudad": localidad_sel if localidad_sel else None
         }
-        # Solo añadir es_centro_gestor si está disponible (admin y no solo_datos_basicos)
-        if 'es_centro_gestor' in locals():
-            datos_empresa["es_centro_gestor"] = es_centro_gestor
+   
+        "es_centro_gestor": es_centro_gestor,
             
         # AGREGAR tipo_empresa solo en creación si es admin
         if es_creacion and session_state.role == "admin":
