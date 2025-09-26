@@ -16,7 +16,7 @@ st.set_page_config(
 # FUNCIONES AUXILIARES
 # =========================
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=60)  # Reducir TTL para debug
 def cargar_cursos_alumno(_supabase, email: str):
     """Carga los cursos del alumno usando la vista existente."""
     try:
@@ -25,29 +25,43 @@ def cargar_cursos_alumno(_supabase, email: str):
         
         if df.empty:
             return df
+        
+        # DEBUG: Mostrar datos originales
+        st.write("DEBUG - Datos originales accion_horas:", df["accion_horas"].tolist())
             
         # CORREGIR: accion_horas viene como null, obtener desde acciones_formativas
-        if not df.empty and (df["accion_horas"].isna().all() or df["accion_horas"].fillna(0).sum() == 0):
-            # Obtener horas reales desde tabla acciones_formativas usando grupo_id
+        df["accion_horas"] = pd.to_numeric(df["accion_horas"], errors='coerce').fillna(0)
+        
+        # Si las horas siguen siendo 0 o muy bajas, buscar en la tabla real
+        if df["accion_horas"].sum() == 0:
+            st.write("DEBUG - Buscando horas reales porque sum=0")
+            
             for idx, row in df.iterrows():
                 grupo_id = row.get("grupo_id")
                 if grupo_id:
                     try:
-                        # Obtener accion_formativa_id del grupo
+                        # Método directo: obtener accion_formativa_id del grupo
                         grupo_res = _supabase.table("grupos").select("accion_formativa_id").eq("id", grupo_id).execute()
                         if grupo_res.data:
                             accion_id = grupo_res.data[0]["accion_formativa_id"]
+                            st.write(f"DEBUG - Grupo {grupo_id} -> Accion {accion_id}")
                             
                             # Obtener horas de la acción formativa
                             accion_res = _supabase.table("acciones_formativas").select("horas").eq("id", accion_id).execute()
                             if accion_res.data:
                                 horas_real = accion_res.data[0]["horas"]
+                                st.write(f"DEBUG - Accion {accion_id} -> {horas_real} horas")
                                 df.at[idx, "accion_horas"] = horas_real
+                            else:
+                                st.write(f"DEBUG - No se encontraron datos para accion {accion_id}")
+                        else:
+                            st.write(f"DEBUG - No se encontró accion_formativa_id para grupo {grupo_id}")
                     except Exception as e:
-                        pass  # Continuar con el siguiente registro
+                        st.write(f"DEBUG - Error procesando grupo {grupo_id}: {e}")
         
-        # Limpiar y procesar datos
-        df["accion_horas"] = pd.to_numeric(df["accion_horas"], errors='coerce').fillna(0)
+        # Resultado final
+        st.write("DEBUG - Horas finales:", df["accion_horas"].tolist())
+        st.write("DEBUG - Suma total:", df["accion_horas"].sum())
         
         # Asegurar que las fechas son del tipo correcto
         df["grupo_fecha_inicio"] = pd.to_datetime(df["grupo_fecha_inicio"], errors='coerce')
