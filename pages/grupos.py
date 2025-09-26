@@ -449,7 +449,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                     acciones_nombres,
                     index=indice_actual,
                     help="Selecciona la acción formativa asociada",
-                    key=f"accion_formativa_select{context}"
+                    key=f"accion_formativa_select_{context}",
+                    on_change=lambda: st.rerun()
                 )
                 accion_id = acciones_dict[accion_formativa]
         
