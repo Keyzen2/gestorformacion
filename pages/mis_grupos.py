@@ -26,6 +26,26 @@ def cargar_cursos_alumno(_supabase, email: str):
         if df.empty:
             return df
             
+        # CORREGIR: accion_horas viene como null, obtener desde acciones_formativas
+        if not df.empty and (df["accion_horas"].isna().all() or df["accion_horas"].fillna(0).sum() == 0):
+            # Obtener horas reales desde tabla acciones_formativas usando grupo_id
+            for idx, row in df.iterrows():
+                grupo_id = row.get("grupo_id")
+                if grupo_id:
+                    try:
+                        # Obtener accion_formativa_id del grupo
+                        grupo_res = _supabase.table("grupos").select("accion_formativa_id").eq("id", grupo_id).execute()
+                        if grupo_res.data:
+                            accion_id = grupo_res.data[0]["accion_formativa_id"]
+                            
+                            # Obtener horas de la acción formativa
+                            accion_res = _supabase.table("acciones_formativas").select("horas").eq("id", accion_id).execute()
+                            if accion_res.data:
+                                horas_real = accion_res.data[0]["horas"]
+                                df.at[idx, "accion_horas"] = horas_real
+                    except Exception as e:
+                        pass  # Continuar con el siguiente registro
+        
         # Limpiar y procesar datos
         df["accion_horas"] = pd.to_numeric(df["accion_horas"], errors='coerce').fillna(0)
         
