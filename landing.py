@@ -238,7 +238,7 @@ def landing_page():
     # Botón Acceder (reposicionado por CSS dentro del header)
     if st.button("Acceder", key="btn_login", type="primary"):
         st.session_state.show_login = True
-        st.stop()  # detiene render de la landing para ir directo al login
+        st.rerun()
 
     # Hero
     hero_html = """
