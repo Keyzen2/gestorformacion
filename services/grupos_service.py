@@ -352,35 +352,45 @@ class GruposService:
         
     def determinar_empresa_gestora_responsable(self, accion_formativa_id, empresa_propietaria_id):
         """
-        Determina qué empresa es responsable ante FUNDAE según jerarquía:
-        1. Si la acción es de una gestora, la gestora es responsable
-        2. Si la acción es de un cliente, su gestora matriz es responsable
+        CORREGIDO: Maneja correctamente valores None y strings "None".
+        Determina qué empresa es responsable ante FUNDAE según jerarquía.
         """
         try:
+            # CORRECCIÓN: Validar empresa_propietaria_id
+            empresa_prop_valida = None
+            if empresa_propietaria_id and str(empresa_propietaria_id).lower() != "none":
+                try:
+                    # Validar que sea un UUID válido
+                    import uuid
+                    uuid.UUID(str(empresa_propietaria_id))
+                    empresa_prop_valida = str(empresa_propietaria_id)
+                except (ValueError, TypeError):
+                    empresa_prop_valida = None
+
             # Obtener empresa de la acción formativa
             accion_res = self.supabase.table("acciones_formativas").select(
                 "empresa_id"
             ).eq("id", accion_formativa_id).execute()
-        
+    
             if not accion_res.data:
                 return None, "Acción formativa no encontrada"
-        
+    
             empresa_accion_id = accion_res.data[0]["empresa_id"]
-        
+    
             # Obtener información de la empresa de la acción
             empresa_res = self.supabase.table("empresas").select(
-                "id, nombre, tipo_empresa, empresa_matriz_id"
+                "id, nombre, cif, tipo_empresa, empresa_matriz_id"
             ).eq("id", empresa_accion_id).execute()
-        
+    
             if not empresa_res.data:
                 return None, "Empresa de la acción no encontrada"
-        
+    
             empresa_accion = empresa_res.data[0]
-        
+    
             # Si es una gestora, ella es responsable
             if empresa_accion["tipo_empresa"] == "GESTORA":
                 return empresa_accion, ""
-        
+    
             # Si es cliente de gestor, buscar la gestora matriz
             elif empresa_accion["tipo_empresa"] == "CLIENTE_GESTOR":
                 gestora_id = empresa_accion["empresa_matriz_id"]
@@ -392,18 +402,21 @@ class GruposService:
                         return None, "Gestora matriz no encontrada"
                 else:
                     return None, "Cliente sin gestora matriz asignada"
-        
-            # Si es cliente SaaS, usar la empresa propietaria del grupo
+    
+            # Si es cliente SaaS, usar la empresa propietaria del grupo (CORREGIDA)
             elif empresa_accion["tipo_empresa"] == "CLIENTE_SAAS":
-                # Para clientes SaaS, la responsable es la empresa propietaria del grupo
-                if empresa_propietaria_id:
-                    propietaria_res = self.supabase.table("empresas").select("*").eq("id", empresa_propietaria_id).execute()
-                    if propietaria_res.data:
-                        return propietaria_res.data[0], ""
+                if empresa_prop_valida:
+                    try:
+                        propietaria_res = self.supabase.table("empresas").select("*").eq("id", empresa_prop_valida).execute()
+                        if propietaria_res.data:
+                            return propietaria_res.data[0], ""
+                    except Exception as e:
+                        # Si falla, usar la empresa de la acción como fallback
+                        pass
                 return empresa_accion, ""  # Fallback a la empresa de la acción
-        
+    
             return empresa_accion, ""
-        
+    
         except Exception as e:
             return None, f"Error al determinar empresa responsable: {e}"
 
