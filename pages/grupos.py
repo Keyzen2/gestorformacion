@@ -421,7 +421,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
         st.caption(f"Estado: {color_estado.get(estado_actual.lower(), '⚪')} {estado_actual}")
 
     # ==============================================
-    # SECCIÓN REACTIVA (FUERA DEL FORMULARIO)
+    # SECCIÓN REACTIVA SIN CALLBACKS - USANDO SESSION_STATE
     # ==============================================
     
     st.markdown("### 🎯 Selección Básica")
@@ -429,7 +429,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
         col1, col2 = st.columns(2)
         
         with col1:
-            # 1. ACCIÓN FORMATIVA (REACTIVA)
+            # 1. ACCIÓN FORMATIVA (SIN CALLBACK)
             acciones_nombres = list(acciones_dict.keys())
             if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
                 accion_actual = next((n for n, i in acciones_dict.items() if i == datos_grupo.get("accion_formativa_id")), None)
@@ -442,10 +442,19 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 acciones_nombres,
                 index=indice_actual,
                 help="Selecciona la acción formativa asociada",
-                key=f"accion_formativa_select_{context}",
-                on_change=lambda: st.rerun()  # ✅ AQUÍ SÍ SE PUEDE
+                key=f"accion_formativa_select_{context}"
+                # ❌ QUITAR: on_change=lambda: st.rerun()
             )
             accion_id = acciones_dict[accion_formativa]
+            
+            # Detectar cambio usando session_state
+            session_key_accion = f"accion_anterior_{context}"
+            accion_anterior = st.session_state.get(session_key_accion, None)
+            
+            if accion_anterior != accion_id:
+                st.session_state[session_key_accion] = accion_id
+                if accion_anterior is not None:  # No mostrar en primera carga
+                    st.info("🔄 Acción formativa actualizada. El código se recalculará automáticamente.")
             
             # Mostrar info de la acción seleccionada
             codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
@@ -455,7 +464,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
             st.info(f"Código: {codigo_accion} | Modalidad: {modalidad_grupo}")
         
         with col2:
-            # 2. EMPRESA PROPIETARIA (REACTIVA PARA ADMIN)
+            # 2. EMPRESA PROPIETARIA (SIN CALLBACK TAMBIÉN)
             if grupos_service.rol == "admin":
                 empresas_opciones = grupos_service.get_empresas_para_grupos()
                 
@@ -473,10 +482,19 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                         list(empresas_opciones.keys()),
                         index=list(empresas_opciones.keys()).index(empresa_nombre_actual) if empresa_nombre_actual else 0,
                         help="Empresa propietaria del grupo",
-                        key=f"empresa_prop_{context}",
-                        on_change=lambda: st.rerun()  # ✅ REACTIVO
+                        key=f"empresa_prop_{context}"
+                        # ❌ QUITAR: on_change=lambda: st.rerun()
                     )
                     empresa_id = empresas_opciones[empresa_propietaria]
+                    
+                    # Detectar cambio de empresa usando session_state
+                    session_key_empresa = f"empresa_anterior_{context}"
+                    empresa_anterior = st.session_state.get(session_key_empresa, None)
+                    
+                    if empresa_anterior != empresa_id:
+                        st.session_state[session_key_empresa] = empresa_id
+                        if empresa_anterior is not None:
+                            st.info("🔄 Empresa actualizada.")
                 else:
                     st.error("No hay empresas disponibles")
                     empresa_id = None
@@ -484,7 +502,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 empresa_id = grupos_service.empresa_id
                 st.info("Tu empresa será la propietaria del grupo")
 
-    # 3. CÓDIGO SUGERIDO (CALCULADO CON VALORES REACTIVOS)
+    # 3. CÓDIGO SUGERIDO (SE RECALCULA AUTOMÁTICAMENTE)
     st.markdown("### 🏷️ Código del Grupo")
     with st.container(border=True):
         if es_creacion:
@@ -509,9 +527,17 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                     st.success(f"✅ Código sugerido: **{codigo_completo_display}**")
                     st.caption(f"Próximo número disponible para acción {codigo_accion}")
                 with col2:
+                    # Forzar usar sugerido si la acción cambió
+                    valor_checkbox = True
+                    if accion_anterior != accion_id and accion_anterior is not None:
+                        st.session_state[f"usar_sugerido_{context}"] = True
+                        valor_checkbox = True
+                    else:
+                        valor_checkbox = st.session_state.get(f"usar_sugerido_{context}", True)
+                    
                     usar_sugerido = st.checkbox(
                         "Usar sugerido",
-                        value=True,
+                        value=valor_checkbox,
                         key=f"usar_sugerido_{context}"
                     )
                 
@@ -527,23 +553,26 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
     if accion_id and empresa_id:
         st.markdown("### 🏢 Empresa Responsable ante FUNDAE")
         with st.container(border=True):
-            empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
-                accion_id, empresa_id
-            )
-            
-            if empresa_responsable and not error_empresa:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.write(f"**{empresa_responsable['nombre']}**")
-                with col2:
-                    st.write(f"CIF: {empresa_responsable.get('cif', 'N/A')}")
-                with col3:
-                    if empresa_responsable['tipo_empresa'] == "GESTORA":
-                        st.success("✅ Gestora")
-                    else:
-                        st.info("ℹ️ Cliente")
-            elif error_empresa:
-                st.warning(f"⚠️ {error_empresa}")
+            try:
+                empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
+                    accion_id, empresa_id
+                )
+                
+                if empresa_responsable and not error_empresa:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.write(f"**{empresa_responsable['nombre']}**")
+                    with col2:
+                        st.write(f"CIF: {empresa_responsable.get('cif', 'N/A')}")
+                    with col3:
+                        if empresa_responsable['tipo_empresa'] == "GESTORA":
+                            st.success("✅ Gestora")
+                        else:
+                            st.info("ℹ️ Cliente")
+                elif error_empresa:
+                    st.warning(f"⚠️ {error_empresa}")
+            except Exception as e:
+                st.error(f"Error al determinar empresa responsable: {e}")
 
     st.divider()
 
