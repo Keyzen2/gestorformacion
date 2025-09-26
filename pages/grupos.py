@@ -374,20 +374,19 @@ def crear_selector_horario_manual(key_suffix="", horario_inicial=""):
 # =========================
 # FUNCIÓN MOSTRAR_FORMULARIO_GRUPO CORREGIDA COMPLETA
 # =========================
+def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context=""):
+    """Formulario con campos reactivos separados del formulario principal."""
 
-def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, context=""):
-    """Formulario con horarios manuales y botones submit correctos."""
-
-    # ✅ Obtener grupo desde session_state
+    # Obtener grupo desde session_state
     grupo_seleccionado = st.session_state.get("grupo_seleccionado", None)
 
     # Obtener acciones disponibles
     acciones_dict = grupos_service.get_acciones_dict()
     if not acciones_dict:
-        st.error("⚠ No hay acciones formativas disponibles. Crea una acción formativa primero.")
+        st.error("No hay acciones formativas disponibles. Crea una acción formativa primero.")
         return None
 
-    # Datos iniciales según si es creación o edición
+    # Datos iniciales
     if grupo_seleccionado and not es_creacion:
         try:
             grupo_fresh = (
@@ -411,119 +410,174 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
         estado_actual = "abierto"
         es_creacion = True
 
-    # Título del formulario
+    # Título
     if es_creacion:
         st.markdown("### ➕ Crear Nuevo Grupo")
-        st.caption("🎯 Complete los datos básicos obligatorios para crear el grupo")
+        st.caption("Complete los datos básicos obligatorios para crear el grupo")
     else:
         codigo = datos_grupo.get("codigo_grupo", "Sin código")
         st.markdown(f"### ✏️ Editar Grupo: {codigo}")
-        color_estado = {"abierto": "🟢", "finalizar": "🟡", "finalizado": "✅", "cancelado": "❌"}
+        color_estado = {"abierto": "🟢", "finalizar": "🟡", "finalizado": "✅"}
         st.caption(f"Estado: {color_estado.get(estado_actual.lower(), '⚪')} {estado_actual}")
 
-    # FORMULARIO
+    # ==============================================
+    # SECCIÓN REACTIVA (FUERA DEL FORMULARIO)
+    # ==============================================
+    
+    st.markdown("### 🎯 Selección Básica")
+    with st.container(border=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 1. ACCIÓN FORMATIVA (REACTIVA)
+            acciones_nombres = list(acciones_dict.keys())
+            if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
+                accion_actual = next((n for n, i in acciones_dict.items() if i == datos_grupo.get("accion_formativa_id")), None)
+                indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
+            else:
+                indice_actual = 0
+
+            accion_formativa = st.selectbox(
+                "📚 Acción Formativa *",
+                acciones_nombres,
+                index=indice_actual,
+                help="Selecciona la acción formativa asociada",
+                key=f"accion_formativa_select_{context}",
+                on_change=lambda: st.rerun()  # ✅ AQUÍ SÍ SE PUEDE
+            )
+            accion_id = acciones_dict[accion_formativa]
+            
+            # Mostrar info de la acción seleccionada
+            codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
+            modalidad_grupo = grupos_service.normalizar_modalidad_fundae(
+                grupos_service.get_accion_modalidad(accion_id)
+            )
+            st.info(f"Código: {codigo_accion} | Modalidad: {modalidad_grupo}")
+        
+        with col2:
+            # 2. EMPRESA PROPIETARIA (REACTIVA PARA ADMIN)
+            if grupos_service.rol == "admin":
+                empresas_opciones = grupos_service.get_empresas_para_grupos()
+                
+                if empresas_opciones:
+                    empresa_actual = datos_grupo.get("empresa_id")
+                    empresa_nombre_actual = None
+                    
+                    for nombre, id_emp in empresas_opciones.items():
+                        if id_emp == empresa_actual:
+                            empresa_nombre_actual = nombre
+                            break
+                    
+                    empresa_propietaria = st.selectbox(
+                        "🏢 Empresa Propietaria *",
+                        list(empresas_opciones.keys()),
+                        index=list(empresas_opciones.keys()).index(empresa_nombre_actual) if empresa_nombre_actual else 0,
+                        help="Empresa propietaria del grupo",
+                        key=f"empresa_prop_{context}",
+                        on_change=lambda: st.rerun()  # ✅ REACTIVO
+                    )
+                    empresa_id = empresas_opciones[empresa_propietaria]
+                else:
+                    st.error("No hay empresas disponibles")
+                    empresa_id = None
+            else:
+                empresa_id = grupos_service.empresa_id
+                st.info("Tu empresa será la propietaria del grupo")
+
+    # 3. CÓDIGO SUGERIDO (CALCULADO CON VALORES REACTIVOS)
+    st.markdown("### 🏷️ Código del Grupo")
+    with st.container(border=True):
+        if es_creacion:
+            fecha_para_codigo = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
+            
+            try:
+                codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
+                    accion_id, fecha_para_codigo
+                )
+            except Exception as e:
+                codigo_sugerido = "1"
+                error_sugerido = f"Error: {e}"
+
+            if error_sugerido:
+                st.error(f"Error al generar código sugerido: {error_sugerido}")
+                codigo_grupo_display = ""
+            else:
+                codigo_completo_display = f"{codigo_accion}-{codigo_sugerido}"
+                
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.success(f"✅ Código sugerido: **{codigo_completo_display}**")
+                    st.caption(f"Próximo número disponible para acción {codigo_accion}")
+                with col2:
+                    usar_sugerido = st.checkbox(
+                        "Usar sugerido",
+                        value=True,
+                        key=f"usar_sugerido_{context}"
+                    )
+                
+                codigo_grupo_display = codigo_sugerido if usar_sugerido else ""
+        else:
+            # Modo edición - mostrar código actual
+            codigo_grupo = datos_grupo.get("codigo_grupo", "")
+            codigo_completo = f"{codigo_accion}-{codigo_grupo}"
+            st.info(f"Código actual: **{codigo_completo}**")
+            codigo_grupo_display = codigo_grupo
+
+    # 4. EMPRESA RESPONSABLE ANTE FUNDAE (INFORMATIVA)
+    if accion_id and empresa_id:
+        st.markdown("### 🏢 Empresa Responsable ante FUNDAE")
+        with st.container(border=True):
+            empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
+                accion_id, empresa_id
+            )
+            
+            if empresa_responsable and not error_empresa:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.write(f"**{empresa_responsable['nombre']}**")
+                with col2:
+                    st.write(f"CIF: {empresa_responsable.get('cif', 'N/A')}")
+                with col3:
+                    if empresa_responsable['tipo_empresa'] == "GESTORA":
+                        st.success("✅ Gestora")
+                    else:
+                        st.info("ℹ️ Cliente")
+            elif error_empresa:
+                st.warning(f"⚠️ {error_empresa}")
+
+    st.divider()
+
+    # ==============================================
+    # FORMULARIO PRINCIPAL (CAMPOS ESTÁTICOS)
+    # ==============================================
+    
     form_key = f"grupo_form_{datos_grupo.get('id', 'nuevo')}"
     with st.form(form_key, clear_on_submit=False):
         
-        errores = []
-        # =====================
-        # SECCIÓN 1: DATOS BÁSICOS FUNDAE CON VALIDACIONES
-        # =====================
+        # SECCIÓN 1: DATOS BÁSICOS
         with st.container(border=True):
-            st.markdown("### 🆔 Datos Básicos FUNDAE")
-            st.markdown("**Información obligatoria para XML FUNDAE**")
+            st.markdown("### 📋 Datos del Grupo")
             
             col1, col2 = st.columns(2)
             
             with col1:
-                # Acción formativa primero
-                acciones_nombres = list(acciones_dict.keys())
-                if grupo_seleccionado and datos_grupo.get("accion_formativa_id"):
-                    accion_actual = next((n for n, i in acciones_dict.items() if i == datos_grupo.get("accion_formativa_id")), None)
-                    indice_actual = acciones_nombres.index(accion_actual) if accion_actual else 0
-                else:
-                    indice_actual = 0
-        
-                accion_formativa = st.selectbox(
-                    "📚 Acción Formativa *",
-                    acciones_nombres,
-                    index=indice_actual,
-                    help="Selecciona la acción formativa asociada",
-                    key=f"accion_formativa_select_{context}",
-                    on_change=lambda: st.rerun()
-                )
-                accion_id = acciones_dict[accion_formativa]
-        
-                # =========================
-                # CÓDIGO DEL GRUPO
-                # =========================
-                st.markdown("### 🏷️ Código del Grupo")
-                if es_creacion:
-                    try:
-                        codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
-                            accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
-                        )
-                    except Exception as e:
-                        codigo_sugerido = "1"
-                        error_sugerido = ""
-        
-                    if error_sugerido:
-                        st.error(f"❌ Error al generar código sugerido: {error_sugerido}")
-                        codigo_grupo = st.text_input(
-                            "Código del Grupo *",
-                            value="",
-                            placeholder="Introduce un número",
-                            key=f"codigo_grupo_{form_key}"
-                        )
-                    else:
-                        colc1, colc2 = st.columns([2, 1])
-                        with colc1:
-                            st.success(f"✅ Código sugerido: {codigo_sugerido}")
-                        with colc2:
-                            usar_sugerido = st.checkbox(
-                                "Usar sugerido",
-                                value=True,
-                                key=f"usar_sugerido_{form_key}"
-                            )
-                        if usar_sugerido:
-                            codigo_grupo = codigo_sugerido
-                        else:
-                            codigo_grupo = st.text_input(
-                                "Código del Grupo *",
-                                value=codigo_sugerido,
-                                placeholder="Introduce un número",
-                                key=f"codigo_grupo_manual_{form_key}"
-                            )
-        
-                    if codigo_grupo:
-                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
-                            codigo_grupo, accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
-                        )
-                        st.success(f"✅ Código '{codigo_grupo}' válido") if es_valido else st.error(f"❌ {mensaje_error}")
-                else:
-                    codigo_grupo = datos_grupo.get("codigo_grupo", "")
-                    st.text_input(
-                        "🏷️ Código del Grupo",
-                        value=codigo_grupo,
-                        disabled=True,
-                        help="No se puede modificar después de la creación"
+                # Código manual si no usa sugerido
+                if es_creacion and not st.session_state.get(f"usar_sugerido_{context}", True):
+                    codigo_grupo = st.text_input(
+                        "Código personalizado *",
+                        value=codigo_grupo_display,
+                        placeholder="Introduce un número",
+                        key=f"codigo_manual_{context}"
                     )
+                else:
+                    codigo_grupo = codigo_grupo_display
                     if codigo_grupo:
-                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
-                            codigo_grupo, accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today(), datos_grupo.get("id")
+                        st.text_input(
+                            "Código del grupo",
+                            value=f"{codigo_accion}-{codigo_grupo}",
+                            disabled=True
                         )
-                        st.success("✅ Código válido") if es_valido else st.error(f"❌ {mensaje_error}")
-        
-                # Modalidad
-                accion_modalidad_raw = grupos_service.get_accion_modalidad(accion_id)
-                modalidad_grupo = grupos_service.normalizar_modalidad_fundae(accion_modalidad_raw)
-                st.text_input(
-                    "🎯 Modalidad",
-                    value=modalidad_grupo,
-                    disabled=True,
-                    help="Modalidad tomada automáticamente de la acción formativa"
-                )
-        
+                
                 # Fechas
                 fecha_inicio_value = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
                 fecha_inicio = st.date_input(
@@ -531,64 +585,29 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                     value=fecha_inicio_value,
                     help="Fecha de inicio de la formación"
                 )
+                
                 fecha_fin_prevista_value = safe_date_conversion(datos_grupo.get("fecha_fin_prevista"))
                 fecha_fin_prevista = st.date_input(
                     "📅 Fecha Fin Prevista *",
                     value=fecha_fin_prevista_value,
                     help="Fecha prevista de finalización"
                 )
+                
+                # Participantes previstos
+                n_participantes_actual = datos_grupo.get("n_participantes_previstos")
+                if n_participantes_actual is None or n_participantes_actual == 0:
+                    n_participantes_actual = 8
+                
+                n_participantes_previstos = st.number_input(
+                    "👥 Participantes Previstos *",
+                    min_value=1,
+                    max_value=30,
+                    value=int(n_participantes_actual),
+                    help="Número de participantes previstos (1-30)"
+                )
             
             with col2:
-                # Empresa propietaria (solo admin)
-                if grupos_service.rol == "admin":
-                    empresas_opciones = grupos_service.get_empresas_para_grupos()
-                    
-                    if empresas_opciones:
-                        empresa_actual = datos_grupo.get("empresa_id")
-                        empresa_nombre_actual = None
-                        
-                        # Buscar nombre actual
-                        for nombre, id_emp in empresas_opciones.items():
-                            if id_emp == empresa_actual:
-                                empresa_nombre_actual = nombre
-                                break
-                        
-                        empresa_propietaria = st.selectbox(
-                            "🏢 Empresa Propietaria *",
-                            list(empresas_opciones.keys()),
-                            index=list(empresas_opciones.keys()).index(empresa_nombre_actual) if empresa_nombre_actual else 0,
-                            help="Empresa propietaria del grupo (obligatorio para admin)"
-                        )
-                        empresa_id = empresas_opciones[empresa_propietaria]
-                    else:
-                        st.error("❌ No hay empresas disponibles")
-                        empresa_id = None
-                else:
-                    # Para gestores, se usa su empresa automáticamente
-                    empresa_id = grupos_service.empresa_id
-                    st.info(f"🏢 Tu empresa será la propietaria del grupo")
-                
-                # MOSTRAR EMPRESA RESPONSABLE ANTE FUNDAE
-                if accion_id and empresa_id:
-                    empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
-                        accion_id, empresa_id
-                    )
-                    
-                    if empresa_responsable and not error_empresa:
-                        with st.container(border=True):
-                            st.markdown("#### 🏢 Empresa Responsable ante FUNDAE")
-                            st.write(f"**Nombre:** {empresa_responsable['nombre']}")
-                            st.write(f"**CIF:** {empresa_responsable.get('cif', 'N/A')}")
-                            st.write(f"**Tipo:** {empresa_responsable['tipo_empresa']}")
-                            
-                            if empresa_responsable['tipo_empresa'] == "GESTORA":
-                                st.success("✅ Gestora - Responsable directa ante FUNDAE")
-                            else:
-                                st.info("ℹ️ Los XMLs se generarán bajo la gestora correspondiente")
-                    elif error_empresa:
-                        st.warning(f"⚠️ {error_empresa}")
-                
-                # Localidad y Provincia con selectores jerárquicos
+                # Localidad y Provincia
                 try:
                     provincias = grupos_service.get_provincias()
                     prov_opciones = {p["nombre"]: p["id"] for p in provincias}
@@ -599,7 +618,7 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                         "🗺️ Provincia *",
                         options=list(prov_opciones.keys()),
                         index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
-                        help="Provincia de impartición (obligatorio FUNDAE)"
+                        help="Provincia de impartición"
                     )
                     
                     if provincia_sel:
@@ -612,23 +631,14 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                             "🏘️ Localidad *",
                             options=loc_nombres,
                             index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
-                            help="Localidad de impartición (obligatorio FUNDAE)"
+                            help="Localidad de impartición"
                         )
                     else:
                         localidad_sel = None
                 except Exception as e:
                     st.error(f"Error al cargar provincias/localidades: {e}")
-                    # Fallback a campos de texto libre
-                    provincia_sel = st.text_input(
-                        "🗺️ Provincia *",
-                        value=datos_grupo.get("provincia", ""),
-                        help="Provincia de impartición (obligatorio FUNDAE)"
-                    )
-                    localidad_sel = st.text_input(
-                        "🏘️ Localidad *", 
-                        value=datos_grupo.get("localidad", ""),
-                        help="Localidad de impartición (obligatorio FUNDAE)"
-                    )
+                    provincia_sel = st.text_input("🗺️ Provincia *", value=datos_grupo.get("provincia", ""))
+                    localidad_sel = st.text_input("🏘️ Localidad *", value=datos_grupo.get("localidad", ""))
                 
                 cp = st.text_input(
                     "📮 Código Postal",
@@ -647,21 +657,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                     value=str(datos_grupo.get("telefono_contacto") or ""), 
                     help="Teléfono de contacto del responsable (opcional)"
                 )
-                
-                # Participantes previstos
-                n_participantes_actual = datos_grupo.get("n_participantes_previstos")
-                if n_participantes_actual is None or n_participantes_actual == 0:
-                    n_participantes_actual = 8
-                
-                n_participantes_previstos = st.number_input(
-                    "👥 Participantes Previstos *",
-                    min_value=1,
-                    max_value=30,
-                    value=int(n_participantes_actual),
-                    help="Número de participantes previstos (1-30)"
-                )
             
-            # Lugar de impartición
+            # Campos de área completa
             lugar_imparticion = st.text_area(
                 "📍 Lugar de Impartición",
                 value=datos_grupo.get("lugar_imparticion", ""),
@@ -669,34 +666,26 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                 help="Descripción detallada del lugar donde se impartirá la formación"
             )
             
-            # Observaciones
             observaciones = st.text_area(
                 "📝 Observaciones",
                 value=datos_grupo.get("observaciones", ""),
                 height=80,
                 help="Información adicional sobre el grupo (opcional)"
             )
+
+        # SECCIÓN 2: HORARIOS
+        with st.container(border=True):
+            horario_actual = datos_grupo.get("horario", "")
             
-            # SECCIÓN 2: HORARIOS FUNDAE MANUAL
-            with st.container(border=True):
-                              
-                # Cargar horario actual
-                horario_actual = datos_grupo.get("horario", "")
-                
-                # Mostrar horario actual como información si existe
-                if horario_actual and not es_creacion:
-                    st.info(f"**Horario actual:** {horario_actual}")
-                    st.caption("Modifique los campos para cambiar el horario o mantenga los valores actuales")
-                
-                # Siempre mostrar el selector manual (con valores precargados si existen)
-                horario_nuevo = crear_selector_horario_manual(
-                    f"horario_{datos_grupo.get('id', 'nuevo')}", 
-                    horario_actual if horario_actual else ""
-                )
-        
-        # =====================
-        # SECCIÓN 3: FINALIZACIÓN (Condicional)
-        # =====================
+            if horario_actual and not es_creacion:
+                st.info(f"**Horario actual:** {horario_actual}")
+            
+            horario_nuevo = crear_selector_horario_manual(
+                f"horario_{datos_grupo.get('id', 'nuevo')}", 
+                horario_actual if horario_actual else ""
+            )
+
+        # SECCIÓN 3: FINALIZACIÓN (si aplica)
         mostrar_finalizacion = (
             not es_creacion
             and (
@@ -709,10 +698,6 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
         if mostrar_finalizacion:
             with st.container(border=True):
                 st.markdown("### 🏁 Datos de Finalización")
-                st.markdown("**Complete los datos de finalización para FUNDAE**")
-                
-                if estado_actual == "FINALIZAR":
-                    st.warning("⚠️ Este grupo ha superado su fecha prevista y necesita ser finalizado")
                 
                 col1, col2 = st.columns(2)
                 
@@ -757,9 +742,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                         help="Número de participantes no aptos"
                     )
                 
-                # VALIDACIÓN DE COHERENCIA EN TIEMPO REAL
                 if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
-                    st.error(f"⚠️ La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
+                    st.error(f"La suma de aptos ({n_aptos}) + no aptos ({n_no_aptos}) debe ser igual a finalizados ({n_finalizados})")
                 elif n_finalizados > 0:
                     st.success("✅ Números de finalización coherentes")
                 
@@ -769,12 +753,8 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                     "n_aptos": n_aptos,
                     "n_no_aptos": n_no_aptos
                 }
-        
-        # =====================
-        # VALIDACIONES FINALES Y BOTONES
-        # =====================
-        
-        # Validaciones FUNDAE completas
+
+        # VALIDACIONES Y BOTONES
         errores = []
         if not codigo_grupo:
             errores.append("Código del grupo requerido")
@@ -790,29 +770,12 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
             errores.append("Empresa propietaria requerida")
         if not horario_nuevo:
             errores.append("Horario requerido")
-        
-        # Validar código único si estamos creando
-        if es_creacion and codigo_grupo and accion_id and fecha_inicio:
-            try:
-                es_valido_codigo, error_codigo = grupos_service.validar_codigo_grupo_correlativo(
-                    codigo_grupo, accion_id, fecha_inicio
-                )
-                if not es_valido_codigo:
-                    errores.append(f"Código no válido: {error_codigo}")
-            except Exception as e:
-                errores.append(f"Error al validar código: {e}")
-        
-        # Validar datos de finalización si aplica
-        if datos_finalizacion:
-            if n_finalizados > 0 and (n_aptos + n_no_aptos != n_finalizados):
-                errores.append("La suma de aptos + no aptos debe igual participantes finalizados")
-        
-        # Mostrar errores si existen
+
         if errores:
-            st.error("❌ Faltan campos obligatorios:")
+            st.error("Faltan campos obligatorios:")
             for error in errores:
                 st.error(f"• {error}")
-        
+
         # Botones de acción
         st.divider()
         submitted = False
@@ -822,94 +785,81 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
         if es_creacion:
             col1, col2 = st.columns([2, 1])
             with col1:
-                submitted = st.form_submit_button(
-                    "➕ Crear Grupo", type="primary", use_container_width=True
-                )
+                submitted = st.form_submit_button("➕ Crear Grupo", type="primary", use_container_width=True)
             with col2:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
         else:
             col1, col2, col3 = st.columns(3)
             with col1:
-                submitted = st.form_submit_button(
-                    "💾 Guardar Cambios", type="primary", use_container_width=True
-                )
+                submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
             with col2:
                 recargar = st.form_submit_button("🔄 Recargar", use_container_width=True)
             with col3:
                 cancelar = st.form_submit_button("❌ Cancelar", use_container_width=True)
-        
+
         # Procesar formulario
-        if submitted:
-            if errores:  # <- ya lo tienes arriba
-                st.error("❌ Corrija los errores antes de continuar")
+        if submitted and not errores:
+            datos_para_guardar = {
+                "accion_formativa_id": accion_id,
+                "modalidad": modalidad_grupo,
+                "fecha_inicio": fecha_inicio.isoformat(),
+                "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
+                "provincia": provincia_sel,
+                "localidad": localidad_sel,
+                "cp": cp,
+                "responsable": responsable.strip() if responsable and responsable.strip() else None,
+                "telefono_contacto": telefono_contacto.strip() if telefono_contacto and telefono_contacto.strip() else None,
+                "lugar_imparticion": lugar_imparticion.strip() if lugar_imparticion and lugar_imparticion.strip() else None,
+                "observaciones": observaciones.strip() if observaciones and observaciones.strip() else None,
+                "n_participantes_previstos": n_participantes_previstos,
+                "horario": horario_nuevo if horario_nuevo else None,
+            }
+
+            if es_creacion:
+                datos_para_guardar["codigo_grupo"] = codigo_grupo
+                datos_para_guardar["empresa_id"] = empresa_id
+                datos_para_guardar["estado"] = "abierto"
             else:
-                datos_para_guardar = {
-                    "accion_formativa_id": acciones_dict[accion_formativa],
-                    "modalidad": modalidad_grupo,
-                    "fecha_inicio": fecha_inicio.isoformat(),
-                    "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                    "provincia": provincia_sel,
-                    "localidad": localidad_sel,
-                    "cp": cp,
-                    "responsable": responsable.strip() if responsable and responsable.strip() else None,
-                    "telefono_contacto": telefono_contacto.strip() if telefono_contacto and telefono_contacto.strip() else None, 
-                    "lugar_imparticion": lugar_imparticion.strip() if lugar_imparticion and lugar_imparticion.strip() else None,
-                    "observaciones": observaciones.strip() if observaciones and observaciones.strip() else None,
-                    "n_participantes_previstos": n_participantes_previstos,
-                    "horario": horario_nuevo if horario_nuevo else None,
-                }
+                datos_para_guardar["estado"] = determinar_estado_grupo(datos_grupo).lower()
 
-                # Código + empresa solo en creación
+            if datos_finalizacion:
+                datos_para_guardar.update(datos_finalizacion)
+
+            try:
                 if es_creacion:
-                    datos_para_guardar["codigo_grupo"] = codigo_grupo
-                    datos_para_guardar["empresa_id"] = empresa_id
-                    datos_para_guardar["estado"] = "abierto"
-                else:
-                    datos_para_guardar["estado"] = determinar_estado_grupo(datos_grupo).lower()
-
-                # Finalización
-                if datos_finalizacion:
-                    datos_para_guardar.update(datos_finalizacion)
-
-                try:
-                    if es_creacion:
-                        exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(
-                            datos_para_guardar
-                        )
-                        if exito:
-                            st.success("✅ Grupo creado correctamente")
-                            grupo_creado = (
-                                grupos_service.supabase.table("grupos")
-                                .select("*")
-                                .eq("id", grupo_id)
-                                .execute()
-                            )
-                            if grupo_creado.data:
-                                st.session_state.grupo_seleccionado = grupo_creado.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al crear grupo")
-                    else:
-                        res = (
+                    exito, grupo_id = grupos_service.create_grupo_con_jerarquia_mejorado(datos_para_guardar)
+                    if exito:
+                        st.success("✅ Grupo creado correctamente")
+                        grupo_creado = (
                             grupos_service.supabase.table("grupos")
-                            .update(datos_para_guardar)
-                            .eq("id", datos_grupo["id"])
+                            .select("*")
+                            .eq("id", grupo_id)
                             .execute()
                         )
-                        if res.data:
-                            st.success("✅ Cambios guardados correctamente")
-                            st.session_state.grupo_seleccionado = res.data[0]
-                            st.rerun()
-                        else:
-                            st.error("❌ No se guardaron cambios en el grupo")
-                except Exception as e:
-                    st.error(f"❌ Error al procesar grupo: {e}")
+                        if grupo_creado.data:
+                            st.session_state.grupo_seleccionado = grupo_creado.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al crear grupo")
+                else:
+                    res = (
+                        grupos_service.supabase.table("grupos")
+                        .update(datos_para_guardar)
+                        .eq("id", datos_grupo["id"])
+                        .execute()
+                    )
+                    if res.data:
+                        st.success("✅ Cambios guardados correctamente")
+                        st.session_state.grupo_seleccionado = res.data[0]
+                        st.rerun()
+                    else:
+                        st.error("❌ No se guardaron cambios en el grupo")
+            except Exception as e:
+                st.error(f"❌ Error al procesar grupo: {e}")
 
-        elif cancelar:
+        elif cancear:
             st.session_state.grupo_seleccionado = None
-            st.session_state.grupo_editando = None
             st.rerun()
-            return None
             
         elif recargar and not es_creacion:
             try:
@@ -921,12 +871,12 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                 )
                 if grupo_recargado.data:
                     st.session_state.grupo_seleccionado = grupo_recargado.data[0]
-                    return grupo_recargado.data[0]["id"]
                 st.rerun()
             except Exception as e:
                 st.error(f"Error al recargar: {e}")
 
-        return datos_grupo.get("id") if datos_grupo else None
+    return datos_grupo.get("id") if datos_grupo else None                  
+                    
 # =========================
 # SECCIONES ADICIONALES CON JERARQUÍA
 # =========================
