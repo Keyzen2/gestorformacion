@@ -574,10 +574,21 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 st.info(f"Código actual: **{codigo_completo}**")
                 codigo_grupo_display = codigo_grupo
 
-    # 4. EMPRESA RESPONSABLE ANTE FUNDAE (INFORMATIVA)
+    # 4. EMPRESA RESPONSABLE ANTE FUNDAE (REACTIVA AL CAMBIO)
     if accion_id and empresa_id:
         st.markdown("### 🏢 Empresa Responsable ante FUNDAE")
         with st.container(border=True):
+            # Detectar cambios para forzar recálculo
+            session_key_empresa_resp = f"empresa_resp_calculada_{context}"
+            clave_actual = f"{accion_id}_{empresa_id}"
+            clave_anterior = st.session_state.get(session_key_empresa_resp, "")
+            
+            if clave_anterior != clave_actual:
+                st.session_state[session_key_empresa_resp] = clave_actual
+                # Limpiar cache de empresa responsable si existe
+                if hasattr(grupos_service, '_cache_empresa_responsable'):
+                    grupos_service._cache_empresa_responsable.clear()
+            
             try:
                 empresa_responsable, error_empresa = grupos_service.determinar_empresa_gestora_responsable(
                     accion_id, empresa_id
@@ -594,12 +605,26 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                             st.success("✅ Gestora")
                         else:
                             st.info("ℹ️ Cliente")
+                    
+                    # Mostrar explicación del cálculo
+                    with st.expander("ℹ️ ¿Cómo se determina la empresa responsable?", expanded=False):
+                        st.markdown("""
+                        **Reglas FUNDAE:**
+                        - Si la acción formativa es de una **GESTORA** → La gestora es responsable
+                        - Si la acción formativa es de un **CLIENTE_GESTOR** → Su gestora matriz es responsable  
+                        - Si la acción formativa es de un **CLIENTE_SAAS** → La empresa propietaria del grupo es responsable
+                        """)
+                        
                 elif error_empresa:
                     st.warning(f"⚠️ {error_empresa}")
+                    
             except Exception as e:
                 st.error(f"Error al determinar empresa responsable: {e}")
-
-    st.divider()
+                # Debug info
+                with st.expander("🔧 Debug Info", expanded=False):
+                    st.write(f"Acción ID: {accion_id}")
+                    st.write(f"Empresa ID: {empresa_id}")
+                    st.write(f"Error: {str(e)}")
 
     # ==============================================
     # FORMULARIO PRINCIPAL (CAMPOS ESTÁTICOS)
