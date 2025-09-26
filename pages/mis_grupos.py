@@ -46,12 +46,25 @@ def cargar_cursos_alumno(_supabase, email: str):
                             accion_id = grupo_res.data[0]["accion_formativa_id"]
                             st.write(f"DEBUG - Grupo {grupo_id} -> Accion {accion_id}")
                             
-                            # Obtener horas de la acción formativa
-                            accion_res = _supabase.table("acciones_formativas").select("horas").eq("id", accion_id).execute()
+                            # Obtener horas de la acción formativa - BUSCAR EN TODOS LOS CAMPOS
+                            accion_res = _supabase.table("acciones_formativas").select("horas, num_horas, duracion_horas").eq("id", accion_id).execute()
                             if accion_res.data:
-                                horas_real = accion_res.data[0]["horas"]
-                                st.write(f"DEBUG - Accion {accion_id} -> {horas_real} horas")
-                                df.at[idx, "accion_horas"] = horas_real
+                                accion_data = accion_res.data[0]
+                                st.write(f"DEBUG - Datos acción: {accion_data}")
+                                
+                                # Buscar horas en cualquier campo disponible
+                                horas_real = None
+                                for campo in ["horas", "num_horas", "duracion_horas"]:
+                                    valor = accion_data.get(campo)
+                                    if valor is not None and valor > 0:
+                                        horas_real = valor
+                                        st.write(f"DEBUG - Usando campo '{campo}' con valor {valor}")
+                                        break
+                                
+                                if horas_real:
+                                    df.at[idx, "accion_horas"] = horas_real
+                                else:
+                                    st.write(f"DEBUG - No se encontraron horas válidas en ningún campo")
                             else:
                                 st.write(f"DEBUG - No se encontraron datos para accion {accion_id}")
                         else:
