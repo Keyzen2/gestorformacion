@@ -39,12 +39,13 @@ def crear_estilos_seguros():
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 1rem 2rem;
+        padding: 0.8rem 2rem;
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid #e5e5e5;
         position: fixed;
         top: 0; left: 0; right: 0;
+        height: 60px;
         z-index: 1000;
     }
     .navbar .logo {
@@ -56,25 +57,26 @@ def crear_estilos_seguros():
         gap: 0.5rem;
     }
 
-    /* Posicionar el botón Acceder dentro del header */
+    /* Botón Acceder nativo reposicionado */
     div[data-testid="stVerticalBlock"] button[kind="primary"] {
-        position: fixed;
+        position: fixed !important;
         top: 12px;
-        right: 20px;
-        z-index: 2000;
-        padding: 0.5rem 1rem;
+        right: 24px;
+        width: auto !important;
+        min-width: 110px;
+        height: auto;
+        padding: 0.4rem 1rem;
         background: linear-gradient(135deg, #667eea, #764ba2);
         border-radius: 6px;
         border: none;
         color: white;
         font-weight: 500;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        z-index: 2000;
     }
     div[data-testid="stVerticalBlock"] button[kind="primary"]:hover {
         background: linear-gradient(135deg, #5a67d8, #6b46c1);
         transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(0,0,0,0.2);
     }
 
     /* Hero */
@@ -82,12 +84,12 @@ def crear_estilos_seguros():
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 4rem 2rem;
-        margin-top: 60px; /* compensa navbar fija */
+        padding: 3rem 2rem;  /* más cerca del header */
+        margin-top: 60px;    /* compensa navbar fija */
         background: linear-gradient(135deg, #667eea, #764ba2);
         color: white;
         flex-wrap: wrap;
-        min-height: 60vh;
+        min-height: 55vh;
     }
     .hero-text {
         flex: 1;
@@ -95,15 +97,15 @@ def crear_estilos_seguros():
         padding: 1rem;
     }
     .hero-text h1 {
-        font-size: 2.5rem;
+        font-size: 2.3rem;
         font-weight: 700;
         margin-bottom: 1rem;
         line-height: 1.2;
     }
     .hero-text p {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         opacity: 0.9;
-        margin-bottom: 2rem;
+        margin-bottom: 1.5rem;
         line-height: 1.6;
     }
     .hero-img {
@@ -119,7 +121,7 @@ def crear_estilos_seguros():
 
     /* Sección de características */
     .section {
-        padding: 3rem 2rem;
+        padding: 2.5rem 2rem;
         max-width: 1100px;
         margin: auto;
     }
@@ -202,14 +204,14 @@ def crear_estilos_seguros():
             padding: 0.5rem 1rem;
         }
         .hero {
-            padding: 5rem 1rem 3rem;
+            padding: 4.5rem 1rem 2rem;
             text-align: center;
         }
         .hero-text h1 {
-            font-size: 2rem;
+            font-size: 1.8rem;
         }
         .hero-img {
-            margin-top: 2rem;
+            margin-top: 1.5rem;
         }
         .features {
             grid-template-columns: 1fr;
@@ -233,11 +235,10 @@ def landing_page():
     """
     st.markdown(navbar_html, unsafe_allow_html=True)
 
-    # Botón Acceder (nativo Streamlit) → se estiliza con CSS para estar arriba a la derecha
+    # Botón Acceder (reposicionado por CSS dentro del header)
     if st.button("Acceder", key="btn_login", type="primary"):
         st.session_state.show_login = True
-        st.session_state.page = "login"  # opcional si usas router
-        st.rerun()
+        st.stop()  # detiene render de la landing para ir directo al login
 
     # Hero
     hero_html = """
