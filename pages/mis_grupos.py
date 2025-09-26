@@ -16,7 +16,7 @@ st.set_page_config(
 # FUNCIONES AUXILIARES
 # =========================
 
-@st.cache_data(ttl=60)  # Reducir TTL para debug
+@st.cache_data(ttl=300)  # Volver a TTL normal
 def cargar_cursos_alumno(_supabase, email: str):
     """Carga los cursos del alumno usando la vista existente."""
     try:
@@ -25,56 +25,38 @@ def cargar_cursos_alumno(_supabase, email: str):
         
         if df.empty:
             return df
-        
-        # DEBUG: Mostrar datos originales
-        st.write("DEBUG - Datos originales accion_horas:", df["accion_horas"].tolist())
             
-        # CORREGIR: accion_horas viene como null, obtener desde acciones_formativas
+        # Limpiar y procesar datos
         df["accion_horas"] = pd.to_numeric(df["accion_horas"], errors='coerce').fillna(0)
         
-        # Si las horas siguen siendo 0 o muy bajas, buscar en la tabla real
+        # Si las horas son 0, buscar en la tabla real de acciones formativas
         if df["accion_horas"].sum() == 0:
-            st.write("DEBUG - Buscando horas reales porque sum=0")
-            
             for idx, row in df.iterrows():
                 grupo_id = row.get("grupo_id")
                 if grupo_id:
                     try:
-                        # Método directo: obtener accion_formativa_id del grupo
+                        # Obtener accion_formativa_id del grupo
                         grupo_res = _supabase.table("grupos").select("accion_formativa_id").eq("id", grupo_id).execute()
                         if grupo_res.data:
                             accion_id = grupo_res.data[0]["accion_formativa_id"]
-                            st.write(f"DEBUG - Grupo {grupo_id} -> Accion {accion_id}")
                             
-                            # Obtener horas de la acción formativa - BUSCAR EN TODOS LOS CAMPOS
+                            # Buscar horas en todos los campos posibles
                             accion_res = _supabase.table("acciones_formativas").select("horas, num_horas, duracion_horas").eq("id", accion_id).execute()
                             if accion_res.data:
                                 accion_data = accion_res.data[0]
-                                st.write(f"DEBUG - Datos acción: {accion_data}")
                                 
-                                # Buscar horas en cualquier campo disponible
+                                # Usar el primer campo con valor válido
                                 horas_real = None
                                 for campo in ["horas", "num_horas", "duracion_horas"]:
                                     valor = accion_data.get(campo)
                                     if valor is not None and valor > 0:
                                         horas_real = valor
-                                        st.write(f"DEBUG - Usando campo '{campo}' con valor {valor}")
                                         break
                                 
                                 if horas_real:
                                     df.at[idx, "accion_horas"] = horas_real
-                                else:
-                                    st.write(f"DEBUG - No se encontraron horas válidas en ningún campo")
-                            else:
-                                st.write(f"DEBUG - No se encontraron datos para accion {accion_id}")
-                        else:
-                            st.write(f"DEBUG - No se encontró accion_formativa_id para grupo {grupo_id}")
-                    except Exception as e:
-                        st.write(f"DEBUG - Error procesando grupo {grupo_id}: {e}")
-        
-        # Resultado final
-        st.write("DEBUG - Horas finales:", df["accion_horas"].tolist())
-        st.write("DEBUG - Suma total:", df["accion_horas"].sum())
+                    except Exception:
+                        continue  # Continuar con el siguiente registro
         
         # Asegurar que las fechas son del tipo correcto
         df["grupo_fecha_inicio"] = pd.to_datetime(df["grupo_fecha_inicio"], errors='coerce')
