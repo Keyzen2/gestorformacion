@@ -1512,84 +1512,83 @@ def mostrar_seccion_costes_por_empresa(grupos_service, grupo_id):
 
 def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, horas, participantes):
     """
-    Procesa una empresa individual - separada para mejor organización del código.
+    Procesa una empresa individual - con protecciones contra valores None.
     """
-    empresa_grupo_id = empresa_grupo_data["id"]
-    empresa_data = empresa_grupo_data["empresa"]
-    empresa_nombre = empresa_data["nombre"]
-    empresa_tipo = empresa_data.get("tipo_empresa", "")
-    empresa_cif = empresa_data.get("cif", "N/A")
-    
-    # Header de la empresa
+    empresa_grupo_id = empresa_grupo_data.get("id")
+
+    # --- Datos de la empresa ---
+    empresa_data = empresa_grupo_data.get("empresa") or {}
+    empresa_nombre = empresa_data.get("nombre") or "Sin nombre"
+    empresa_tipo = empresa_data.get("tipo_empresa") or "N/D"
+    empresa_cif = empresa_data.get("cif") or "N/A"
+
+    # Header
     st.markdown(f"#### 🏢 {empresa_nombre}")
     st.caption(f"Tipo: {empresa_tipo} | CIF: {empresa_cif}")
-    
+
     # === COSTES DE ESTA EMPRESA ===
     st.markdown("##### 💳 Costes de Formación")
-    
-    # Obtener costes existentes de esta empresa (CON CACHÉ)
+
     try:
         costes_empresa_res = grupos_service.supabase.table("empresa_grupo_costes").select("*").eq("empresa_grupo_id", empresa_grupo_id).execute()
         costes_actuales = costes_empresa_res.data[0] if costes_empresa_res.data else {}
-    except:
+    except Exception:
         costes_actuales = {}
-    
-    # Formulario de costes para esta empresa (KEY ÚNICO)
+
     with st.form(f"costes_empresa_{empresa_grupo_id}", clear_on_submit=False):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             costes_directos = st.number_input(
                 "💼 Costes Directos (€)",
-                value=float(costes_actuales.get("costes_directos", 0)),
+                value=float(costes_actuales.get("costes_directos") or 0),
                 min_value=0.0,
                 key=f"directos_emp_{empresa_grupo_id}"
             )
-            
+
             costes_indirectos = st.number_input(
                 "📋 Costes Indirectos (€)",
-                value=float(costes_actuales.get("costes_indirectos", 0)),
+                value=float(costes_actuales.get("costes_indirectos") or 0),
                 min_value=0.0,
                 help="Máximo 30% de costes directos",
                 key=f"indirectos_emp_{empresa_grupo_id}"
             )
-            
+
             costes_organizacion = st.number_input(
                 "🏢 Costes Organización (€)",
-                value=float(costes_actuales.get("costes_organizacion", 0)),
+                value=float(costes_actuales.get("costes_organizacion") or 0),
                 min_value=0.0,
                 key=f"organizacion_emp_{empresa_grupo_id}"
             )
-        
+
         with col2:
             costes_salariales = st.number_input(
                 "👥 Costes Salariales (€)",
-                value=float(costes_actuales.get("costes_salariales", 0)),
+                value=float(costes_actuales.get("costes_salariales") or 0),
                 min_value=0.0,
                 key=f"salariales_emp_{empresa_grupo_id}"
             )
-            
+
             cofinanciacion_privada = st.number_input(
                 "🏦 Cofinanciación Privada (€)",
-                value=float(costes_actuales.get("cofinanciacion_privada", 0)),
+                value=float(costes_actuales.get("cofinanciacion_privada") or 0),
                 min_value=0.0,
                 key=f"cofinanciacion_emp_{empresa_grupo_id}"
             )
-            
+
             tarifa_hora = st.number_input(
                 "⏰ Tarifa por Hora (€)",
-                value=float(costes_actuales.get("tarifa_hora", tarifa_max)),
+                value=float(costes_actuales.get("tarifa_hora") or tarifa_max),
                 min_value=0.0,
                 max_value=tarifa_max,
                 help=f"Máximo FUNDAE: {tarifa_max} €/h",
                 key=f"tarifa_emp_{empresa_grupo_id}"
             )
-        
-        # Cálculos y validaciones EN TIEMPO REAL
+
         total_costes_empresa = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
         limite_calculado_empresa = tarifa_hora * horas * participantes
-        
-        # Mostrar métricas de esta empresa
+
+        # Métricas
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("💰 Total Costes", f"{total_costes_empresa:,.2f} €")
@@ -1599,31 +1598,27 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
             diferencia = limite_calculado_empresa - total_costes_empresa
             delta_color = "normal" if diferencia >= 0 else "inverse"
             st.metric("📊 Diferencia", f"{diferencia:,.2f} €", delta=f"{diferencia:,.2f} €")
-        
-        # Validaciones sin múltiples st.error (reduce reruns)
-        errores_empresa = []
-        warnings_empresa = []
-        
+
+        # Validaciones
+        errores_empresa, warnings_empresa = [], []
         if costes_directos > 0:
             pct_indirectos = (costes_indirectos / costes_directos) * 100
             if pct_indirectos > 30:
                 errores_empresa.append(f"Costes indirectos ({pct_indirectos:.1f}%) superan el 30% permitido")
             else:
                 warnings_empresa.append(f"✅ Costes indirectos válidos ({pct_indirectos:.1f}%)")
-        
+
         if tarifa_hora > tarifa_max:
             errores_empresa.append(f"Tarifa/hora ({tarifa_hora:.2f}€) supera el máximo ({tarifa_max:.2f}€)")
-        
-        # Mostrar validaciones AGRUPADAS
+
         if errores_empresa:
             st.error("❌ Errores encontrados:\n" + "\n".join([f"• {err}" for err in errores_empresa]))
         elif warnings_empresa:
-            for warning in warnings_empresa[:1]:  # Solo mostrar el primero
+            for warning in warnings_empresa[:1]:
                 st.success(warning)
-        
-        # Botón guardar costes
+
         submit_costes = st.form_submit_button("💾 Guardar Costes", type="primary", disabled=bool(errores_empresa))
-        
+
         if submit_costes and not errores_empresa:
             datos_costes_empresa = {
                 "empresa_grupo_id": empresa_grupo_id,
@@ -1633,19 +1628,16 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
                 "costes_salariales": costes_salariales,
                 "cofinanciacion_privada": cofinanciacion_privada,
                 "tarifa_hora": tarifa_hora,
-                "modalidad": "PRESENCIAL",  # Se puede obtener del grupo padre
+                "modalidad": "PRESENCIAL",
                 "total_costes_formacion": total_costes_empresa,
                 "limite_maximo_bonificacion": limite_calculado_empresa
             }
-            
             try:
                 if costes_actuales:
-                    # Actualizar existente
                     success = grupos_service.update_empresa_coste(empresa_grupo_id, datos_costes_empresa)
                 else:
-                    # Crear nuevo
                     success = grupos_service.create_empresa_coste(datos_costes_empresa)
-                
+
                 if success:
                     st.success(f"✅ Costes de {empresa_nombre} guardados correctamente")
                     st.rerun()
@@ -1653,23 +1645,20 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
                     st.error("❌ Error al guardar costes")
             except Exception as e:
                 st.error(f"❌ Error al guardar costes: {e}")
-    
-    # === BONIFICACIONES DE ESTA EMPRESA ===
+
+    # === BONIFICACIONES ===
     st.divider()
     st.markdown("##### 📅 Bonificaciones Mensuales")
-    
-    # Obtener bonificaciones existentes de esta empresa
+
     try:
         bonificaciones_empresa = grupos_service.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id).order("mes").execute()
         df_bonif_empresa = pd.DataFrame(bonificaciones_empresa.data or [])
-    except:
+    except Exception:
         df_bonif_empresa = pd.DataFrame()
-    
-    # Calcular totales de esta empresa
+
     total_bonificado_empresa = df_bonif_empresa["importe"].sum() if not df_bonif_empresa.empty else 0
     disponible_empresa = total_costes_empresa - total_bonificado_empresa
-    
-    # Métricas de bonificación
+
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("💰 Costes Empresa", f"{total_costes_empresa:,.2f} €")
@@ -1677,18 +1666,22 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
         st.metric("📊 Ya Bonificado", f"{total_bonificado_empresa:,.2f} €")
     with col3:
         st.metric("💡 Disponible", f"{disponible_empresa:,.2f} €")
-    
-    # Mostrar bonificaciones existentes (COMPACTO)
+
     if not df_bonif_empresa.empty:
         st.markdown("###### 📋 Bonificaciones Registradas")
         for _, bonif in df_bonif_empresa.iterrows():
             col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
             with col1:
-                mes_nombre = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
-                            "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][int(bonif["mes"])]
+                mes_val = bonif.get("mes")
+                try:
+                    mes_nombre = ["", "Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio",
+                                  "Agosto","Septiembre","Octubre","Noviembre","Diciembre"][int(mes_val)]
+                except:
+                    mes_nombre = "N/D"
                 st.write(f"📅 {mes_nombre}")
             with col2:
-                st.write(f"💰 {bonif['importe']:.2f} €")
+                importe_val = bonif.get("importe") or 0
+                st.write(f"💰 {importe_val:.2f} €")
             with col3:
                 st.caption(f"📝 {bonif.get('observaciones', '')[:30]}...")
             with col4:
@@ -1698,76 +1691,6 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
-    
-    # Añadir nueva bonificación (FORMULARIO COMPACTO)
-    if total_costes_empresa > 0 and disponible_empresa > 0:
-        with st.expander(f"➕ Añadir Bonificación a {empresa_nombre[:15]}..."):
-            with st.form(f"bonif_{empresa_grupo_id}", clear_on_submit=False):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    # Meses disponibles (no usados por esta empresa)
-                    meses_usados = set(df_bonif_empresa["mes"].astype(int).tolist()) if not df_bonif_empresa.empty else set()
-                    meses_disponibles = [m for m in range(1, 13) if m not in meses_usados]
-                    
-                    if not meses_disponibles:
-                        st.warning("⚠️ Ya hay bonificaciones para todos los meses")
-                        mes_bonif = None
-                    else:
-                        mes_options = {
-                            f"{m:02d} - {['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m]}": m 
-                            for m in meses_disponibles
-                        }
-                        mes_display = st.selectbox("📅 Mes", list(mes_options.keys()), key=f"mes_select_{empresa_grupo_id}")
-                        mes_bonif = mes_options[mes_display]
-                    
-                    importe_bonif = st.number_input(
-                        "💰 Importe (€)",
-                        min_value=0.01,
-                        max_value=float(disponible_empresa) if disponible_empresa > 0 else 1000.0,
-                        value=min(100.0, float(disponible_empresa)) if disponible_empresa > 0 else 100.0,
-                        help=f"Máximo disponible: {disponible_empresa:.2f} €",
-                        key=f"importe_bonif_{empresa_grupo_id}"
-                    )
-                
-                with col2:
-                    observaciones_bonif = st.text_area(
-                        "📝 Observaciones",
-                        height=80,
-                        key=f"obs_bonif_{empresa_grupo_id}",
-                        placeholder="Observaciones opcionales..."
-                    )
-                
-                submit_bonif = st.form_submit_button("➕ Añadir", type="primary")
-                
-                if submit_bonif:
-                    if not mes_bonif:
-                        st.error("❌ No hay meses disponibles")
-                    elif importe_bonif <= 0:
-                        st.error("❌ El importe debe ser mayor que 0")
-                    elif importe_bonif > disponible_empresa:
-                        st.error(f"❌ El importe ({importe_bonif:.2f}€) supera el disponible ({disponible_empresa:.2f}€)")
-                    else:
-                        datos_bonif = {
-                            "empresa_grupo_id": empresa_grupo_id,
-                            "mes": mes_bonif,
-                            "importe": importe_bonif,
-                            "observaciones": observaciones_bonif.strip() if observaciones_bonif.strip() else None
-                        }
-                        
-                        try:
-                            if grupos_service.create_empresa_bonificacion(datos_bonif):
-                                st.success(f"✅ Bonificación añadida")
-                                st.rerun()
-                            else:
-                                st.error("❌ Error al añadir bonificación")
-                        except Exception as e:
-                            st.error(f"❌ Error: {e}")
-    else:
-        if total_costes_empresa <= 0:
-            st.info("💡 Define primero los costes de formación para esta empresa")
-        else:
-            st.info("💡 Ya se han bonificado todos los costes disponibles")
 
 # =========================
 # 2. IMPLEMENTAR FILTROS AVANZADOS STREAMLIT 1.49
