@@ -502,84 +502,77 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 empresa_id = grupos_service.empresa_id
                 st.info("Tu empresa será la propietaria del grupo")
 
-    # 3. CÓDIGO DEL GRUPO (CORREGIDO - SIN CONFLICTO SESSION STATE)
-    st.markdown("### 🏷️ Código del Grupo")
-    with st.container(border=True):
-        if es_creacion:
-            fecha_para_codigo = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
+        # 3. CÓDIGO DEL GRUPO (VERSIÓN SIMPLE - COMO TENÍAS ANTES)
+        st.markdown("### 🏷️ Código del Grupo")
+        with st.container(border=True):
+            if es_creacion:
+                fecha_para_codigo = safe_date_conversion(datos_grupo.get("fecha_inicio")) or date.today()
             
-            try:
-                codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
-                    accion_id, fecha_para_codigo
-                )
-            except Exception as e:
-                codigo_sugerido = "1"
-                error_sugerido = f"Error: {e}"
+                try:
+                    codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
+                        accion_id, fecha_para_codigo
+                    )
+                except Exception as e:
+                    codigo_sugerido = "1"
+                    error_sugerido = f"Error: {e}"
 
-            if error_sugerido:
-                st.error(f"Error al generar código sugerido: {error_sugerido}")
-                codigo_grupo_display = ""
-            else:
-                codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
-                codigo_completo_display = f"{codigo_accion}-{codigo_sugerido}"
-                
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.success(f"✅ Código sugerido: **{codigo_completo_display}**")
-                    st.caption(f"Próximo número disponible para acción {codigo_accion}")
-                with col2:
-                    # CORRECCIÓN: Solo usar session_state, NO value=
-                    # Inicializar en session_state si no existe
-                    checkbox_key = f"usar_sugerido_{context}"
-                    if checkbox_key not in st.session_state:
-                        st.session_state[checkbox_key] = True
-                    
-                    # Si la acción cambió, forzar usar sugerido
-                    session_key_accion = f"accion_anterior_{context}"
-                    accion_anterior = st.session_state.get(session_key_accion, None)
-                    if accion_anterior != accion_id and accion_anterior is not None:
-                        st.session_state[checkbox_key] = True
-                    
-                    usar_sugerido = st.checkbox(
-                        "Usar sugerido",
-                        key=checkbox_key  # Solo key, SIN value=
-                    )
-                
-                if usar_sugerido:
-                    codigo_grupo_display = codigo_sugerido
-                    st.info(f"📋 Usarás el código: **{codigo_completo_display}**")
+                if error_sugerido:
+                    st.error(f"Error al generar código sugerido: {error_sugerido}")
+                    codigo_grupo_display = ""
                 else:
-                    # Campo manual cuando no usa sugerido
-                    codigo_manual = st.text_input(
-                        "Código personalizado *",
-                        value=codigo_sugerido,
-                        placeholder="Introduce un número",
-                        key=f"codigo_manual_{context}",
-                        help="Introduce cualquier número disponible"
-                    )
-                    codigo_grupo_display = codigo_manual
+                    codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
+                    codigo_completo_display = f"{codigo_accion}-{codigo_sugerido}"
+                
+                    colc1, colc2 = st.columns([2, 1])
+                    with colc1:
+                        st.success(f"✅ Código sugerido: {codigo_completo_display}")
+                    with colc2:
+                        # Checkbox simple - solo inicializar si no existe
+                        checkbox_key = f"usar_sugerido_{context}"
+                        if checkbox_key not in st.session_state:
+                            st.session_state[checkbox_key] = True
+                        
+                        usar_sugerido = st.checkbox(
+                            "Usar sugerido",
+                            key=checkbox_key
+                        )
                     
-                    # Validación del código manual
-                    if codigo_manual:
-                        if not codigo_manual.strip().isdigit():
-                            st.error("❌ El código debe ser numérico")
+                    if usar_sugerido:
+                        codigo_grupo_display = codigo_sugerido
+                        # Mostrar el código que se usará
+                        st.info(f"📋 Se usará: **{codigo_completo_display}**")
+                    else:
+                        # Campo manual SOLO cuando no usa sugerido
+                        codigo_grupo_display = st.text_input(
+                            "Código del Grupo *",
+                            value=codigo_sugerido,
+                            placeholder="Introduce un número",
+                            key=f"codigo_grupo_manual_{context}",  # KEY DIFERENTE
+                            help="Introduce cualquier número disponible"
+                        )
+
+                # Validación común (si hay código)
+                if codigo_grupo_display:
+                    try:
+                        es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                            codigo_grupo_display, accion_id, fecha_para_codigo
+                        )
+                        codigo_final = grupos_service.generar_display_codigo_completo(accion_id, codigo_grupo_display)
+                        
+                        if es_valido:
+                            st.success(f"✅ Código '{codigo_final}' válido")
                         else:
-                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
-                                codigo_manual, accion_id, fecha_para_codigo
-                            )
-                            if es_valido:
-                                codigo_completo_manual = f"{codigo_accion}-{codigo_manual}"
-                                st.success(f"✅ Código válido: **{codigo_completo_manual}**")
-                            else:
-                                st.error(f"❌ {mensaje_error}")
+                            st.error(f"❌ {mensaje_error}")
+                    except Exception as e:
+                        st.error(f"❌ Error al validar: {e}")
                     
-        else:
-            # Modo edición - mostrar código actual
-            codigo_grupo = datos_grupo.get("codigo_grupo", "")
-            codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
-            codigo_completo = f"{codigo_accion}-{codigo_grupo}"
-            st.info(f"Código actual: **{codigo_completo}**")
-            codigo_grupo_display = codigo_grupo
+            else:
+                # Modo edición - código no editable
+                codigo_grupo = datos_grupo.get("codigo_grupo", "")
+                codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
+                codigo_completo = f"{codigo_accion}-{codigo_grupo}"
+                st.info(f"Código actual: **{codigo_completo}**")
+                codigo_grupo_display = codigo_grupo
 
     # 4. EMPRESA RESPONSABLE ANTE FUNDAE (INFORMATIVA)
     if accion_id and empresa_id:
