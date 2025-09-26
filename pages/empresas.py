@@ -865,6 +865,7 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             es_pyme = datos.get("es_pyme", True)
             voluntad_acumular_credito = datos.get("voluntad_acumular_credito", False)
             tiene_erte = datos.get("tiene_erte", False)
+            es_centro_gestor = datos.get("es_centro_gestor", False)
             provincia_sel = datos.get("provincia") or ""
             localidad_sel = datos.get("ciudad") or ""
             provincia_id = None
