@@ -857,7 +857,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
             except Exception as e:
                 st.error(f"❌ Error al procesar grupo: {e}")
 
-        elif cancear:
+        elif cancelar:
             st.session_state.grupo_seleccionado = None
             st.rerun()
             
