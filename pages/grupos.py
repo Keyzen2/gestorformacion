@@ -459,9 +459,13 @@ def mostrar_formulario_grupo_corregido(grupos_service, es_creacion=False, contex
                 # =========================
                 st.markdown("### 🏷️ Código del Grupo")
                 if es_creacion:
-                    codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
-                        accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
-                    )
+                    try:
+                        codigo_sugerido, error_sugerido = grupos_service.generar_codigo_grupo_sugerido_correlativo(
+                            accion_id, fecha_inicio if 'fecha_inicio' in locals() else date.today()
+                        )
+                    except Exception as e:
+                        codigo_sugerido = "1"
+                        error_sugerido = ""
         
                     if error_sugerido:
                         st.error(f"❌ Error al generar código sugerido: {error_sugerido}")
