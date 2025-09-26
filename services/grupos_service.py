@@ -361,7 +361,6 @@ class GruposService:
             if empresa_propietaria_id and str(empresa_propietaria_id).lower() != "none":
                 try:
                     # Validar que sea un UUID válido
-                    import uuid
                     uuid.UUID(str(empresa_propietaria_id))
                     empresa_prop_valida = str(empresa_propietaria_id)
                 except (ValueError, TypeError):
