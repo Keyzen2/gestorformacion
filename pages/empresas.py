@@ -932,12 +932,12 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
             iso_activo = datos.get("iso_activo", False)
             rgpd_activo = datos.get("rgpd_activo", False)
             docu_avanzada_activo = datos.get("docu_avanzada_activo", False)
-                     
+            
+            es_centro_gestor = datos.get("es_centro_gestor", False)
+            
             crm_data = empresas_service.get_crm_empresa(datos.get("id")) if not es_creacion else {}
             crm_activo = crm_data.get("crm_activo", False)
             crm_inicio, crm_fin = crm_data.get("crm_inicio"), crm_data.get("crm_fin")
-
-        es_centro_gestor = datos.get("es_centro_gestor", False)
 
         if not solo_datos_basicos:
             st.markdown("### 🏢 Funcionalidades Adicionales")
