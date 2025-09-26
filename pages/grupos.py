@@ -1946,7 +1946,7 @@ def main(supabase, session_state):
             # Mostrar formulario de edición si hay selección
             if seleccionado is not None:
                 with st.container(border=True):
-                    grupo_id = mostrar_formulario_grupo_corregido(
+                    grupo_id = mostrar_formulario_grupo_separado(
                         grupos_service, es_creacion=False, context="_editar"
                     )
                     if grupo_id:
@@ -1961,7 +1961,7 @@ def main(supabase, session_state):
     # =========================
     with tabs[1]:
         with st.container(border=True):
-            mostrar_formulario_grupo_corregido(
+            mostrar_formulario_grupo_separado(
                 grupos_service, es_creacion=True, context="_crear"
             )
         
