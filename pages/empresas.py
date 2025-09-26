@@ -1094,11 +1094,10 @@ def procesar_guardado_empresa(
             "provincia_id": provincia_id,
             "localidad_id": localidad_id,
             "provincia": provincia_sel if provincia_sel else None,
-            "ciudad": localidad_sel if localidad_sel else None
+            "ciudad": localidad_sel if localidad_sel else None,
+            "es_centro_gestor": es_centro_gestor
         }
-   
-        "es_centro_gestor": es_centro_gestor,
-            
+              
         # AGREGAR tipo_empresa solo en creación si es admin
         if es_creacion and session_state.role == "admin":
             datos_empresa["tipo_empresa"] = tipo_empresa
