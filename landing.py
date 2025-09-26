@@ -56,6 +56,27 @@ def crear_estilos_seguros():
         gap: 0.5rem;
     }
 
+    /* Posicionar el botón Acceder dentro del header */
+    div[data-testid="stVerticalBlock"] button[kind="primary"] {
+        position: fixed;
+        top: 12px;
+        right: 20px;
+        z-index: 2000;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 6px;
+        border: none;
+        color: white;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    div[data-testid="stVerticalBlock"] button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #5a67d8, #6b46c1);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+    }
+
     /* Hero */
     .hero {
         display: flex;
@@ -204,21 +225,19 @@ def landing_page():
     # Estilos
     st.markdown(crear_estilos_seguros(), unsafe_allow_html=True)
 
-    # Navbar con placeholder para botón Acceder
+    # Navbar
     navbar_html = """
     <div class="navbar">
         <div class="logo">🚀 Gestor de Formación</div>
-        <div id="login-btn"></div>
     </div>
     """
     st.markdown(navbar_html, unsafe_allow_html=True)
 
-    # Botón Acceder real (Streamlit)
-    login_placeholder = st.empty()
-    with login_placeholder.container():
-        if st.button("Acceder", key="btn_login_nav"):
-            st.session_state.show_login = True
-            st.rerun()
+    # Botón Acceder (nativo Streamlit) → se estiliza con CSS para estar arriba a la derecha
+    if st.button("Acceder", key="btn_login", type="primary"):
+        st.session_state.show_login = True
+        st.session_state.page = "login"  # opcional si usas router
+        st.rerun()
 
     # Hero
     hero_html = """
