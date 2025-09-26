@@ -999,7 +999,8 @@ def mostrar_formulario_empresa(empresa_data, empresas_service, session_state, es
                     rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
                     st.session_state[cuentas_key] if not solo_datos_basicos else [],
                     provincia_sel if provincia_sel else None, localidad_sel if localidad_sel else None, 
-                    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos
+                    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos,
+                    es_centro_gestor
                 )
             
         if eliminar:
