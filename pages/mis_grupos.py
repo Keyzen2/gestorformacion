@@ -121,6 +121,16 @@ def obtener_diploma_real(_supabase, grupo_id, email):
     }
     return colores.get(estado, "⚪")
 
+def obtener_color_estado(estado: str) -> str:
+    """Devuelve el emoji apropiado para cada estado."""
+    colores = {
+        "Pendiente de inicio": "🟡",
+        "En curso": "🟢", 
+        "Curso finalizado": "🔵",
+        "Finalizado": "🔵"
+    }
+    return colores.get(estado, "⚪")
+
 def calcular_dias_restantes(fecha_inicio) -> Optional[int]:
     """Calcula días restantes para que comience un curso."""
     if pd.isna(fecha_inicio):
