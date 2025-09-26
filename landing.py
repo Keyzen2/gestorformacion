@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 def crear_estilos_seguros():
-    """Crea los estilos CSS de forma segura sin exposición"""
+    """Crea los estilos CSS de la landing"""
     estilos = """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
@@ -34,6 +34,7 @@ def crear_estilos_seguros():
         display: none;
     }
 
+    /* Navbar */
     .navbar {
         display: flex;
         justify-content: space-between;
@@ -54,22 +55,14 @@ def crear_estilos_seguros():
         color: #1a202c;
         gap: 0.5rem;
     }
-    .navbar .btn-login {
-        padding: 0.5rem 1rem;
-        background: #667eea;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-weight: 500;
-    }
 
+    /* Hero */
     .hero {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 4rem 2rem; /* reducido */
-        margin-top: 60px;   /* compensa navbar fija */
+        padding: 4rem 2rem;
+        margin-top: 60px; /* compensa navbar fija */
         background: linear-gradient(135deg, #667eea, #764ba2);
         color: white;
         flex-wrap: wrap;
@@ -103,8 +96,9 @@ def crear_estilos_seguros():
         box-shadow: 0 8px 25px rgba(0,0,0,0.15);
     }
 
+    /* Sección de características */
     .section {
-        padding: 3rem 2rem; /* reducido */
+        padding: 3rem 2rem;
         max-width: 1100px;
         margin: auto;
     }
@@ -127,11 +121,12 @@ def crear_estilos_seguros():
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         text-align: center;
         border: 1px solid #f1f5f9;
-        transition: transform 0.3s ease;
+        transition: all 0.3s ease;
     }
     .feature:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        transform: translateY(-6px) scale(1.03);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        border-color: #c3dafe;
     }
     .feature-icon {
         width: 60px;
@@ -157,6 +152,7 @@ def crear_estilos_seguros():
         margin: 0;
     }
 
+    /* Footer */
     .footer {
         background: #1a202c;
         color: #e2e8f0;
@@ -179,13 +175,20 @@ def crear_estilos_seguros():
         margin-bottom: 0.5rem;
     }
 
+    /* Responsive */
     @media (max-width: 768px) {
+        .navbar {
+            padding: 0.5rem 1rem;
+        }
         .hero {
             padding: 5rem 1rem 3rem;
             text-align: center;
         }
         .hero-text h1 {
             font-size: 2rem;
+        }
+        .hero-img {
+            margin-top: 2rem;
         }
         .features {
             grid-template-columns: 1fr;
@@ -196,23 +199,28 @@ def crear_estilos_seguros():
     return estilos
 
 def landing_page():
-    """Landing page segura sin exposición de código"""
+    """Landing page profesional y responsive"""
     
-    # Aplicar estilos
+    # Estilos
     st.markdown(crear_estilos_seguros(), unsafe_allow_html=True)
 
-    # Navbar con botón Acceder alineado a la derecha
+    # Navbar con placeholder para botón Acceder
     navbar_html = """
     <div class="navbar">
         <div class="logo">🚀 Gestor de Formación</div>
-        <form action="#" method="post">
-            <button class="btn-login">Acceder</button>
-        </form>
+        <div id="login-btn"></div>
     </div>
     """
     st.markdown(navbar_html, unsafe_allow_html=True)
 
-    # Hero section
+    # Botón Acceder real (Streamlit)
+    login_placeholder = st.empty()
+    with login_placeholder.container():
+        if st.button("Acceder", key="btn_login_nav"):
+            st.session_state.show_login = True
+            st.rerun()
+
+    # Hero
     hero_html = """
     <div class="hero">
         <div class="hero-text">
@@ -228,7 +236,7 @@ def landing_page():
     """
     st.markdown(hero_html, unsafe_allow_html=True)
 
-    # Sección de características
+    # Características
     st.markdown('<div class="section">', unsafe_allow_html=True)
     st.markdown("## Características principales")
     
