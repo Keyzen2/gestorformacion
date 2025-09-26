@@ -502,7 +502,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 empresa_id = grupos_service.empresa_id
                 st.info("Tu empresa será la propietaria del grupo")
 
-    # 3. CÓDIGO SUGERIDO (SE RECALCULA AUTOMÁTICAMENTE)
+    # 3. CÓDIGO DEL GRUPO (CORREGIDO - SIN CONFLICTO SESSION STATE)
     st.markdown("### 🏷️ Código del Grupo")
     with st.container(border=True):
         if es_creacion:
@@ -520,6 +520,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 st.error(f"Error al generar código sugerido: {error_sugerido}")
                 codigo_grupo_display = ""
             else:
+                codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
                 codigo_completo_display = f"{codigo_accion}-{codigo_sugerido}"
                 
                 col1, col2 = st.columns([3, 1])
@@ -527,24 +528,55 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                     st.success(f"✅ Código sugerido: **{codigo_completo_display}**")
                     st.caption(f"Próximo número disponible para acción {codigo_accion}")
                 with col2:
-                    # Forzar usar sugerido si la acción cambió
-                    valor_checkbox = True
+                    # CORRECCIÓN: Solo usar session_state, NO value=
+                    # Inicializar en session_state si no existe
+                    checkbox_key = f"usar_sugerido_{context}"
+                    if checkbox_key not in st.session_state:
+                        st.session_state[checkbox_key] = True
+                    
+                    # Si la acción cambió, forzar usar sugerido
+                    session_key_accion = f"accion_anterior_{context}"
+                    accion_anterior = st.session_state.get(session_key_accion, None)
                     if accion_anterior != accion_id and accion_anterior is not None:
-                        st.session_state[f"usar_sugerido_{context}"] = True
-                        valor_checkbox = True
-                    else:
-                        valor_checkbox = st.session_state.get(f"usar_sugerido_{context}", True)
+                        st.session_state[checkbox_key] = True
                     
                     usar_sugerido = st.checkbox(
                         "Usar sugerido",
-                        value=valor_checkbox,
-                        key=f"usar_sugerido_{context}"
+                        key=checkbox_key  # Solo key, SIN value=
                     )
                 
-                codigo_grupo_display = codigo_sugerido if usar_sugerido else ""
+                if usar_sugerido:
+                    codigo_grupo_display = codigo_sugerido
+                    st.info(f"📋 Usarás el código: **{codigo_completo_display}**")
+                else:
+                    # Campo manual cuando no usa sugerido
+                    codigo_manual = st.text_input(
+                        "Código personalizado *",
+                        value=codigo_sugerido,
+                        placeholder="Introduce un número",
+                        key=f"codigo_manual_{context}",
+                        help="Introduce cualquier número disponible"
+                    )
+                    codigo_grupo_display = codigo_manual
+                    
+                    # Validación del código manual
+                    if codigo_manual:
+                        if not codigo_manual.strip().isdigit():
+                            st.error("❌ El código debe ser numérico")
+                        else:
+                            es_valido, mensaje_error = grupos_service.validar_codigo_grupo_correlativo(
+                                codigo_manual, accion_id, fecha_para_codigo
+                            )
+                            if es_valido:
+                                codigo_completo_manual = f"{codigo_accion}-{codigo_manual}"
+                                st.success(f"✅ Código válido: **{codigo_completo_manual}**")
+                            else:
+                                st.error(f"❌ {mensaje_error}")
+                    
         else:
             # Modo edición - mostrar código actual
             codigo_grupo = datos_grupo.get("codigo_grupo", "")
+            codigo_accion = grupos_service.get_codigo_accion_numerico(accion_id)
             codigo_completo = f"{codigo_accion}-{codigo_grupo}"
             st.info(f"Código actual: **{codigo_completo}**")
             codigo_grupo_display = codigo_grupo
