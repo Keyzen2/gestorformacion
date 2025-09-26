@@ -48,4 +48,4 @@ Pillow>=10.0.0
 streamlit-option-menu>=0.3.6
 # Gráficos interactivos y Gantt charts
 plotly>=5.17.0
-streamlit-calendar>=0.8.0
+streamlit-calendar==0.9.0
