@@ -947,7 +947,7 @@ def mostrar_secciones_adicionales(grupos_service, grupo_id):
     
     # SECCIÓN 7: COSTES FUNDAE
     with st.expander("💰 7. Costes y Bonificaciones FUNDAE", expanded=False):
-        mostrar_seccion_costes(grupos_service, grupo_id)
+        mostrar_seccion_costes_por_empresa(grupos_service, grupo_id)
 
 def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
     """CORREGIDO: Usando tabla tutores_grupos (N:N)."""
