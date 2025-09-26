@@ -1049,7 +1049,8 @@ def procesar_guardado_empresa(
     voluntad_acumular_credito, tiene_erte, formacion_activo, iso_activo,
     rgpd_activo, docu_avanzada_activo, crm_activo, crm_inicio, crm_fin,
     cuentas_cotizacion, provincia_sel, localidad_sel, 
-    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos=False
+    empresas_service, session_state, es_creacion, tipo_empresa, solo_datos_basicos=False,
+    es_centro_gestor=False
 ):
     """Procesa creación/actualización de empresa con jerarquía, cuentas y CRM."""
     try:
