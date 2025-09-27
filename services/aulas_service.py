@@ -1064,6 +1064,6 @@ class AulasService:
             return []
     
     
-    def get_aulas_service(supabase, session_state) -> AulasService:
-        """Factory function para obtener instancia del servicio de aulas"""
-        return AulasService(supabase, session_state)
+def get_aulas_service(supabase, session_state) -> AulasService:
+    """Factory function para obtener instancia del servicio de aulas"""
+    return AulasService(supabase, session_state)
