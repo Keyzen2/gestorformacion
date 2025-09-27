@@ -512,8 +512,8 @@ def route():
 
     elif rol == "alumno":
         st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_mis_grupos"):
-            st.session_state.page = "mis_grupos"
+        if st.sidebar.button("Área alumno", key="alumno_mis_grupos"):
+            st.session_state.page = "area_alumno"
             
     # Panel del Gestor
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
@@ -534,6 +534,7 @@ def route():
                 "Participantes": "participantes",
                 "Tutores": "tutores",
                 "Aulas": "aulas",
+                "Gestión Clases": "gestion_clases",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
@@ -545,6 +546,7 @@ def route():
                 "Participantes": "participantes",
                 "Tutores": "tutores",
                 "Aulas": "aulas",
+                "Gestión Clases": "gestion_clases",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
