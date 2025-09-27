@@ -317,11 +317,11 @@ def mostrar_cronograma_fullcalendar(aulas_service, session_state):
         
         # Configuración del calendario según documentación oficial
         calendar_options = {
-            "editable": "true",
-            "navLinks": "true",
-            "selectable": "true",
+            "editable": True,
+            "navLinks": True,
+            "selectable": True,
             "initialView": vista_inicial,
-            "initialDate": fecha_inicio.isoformat(),
+            "initialDate": datetime.now().date().isoformat(),
             "headerToolbar": {
                 "left": "prev,next today",
                 "center": "title",
