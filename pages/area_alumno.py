@@ -30,7 +30,14 @@ def verificar_acceso_alumno(session_state):
         return False
     
     return True
-
+    
+def get_participante_id(supabase, auth_id):
+    """Convierte auth_id a participante_id"""
+    try:
+        result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+        return result.data[0]["id"] if result.data else None
+    except:
+        return None
 # =========================
 # TAB 1: MIS GRUPOS FUNDAE
 # =========================
