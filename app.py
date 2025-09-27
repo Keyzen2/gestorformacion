@@ -2,6 +2,7 @@ import os
 import sys
 import streamlit as st
 from landing import landing_page
+from pages import area_alumno, gestion_clases
 from utils import get_ajustes_app
 from supabase import create_client
 from datetime import datetime
