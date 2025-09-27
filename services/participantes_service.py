@@ -172,7 +172,6 @@ class ParticipantesService:
     # =========================
     # MÉTODOS CON JERARQUÍA DE EMPRESAS
     # =========================
-    
     @st.cache_data(ttl=300)
     def get_participantes_con_jerarquia(_self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica completa."""
@@ -800,7 +799,112 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error en migración: {e}")
             return False
-        
+            
+    def get_avatar_participante(self, participante_id: str) -> Optional[Dict]:
+        """Obtiene información del avatar de un participante"""
+        try:
+            result = self.supabase.table("participantes_avatars").select("*").eq(
+                "participante_id", participante_id
+            ).execute()
+            
+            if result.data:
+                return result.data[0]
+            return None
+            
+        except Exception as e:
+            return None
+    
+    def subir_avatar(self, participante_id: str, archivo_imagen) -> bool:
+        """Sube avatar de participante a Supabase Storage"""
+        try:
+            from PIL import Image
+            import io
+            
+            # Leer archivo
+            file_bytes = archivo_imagen.getvalue()
+            file_name = archivo_imagen.name
+            file_type = archivo_imagen.type
+            
+            # Validar tamaño (máximo 2MB)
+            if len(file_bytes) > 2 * 1024 * 1024:
+                return False
+            
+            # Redimensionar imagen a 150x150px
+            image = Image.open(io.BytesIO(file_bytes))
+            image = image.resize((150, 150), Image.Resampling.LANCZOS)
+            
+            # Convertir de vuelta a bytes
+            output = io.BytesIO()
+            format_map = {"image/jpeg": "JPEG", "image/jpg": "JPEG", "image/png": "PNG"}
+            img_format = format_map.get(file_type, "JPEG")
+            image.save(output, format=img_format, quality=85)
+            processed_bytes = output.getvalue()
+            
+            # Generar nombre único
+            extension = file_name.split('.')[-1] if '.' in file_name else 'jpg'
+            nombre_unico = f"avatar_{participante_id}_{int(datetime.now().timestamp())}.{extension}"
+            
+            # Subir a Supabase Storage
+            resultado = self.supabase.storage.from_("avatars").upload(
+                nombre_unico, processed_bytes, {"content-type": file_type}
+            )
+            
+            if resultado:
+                # Obtener URL pública
+                url_publica = self.supabase.storage.from_("avatars").get_public_url(nombre_unico)
+                
+                # Eliminar avatar anterior si existe
+                self.eliminar_avatar(participante_id)
+                
+                # Guardar en base de datos
+                datos_avatar = {
+                    "id": str(uuid.uuid4()),
+                    "participante_id": participante_id,
+                    "archivo_nombre": file_name,
+                    "archivo_url": url_publica,
+                    "mime_type": file_type,
+                    "tamaño_bytes": len(processed_bytes),
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                resultado_db = self.supabase.table("participantes_avatars").insert(datos_avatar).execute()
+                return bool(resultado_db.data)
+            
+            return False
+            
+        except Exception as e:
+            st.error(f"Error subiendo avatar: {e}")
+            return False
+    
+    def eliminar_avatar(self, participante_id: str) -> bool:
+        """Elimina avatar existente de un participante"""
+        try:
+            # Obtener avatar actual
+            avatar_actual = self.supabase.table("participantes_avatars").select("*").eq(
+                "participante_id", participante_id
+            ).execute()
+            
+            if avatar_actual.data:
+                avatar = avatar_actual.data[0]
+                
+                # Eliminar de storage
+                archivo_url = avatar["archivo_url"]
+                nombre_archivo = archivo_url.split("/")[-1]
+                try:
+                    self.supabase.storage.from_("avatars").remove([nombre_archivo])
+                except:
+                    pass  # No fallar si el archivo ya no existe
+                
+                # Eliminar de base de datos
+                self.supabase.table("participantes_avatars").delete().eq(
+                    "participante_id", participante_id
+                ).execute()
+            
+            return True
+            
+        except Exception as e:
+            return False    
+            
     def get_participantes_por_empresa(_self, empresa_id: str) -> pd.DataFrame:
         """Obtiene participantes de una empresa específica."""
         try:
