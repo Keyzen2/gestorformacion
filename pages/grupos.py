@@ -1614,6 +1614,18 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
         st.warning(f"⚠️ Error al cargar costes: {e}")
         costes_actuales = {}
 
+    # DEFINIR VARIABLES FUERA DEL FORMULARIO PARA ACCESO GLOBAL
+    costes_directos_inicial = float(costes_actuales.get("costes_directos", 0) or 0)
+    costes_indirectos_inicial = float(costes_actuales.get("costes_indirectos", 0) or 0)
+    costes_organizacion_inicial = float(costes_actuales.get("costes_organizacion", 0) or 0)
+    costes_salariales_inicial = float(costes_actuales.get("costes_salariales", 0) or 0)
+    cofinanciacion_privada_inicial = float(costes_actuales.get("cofinanciacion_privada", 0) or 0)
+    tarifa_hora_inicial = float(costes_actuales.get("tarifa_hora", tarifa_max) or tarifa_max)
+    
+    # CALCULAR TOTALES INICIALES
+    total_costes_empresa = costes_directos_inicial + costes_indirectos_inicial + costes_organizacion_inicial + costes_salariales_inicial
+    limite_calculado_empresa = tarifa_hora_inicial * horas * participantes
+
     with st.form(f"costes_empresa_{empresa_grupo_id}", clear_on_submit=False):
         col1, col2 = st.columns(2)
 
@@ -1621,14 +1633,14 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
             # USAR NOMBRES EXACTOS DEL SCHEMA
             costes_directos = st.number_input(
                 "💼 Costes Directos (€)",
-                value=float(costes_actuales.get("costes_directos", 0) or 0),
+                value=costes_directos_inicial,
                 min_value=0.0,
                 key=f"directos_emp_{empresa_grupo_id}"
             )
 
             costes_indirectos = st.number_input(
                 "📋 Costes Indirectos (€)",
-                value=float(costes_actuales.get("costes_indirectos", 0) or 0),
+                value=costes_indirectos_inicial,
                 min_value=0.0,
                 help="Máximo 30% de costes directos",
                 key=f"indirectos_emp_{empresa_grupo_id}"
@@ -1636,7 +1648,7 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
 
             costes_organizacion = st.number_input(
                 "🏢 Costes Organización (€)",
-                value=float(costes_actuales.get("costes_organizacion", 0) or 0),
+                value=costes_organizacion_inicial,
                 min_value=0.0,
                 key=f"organizacion_emp_{empresa_grupo_id}"
             )
@@ -1644,29 +1656,30 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
         with col2:
             costes_salariales = st.number_input(
                 "👥 Costes Salariales (€)",
-                value=float(costes_actuales.get("costes_salariales", 0) or 0),
+                value=costes_salariales_inicial,
                 min_value=0.0,
                 key=f"salariales_emp_{empresa_grupo_id}"
             )
 
             cofinanciacion_privada = st.number_input(
                 "🏦 Cofinanciación Privada (€)",
-                value=float(costes_actuales.get("cofinanciacion_privada", 0) or 0),
+                value=cofinanciacion_privada_inicial,
                 min_value=0.0,
                 key=f"cofinanciacion_emp_{empresa_grupo_id}"
             )
 
             tarifa_hora = st.number_input(
                 "⏰ Tarifa por Hora (€)",
-                value=float(costes_actuales.get("tarifa_hora", tarifa_max) or tarifa_max),
+                value=tarifa_hora_inicial,
                 min_value=0.0,
                 max_value=tarifa_max,
                 help=f"Máximo FUNDAE: {tarifa_max} €/h",
                 key=f"tarifa_emp_{empresa_grupo_id}"
             )
 
-        total_costes_empresa = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
-        limite_calculado_empresa = tarifa_hora * horas * participantes
+        # RECALCULAR TOTALES CON VALORES DEL FORMULARIO
+        total_costes_formulario = costes_directos + costes_indirectos + costes_organizacion + costes_salariales
+        limite_calculado_formulario = tarifa_hora * horas * participantes
 
         # Métricas
         col1, col2, col3 = st.columns(3)
