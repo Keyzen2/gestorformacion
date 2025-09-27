@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from typing import Dict, Any, List
+import uuid
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 from utils import validar_dni_cif
 
