@@ -18,18 +18,26 @@ st.set_page_config(
 # =========================
 # VERIFICACIÓN DE ACCESO
 # =========================
-def verificar_acceso_alumno(session_state):
-    """Verifica que el usuario sea un participante/alumno."""
-    if session_state.role != "alumno":
-        st.error("🔒 Acceso restringido")
-        st.info("Esta área está disponible solo para alumnos/participantes")
-        return False
-    
-    if not hasattr(session_state, 'user') or not session_state.user.get('id'):
-        st.error("❌ No se encontró información del usuario")
-        return False
-    
-    return True
+def verificar_acceso_alumno(session_state, supabase):
+    # Si ya viene con rol alumno → OK
+    if session_state.role == "alumno":
+        return
+
+    # Si no, comprobar si el auth_id está en participantes
+    auth_id = session_state.user.get("id")
+    if not auth_id:
+        st.error("🔒 No se ha encontrado usuario autenticado")
+        st.stop()
+
+    participante = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+    if participante.data:
+        # Forzamos rol alumno
+        session_state.role = "alumno"
+        return
+
+    # Si no es participante → error
+    st.error("🔒 Acceso restringido al área de alumnos")
+    st.stop()
     
 def get_participante_id(supabase, auth_id):
     """Convierte auth_id a participante_id"""
