@@ -75,7 +75,15 @@ class ParticipantesService:
                 'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                 'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
             ])
- 
+            
+    def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
+        """Obtiene participante_id desde auth_id usando la vista"""
+        try:
+            result = self.supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
+            return result.data[0]["participante_id"] if result.data else None
+        except:
+            return None
+            
     @st.cache_data(ttl=300)
     def get_participantes_con_empresa_jerarquica(_self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica de empresa."""
