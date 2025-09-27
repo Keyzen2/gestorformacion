@@ -586,8 +586,7 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                 st.image(
                     avatar["archivo_url"],
                     caption="Tu foto actual",
-                    width=200,
-                    use_column_width=False
+                    width=200
                 )
                 
                 # Información del archivo
@@ -615,8 +614,7 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                 st.info("📷 Sin foto de perfil")
                 st.image(
                     "https://via.placeholder.com/200x200/CCCCCC/FFFFFF?text=Sin+Foto",
-                    width=200,
-                    use_column_width=False
+                    width=200
                 )
                 st.session_state["cambiar_avatar"] = True
             
