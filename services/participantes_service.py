@@ -799,7 +799,7 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error en migración: {e}")
             return False
-            
+
     def get_avatar_participante(self, participante_id: str) -> Optional[Dict]:
         """Obtiene información del avatar de un participante"""
         try:
@@ -841,6 +841,7 @@ class ParticipantesService:
             processed_bytes = output.getvalue()
             
             # Generar nombre único
+            import uuid
             extension = file_name.split('.')[-1] if '.' in file_name else 'jpg'
             nombre_unico = f"avatar_{participante_id}_{int(datetime.now().timestamp())}.{extension}"
             
@@ -873,7 +874,6 @@ class ParticipantesService:
             return False
             
         except Exception as e:
-            st.error(f"Error subiendo avatar: {e}")
             return False
     
     def eliminar_avatar(self, participante_id: str) -> bool:
