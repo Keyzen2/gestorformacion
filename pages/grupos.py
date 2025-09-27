@@ -1742,138 +1742,138 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
             except Exception as e:
                 st.error(f"❌ Error al guardar costes: {e}")
 
-# === BONIFICACIONES MENSUALES (FUERA DEL FORMULARIO) ===
-st.divider()
-st.markdown("##### 📅 Bonificaciones Mensuales")
-
-try:
-    # USAR CAMPOS EXACTOS DEL SCHEMA: mes es INTEGER, no VARCHAR
-    bonificaciones_empresa_res = grupos_service.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id).order("mes").execute()
-    df_bonif_empresa = pd.DataFrame(bonificaciones_empresa_res.data or [])
-except Exception as e:
-    st.warning(f"⚠️ Error al cargar bonificaciones: {e}")
-    df_bonif_empresa = pd.DataFrame()
-
-# Cálculos seguros de bonificaciones
-try:
-    if not df_bonif_empresa.empty:
-        df_bonif_empresa["importe"] = pd.to_numeric(df_bonif_empresa["importe"], errors="coerce").fillna(0.0)
-        df_bonif_empresa["mes"] = pd.to_numeric(df_bonif_empresa["mes"], errors="coerce").fillna(1).astype(int)
-        total_bonificado_empresa = df_bonif_empresa["importe"].sum()
-    else:
-        total_bonificado_empresa = 0.0
-except Exception as e:
-    st.warning(f"⚠️ Error al procesar bonificaciones: {e}")
-    total_bonificado_empresa = 0.0
-
-disponible_empresa = total_costes_empresa - total_bonificado_empresa
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("💰 Costes Empresa", f"{total_costes_empresa:,.2f} €")
-with col2:
-    st.metric("📊 Ya Bonificado", f"{total_bonificado_empresa:,.2f} €")
-with col3:
-    st.metric("💡 Disponible", f"{disponible_empresa:,.2f} €")
-
-# Mostrar bonificaciones existentes
-if not df_bonif_empresa.empty:
-    st.markdown("###### 📋 Bonificaciones Registradas")
-    for _, bonif in df_bonif_empresa.iterrows():
-        with st.container(border=True):
-            col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
-            with col1:
-                mes_val = bonif.get("mes", 1)
-                try:
-                    mes_num = int(mes_val) if mes_val else 1
-                    mes_nombre = ["", "Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio",
-                                  "Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes_num]
-                except (IndexError, ValueError, TypeError):
-                    mes_nombre = "N/D"
-                st.write(f"📅 {mes_nombre}")
-                
-            with col2:
-                importe_val = bonif.get("importe", 0)
-                try:
-                    importe_num = float(importe_val) if importe_val is not None else 0.0
-                except (ValueError, TypeError):
-                    importe_num = 0.0
-                st.write(f"💰 {importe_num:.2f} €")
-                
-            with col3:
-                observaciones = bonif.get("observaciones") or ""
-                st.caption(f"📝 {str(observaciones)[:30]}...")
-                
-            with col4:
-                bonif_id = bonif.get("id")
-                if bonif_id and st.button("❌", key=f"del_bonif_emp_{bonif_id}", help="Eliminar bonificación"):
-                    try:
-                        grupos_service.supabase.table("empresa_grupo_bonificaciones").delete().eq("id", bonif_id).execute()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error al eliminar: {e}")
-
-# Añadir nueva bonificación
-with st.expander("➕ Añadir Bonificación Mensual"):
-    with st.form(f"nueva_bonif_emp_{empresa_grupo_id}"):
-        col1, col2 = st.columns(2)
-
+        # === BONIFICACIONES MENSUALES (FUERA DEL FORMULARIO) ===
+        st.divider()
+        st.markdown("##### 📅 Bonificaciones Mensuales")
+        
+        try:
+            # USAR CAMPOS EXACTOS DEL SCHEMA: mes es INTEGER, no VARCHAR
+            bonificaciones_empresa_res = grupos_service.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id).order("mes").execute()
+            df_bonif_empresa = pd.DataFrame(bonificaciones_empresa_res.data or [])
+        except Exception as e:
+            st.warning(f"⚠️ Error al cargar bonificaciones: {e}")
+            df_bonif_empresa = pd.DataFrame()
+        
+        # Cálculos seguros de bonificaciones
+        try:
+            if not df_bonif_empresa.empty:
+                df_bonif_empresa["importe"] = pd.to_numeric(df_bonif_empresa["importe"], errors="coerce").fillna(0.0)
+                df_bonif_empresa["mes"] = pd.to_numeric(df_bonif_empresa["mes"], errors="coerce").fillna(1).astype(int)
+                total_bonificado_empresa = df_bonif_empresa["importe"].sum()
+            else:
+                total_bonificado_empresa = 0.0
+        except Exception as e:
+            st.warning(f"⚠️ Error al procesar bonificaciones: {e}")
+            total_bonificado_empresa = 0.0
+        
+        disponible_empresa = total_costes_empresa - total_bonificado_empresa
+        
+        col1, col2, col3 = st.columns(3)
         with col1:
-            # Meses disponibles (que no estén ya usados) - USAR INTEGER
-            meses_usados = df_bonif_empresa["mes"].tolist() if not df_bonif_empresa.empty else []
-            meses_disponibles = [m for m in range(1, 13) if m not in meses_usados]
-            
-            if not meses_disponibles:
-                st.warning("⚠️ Ya hay bonificaciones para todos los meses")
-                mes_bonif = 1
-            else:
-                mes_bonif = st.selectbox(
-                    "📅 Mes",
-                    options=meses_disponibles,
-                    format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
-                    key=f"mes_nueva_bonif_emp_{empresa_grupo_id}"
-                )
-            
-            importe_bonif = st.number_input(
-                "💰 Importe (€)",
-                min_value=0.01,
-                max_value=disponible_empresa if disponible_empresa > 0 else 999999.0,
-                value=0.0,
-                help=f"Disponible: {disponible_empresa:.2f} €",
-                key=f"importe_nueva_bonif_emp_{empresa_grupo_id}"
-            )
-
+            st.metric("💰 Costes Empresa", f"{total_costes_empresa:,.2f} €")
         with col2:
-            observaciones_bonif = st.text_area(
-                "📝 Observaciones",
-                height=100,
-                key=f"obs_nueva_bonif_emp_{empresa_grupo_id}"
-            )
-
-        if st.form_submit_button("➕ Añadir Bonificación", type="primary"):
-            if importe_bonif <= 0:
-                st.error("❌ El importe debe ser mayor que 0")
-            elif importe_bonif > disponible_empresa:
-                st.error(f"❌ El importe ({importe_bonif:.2f} €) supera lo disponible ({disponible_empresa:.2f} €)")
-            else:
-                # USAR CAMPOS EXACTOS DEL SCHEMA
-                datos_bonif = {
-                    "empresa_grupo_id": empresa_grupo_id,
-                    "mes": mes_bonif,  # INTEGER según schema
-                    "importe": importe_bonif,
-                    "observaciones": observaciones_bonif or None,
-                    "created_at": "now()",
-                    "updated_at": "now()"
-                }
-                try:
-                    res = grupos_service.supabase.table("empresa_grupo_bonificaciones").insert(datos_bonif).execute()
-                    if res.data:
-                        st.success("✅ Bonificación añadida correctamente")
-                        st.rerun()
+            st.metric("📊 Ya Bonificado", f"{total_bonificado_empresa:,.2f} €")
+        with col3:
+            st.metric("💡 Disponible", f"{disponible_empresa:,.2f} €")
+        
+        # Mostrar bonificaciones existentes
+        if not df_bonif_empresa.empty:
+            st.markdown("###### 📋 Bonificaciones Registradas")
+            for _, bonif in df_bonif_empresa.iterrows():
+                with st.container(border=True):
+                    col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
+                    with col1:
+                        mes_val = bonif.get("mes", 1)
+                        try:
+                            mes_num = int(mes_val) if mes_val else 1
+                            mes_nombre = ["", "Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio",
+                                          "Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes_num]
+                        except (IndexError, ValueError, TypeError):
+                            mes_nombre = "N/D"
+                        st.write(f"📅 {mes_nombre}")
+                        
+                    with col2:
+                        importe_val = bonif.get("importe", 0)
+                        try:
+                            importe_num = float(importe_val) if importe_val is not None else 0.0
+                        except (ValueError, TypeError):
+                            importe_num = 0.0
+                        st.write(f"💰 {importe_num:.2f} €")
+                        
+                    with col3:
+                        observaciones = bonif.get("observaciones") or ""
+                        st.caption(f"📝 {str(observaciones)[:30]}...")
+                        
+                    with col4:
+                        bonif_id = bonif.get("id")
+                        if bonif_id and st.button("❌", key=f"del_bonif_emp_{bonif_id}", help="Eliminar bonificación"):
+                            try:
+                                grupos_service.supabase.table("empresa_grupo_bonificaciones").delete().eq("id", bonif_id).execute()
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al eliminar: {e}")
+        
+        # Añadir nueva bonificación
+        with st.expander("➕ Añadir Bonificación Mensual"):
+            with st.form(f"nueva_bonif_emp_{empresa_grupo_id}"):
+                col1, col2 = st.columns(2)
+        
+                with col1:
+                    # Meses disponibles (que no estén ya usados) - USAR INTEGER
+                    meses_usados = df_bonif_empresa["mes"].tolist() if not df_bonif_empresa.empty else []
+                    meses_disponibles = [m for m in range(1, 13) if m not in meses_usados]
+                    
+                    if not meses_disponibles:
+                        st.warning("⚠️ Ya hay bonificaciones para todos los meses")
+                        mes_bonif = 1
                     else:
-                        st.error("❌ Error al añadir bonificación - sin datos devueltos")
-                except Exception as e:
-                    st.error(f"❌ Error al añadir bonificación: {e}")
+                        mes_bonif = st.selectbox(
+                            "📅 Mes",
+                            options=meses_disponibles,
+                            format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
+                            key=f"mes_nueva_bonif_emp_{empresa_grupo_id}"
+                        )
+                    
+                    importe_bonif = st.number_input(
+                        "💰 Importe (€)",
+                        min_value=0.01,
+                        max_value=disponible_empresa if disponible_empresa > 0 else 999999.0,
+                        value=0.0,
+                        help=f"Disponible: {disponible_empresa:.2f} €",
+                        key=f"importe_nueva_bonif_emp_{empresa_grupo_id}"
+                    )
+        
+                with col2:
+                    observaciones_bonif = st.text_area(
+                        "📝 Observaciones",
+                        height=100,
+                        key=f"obs_nueva_bonif_emp_{empresa_grupo_id}"
+                    )
+        
+                if st.form_submit_button("➕ Añadir Bonificación", type="primary"):
+                    if importe_bonif <= 0:
+                        st.error("❌ El importe debe ser mayor que 0")
+                    elif importe_bonif > disponible_empresa:
+                        st.error(f"❌ El importe ({importe_bonif:.2f} €) supera lo disponible ({disponible_empresa:.2f} €)")
+                    else:
+                        # USAR CAMPOS EXACTOS DEL SCHEMA
+                        datos_bonif = {
+                            "empresa_grupo_id": empresa_grupo_id,
+                            "mes": mes_bonif,  # INTEGER según schema
+                            "importe": importe_bonif,
+                            "observaciones": observaciones_bonif or None,
+                            "created_at": "now()",
+                            "updated_at": "now()"
+                        }
+                        try:
+                            res = grupos_service.supabase.table("empresa_grupo_bonificaciones").insert(datos_bonif).execute()
+                            if res.data:
+                                st.success("✅ Bonificación añadida correctamente")
+                                st.rerun()
+                            else:
+                                st.error("❌ Error al añadir bonificación - sin datos devueltos")
+                        except Exception as e:
+                            st.error(f"❌ Error al añadir bonificación: {e}")
 
 # =========================
 # 2. IMPLEMENTAR FILTROS AVANZADOS STREAMLIT 1.49
