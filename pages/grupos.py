@@ -1841,7 +1841,7 @@ def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, 
                     "💰 Importe (€)",
                     min_value=0.01,
                     max_value=disponible_empresa if disponible_empresa > 0 else 999999.0,
-                    value=0.0,
+                    value=0.01,
                     help=f"Disponible: {disponible_empresa:.2f} €",
                     key=f"importe_nueva_bonif_emp_{empresa_grupo_id}"
                 )
