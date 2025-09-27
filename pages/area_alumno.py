@@ -38,7 +38,9 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     """Muestra los grupos FUNDAE del participante (funcionalidad existente mejorada)."""
     st.header("📚 Mis Grupos FUNDAE")
     
-    participante_id = session_state.user.get('id')
+    auth_id = session_state.user.get('id')
+    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
+    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
     
     try:
         # Obtener grupos del participante usando relación N:N
@@ -167,8 +169,10 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
     """Muestra las clases que tiene reservadas el participante."""
     st.header("🏃‍♀️ Mis Clases Reservadas")
     
-    participante_id = session_state.user.get('id')
-    
+    auth_id = session_state.user.get('id')
+    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
+    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
+        
     try:
         # Verificar suscripción
         suscripcion = clases_service.get_suscripcion_participante(participante_id)
@@ -339,7 +343,9 @@ def mostrar_reservar_clases(clases_service, session_state):
     """Interfaz para reservar nuevas clases."""
     st.header("📅 Reservar Clases")
     
-    participante_id = session_state.user.get('id')
+    auth_id = session_state.user.get('id')
+    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
+    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
     
     try:
         # Verificar suscripción
@@ -557,7 +563,9 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
     """Gestión del perfil del participante."""
     st.header("👤 Mi Perfil")
     
-    participante_id = session_state.user.get('id')
+    auth_id = session_state.user.get('id')
+    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
+    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
     
     try:
         # Obtener datos del participante
