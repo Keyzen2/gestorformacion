@@ -21,23 +21,25 @@ st.set_page_config(
 def verificar_acceso_alumno(session_state, supabase):
     # Si ya viene con rol alumno → OK
     if session_state.role == "alumno":
-        return
+        return True
 
     # Si no, comprobar si el auth_id está en participantes
     auth_id = session_state.user.get("id")
     if not auth_id:
         st.error("🔒 No se ha encontrado usuario autenticado")
         st.stop()
+        return False
 
     participante = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
     if participante.data:
         # Forzamos rol alumno
         session_state.role = "alumno"
-        return
+        return True
 
     # Si no es participante → error
     st.error("🔒 Acceso restringido al área de alumnos")
     st.stop()
+    return False
     
 def get_participante_id(supabase, auth_id):
     """Convierte auth_id a participante_id"""
@@ -807,8 +809,8 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 def main(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
-    # Verificar acceso
-    if not verificar_acceso_alumno(session_state):
+    # ✅ Verificar acceso con supabase
+    if not verificar_acceso_alumno(session_state, supabase):
         return
     
     # Cargar servicios
@@ -817,7 +819,10 @@ def main(supabase, session_state):
     clases_service = get_clases_service(supabase, session_state)
     
     # Mostrar información del usuario
-    st.caption(f"👤 Bienvenido/a: {session_state.user.get('nombre', 'Usuario')} | 📧 {session_state.user.get('email', 'N/A')}")
+    st.caption(
+        f"👤 Bienvenido/a: {session_state.user.get('nombre', 'Usuario')} "
+        f"| 📧 {session_state.user.get('email', 'N/A')}"
+    )
     
     # Tabs principales
     tabs = st.tabs([
