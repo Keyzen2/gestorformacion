@@ -981,7 +981,7 @@ def mostrar_secciones_adicionales(grupos_service, grupo_id):
     
     # SECCIÓN 7: COSTES FUNDAE
     with st.expander("💰 7. Costes y Bonificaciones FUNDAE", expanded=False):
-        mostrar_seccion_costes_por_empresa(grupos_service, grupo_id)
+        mostrar_seccion_costes_por_empresa_schema_real(grupos_service, grupo_id)
 
 def mostrar_seccion_tutores_jerarquia(grupos_service, grupo_id):
     """CORREGIDO: Usando tabla tutores_grupos (N:N)."""
@@ -1471,38 +1471,64 @@ def mostrar_seccion_participantes_jerarquia(grupos_service, grupo_id):
     except Exception as e:
         st.error(f"Error al cargar sección de participantes: {e}")
 
-def mostrar_seccion_costes_por_empresa(grupos_service, grupo_id):
+def mostrar_seccion_costes_por_empresa_schema_real(grupos_service, grupo_id):
     """
-    Versión optimizada - reduce reruns y mejora performance.
-    Corrige mapeo de campos de datos básicos.
+    CORREGIDO: Usando las tablas del schema real con validaciones robustas.
     """
     st.markdown("### 💰 Costes y Bonificaciones por Empresa")
     st.caption("Cada empresa participante gestiona sus propios costes y bonificaciones de forma independiente")
     
     try:
-        # Obtener empresas participantes del grupo (con caché mejorado)
-        empresas_grupo = grupos_service.supabase.table("empresas_grupos").select("""
+        # Obtener empresas participantes del grupo (VALIDACIÓN ROBUSTA)
+        empresas_grupo_res = grupos_service.supabase.table("empresas_grupos").select("""
             id, empresa_id, fecha_asignacion,
             empresa:empresas(id, nombre, cif, tipo_empresa)
         """).eq("grupo_id", grupo_id).execute()
         
-        if not empresas_grupo.data:
+        if not empresas_grupo_res.data:
             st.warning("⚠️ No hay empresas participantes. Añade empresas primero en la sección anterior.")
             return
         
-        # Obtener datos del grupo para cálculos FUNDAE (UNA SOLA VEZ)
+        # FILTRAR empresas válidas (con datos no None)
+        empresas_validas = []
+        for empresa_grupo in empresas_grupo_res.data:
+            if (empresa_grupo and 
+                isinstance(empresa_grupo, dict) and 
+                empresa_grupo.get("empresa") and 
+                isinstance(empresa_grupo.get("empresa"), dict)):
+                empresas_validas.append(empresa_grupo)
+        
+        if not empresas_validas:
+            st.error("❌ No se encontraron empresas con datos válidos")
+            return
+        
+        # Obtener datos del grupo para cálculos FUNDAE
         grupo_info = grupos_service.supabase.table("grupos").select("""
             modalidad, n_participantes_previstos,
             accion_formativa:acciones_formativas(num_horas)
         """).eq("id", grupo_id).execute()
         
-        datos_grupo = grupo_info.data[0] if grupo_info.data else {}
+        if not grupo_info.data:
+            st.error("❌ No se pudo cargar información del grupo")
+            return
+            
+        datos_grupo = grupo_info.data[0] or {}
         modalidad = datos_grupo.get("modalidad", "PRESENCIAL")
-        participantes = datos_grupo.get("n_participantes_previstos", 1)
-        horas = datos_grupo.get("accion_formativa", {}).get("num_horas", 0) if datos_grupo.get("accion_formativa") else 0
+        participantes = datos_grupo.get("n_participantes_previstos", 1) or 1
         
-        # Calcular límite FUNDAE base (UNA SOLA VEZ)
-        limite_boni_base, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
+        # VALIDACIÓN ROBUSTA de accion_formativa
+        accion_formativa = datos_grupo.get("accion_formativa")
+        if accion_formativa and isinstance(accion_formativa, dict):
+            horas = accion_formativa.get("num_horas", 0) or 0
+        else:
+            horas = 0
+        
+        # Calcular límite FUNDAE con valores por defecto seguros
+        try:
+            limite_boni_base, tarifa_max = grupos_service.calcular_limite_fundae(modalidad, horas, participantes)
+        except Exception as e:
+            st.warning(f"⚠️ Error al calcular límites FUNDAE: {e}")
+            limite_boni_base, tarifa_max = 0.0, 13.0
         
         # Métricas generales del grupo
         with st.container(border=True):
@@ -1516,73 +1542,93 @@ def mostrar_seccion_costes_por_empresa(grupos_service, grupo_id):
             with col4:
                 st.metric("💰 Tarifa Max", f"{tarifa_max:.2f} €/h")
         
-        # PESTAÑAS PARA CADA EMPRESA (En lugar de expanders que causan reruns)
+        # PESTAÑAS PARA CADA EMPRESA
         empresa_nombres = []
         empresa_data_map = {}
         
-        for empresa_grupo in empresas_grupo.data:
-            empresa_data = empresa_grupo["empresa"]
-            tipo_icon = {"GESTORA": "🏛️", "CLIENTE_GESTOR": "🏢", "CLIENTE_SAAS": "💼"}.get(empresa_data.get("tipo_empresa", ""), "🏢")
-            nombre_tab = f"{tipo_icon} {empresa_data['nombre'][:20]}..."  # Limitar longitud para tabs
+        for empresa_grupo in empresas_validas:
+            empresa_data = empresa_grupo.get("empresa", {})
+            tipo_icon = {"GESTORA": "🏛️", "CLIENTE_GESTOR": "🏢", "CLIENTE_SAAS": "💼"}.get(
+                empresa_data.get("tipo_empresa", ""), "🏢"
+            )
+            nombre_empresa = empresa_data.get("nombre", "Sin nombre")
+            nombre_tab = f"{tipo_icon} {nombre_empresa[:20]}..."
             empresa_nombres.append(nombre_tab)
             empresa_data_map[nombre_tab] = empresa_grupo
         
-        # Crear tabs dinámicas (MEJOR PERFORMANCE que expanders)
+        # Crear tabs dinámicas
         if len(empresa_nombres) == 1:
-            # Si solo hay 1 empresa, mostrar directamente sin tabs
-            procesar_empresa_individual(grupos_service, empresa_data_map[empresa_nombres[0]], tarifa_max, horas, participantes)
+            procesar_empresa_individual_schema_real(grupos_service, empresa_data_map[empresa_nombres[0]], tarifa_max, horas, participantes)
         else:
-            # Si hay múltiples empresas, usar tabs
             tabs_empresas = st.tabs(empresa_nombres)
-            
             for i, tab in enumerate(tabs_empresas):
                 with tab:
                     empresa_data = empresa_data_map[empresa_nombres[i]]
-                    procesar_empresa_individual(grupos_service, empresa_data, tarifa_max, horas, participantes)
+                    procesar_empresa_individual_schema_real(grupos_service, empresa_data, tarifa_max, horas, participantes)
         
     except Exception as e:
         st.error(f"❌ Error en sección de costes por empresa: {e}")
+        # Debug detallado
+        with st.expander("🔧 Debug Info", expanded=False):
+            st.write(f"Grupo ID: {grupo_id}")
+            st.write(f"Error completo: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 
-def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, horas, participantes):
+def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, tarifa_max, horas, participantes):
     """
-    Procesa una empresa individual - con protecciones contra valores None.
+    CORREGIDO: Procesamiento individual usando campos exactos del schema.
     """
+    # VALIDACIONES INICIALES ROBUSTAS
+    if not empresa_grupo_data or not isinstance(empresa_grupo_data, dict):
+        st.error("❌ Datos de empresa-grupo no válidos")
+        return
+        
     empresa_grupo_id = empresa_grupo_data.get("id")
+    if not empresa_grupo_id:
+        st.error("❌ ID de empresa-grupo no encontrado")
+        return
 
-    # --- Datos de la empresa ---
-    empresa_data = empresa_grupo_data.get("empresa") or {}
-    empresa_nombre = empresa_data.get("nombre") or "Sin nombre"
-    empresa_tipo = empresa_data.get("tipo_empresa") or "N/D"
-    empresa_cif = empresa_data.get("cif") or "N/A"
+    empresa_data = empresa_grupo_data.get("empresa", {})
+    if not isinstance(empresa_data, dict):
+        st.error("❌ Datos de empresa no válidos")
+        return
+        
+    empresa_nombre = empresa_data.get("nombre", "Sin nombre")
+    empresa_tipo = empresa_data.get("tipo_empresa", "N/D")
+    empresa_cif = empresa_data.get("cif", "N/A")
 
     # Header
     st.markdown(f"#### 🏢 {empresa_nombre}")
     st.caption(f"Tipo: {empresa_tipo} | CIF: {empresa_cif}")
 
-    # === COSTES DE ESTA EMPRESA ===
+    # === COSTES DE ESTA EMPRESA (tabla empresa_grupo_costes) ===
     st.markdown("##### 💳 Costes de Formación")
 
     try:
+        # USAR CAMPOS EXACTOS DEL SCHEMA
         costes_empresa_res = grupos_service.supabase.table("empresa_grupo_costes").select("*").eq("empresa_grupo_id", empresa_grupo_id).execute()
-        costes_actuales = costes_empresa_res.data[0] if costes_empresa_res.data else {}
-    except Exception:
+        costes_actuales = (costes_empresa_res.data[0] if costes_empresa_res.data else None) or {}
+    except Exception as e:
+        st.warning(f"⚠️ Error al cargar costes: {e}")
         costes_actuales = {}
 
     with st.form(f"costes_empresa_{empresa_grupo_id}", clear_on_submit=False):
         col1, col2 = st.columns(2)
 
         with col1:
+            # USAR NOMBRES EXACTOS DEL SCHEMA
             costes_directos = st.number_input(
                 "💼 Costes Directos (€)",
-                value=float(costes_actuales.get("costes_directos") or 0),
+                value=float(costes_actuales.get("costes_directos", 0) or 0),
                 min_value=0.0,
                 key=f"directos_emp_{empresa_grupo_id}"
             )
 
             costes_indirectos = st.number_input(
                 "📋 Costes Indirectos (€)",
-                value=float(costes_actuales.get("costes_indirectos") or 0),
+                value=float(costes_actuales.get("costes_indirectos", 0) or 0),
                 min_value=0.0,
                 help="Máximo 30% de costes directos",
                 key=f"indirectos_emp_{empresa_grupo_id}"
@@ -1590,7 +1636,7 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
 
             costes_organizacion = st.number_input(
                 "🏢 Costes Organización (€)",
-                value=float(costes_actuales.get("costes_organizacion") or 0),
+                value=float(costes_actuales.get("costes_organizacion", 0) or 0),
                 min_value=0.0,
                 key=f"organizacion_emp_{empresa_grupo_id}"
             )
@@ -1598,21 +1644,21 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
         with col2:
             costes_salariales = st.number_input(
                 "👥 Costes Salariales (€)",
-                value=float(costes_actuales.get("costes_salariales") or 0),
+                value=float(costes_actuales.get("costes_salariales", 0) or 0),
                 min_value=0.0,
                 key=f"salariales_emp_{empresa_grupo_id}"
             )
 
             cofinanciacion_privada = st.number_input(
                 "🏦 Cofinanciación Privada (€)",
-                value=float(costes_actuales.get("cofinanciacion_privada") or 0),
+                value=float(costes_actuales.get("cofinanciacion_privada", 0) or 0),
                 min_value=0.0,
                 key=f"cofinanciacion_emp_{empresa_grupo_id}"
             )
 
             tarifa_hora = st.number_input(
                 "⏰ Tarifa por Hora (€)",
-                value=float(costes_actuales.get("tarifa_hora") or tarifa_max),
+                value=float(costes_actuales.get("tarifa_hora", tarifa_max) or tarifa_max),
                 min_value=0.0,
                 max_value=tarifa_max,
                 help=f"Máximo FUNDAE: {tarifa_max} €/h",
@@ -1630,30 +1676,27 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
             st.metric("🎯 Límite Calculado", f"{limite_calculado_empresa:,.2f} €")
         with col3:
             diferencia = limite_calculado_empresa - total_costes_empresa
-            delta_color = "normal" if diferencia >= 0 else "inverse"
-            st.metric("📊 Diferencia", f"{diferencia:,.2f} €", delta=f"{diferencia:,.2f} €")
+            st.metric("📊 Diferencia", f"{diferencia:,.2f} €")
 
         # Validaciones
-        errores_empresa, warnings_empresa = [], []
+        errores_empresa = []
         if costes_directos > 0:
             pct_indirectos = (costes_indirectos / costes_directos) * 100
             if pct_indirectos > 30:
                 errores_empresa.append(f"Costes indirectos ({pct_indirectos:.1f}%) superan el 30% permitido")
-            else:
-                warnings_empresa.append(f"✅ Costes indirectos válidos ({pct_indirectos:.1f}%)")
 
         if tarifa_hora > tarifa_max:
             errores_empresa.append(f"Tarifa/hora ({tarifa_hora:.2f}€) supera el máximo ({tarifa_max:.2f}€)")
 
         if errores_empresa:
-            st.error("❌ Errores encontrados:\n" + "\n".join([f"• {err}" for err in errores_empresa]))
-        elif warnings_empresa:
-            for warning in warnings_empresa[:1]:
-                st.success(warning)
+            st.error("❌ Errores encontrados:")
+            for err in errores_empresa:
+                st.error(f"• {err}")
 
         submit_costes = st.form_submit_button("💾 Guardar Costes", type="primary", disabled=bool(errores_empresa))
 
         if submit_costes and not errores_empresa:
+            # USAR CAMPOS EXACTOS DEL SCHEMA
             datos_costes_empresa = {
                 "empresa_grupo_id": empresa_grupo_id,
                 "costes_directos": costes_directos,
@@ -1662,69 +1705,162 @@ def procesar_empresa_individual(grupos_service, empresa_grupo_data, tarifa_max, 
                 "costes_salariales": costes_salariales,
                 "cofinanciacion_privada": cofinanciacion_privada,
                 "tarifa_hora": tarifa_hora,
-                "modalidad": "PRESENCIAL",
+                "modalidad": modalidad,  # Campo según schema
                 "total_costes_formacion": total_costes_empresa,
-                "limite_maximo_bonificacion": limite_calculado_empresa
+                "limite_maximo_bonificacion": limite_calculado_empresa,
+                "observaciones": None,  # Campo según schema
+                "updated_at": "now()"
             }
+            
             try:
-                if costes_actuales:
-                    success = grupos_service.update_empresa_coste(empresa_grupo_id, datos_costes_empresa)
+                if costes_actuales and costes_actuales.get("id"):
+                    # ACTUALIZAR EXISTENTE
+                    res = grupos_service.supabase.table("empresa_grupo_costes").update(datos_costes_empresa).eq("empresa_grupo_id", empresa_grupo_id).execute()
                 else:
-                    success = grupos_service.create_empresa_coste(datos_costes_empresa)
+                    # CREAR NUEVO - incluir created_at
+                    datos_costes_empresa["created_at"] = "now()"
+                    res = grupos_service.supabase.table("empresa_grupo_costes").insert(datos_costes_empresa).execute()
 
-                if success:
+                if res.data:
                     st.success(f"✅ Costes de {empresa_nombre} guardados correctamente")
                     st.rerun()
                 else:
-                    st.error("❌ Error al guardar costes")
+                    st.error("❌ Error al guardar costes - sin datos devueltos")
             except Exception as e:
                 st.error(f"❌ Error al guardar costes: {e}")
 
-    # === BONIFICACIONES ===
-    st.divider()
-    st.markdown("##### 📅 Bonificaciones Mensuales")
+# === BONIFICACIONES MENSUALES (FUERA DEL FORMULARIO) ===
+st.divider()
+st.markdown("##### 📅 Bonificaciones Mensuales")
 
-    try:
-        bonificaciones_empresa = grupos_service.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id).order("mes").execute()
-        df_bonif_empresa = pd.DataFrame(bonificaciones_empresa.data or [])
-    except Exception:
-        df_bonif_empresa = pd.DataFrame()
+try:
+    # USAR CAMPOS EXACTOS DEL SCHEMA: mes es INTEGER, no VARCHAR
+    bonificaciones_empresa_res = grupos_service.supabase.table("empresa_grupo_bonificaciones").select("*").eq("empresa_grupo_id", empresa_grupo_id).order("mes").execute()
+    df_bonif_empresa = pd.DataFrame(bonificaciones_empresa_res.data or [])
+except Exception as e:
+    st.warning(f"⚠️ Error al cargar bonificaciones: {e}")
+    df_bonif_empresa = pd.DataFrame()
 
-    total_bonificado_empresa = df_bonif_empresa["importe"].sum() if not df_bonif_empresa.empty else 0
-    disponible_empresa = total_costes_empresa - total_bonificado_empresa
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("💰 Costes Empresa", f"{total_costes_empresa:,.2f} €")
-    with col2:
-        st.metric("📊 Ya Bonificado", f"{total_bonificado_empresa:,.2f} €")
-    with col3:
-        st.metric("💡 Disponible", f"{disponible_empresa:,.2f} €")
-
+# Cálculos seguros de bonificaciones
+try:
     if not df_bonif_empresa.empty:
-        st.markdown("###### 📋 Bonificaciones Registradas")
-        for _, bonif in df_bonif_empresa.iterrows():
+        df_bonif_empresa["importe"] = pd.to_numeric(df_bonif_empresa["importe"], errors="coerce").fillna(0.0)
+        df_bonif_empresa["mes"] = pd.to_numeric(df_bonif_empresa["mes"], errors="coerce").fillna(1).astype(int)
+        total_bonificado_empresa = df_bonif_empresa["importe"].sum()
+    else:
+        total_bonificado_empresa = 0.0
+except Exception as e:
+    st.warning(f"⚠️ Error al procesar bonificaciones: {e}")
+    total_bonificado_empresa = 0.0
+
+disponible_empresa = total_costes_empresa - total_bonificado_empresa
+
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.metric("💰 Costes Empresa", f"{total_costes_empresa:,.2f} €")
+with col2:
+    st.metric("📊 Ya Bonificado", f"{total_bonificado_empresa:,.2f} €")
+with col3:
+    st.metric("💡 Disponible", f"{disponible_empresa:,.2f} €")
+
+# Mostrar bonificaciones existentes
+if not df_bonif_empresa.empty:
+    st.markdown("###### 📋 Bonificaciones Registradas")
+    for _, bonif in df_bonif_empresa.iterrows():
+        with st.container(border=True):
             col1, col2, col3, col4 = st.columns([2, 2, 3, 1])
             with col1:
-                mes_val = bonif.get("mes")
+                mes_val = bonif.get("mes", 1)
                 try:
+                    mes_num = int(mes_val) if mes_val else 1
                     mes_nombre = ["", "Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio",
-                                  "Agosto","Septiembre","Octubre","Noviembre","Diciembre"][int(mes_val)]
-                except:
+                                  "Agosto","Septiembre","Octubre","Noviembre","Diciembre"][mes_num]
+                except (IndexError, ValueError, TypeError):
                     mes_nombre = "N/D"
                 st.write(f"📅 {mes_nombre}")
+                
             with col2:
-                importe_val = bonif.get("importe") or 0
-                st.write(f"💰 {importe_val:.2f} €")
+                importe_val = bonif.get("importe", 0)
+                try:
+                    importe_num = float(importe_val) if importe_val is not None else 0.0
+                except (ValueError, TypeError):
+                    importe_num = 0.0
+                st.write(f"💰 {importe_num:.2f} €")
+                
             with col3:
-                st.caption(f"📝 {bonif.get('observaciones', '')[:30]}...")
+                observaciones = bonif.get("observaciones") or ""
+                st.caption(f"📝 {str(observaciones)[:30]}...")
+                
             with col4:
-                if st.button("❌", key=f"del_bonif_emp_{bonif['id']}", help="Eliminar bonificación"):
+                bonif_id = bonif.get("id")
+                if bonif_id and st.button("❌", key=f"del_bonif_emp_{bonif_id}", help="Eliminar bonificación"):
                     try:
-                        grupos_service.supabase.table("empresa_grupo_bonificaciones").delete().eq("id", bonif["id"]).execute()
+                        grupos_service.supabase.table("empresa_grupo_bonificaciones").delete().eq("id", bonif_id).execute()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error: {e}")
+                        st.error(f"Error al eliminar: {e}")
+
+# Añadir nueva bonificación
+with st.expander("➕ Añadir Bonificación Mensual"):
+    with st.form(f"nueva_bonif_emp_{empresa_grupo_id}"):
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Meses disponibles (que no estén ya usados) - USAR INTEGER
+            meses_usados = df_bonif_empresa["mes"].tolist() if not df_bonif_empresa.empty else []
+            meses_disponibles = [m for m in range(1, 13) if m not in meses_usados]
+            
+            if not meses_disponibles:
+                st.warning("⚠️ Ya hay bonificaciones para todos los meses")
+                mes_bonif = 1
+            else:
+                mes_bonif = st.selectbox(
+                    "📅 Mes",
+                    options=meses_disponibles,
+                    format_func=lambda x: f"{x:02d} - {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][x-1]}",
+                    key=f"mes_nueva_bonif_emp_{empresa_grupo_id}"
+                )
+            
+            importe_bonif = st.number_input(
+                "💰 Importe (€)",
+                min_value=0.01,
+                max_value=disponible_empresa if disponible_empresa > 0 else 999999.0,
+                value=0.0,
+                help=f"Disponible: {disponible_empresa:.2f} €",
+                key=f"importe_nueva_bonif_emp_{empresa_grupo_id}"
+            )
+
+        with col2:
+            observaciones_bonif = st.text_area(
+                "📝 Observaciones",
+                height=100,
+                key=f"obs_nueva_bonif_emp_{empresa_grupo_id}"
+            )
+
+        if st.form_submit_button("➕ Añadir Bonificación", type="primary"):
+            if importe_bonif <= 0:
+                st.error("❌ El importe debe ser mayor que 0")
+            elif importe_bonif > disponible_empresa:
+                st.error(f"❌ El importe ({importe_bonif:.2f} €) supera lo disponible ({disponible_empresa:.2f} €)")
+            else:
+                # USAR CAMPOS EXACTOS DEL SCHEMA
+                datos_bonif = {
+                    "empresa_grupo_id": empresa_grupo_id,
+                    "mes": mes_bonif,  # INTEGER según schema
+                    "importe": importe_bonif,
+                    "observaciones": observaciones_bonif or None,
+                    "created_at": "now()",
+                    "updated_at": "now()"
+                }
+                try:
+                    res = grupos_service.supabase.table("empresa_grupo_bonificaciones").insert(datos_bonif).execute()
+                    if res.data:
+                        st.success("✅ Bonificación añadida correctamente")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al añadir bonificación - sin datos devueltos")
+                except Exception as e:
+                    st.error(f"❌ Error al añadir bonificación: {e}")
 
 # =========================
 # 2. IMPLEMENTAR FILTROS AVANZADOS STREAMLIT 1.49
