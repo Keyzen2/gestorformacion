@@ -20,7 +20,7 @@ st.set_page_config(
 # =========================
 def verificar_acceso_alumno(session_state):
     """Verifica que el usuario sea un participante/alumno."""
-    if session_state.role != "participante":
+    if session_state.role != "alumno":
         st.error("🔒 Acceso restringido")
         st.info("Esta área está disponible solo para alumnos/participantes")
         return False
