@@ -70,17 +70,7 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
-            
-            # Información de ayuda
-            st.info("""
-            **Posibles causas:**
-            - Tu cuenta no está registrada como participante
-            - Falta la relación entre tu usuario y el registro de participante
-            - El administrador aún no ha completado tu perfil
-        
-            **Solución:** Contacta con el administrador del sistema.
-            """)
-            return
+        return
 
     try:
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
