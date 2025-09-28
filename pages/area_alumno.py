@@ -333,7 +333,7 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
                 
                 with col1:
                     st.metric("🎯 Clases Disponibles", resumen.get("clases_disponibles", 0))
-                    st.metric("✅ Asistencias", resumen.get("asistencias", 0))
+                    st.metric("✅ Asistencias", reumen.get("asistencias", 0))
                 
                 with col2:
                     st.metric("⚡ Clases Restantes", resumen.get("clases_restantes", 0))
@@ -357,18 +357,26 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
 
 # =========================
 # TAB 3: RESERVAR CLASES
-# =========================
+# =========================   
 def mostrar_reservar_clases(clases_service, session_state):
     """Interfaz para reservar nuevas clases."""
     st.header("📅 Reservar Clases")
     
-    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
     participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
         return
+    
+    try:  # ← ESTE TRY DEBE ESTAR AL INICIO DE LA FUNCIÓN
+        # Verificar suscripción
+        suscripcion = clases_service.get_suscripcion_participante(participante_id)
+        
+        if not suscripcion or not suscripcion.get("activa"):
+            st.warning("⚠️ No tienes una suscripción activa")
+            st.info("Contacta con tu centro de formación para activar tu suscripción.")
+            return
         
         # Verificar clases disponibles
         clases_disponibles = suscripcion.get("clases_mensuales", 0) - suscripcion.get("clases_usadas_mes", 0)
@@ -378,88 +386,7 @@ def mostrar_reservar_clases(clases_service, session_state):
             st.info(f"Tienes {suscripcion.get('clases_mensuales', 0)} clases al mes. El contador se reinicia el próximo mes.")
             return
         
-        # Mostrar estado de suscripción
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("⚡ Clases Disponibles", clases_disponibles)
-        with col2:
-            st.metric("✅ Usadas Este Mes", suscripcion.get("clases_usadas_mes", 0))
-        with col3:
-            st.metric("🎯 Total Mensuales", suscripcion.get("clases_mensuales", 0))
-        
-        st.divider()
-        
-        # Selector de período para ver clases
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fecha_inicio_busqueda = st.date_input(
-                "Ver clases desde",
-                value=date.today(),
-                min_value=date.today(),
-                key="buscar_clases_inicio"
-            )
-        
-        with col2:
-            fecha_fin_busqueda = st.date_input(
-                "Hasta",
-                value=date.today() + timedelta(days=14),
-                min_value=date.today(),
-                key="buscar_clases_fin"
-            )
-        
-        if fecha_inicio_busqueda > fecha_fin_busqueda:
-            st.error("❌ La fecha de inicio debe ser anterior a la fecha de fin")
-            return
-        
-        # Obtener clases disponibles para el participante
-        clases_disponibles_lista = clases_service.get_clases_disponibles_participante(
-            participante_id, fecha_inicio_busqueda, fecha_fin_busqueda
-        )
-        
-        if not clases_disponibles_lista:
-            st.info("📭 No hay clases disponibles en este período")
-            st.markdown("""
-            **Posibles razones:**
-            - No hay clases programadas en estas fechas
-            - Todas las clases están completas
-            - Ya tienes reservas para estas clases
-            
-            Prueba con un período diferente o contacta con tu centro.
-            """)
-            return
-        
-        st.markdown(f"### 🎯 {len(clases_disponibles_lista)} clase(s) disponible(s)")
-        
-        # Filtros adicionales
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Filtro por categoría
-            categorias = list(set([clase.get("extendedProps", {}).get("categoria", "Sin categoría") 
-                                 for clase in clases_disponibles_lista]))
-            categoria_filtro = st.selectbox("🏷️ Filtrar por categoría", ["Todas"] + categorias, key="filtro_categoria_reservar")
-        
-        with col2:
-            # Filtro por día de la semana
-            dias_semana = ["Todos", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            dia_filtro = st.selectbox("📅 Filtrar por día", dias_semana, key="filtro_dia_reservar")
-        
-        # Aplicar filtros
-        clases_filtradas = clases_disponibles_lista.copy()
-        
-        if categoria_filtro != "Todas":
-            clases_filtradas = [
-                clase for clase in clases_filtradas
-                if clase.get("extendedProps", {}).get("categoria") == categoria_filtro
-            ]
-        
-        if dia_filtro != "Todos":
-            clases_filtradas = [
-                clase for clase in clases_filtradas
-                if pd.to_datetime(clase["start"]).strftime('%A') == dia_filtro.upper()
-            ]
+        # ... TODO TU CÓDIGO EXISTENTE HASTA AQUÍ ...
         
         if not clases_filtradas:
             st.warning("🔍 No hay clases que coincidan con los filtros aplicados")
@@ -567,7 +494,7 @@ def mostrar_reservar_clases(clases_service, session_state):
             - Contacta con recepción para cambios de suscripción
             """)
     
-    except Exception as e:
+    except Exception as e:  # ← ESTE EXCEPT AHORA TIENE SU TRY CORRESPONDIENTE
         st.error(f"❌ Error cargando clases disponibles: {e}")
 
 # =========================
