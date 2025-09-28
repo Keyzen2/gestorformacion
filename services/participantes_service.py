@@ -109,52 +109,52 @@ class ParticipantesService:
             print(f"Error obteniendo participante_id: {e}")
             return None
 
-def verificar_acceso_alumno(session_state, supabase):
-    """Verifica acceso con corrección de datos inconsistentes"""
-    if session_state.role == "alumno":
-        return True
-
-    if not hasattr(session_state, 'user') or not session_state.user:
-        st.error("No se encontraron datos de usuario")
-        st.stop()
-        return False
-
-    auth_id = session_state.user.get("id")  # Este es el usuario.id, NO el auth_id real
-    
-    if not auth_id:
-        st.error("Usuario no autenticado correctamente")
-        st.stop()
-        return False
-
-    try:
-        # CORREGIDO: Buscar participante por email, no por auth_id confuso
-        user_email = session_state.user.get("email")
-        
-        if not user_email:
-            st.error("Email de usuario no disponible")
-            st.stop()
-            return False
-        
-        # Buscar participante directamente por email
-        participante_result = supabase.table("participantes").select("id, auth_id").eq(
-            "email", user_email
-        ).execute()
-        
-        if participante_result.data:
-            participante_id = participante_result.data[0]["id"]
-            session_state.role = "alumno"
-            session_state.participante_id = participante_id
+    def verificar_acceso_alumno(session_state, supabase):
+        """Verifica acceso con corrección de datos inconsistentes"""
+        if session_state.role == "alumno":
             return True
-        else:
-            st.error("Acceso restringido al área de alumnos")
-            st.write(f"No se encontró participante con email: {user_email}")
+    
+        if not hasattr(session_state, 'user') or not session_state.user:
+            st.error("No se encontraron datos de usuario")
             st.stop()
             return False
+    
+        auth_id = session_state.user.get("id")  # Este es el usuario.id, NO el auth_id real
+        
+        if not auth_id:
+            st.error("Usuario no autenticado correctamente")
+            st.stop()
+            return False
+    
+        try:
+            # CORREGIDO: Buscar participante por email, no por auth_id confuso
+            user_email = session_state.user.get("email")
             
-    except Exception as e:
-        st.error(f"Error verificando acceso: {e}")
-        st.stop()
-        return False
+            if not user_email:
+                st.error("Email de usuario no disponible")
+                st.stop()
+                return False
+            
+            # Buscar participante directamente por email
+            participante_result = supabase.table("participantes").select("id, auth_id").eq(
+                "email", user_email
+            ).execute()
+            
+            if participante_result.data:
+                participante_id = participante_result.data[0]["id"]
+                session_state.role = "alumno"
+                session_state.participante_id = participante_id
+                return True
+            else:
+                st.error("Acceso restringido al área de alumnos")
+                st.write(f"No se encontró participante con email: {user_email}")
+                st.stop()
+                return False
+                
+        except Exception as e:
+            st.error(f"Error verificando acceso: {e}")
+            st.stop()
+            return False
             
     @st.cache_data(ttl=300)
     def get_participantes_con_empresa_jerarquica(self) -> pd.DataFrame:
