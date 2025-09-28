@@ -678,7 +678,7 @@ def route():
                 "Participantes": "participantes",
                 "Tutores": "tutores",
                 "Aulas": "aulas",
-                "Gestión aulas": "gestion_clases",
+                "Gestión Clases": "gestion_clases",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
@@ -690,7 +690,7 @@ def route():
                 "Participantes": "participantes",
                 "Tutores": "tutores",
                 "Aulas": "aulas",
-                "Gestión aulas": "gestion_clases",
+                "Gestión Clases": "gestion_clases",
                 "Proyectos": "proyectos",
                 "Documentos": "documentos"
             }
