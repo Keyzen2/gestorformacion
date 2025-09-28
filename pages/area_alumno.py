@@ -713,12 +713,19 @@ def main(supabase, session_state):
     if not verificar_acceso_alumno(session_state, supabase):
         return
     
-    # CARGA ROBUSTA DE SERVICIOS con verificación y recarga
+    # CARGA ROBUSTA DE SERVICIOS - CORREGIDA
     try:
-        # Intentar carga normal
-        participantes_service = get_participantes_service(supabase, session_state)
+        # Importaciones al inicio
+        from services.participantes_service import get_participantes_service
+        from services.grupos_service import get_grupos_service
+        from services.clases_service import get_clases_service
         
-        # Verificar que el servicio tiene los métodos necesarios
+        # Crear servicios
+        participantes_service = get_participantes_service(supabase, session_state)
+        grupos_service = get_grupos_service(supabase, session_state)
+        clases_service = get_clases_service(supabase, session_state)
+        
+        # Verificar que el servicio crítico tiene los métodos necesarios
         if not hasattr(participantes_service, 'get_grupos_de_participante'):
             st.warning("⚠️ Recargando servicios...")
             
@@ -737,14 +744,14 @@ def main(supabase, session_state):
                     importlib.reload(sys.modules[module_name])
             
             # Reimportar después de la recarga
-            from services.participantes_service import get_participantes_service
-            from services.grupos_service import get_grupos_service
-            from services.clases_service import get_clases_service
+            from services.participantes_service import get_participantes_service as get_participantes_service_reload
+            from services.grupos_service import get_grupos_service as get_grupos_service_reload
+            from services.clases_service import get_clases_service as get_clases_service_reload
             
-            # Recrear servicios
-            participantes_service = get_participantes_service(supabase, session_state)
-            grupos_service = get_grupos_service(supabase, session_state)
-            clases_service = get_clases_service(supabase, session_state)
+            # Recrear servicios con nombres únicos
+            participantes_service = get_participantes_service_reload(supabase, session_state)
+            grupos_service = get_grupos_service_reload(supabase, session_state)
+            clases_service = get_clases_service_reload(supabase, session_state)
             
             # Verificar nuevamente
             if not hasattr(participantes_service, 'get_grupos_de_participante'):
@@ -753,10 +760,6 @@ def main(supabase, session_state):
                 return
             else:
                 st.success("✅ Servicios recargados correctamente")
-        else:
-            # Carga normal exitosa
-            grupos_service = get_grupos_service(supabase, session_state)
-            clases_service = get_clases_service(supabase, session_state)
     
     except Exception as e:
         st.error(f"❌ Error cargando servicios: {e}")
