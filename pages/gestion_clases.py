@@ -184,7 +184,6 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                     "➕ Crear Clase" if es_creacion else "💾 Guardar Cambios",
                     type="primary",
                     use_container_width=True,
-                    disabled=bool(errores)
                 )
             
             with col_btn2:
@@ -207,9 +206,11 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                     "activa": activa,
                     "empresa_id": empresa_id
                 }
-                
-                if es_creacion:
-                    success, clase_id = clases_service.crear_clase(datos_clase)
+                elif submitted and errores:
+                    st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
+                                if es_creacion:
+                                    success, clase_id = clases_service.crear_clase(datos_clase)
+                                    
                     if success:
                         st.success("✅ Clase creada correctamente")
                         st.rerun()
