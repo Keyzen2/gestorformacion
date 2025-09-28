@@ -43,40 +43,140 @@ def verificar_acceso_alumno(session_state, supabase):
     return False
     
 def get_participante_id_from_auth(supabase, auth_id):
-    """Convierte auth_id a participante_id - CORREGIDO"""
+    """Versión corregida que maneja auth_id null automáticamente"""
     try:
+        # Validaciones básicas
+        if not auth_id or str(auth_id) == "None":
+            print(f"Auth_id inválido: {auth_id}")
+            return None
+            
+        # Verificar UUID válido
+        import uuid
+        try:
+            uuid.UUID(str(auth_id))
+        except ValueError:
+            print(f"Auth_id no es UUID válido: {auth_id}")
+            return None
+        
+        # Método 1: Buscar directamente por auth_id
         result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-        return result.data[0]["id"] if result.data else None
+        if result.data:
+            return result.data[0]["id"]
+        
+        # Método 2: Fallback - buscar por email y corregir auth_id
+        print(f"Participante no encontrado con auth_id {auth_id}, buscando por email...")
+        
+        # Obtener email del usuario
+        user_result = supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
+        
+        if not user_result.data:
+            print(f"Usuario no encontrado con auth_id: {auth_id}")
+            return None
+            
+        email = user_result.data[0]["email"]
+        print(f"Email encontrado: {email}")
+        
+        # Buscar participante por email
+        participante_result = supabase.table("participantes").select("id, auth_id").eq("email", email).execute()
+        
+        if not participante_result.data:
+            print(f"Participante no encontrado con email: {email}")
+            return None
+            
+        participante = participante_result.data[0]
+        participante_id = participante["id"]
+        participante_auth_id = participante["auth_id"]
+        
+        # Si no tiene auth_id, corregirlo automáticamente
+        if not participante_auth_id:
+            print(f"Corrigiendo auth_id null para participante {participante_id}")
+            
+            update_result = supabase.table("participantes").update({
+                "auth_id": auth_id
+            }).eq("id", participante_id).execute()
+            
+            if update_result.data:
+                print(f"Auth_id corregido exitosamente")
+                return participante_id
+            else:
+                print("Error actualizando auth_id")
+                return participante_id  # Devolver ID aunque no se haya actualizado
+        else:
+            return participante_id
+        
     except Exception as e:
-        st.error(f"Error obteniendo participante_id: {e}")
+        print(f"Error en get_participante_id_from_auth_corregido: {e}")
         return None
+
+def debug_session_state(session_state):
+    """Función de debug para verificar session_state"""
+    try:
+        st.write("**Debug Session State:**")
+        st.write(f"Role: {getattr(session_state, 'role', 'NO_ROLE')}")
+        
+        if hasattr(session_state, 'user') and session_state.user:
+            user = session_state.user
+            st.write(f"User ID: {user.get('id', 'NO_ID')}")
+            st.write(f"User Email: {user.get('email', 'NO_EMAIL')}")
+        else:
+            st.write("User: NO_USER_DATA")
+    except Exception as e:
+        st.write(f"Error en debug: {e}")
+
 # =========================
 # TAB 1: MIS GRUPOS FUNDAE
 # =========================
 def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_state):
-    """Muestra los grupos FUNDAE del participante - VERSIÓN CORREGIDA"""
+    """Muestra los grupos FUNDAE del participante - VERSIÓN CORREGIDA Y SEGURA"""
     st.header("📚 Mis Grupos FUNDAE")
     
-    # Debug del session_state
-    debug_session_state(session_state)
+    # Debug del session_state (comentar en producción)
+    if st.checkbox("Mostrar información de debug", value=False):
+        debug_session_state(session_state)
     
     auth_id = session_state.user.get('id')
     
-    if not auth_id or auth_id == "None":
+    if not auth_id or str(auth_id) == "None":
         st.error("❌ No se pudo obtener tu identificador de usuario")
+        st.info("Contacta con el administrador del sistema.")
         return
     
-    participante_id = get_participante_id_from_auth(grupos_service.supabase, auth_id)
+    # Usar la función corregida
+    participante_id = get_participante_id_from_auth_corregido(grupos_service.supabase, auth_id)
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
+        
+        # Información de ayuda mejorada
+        with st.expander("🔧 Información de diagnóstico"):
+            st.markdown("""
+            **Posibles causas:**
+            - Tu cuenta no está registrada como participante
+            - Falta la relación entre tu usuario y el registro de participante
+            - El administrador aún no ha completado tu perfil
+            
+            **Información técnica:**
+            """)
+            st.code(f"Auth ID: {auth_id}")
+            st.code(f"Email: {session_state.user.get('email', 'N/A')}")
+            
+            st.markdown("**Solución:** Contacta con el administrador del sistema.")
         return
 
     try:
+        # Obtener grupos del participante usando relación N:N
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
         
         if df_grupos.empty:
             st.info("📭 No estás inscrito en ningún grupo FUNDAE")
+            st.markdown("""
+            **¿Qué son los grupos FUNDAE?**
+            - Formación bonificada para trabajadores
+            - Cursos oficiales con certificación
+            - Financiados por FUNDAE (Fundación Estatal para la Formación en el Empleo)
+            
+            Contacta con tu empresa para inscribirte en grupos formativos.
+            """)
             return
         
         st.markdown(f"### 🎯 Tienes {len(df_grupos)} grupo(s) asignado(s)")
@@ -87,12 +187,16 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                 col1, col2, col3 = st.columns([2, 2, 1])
                 
                 with col1:
-                    st.markdown(f"**📖 {grupo['codigo_grupo']}**")
-                    st.markdown(f"*{grupo.get('accion_nombre', 'Sin acción formativa')}*")
+                    codigo_grupo = grupo.get('codigo_grupo', 'Sin código')
+                    accion_nombre = grupo.get('accion_nombre', 'Sin acción formativa')
+                    
+                    st.markdown(f"**📖 {codigo_grupo}**")
+                    st.markdown(f"*{accion_nombre}*")
                     
                     # Mostrar horas si están disponibles
-                    if grupo.get('accion_horas', 0) > 0:
-                        st.caption(f"⏱️ Duración: {grupo['accion_horas']} horas")
+                    accion_horas = grupo.get('accion_horas', 0)
+                    if accion_horas and accion_horas > 0:
+                        st.caption(f"⏱️ Duración: {accion_horas} horas")
                 
                 with col2:
                     # Fechas del grupo
@@ -100,40 +204,60 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                     fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
                     
                     if fecha_inicio:
-                        inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y')
-                        st.write(f"📅 **Inicio:** {inicio_str}")
+                        try:
+                            inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y')
+                            st.write(f"📅 **Inicio:** {inicio_str}")
+                        except:
+                            st.write(f"📅 **Inicio:** {fecha_inicio}")
                     
                     if fecha_fin:
-                        fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
-                        st.write(f"🏁 **Fin:** {fin_str}")
-                        
-                        # Calcular estado
-                        hoy = pd.Timestamp.now().date()
-                        fecha_fin_dt = pd.to_datetime(fecha_fin).date()
-                        
-                        if fecha_fin_dt < hoy:
-                            st.success("✅ **Finalizado**")
-                        elif fecha_inicio and pd.to_datetime(fecha_inicio).date() <= hoy <= fecha_fin_dt:
-                            st.info("🟡 **En curso**")
-                        else:
-                            st.warning("⏳ **Próximamente**")
+                        try:
+                            fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                            st.write(f"🏁 **Fin:** {fin_str}")
+                            
+                            # Calcular estado de forma segura
+                            try:
+                                hoy = pd.Timestamp.now().date()
+                                fecha_fin_dt = pd.to_datetime(fecha_fin).date()
+                                
+                                if fecha_fin_dt < hoy:
+                                    st.success("✅ **Finalizado**")
+                                elif fecha_inicio:
+                                    fecha_inicio_dt = pd.to_datetime(fecha_inicio).date()
+                                    if fecha_inicio_dt <= hoy <= fecha_fin_dt:
+                                        st.info("🟡 **En curso**")
+                                    else:
+                                        st.warning("⏳ **Próximamente**")
+                                else:
+                                    st.info("📅 **Programado**")
+                            except:
+                                st.caption("📅 Estado no disponible")
+                        except:
+                            st.write(f"🏁 **Fin:** {fecha_fin}")
                     
                     # Modalidad e información adicional
-                    if grupo.get('modalidad'):
-                        st.caption(f"📍 Modalidad: {grupo['modalidad']}")
+                    modalidad = grupo.get('modalidad')
+                    if modalidad:
+                        st.caption(f"📍 Modalidad: {modalidad}")
                     
-                    if grupo.get('lugar_imparticion'):
-                        st.caption(f"🏢 Lugar: {grupo['lugar_imparticion']}")
+                    lugar_imparticion = grupo.get('lugar_imparticion')
+                    if lugar_imparticion:
+                        st.caption(f"🏢 Lugar: {lugar_imparticion}")
                 
                 with col3:
                     # Fecha de asignación
-                    if grupo.get('fecha_asignacion'):
-                        fecha_asignacion = pd.to_datetime(grupo['fecha_asignacion']).strftime('%d/%m/%Y')
-                        st.caption(f"📋 Inscrito: {fecha_asignacion}")
+                    fecha_asignacion = grupo.get('fecha_asignacion')
+                    if fecha_asignacion:
+                        try:
+                            fecha_asignacion_str = pd.to_datetime(fecha_asignacion).strftime('%d/%m/%Y')
+                            st.caption(f"📋 Inscrito: {fecha_asignacion_str}")
+                        except:
+                            st.caption(f"📋 Inscrito: {fecha_asignacion}")
                     
-                    # Botón de información adicional
-                    if st.button("ℹ️ Detalles", key=f"detalles_{grupo['grupo_id']}", use_container_width=True):
-                        mostrar_detalles_grupo_fundae(grupos_service, grupo['grupo_id'])
+                    # Botón de información adicional (con ID único)
+                    grupo_id = grupo.get('grupo_id', grupo.get('id', 'sin_id'))
+                    if st.button("ℹ️ Detalles", key=f"detalles_{grupo_id}_{participante_id}", use_container_width=True):
+                        mostrar_detalles_grupo_fundae(grupos_service, grupo_id)
         
         # Información adicional sobre FUNDAE
         with st.expander("ℹ️ Información sobre Formación FUNDAE"):
@@ -154,6 +278,11 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     
     except Exception as e:
         st.error(f"❌ Error cargando tus grupos FUNDAE: {e}")
+        print(f"Error detallado en mostrar_mis_grupos_fundae: {e}")
+        
+        # Información adicional de error para debug
+        if st.checkbox("Mostrar error detallado", value=False):
+            st.code(str(e))
 
 def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
     """Muestra detalles adicionales de un grupo FUNDAE."""
