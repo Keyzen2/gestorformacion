@@ -672,23 +672,26 @@ def verificar_acceso_alumno(session_state, supabase):
             return self._handle_query_error("participantes con grupos N:N", e)
 
     def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
-        """NUEVO: Obtiene todos los grupos de un participante específico."""
+        """Obtiene todos los grupos de un participante específico."""
         try:
-            # Verificar permisos
+            # Verificar que el participante existe
             participante_check = self.supabase.table("participantes").select(
                 "empresa_id"
             ).eq("id", participante_id).execute()
-            
+        
             if not participante_check.data:
                 return pd.DataFrame()
-            
+        
             empresa_id = participante_check.data[0]["empresa_id"]
-            empresas_permitidas = self._get_empresas_gestionables()
-            
-            if empresa_id not in empresas_permitidas:
-                return pd.DataFrame()
-            
-            # Obtener grupos del participante
+        
+            # Solo verificar permisos para admin y gestor, NO para alumno
+            if self.rol in ["admin", "gestor"]:
+                empresas_permitidas = self._get_empresas_gestionables()
+                if empresa_id not in empresas_permitidas:
+                    return pd.DataFrame()
+            # Para rol "alumno", permitir acceso sin verificación de permisos empresariales
+        
+            # Obtener grupos del participante usando la tabla de relación N:N
             res = self.supabase.table("participantes_grupos").select("""
                 id, grupo_id, fecha_asignacion,
                 grupo:grupos(
@@ -697,12 +700,12 @@ def verificar_acceso_alumno(session_state, supabase):
                     accion_formativa:acciones_formativas(nombre, horas)
                 )
             """).eq("participante_id", participante_id).execute()
-            
+        
             grupos_data = []
             for rel in res.data or []:
                 grupo = rel.get("grupo", {})
                 accion = grupo.get("accion_formativa", {}) if isinstance(grupo, dict) else {}
-                
+            
                 grupos_data.append({
                     "relacion_id": rel.get("id"),
                     "grupo_id": rel.get("grupo_id"),
@@ -714,14 +717,14 @@ def verificar_acceso_alumno(session_state, supabase):
                     "modalidad": grupo.get("modalidad", "") if isinstance(grupo, dict) else "",
                     "lugar_imparticion": grupo.get("lugar_imparticion", "") if isinstance(grupo, dict) else "",
                     "accion_nombre": accion.get("nombre", "") if isinstance(accion, dict) else "",
-                    # 🔧 fuerza a int siempre, aunque venga None
                     "accion_horas": int(accion.get("horas") or 0) if isinstance(accion, dict) else 0
                 })
-            
+        
             return pd.DataFrame(grupos_data)
-            
+        
         except Exception as e:
-            return self._handle_query_error("grupos del participante", e)
+            print(f"Error obteniendo grupos del participante: {e}")
+            return pd.DataFrame()
     
     def asignar_participante_a_grupo(self, participante_id: str, grupo_id: str) -> bool:
         """NUEVO: Asigna participante a grupo usando tabla N:N."""
