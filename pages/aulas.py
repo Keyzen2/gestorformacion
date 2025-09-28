@@ -10,7 +10,94 @@ try:
     CALENDAR_AVAILABLE = True
 except ImportError:
     CALENDAR_AVAILABLE = False
+# =========================
+# UTILIDADES DE EXPORTACIÓN
+# =========================
 
+def exportar_cronograma_excel(eventos: list):
+    """Transforma eventos de calendario en un Excel amigable"""
+    try:
+        datos = []
+        for ev in eventos:
+            props = ev.get("extendedProps", {})
+            datos.append({
+                "Título": ev.get("title", ""),
+                "Aula": props.get("aula_nombre", ""),
+                "Inicio": ev.get("start", ""),
+                "Fin": ev.get("end", ""),
+                "Tipo de Reserva": props.get("tipo_reserva", ""),
+                "Estado": props.get("estado", ""),
+                "Grupo": props.get("grupo_codigo", "")
+            })
+
+        df_export = pd.DataFrame(datos)
+
+        fecha_str = datetime.now().strftime("%Y%m%d")
+        filename = f"cronograma_aulas_{fecha_str}.xlsx"
+
+        from utils import export_excel  # si ya tienes esta función utilitaria
+        export_excel(df_export, filename=filename, label="📥 Descargar Cronograma en Excel")
+
+    except Exception as e:
+        st.error(f"❌ Error exportando Excel: {e}")
+
+
+def exportar_cronograma_pdf(eventos: list):
+    """Exporta cronograma a un PDF amigable"""
+    try:
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet
+
+        fecha_str = datetime.now().strftime("%Y%m%d")
+        filename = f"cronograma_aulas_{fecha_str}.pdf"
+
+        # Cabecera
+        datos = [["Título", "Aula", "Inicio", "Fin", "Tipo", "Estado", "Grupo"]]
+        for ev in eventos:
+            props = ev.get("extendedProps", {})
+            datos.append([
+                ev.get("title", ""),
+                props.get("aula_nombre", ""),
+                ev.get("start", ""),
+                ev.get("end", ""),
+                props.get("tipo_reserva", ""),
+                props.get("estado", ""),
+                props.get("grupo_codigo", "")
+            ])
+
+        doc = SimpleDocTemplate(filename, pagesize=A4)
+        styles = getSampleStyleSheet()
+        elementos = []
+
+        elementos.append(Paragraph("📅 Cronograma de Aulas", styles["Heading1"]))
+        elementos.append(Spacer(1, 12))
+
+        tabla = Table(datos)
+        tabla.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
+        ]))
+        elementos.append(tabla)
+
+        doc.build(elementos)
+
+        with open(filename, "rb") as f:
+            st.download_button(
+                "📥 Descargar Cronograma en PDF",
+                f,
+                file_name=filename,
+                mime="application/pdf"
+            )
+
+    except Exception as e:
+        st.error(f"❌ Error exportando PDF: {e}")
+        
 def mostrar_tabla_aulas(df_aulas, session_state, aulas_service, titulo_tabla="🏢 Lista de Aulas"):
     """Tabla de aulas siguiendo el patrón de Streamlit 1.49"""
     if df_aulas.empty:
@@ -468,60 +555,11 @@ def mostrar_cronograma_fullcalendar(aulas_service, session_state):
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("📥 Exportar a Excel", key="export_cronograma_excel"):
-            try:
-                df_export = pd.DataFrame(eventos)
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename = f"cronograma_aulas_{fecha_str}.xlsx"
-                export_excel(df_export, filename=filename, label="Cronograma exportado")
-            except Exception as e:
-                st.error(f"❌ Error exportando Excel: {e}")
-
+        exportar_cronograma_excel(eventos)
+    
     with col2:
-        if st.button("🖨️ Exportar a PDF", key="export_cronograma_pdf"):
-            try:
-                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-                from reportlab.lib.pagesizes import A4
-                from reportlab.lib import colors
-                from reportlab.lib.styles import getSampleStyleSheet
-                from io import BytesIO
-
-                buffer = BytesIO()
-                doc = SimpleDocTemplate(buffer, pagesize=A4)
-                styles = getSampleStyleSheet()
-
-                data = [["Título", "Aula", "Inicio", "Fin", "Tipo", "Estado"]]
-                for ev in eventos:
-                    data.append([
-                        ev.get("title", ""),
-                        ev.get("extendedProps", {}).get("aula_nombre", ""),
-                        ev.get("start", ""),
-                        ev.get("end", ""),
-                        ev.get("extendedProps", {}).get("tipo_reserva", ""),
-                        ev.get("extendedProps", {}).get("estado", "")
-                    ])
-
-                table = Table(data, repeatRows=1)
-                table.setStyle(TableStyle([
-                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#0066cc")),
-                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-                    ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
-                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ]))
-
-                doc.build([Paragraph("Cronograma de Aulas", styles["Title"]), table])
-                buffer.seek(0)
-
-                st.download_button(
-                    label="📥 Descargar PDF",
-                    data=buffer,
-                    file_name=f"cronograma_aulas_{fecha_str}.pdf",
-                    mime="application/pdf"
-                )
-
-            except Exception as e:
-                st.error(f"❌ Error exportando PDF: {e}")
-
+        exportar_cronograma_pdf(eventos)
+    
 def mostrar_cronograma_alternativo(aulas_service, session_state):
     """Vista alternativa si no funciona el calendario"""
     
