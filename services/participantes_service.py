@@ -27,15 +27,15 @@ class ParticipantesService:
     # =========================
     # CONSULTAS PRINCIPALES
     # =========================
-    def get_participantes_completos(_self) -> pd.DataFrame:
+    def get_participantes_completos(self) -> pd.DataFrame:
         """CORREGIDO: Retorna siempre DataFrame válido, nunca None."""
         try:
-            query = _self.supabase.table("participantes").select("""
+            query = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, dni, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, grupo_id, empresa_id,
                 empresa:empresas(id, nombre, cif)
             """)
-            query = _self._apply_empresa_filter(query)
+            query = self._apply_empresa_filter(query)
     
             res = query.order("created_at", desc=True).execute()
             
@@ -76,39 +76,59 @@ class ParticipantesService:
                 'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
             ])
             
-    def get_participante_id_from_auth(supabase, auth_id):
-        """Convierte auth_id a participante_id - CORREGIDO con validaciones"""
+    def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
+        """CORREGIDO: Convierte auth_id a participante_id con validaciones y auto-corrección"""
         try:
-            # Validación crítica: verificar que auth_id no sea None, "None" o vacío
+            # Validación crítica
             if not auth_id or auth_id == "None" or str(auth_id).strip() == "":
                 print(f"Error: auth_id inválido: {auth_id}")
                 return None
             
-            # Verificar si es un UUID válido
-    
+            # Verificar UUID válido
             try:
                 uuid.UUID(str(auth_id))
             except ValueError:
                 print(f"Error: auth_id no es un UUID válido: {auth_id}")
                 return None
         
-            # Primero intentar buscar por auth_id en participantes
-            result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-        
+            # Método 1: Buscar directamente por auth_id
+            result = self.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+            
             if result.data:
                 return result.data[0]["id"]
         
-            # Si no encuentra por auth_id, intentar buscar por email como fallback
-            # Primero obtener el email del usuario autenticado
-            user_result = supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
+            # Método 2: Fallback por email + autocorrección
+            print(f"Participante no encontrado con auth_id {auth_id}, buscando por email...")
+            
+            user_result = self.supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
         
             if user_result.data:
                 email = user_result.data[0]["email"]
-                # Buscar participante por email
-                participante_result = supabase.table("participantes").select("id").eq("email", email).execute()
+                print(f"Email encontrado: {email}")
+                
+                participante_result = self.supabase.table("participantes").select("id, auth_id").eq("email", email).execute()
             
                 if participante_result.data:
-                    return participante_result.data[0]["id"]
+                    participante = participante_result.data[0]
+                    participante_id = participante["id"]
+                    participante_auth_id = participante["auth_id"]
+                    
+                    # AUTOCORRECCIÓN: Si no tiene auth_id, asignarlo
+                    if not participante_auth_id:
+                        print(f"Corrigiendo auth_id null para participante {participante_id}")
+                        
+                        update_result = self.supabase.table("participantes").update({
+                            "auth_id": auth_id
+                        }).eq("id", participante_id).execute()
+                        
+                        if update_result.data:
+                            print(f"Auth_id corregido exitosamente")
+                            return participante_id
+                        else:
+                            print("Error actualizando auth_id")
+                            return participante_id
+                    else:
+                        return participante_id
         
             print(f"No se encontró participante para auth_id: {auth_id}")
             return None
@@ -178,10 +198,10 @@ def verificar_acceso_alumno(session_state, supabase):
         return False
             
     @st.cache_data(ttl=300)
-    def get_participantes_con_empresa_jerarquica(_self) -> pd.DataFrame:
+    def get_participantes_con_empresa_jerarquica(self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica de empresa."""
         try:
-            query = _self.supabase.table("participantes").select("""
+            query = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, 
                 fecha_nacimiento, sexo, created_at, grupo_id, empresa_id,
                 grupo:grupos(id, codigo_grupo),
@@ -192,9 +212,9 @@ def verificar_acceso_alumno(session_state, supabase):
             """)
             
             # Aplicar filtro jerárquico
-            if _self.rol == "gestor":
+            if self.rol == "gestor":
                 # Gestor ve participantes de su empresa y empresas clientes
-                empresas_permitidas = _self._get_empresas_permitidas_gestor()
+                empresas_permitidas = self._get_empresas_permitidas_gestor()
                 if empresas_permitidas:
                     query = query.in_("empresa_id", empresas_permitidas)
                 else:
@@ -224,16 +244,16 @@ def verificar_acceso_alumno(session_state, supabase):
             
             return df
         except Exception as e:
-            return _self._handle_query_error("cargar participantes con jerarquía", e)
+            return self._handle_query_error("cargar participantes con jerarquía", e)
     
-    def _get_empresas_permitidas_gestor(_self) -> List[str]:
+    def _get_empresas_permitidas_gestor(self) -> List[str]:
         """Obtiene IDs de empresas que puede gestionar el gestor."""
         try:
             # Incluir empresa propia + empresas clientes
-            empresas = [_self.empresa_id] if _self.empresa_id else []
+            empresas = [self.empresa_id] if self.empresa_id else []
             
-            clientes_res = _self.supabase.table("empresas").select("id").eq(
-                "empresa_matriz_id", _self.empresa_id
+            clientes_res = self.supabase.table("empresas").select("id").eq(
+                "empresa_matriz_id", self.empresa_id
             ).execute()
             
             if clientes_res.data:
@@ -244,18 +264,18 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"Error obteniendo empresas permitidas: {e}")
             return []
     
-    def get_empresas_para_participantes(_self) -> Dict[str, str]:
+    def get_empresas_para_participantes(self) -> Dict[str, str]:
         """Obtiene empresas donde se pueden crear participantes."""
         try:
-            if _self.rol == "admin":
+            if self.rol == "admin":
                 # Admin puede asignar a cualquier empresa
-                res = _self.supabase.table("empresas").select("id, nombre").execute()
+                res = self.supabase.table("empresas").select("id, nombre").execute()
                 
-            elif _self.rol == "gestor":
+            elif self.rol == "gestor":
                 # Gestor puede asignar a su empresa y clientes
-                empresas_ids = _self._get_empresas_permitidas_gestor()
+                empresas_ids = self._get_empresas_permitidas_gestor()
                 if empresas_ids:
-                    res = _self.supabase.table("empresas").select("id, nombre").in_(
+                    res = self.supabase.table("empresas").select("id, nombre").in_(
                         "id", empresas_ids
                     ).execute()
                 else:
@@ -275,10 +295,10 @@ def verificar_acceso_alumno(session_state, supabase):
     # MÉTODOS CON JERARQUÍA DE EMPRESAS
     # =========================
     @st.cache_data(ttl=300)
-    def get_participantes_con_jerarquia(_self) -> pd.DataFrame:
+    def get_participantes_con_jerarquia(self) -> pd.DataFrame:
         """Obtiene participantes con información jerárquica completa."""
         try:
-            query = _self.supabase.table("participantes").select("""
+            query = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, fecha_nacimiento, 
                 sexo, created_at, updated_at, grupo_id, empresa_id,
                 grupo:grupos(id, codigo_grupo),
@@ -289,9 +309,9 @@ def verificar_acceso_alumno(session_state, supabase):
             """)
             
             # Aplicar filtro jerárquico según rol
-            if _self.rol == "gestor" and _self.empresa_id:
+            if self.rol == "gestor" and self.empresa_id:
                 # Gestor ve participantes de su empresa y empresas clientes
-                empresas_permitidas = _self._get_empresas_gestionables()
+                empresas_permitidas = self._get_empresas_gestionables()
                 if empresas_permitidas:
                     query = query.in_("empresa_id", empresas_permitidas)
                 else:
@@ -333,25 +353,25 @@ def verificar_acceso_alumno(session_state, supabase):
             
             return df
         except Exception as e:
-            return _self._handle_query_error("cargar participantes con jerarquía", e)
+            return self._handle_query_error("cargar participantes con jerarquía", e)
     
-    def _get_empresas_gestionables(_self) -> List[str]:
+    def _get_empresas_gestionables(self) -> List[str]:
         """Obtiene lista de IDs de empresas que puede gestionar el usuario."""
         try:
             empresas = []
             
-            if _self.rol == "admin":
+            if self.rol == "admin":
                 # Admin puede gestionar todas las empresas
-                res = _self.supabase.table("empresas").select("id").execute()
+                res = self.supabase.table("empresas").select("id").execute()
                 empresas = [emp["id"] for emp in (res.data or [])]
                 
-            elif _self.rol == "gestor" and _self.empresa_id:
+            elif self.rol == "gestor" and self.empresa_id:
                 # Gestor puede gestionar su empresa y sus clientes
-                empresas = [_self.empresa_id]
+                empresas = [self.empresa_id]
                 
                 # Agregar empresas clientes
-                clientes_res = _self.supabase.table("empresas").select("id").eq(
-                    "empresa_matriz_id", _self.empresa_id
+                clientes_res = self.supabase.table("empresas").select("id").eq(
+                    "empresa_matriz_id", self.empresa_id
                 ).execute()
                 
                 if clientes_res.data:
@@ -362,21 +382,21 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"Error obteniendo empresas gestionables: {e}")
             return []
     
-    def get_empresas_para_participantes(_self) -> Dict[str, str]:
+    def get_empresas_para_participantes(self) -> Dict[str, str]:
         """Obtiene empresas donde se pueden crear/asignar participantes."""
         try:
-            if _self.rol == "admin":
+            if self.rol == "admin":
                 # Admin puede asignar a cualquier empresa
-                res = _self.supabase.table("empresas").select("""
+                res = self.supabase.table("empresas").select("""
                     id, nombre, tipo_empresa, empresa_matriz_id,
                     empresa_matriz:empresas!empresa_matriz_id(nombre)
                 """).order("nombre").execute()
                 
-            elif _self.rol == "gestor" and _self.empresa_id:
+            elif self.rol == "gestor" and self.empresa_id:
                 # Gestor puede asignar a su empresa y clientes
-                empresas_ids = _self._get_empresas_gestionables()
+                empresas_ids = self._get_empresas_gestionables()
                 if empresas_ids:
-                    res = _self.supabase.table("empresas").select("""
+                    res = self.supabase.table("empresas").select("""
                         id, nombre, tipo_empresa, empresa_matriz_id,
                         empresa_matriz:empresas!empresa_matriz_id(nombre)
                     """).in_("id", empresas_ids).order("nombre").execute()
@@ -409,7 +429,7 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"Error al cargar empresas para participantes: {e}")
             return {}
     
-    def create_participante_con_jerarquia(_self, datos: Dict[str, Any]) -> bool:
+    def create_participante_con_jerarquia(self, datos: Dict[str, Any]) -> bool:
         """Crea participante validando permisos jerárquicos."""
         try:
             # Validaciones básicas
@@ -428,13 +448,13 @@ def verificar_acceso_alumno(session_state, supabase):
                 return False
             
             # Verificar permisos sobre la empresa
-            empresas_permitidas = _self._get_empresas_gestionables()
+            empresas_permitidas = self._get_empresas_gestionables()
             if empresa_id_part not in empresas_permitidas:
                 st.error("No tienes permisos para crear participantes en esa empresa.")
                 return False
             
             # Verificar que la empresa existe y obtener información
-            empresa_info = _self.supabase.table("empresas").select(
+            empresa_info = self.supabase.table("empresas").select(
                 "id, nombre, tipo_empresa"
             ).eq("id", empresa_id_part).execute()
             
@@ -448,7 +468,7 @@ def verificar_acceso_alumno(session_state, supabase):
                 return False
     
             # Verificar email único
-            email_existe = _self.supabase.table("participantes").select("id").eq(
+            email_existe = self.supabase.table("participantes").select("id").eq(
                 "email", datos["email"]
             ).execute()
             if email_existe.data:
@@ -456,7 +476,7 @@ def verificar_acceso_alumno(session_state, supabase):
                 return False
     
             # Verificar email único en usuarios
-            usuario_existe = _self.supabase.table("usuarios").select("id").eq(
+            usuario_existe = self.supabase.table("usuarios").select("id").eq(
                 "email", datos["email"]
             ).execute()
             if usuario_existe.data:
@@ -471,11 +491,11 @@ def verificar_acceso_alumno(session_state, supabase):
             })
     
             # Crear participante
-            result = _self.supabase.table("participantes").insert(datos_finales).execute()
+            result = self.supabase.table("participantes").insert(datos_finales).execute()
     
             if result.data:
                 # Limpiar cache
-                _self.get_participantes_con_jerarquia.clear()
+                self.get_participantes_con_jerarquia.clear()
                 return True
             else:
                 st.error("Error al crear el participante.")
@@ -485,11 +505,11 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"Error al crear participante: {e}")
             return False
     
-    def update_participante_con_jerarquia(_self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
+    def update_participante_con_jerarquia(self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
         """Actualiza participante validando permisos jerárquicos."""
         try:
             # Verificar permisos sobre el participante
-            participante_actual = _self.supabase.table("participantes").select(
+            participante_actual = self.supabase.table("participantes").select(
                 "empresa_id, email"
             ).eq("id", participante_id).execute()
             
@@ -501,7 +521,7 @@ def verificar_acceso_alumno(session_state, supabase):
             email_actual = participante_actual.data[0]["email"]
             
             # Verificar que puede gestionar la empresa actual
-            empresas_permitidas = _self._get_empresas_gestionables()
+            empresas_permitidas = self._get_empresas_gestionables()
             if empresa_actual not in empresas_permitidas:
                 st.error("No tienes permisos para editar este participante.")
                 return False
@@ -523,7 +543,7 @@ def verificar_acceso_alumno(session_state, supabase):
     
             # Verificar email único (excluyendo el actual)
             if datos_editados["email"] != email_actual:
-                email_existe = _self.supabase.table("participantes").select("id").eq(
+                email_existe = self.supabase.table("participantes").select("id").eq(
                     "email", datos_editados["email"]
                 ).neq("id", participante_id).execute()
                 
@@ -535,10 +555,10 @@ def verificar_acceso_alumno(session_state, supabase):
             datos_editados["updated_at"] = datetime.utcnow().isoformat()
     
             # Actualizar participante
-            _self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+            self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
     
             # Limpiar cache
-            _self.get_participantes_con_jerarquia.clear()
+            self.get_participantes_con_jerarquia.clear()
     
             return True
     
@@ -546,11 +566,11 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"Error al actualizar participante: {e}")
             return False
     
-    def delete_participante_con_jerarquia(_self, participante_id: str) -> bool:
+    def delete_participante_con_jerarquia(self, participante_id: str) -> bool:
         """Elimina participante validando permisos jerárquicos."""
         try:
             # Verificar permisos sobre el participante
-            participante = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
+            participante = self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
             
             if not participante.data:
                 st.error("Participante no encontrado.")
@@ -559,37 +579,28 @@ def verificar_acceso_alumno(session_state, supabase):
             empresa_id = participante.data[0]["empresa_id"]
             
             # Verificar permisos
-            empresas_permitidas = _self._get_empresas_gestionables()
+            empresas_permitidas = self._get_empresas_gestionables()
             if empresa_id not in empresas_permitidas:
                 st.error("No tienes permisos para eliminar este participante.")
                 return False
     
             # Verificar dependencias - diplomas
-            diplomas = _self.supabase.table("diplomas").select("id").eq("participante_id", participante_id).execute()
+            diplomas = self.supabase.table("diplomas").select("id").eq("participante_id", participante_id).execute()
             if diplomas.data:
                 st.error("No se puede eliminar. El participante tiene diplomas asociados.")
                 return False
     
             # Eliminar participante (esto también eliminará relaciones en cascada)
-            _self.supabase.table("participantes").delete().eq("id", participante_id).execute()
+            self.supabase.table("participantes").delete().eq("id", participante_id).execute()
     
             # Limpiar cache
-            _self.get_participantes_con_jerarquia.clear()
+            self.get_participantes_con_jerarquia.clear()
     
             return True
     
         except Exception as e:
             st.error(f"Error al eliminar participante: {e}")
             return False
-    def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
-        """Obtiene participante_id desde auth_id - CORREGIDO"""
-        try:
-            # Buscar directamente por auth_id en participantes
-            result = self.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-            return result.data[0]["id"] if result.data else None
-        except Exception as e:
-            print(f"Error obteniendo participante desde auth_id: {e}")
-            return None
 
     def get_participante_desde_usuario_auth(self, auth_id: str) -> Optional[Dict]:
         """Obtiene participante completo desde auth_id"""
@@ -670,7 +681,7 @@ def verificar_acceso_alumno(session_state, supabase):
             
         except Exception as e:
             return self._handle_query_error("participantes con grupos N:N", e)
-
+            
     def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
         """Obtiene todos los grupos de un participante específico."""
         try:
@@ -1028,15 +1039,15 @@ def verificar_acceso_alumno(session_state, supabase):
         except Exception as e:
             return False    
             
-    def get_participantes_por_empresa(_self, empresa_id: str) -> pd.DataFrame:
+    def get_participantes_por_empresa(self, empresa_id: str) -> pd.DataFrame:
         """Obtiene participantes de una empresa específica."""
         try:
             # Verificar permisos sobre la empresa
-            empresas_permitidas = _self._get_empresas_gestionables()
+            empresas_permitidas = self._get_empresas_gestionables()
             if empresa_id not in empresas_permitidas:
                 return pd.DataFrame()
             
-            res = _self.supabase.table("participantes").select("""
+            res = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, 
                 fecha_nacimiento, sexo, grupo_id, created_at,
                 grupo:grupos(id, codigo_grupo)
@@ -1051,27 +1062,27 @@ def verificar_acceso_alumno(session_state, supabase):
             
             return df
         except Exception as e:
-            return _self._handle_query_error("cargar participantes por empresa", e)
+            return self._handle_query_error("cargar participantes por empresa", e)
     
-    def get_participantes_asignables_a_grupo(_self, grupo_id: str) -> pd.DataFrame:
+    def get_participantes_asignables_a_grupo(self, grupo_id: str) -> pd.DataFrame:
         """Obtiene participantes que pueden asignarse a un grupo específico."""
         try:
             # Obtener empresas participantes del grupo
-            empresas_grupo = _self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
+            empresas_grupo = self.supabase.table("empresas_grupos").select("empresa_id").eq("grupo_id", grupo_id).execute()
             empresas_participantes = [emp["empresa_id"] for emp in (empresas_grupo.data or [])]
             
             if not empresas_participantes:
                 return pd.DataFrame()
             
             # Filtrar por empresas que puede gestionar el usuario
-            empresas_permitidas = _self._get_empresas_gestionables()
+            empresas_permitidas = self._get_empresas_gestionables()
             empresas_validas = [e for e in empresas_participantes if e in empresas_permitidas]
             
             if not empresas_validas:
                 return pd.DataFrame()
             
             # Obtener participantes sin grupo de las empresas válidas
-            res = _self.supabase.table("participantes").select("""
+            res = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, empresa_id,
                 empresa:empresas(nombre, tipo_empresa)
             """).in_("empresa_id", empresas_validas).is_("grupo_id", "null").order("nombre").execute()
@@ -1088,12 +1099,12 @@ def verificar_acceso_alumno(session_state, supabase):
             
             return df
         except Exception as e:
-            return _self._handle_query_error("cargar participantes asignables", e)
+            return self._handle_query_error("cargar participantes asignables", e)
     
-    def search_participantes_jerarquia(_self, filtros: Dict[str, Any]) -> pd.DataFrame:
+    def search_participantes_jerarquia(self, filtros: Dict[str, Any]) -> pd.DataFrame:
         """Búsqueda avanzada de participantes con filtros jerárquicos."""
         try:
-            df = _self.get_participantes_con_jerarquia()
+            df = self.get_participantes_con_jerarquia()
             if df.empty:
                 return df
     
@@ -1130,12 +1141,12 @@ def verificar_acceso_alumno(session_state, supabase):
             return df_filtered
     
         except Exception as e:
-            return _self._handle_query_error("búsqueda jerárquica de participantes", e)
+            return self._handle_query_error("búsqueda jerárquica de participantes", e)
     
-    def get_estadisticas_participantes_jerarquia(_self) -> Dict[str, Any]:
+    def get_estadisticas_participantes_jerarquia(self) -> Dict[str, Any]:
         """Obtiene estadísticas de participantes con información jerárquica."""
         try:
-            df = _self.get_participantes_con_jerarquia()
+            df = self.get_participantes_con_jerarquia()
             
             if df.empty:
                 return {
@@ -1170,11 +1181,11 @@ def verificar_acceso_alumno(session_state, supabase):
     # =========================
     # OPERACIONES CRUD
     # =========================
-    def create_participante(_self, datos: Dict[str, Any]) -> bool:
+    def create_participante(self, datos: Dict[str, Any]) -> bool:
         """Crea un nuevo participante y su usuario en Auth automáticamente."""
         try:
             from services.alumnos import AlumnosService
-            alumnos_service = AlumnosService(_self.supabase)
+            alumnos_service = AlumnosService(self.supabase)
     
             # Validaciones básicas
             if not datos.get("email") or not datos.get("password"):
@@ -1188,13 +1199,13 @@ def verificar_acceso_alumno(session_state, supabase):
                 return False
     
             # Ajustar empresa si es gestor
-            if _self.rol == "gestor":
-                datos["empresa_id"] = _self.empresa_id
+            if self.rol == "gestor":
+                datos["empresa_id"] = self.empresa_id
     
             # Crear alumno en Auth + Participantes
             participante_id = alumnos_service.crear_alumno(datos)
             if participante_id:
-                _self.get_participantes_completos.clear()
+                self.get_participantes_completos.clear()
                 return True
             else:
                 return False
@@ -1203,14 +1214,14 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"⚠️ Error al crear participante con Auth: {e}")
             return False
     
-    def update_participante(_self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
+    def update_participante(self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
         """Actualiza un participante y sincroniza datos con Auth."""
         try:
             from services.alumnos import AlumnosService
-            alumnos_service = AlumnosService(_self.supabase)
+            alumnos_service = AlumnosService(self.supabase)
     
             # Verificar existencia del participante
-            participante = _self.supabase.table("participantes").select("auth_id, email").eq("id", participante_id).execute()
+            participante = self.supabase.table("participantes").select("auth_id, email").eq("id", participante_id).execute()
             if not participante.data:
                 st.error("⚠️ Participante no encontrado.")
                 return False
@@ -1229,7 +1240,7 @@ def verificar_acceso_alumno(session_state, supabase):
             # Verificar email único (excluyendo el actual)
             if datos_editados["email"] != email_actual:
                 email_existe = (
-                    _self.supabase.table("participantes")
+                    self.supabase.table("participantes")
                     .select("id")
                     .eq("email", datos_editados["email"])
                     .neq("id", participante_id)
@@ -1240,15 +1251,15 @@ def verificar_acceso_alumno(session_state, supabase):
                     return False
     
             # Control de permisos para gestor
-            if _self.rol == "gestor":
-                participante_check = _self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
-                if not participante_check.data or participante_check.data[0].get("empresa_id") != _self.empresa_id:
+            if self.rol == "gestor":
+                participante_check = self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
+                if not participante_check.data or participante_check.data[0].get("empresa_id") != self.empresa_id:
                     st.error("⚠️ No tienes permisos para editar este participante.")
                     return False
     
             # --- Actualizar tabla participantes ---
             datos_editados["updated_at"] = datetime.utcnow().isoformat()
-            _self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+            self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
     
             # --- Sincronizar con Auth ---
             if auth_id:
@@ -1261,12 +1272,12 @@ def verificar_acceso_alumno(session_state, supabase):
                         "nombre": datos_editados.get("nombre"),
                         "apellidos": datos_editados.get("apellidos"),
                     }
-                    _self.supabase.auth.admin.update_user(auth_id, update_data)
+                    self.supabase.auth.admin.update_user(auth_id, update_data)
                 except Exception as e:
                     st.warning(f"⚠️ Participante actualizado pero no se pudo sincronizar con Auth: {e}")
     
             # Limpiar caché
-            _self.get_participantes_completos.clear()
+            self.get_participantes_completos.clear()
     
             return True
     
@@ -1274,20 +1285,20 @@ def verificar_acceso_alumno(session_state, supabase):
             st.error(f"⚠️ Error al actualizar participante: {e}")
             return False
 
-    def delete_participante(_self, participante_id: str) -> bool:
+    def delete_participante(self, participante_id: str) -> bool:
         """Elimina un participante y su usuario en Auth automáticamente."""
         try:
             from services.alumnos import AlumnosService
-            alumnos_service = AlumnosService(_self.supabase)
+            alumnos_service = AlumnosService(self.supabase)
     
             # Buscar auth_id
-            res = _self.supabase.table("participantes").select("auth_id").eq("id", participante_id).execute()
+            res = self.supabase.table("participantes").select("auth_id").eq("id", participante_id).execute()
             auth_id = res.data[0]["auth_id"] if res.data else None
     
             # Eliminar
             ok = alumnos_service.borrar_alumno(participante_id, auth_id)
             if ok:
-                _self.get_participantes_completos.clear()
+                self.get_participantes_completos.clear()
                 return True
             return False
     
@@ -1298,10 +1309,10 @@ def verificar_acceso_alumno(session_state, supabase):
     # =========================
     # BÚSQUEDAS Y FILTROS
     # =========================
-    def search_participantes_avanzado(_self, filtros: Dict[str, Any]) -> pd.DataFrame:
+    def search_participantes_avanzado(self, filtros: Dict[str, Any]) -> pd.DataFrame:
         """Búsqueda avanzada de participantes con múltiples filtros."""
         try:
-            df = _self.get_participantes_completos()
+            df = self.get_participantes_completos()
             if df.empty:
                 return df
 
@@ -1322,22 +1333,22 @@ def verificar_acceso_alumno(session_state, supabase):
                 df_filtered = df_filtered[df_filtered["grupo_id"] == filtros["grupo_id"]]
 
             # Filtro por empresa (solo para admin)
-            if _self.rol == "admin" and filtros.get("empresa_id"):
+            if self.rol == "admin" and filtros.get("empresa_id"):
                 df_filtered = df_filtered[df_filtered["empresa_id"] == filtros["empresa_id"]]
 
             return df_filtered
 
         except Exception as e:
-            return _self._handle_query_error("búsqueda avanzada de participantes", e)
+            return self._handle_query_error("búsqueda avanzada de participantes", e)
 
     # =========================
     # ESTADÍSTICAS
     # =========================
-    def get_estadisticas_participantes(_self) -> Dict[str, Any]:
+    def get_estadisticas_participantes(self) -> Dict[str, Any]:
         """Alias para compatibilidad: usa la versión jerárquica por defecto."""
-        return _self.get_estadisticas_participantes_jerarquia()
+        return self.get_estadisticas_participantes_jerarquia()
         try:
-            df = _self.get_participantes_completos()
+            df = self.get_participantes_completos()
             
             if df.empty:
                 return {
@@ -1392,9 +1403,9 @@ def verificar_acceso_alumno(session_state, supabase):
     # =========================
     # PERMISOS
     # =========================
-    def can_modify_data(_self) -> bool:
+    def can_modify_data(self) -> bool:
         """Verifica si el usuario puede modificar datos."""
-        return _self.rol in ["admin", "gestor"]
+        return self.rol in ["admin", "gestor"]
 
 # =========================
 # FUNCIÓN FACTORY (FUERA DE LA CLASE)
