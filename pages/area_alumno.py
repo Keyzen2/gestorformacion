@@ -629,12 +629,11 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 
         # Estadísticas mejoradas
         st.markdown("### 📊 Mis Estadísticas")
-
         try:
             # Grupos FUNDAE
             grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
             num_grupos = len(grupos_participante) if not grupos_participante.empty else 0
-
+            
             # Suscripción de clases
             suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
             
@@ -645,12 +644,12 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     resumen_clases = clases_service.get_resumen_mensual_participante(participante_id)
                 except:
                     pass
-
+            
             col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
-
+            
             with col_stats1:
                 st.metric("🎓 Grupos FUNDAE", num_grupos)
-
+            
             with col_stats2:
                 if suscripcion_clases and suscripcion_clases.get("activa"):
                     clases_disponibles = (
@@ -660,13 +659,13 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     st.metric("🏃‍♀️ Clases Disponibles", clases_disponibles)
                 else:
                     st.metric("🏃‍♀️ Clases Disponibles", 0)
-
+            
             with col_stats3:
                 if resumen_clases and resumen_clases.get("asistencias") is not None:
                     st.metric("✅ Asistencias", resumen_clases.get("asistencias", 0))
                 else:
                     st.metric("✅ Asistencias", "N/A")
-
+            
             with col_stats4:
                 # Diplomas obtenidos
                 try:
@@ -696,12 +695,66 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                 if resumen_clases and resumen_clases.get("porcentaje_asistencia") is not None:
                     porcentaje = resumen_clases["porcentaje_asistencia"]
                     st.metric("📈 % Asistencia", f"{porcentaje}%")
-
+        
+            # NUEVA SECCIÓN DE DIPLOMAS - AÑADIR AQUÍ
+            st.markdown("### 📜 Mis Diplomas")
+            
+            try:
+                # Obtener diplomas del participante
+                diplomas_res = participantes_service.supabase.table("diplomas").select("""
+                    id, nombre_diploma, fecha_emision, url_archivo, tipo_archivo,
+                    grupo:grupos(codigo_grupo, 
+                                accion_formativa:acciones_formativas(nombre))
+                """).eq("participante_id", participante_id).order("fecha_emision", desc=True).execute()
+                
+                if diplomas_res.data:
+                    st.success(f"Tienes {len(diplomas_res.data)} diploma(s) disponible(s)")
+                    
+                    for diploma in diplomas_res.data:
+                        with st.container(border=True):
+                            col1, col2, col3 = st.columns([2, 2, 1])
+                            
+                            with col1:
+                                st.markdown(f"**📜 {diploma.get('nombre_diploma', 'Diploma')}**")
+                                if diploma.get('grupo'):
+                                    grupo_info = diploma['grupo']
+                                    codigo_grupo = grupo_info.get('codigo_grupo', 'Sin código')
+                                    accion_nombre = ""
+                                    if grupo_info.get('accion_formativa'):
+                                        accion_nombre = grupo_info['accion_formativa'].get('nombre', '')
+                                    st.caption(f"Grupo: {codigo_grupo}")
+                                    if accion_nombre:
+                                        st.caption(f"Curso: {accion_nombre}")
+                            
+                            with col2:
+                                if diploma.get('fecha_emision'):
+                                    fecha_emision = pd.to_datetime(diploma['fecha_emision']).strftime('%d/%m/%Y')
+                                    st.write(f"📅 **Fecha:** {fecha_emision}")
+                                
+                                tipo_archivo = diploma.get('tipo_archivo', 'PDF')
+                                st.write(f"📄 **Formato:** {tipo_archivo}")
+                            
+                            with col3:
+                                if diploma.get('url_archivo'):
+                                    st.link_button(
+                                        "📥 Descargar",
+                                        diploma['url_archivo'],
+                                        use_container_width=True
+                                    )
+                                else:
+                                    st.button("📄 Ver", disabled=True, use_container_width=True)
+                else:
+                    st.info("No tienes diplomas disponibles aún")
+                    st.caption("Los diplomas se generan al finalizar los grupos formativos")
+        
+            except Exception as e:
+                st.error(f"Error cargando diplomas: {e}")
+        
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
-
-    except Exception as e:
-        st.error(f"❌ Error cargando información del perfil: {e}")
+        
+        except Exception as e:
+            st.error(f"❌ Error cargando información del perfil: {e}")
 
 # =========================
 # MAIN FUNCTION
