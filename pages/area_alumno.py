@@ -512,6 +512,7 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
         st.error("❌ No se pudo encontrar tu registro como participante")
         return
         
+    try:
         participante = participante_res.data[0]
         
         # Layout en dos columnas
