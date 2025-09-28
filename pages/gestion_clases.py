@@ -373,14 +373,6 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
         if errores:
             st.warning(f"⚠️ Errores: {', '.join(errores)}")
             
-        if st.checkbox("Mostrar debug", key=f"debug_{form_key}"):
-            st.write("Datos del formulario:")
-            st.write(f"- Clase ID: {clase_id}")
-            st.write(f"- Día: {dia_semana}")
-            st.write(f"- Hora inicio: {hora_inicio}")
-            st.write(f"- Hora fin: {hora_fin}")
-            st.write(f"- Capacidad: {capacidad_maxima}")
-            
         # Botones
         col_btn1, col_btn2 = st.columns(2)
         
@@ -402,15 +394,11 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
             datos_horario = {
                 "clase_id": clase_id,
                 "dia_semana": dia_semana,
-                "hora_inicio": hora_inicio.isoformat(),
-                "hora_fin": hora_fin.isoformat(),
+                "hora_inicio": hora_inicio.strftime("%H:%M:%S"),  # Convertir a string formato HH:MM:SS
+                "hora_fin": hora_fin.strftime("%H:%M:%S"),        # Convertir a string formato HH:MM:SS
                 "capacidad_maxima": capacidad_maxima,
                 "activo": activo
             }
-            
-            st.write("Datos a enviar:", datos_horario)
-            
-            success, horario_id = clases_service.crear_horario(datos_horario)
             
             if es_creacion:
                 success, horario_id = clases_service.crear_horario(datos_horario)
