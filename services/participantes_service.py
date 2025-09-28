@@ -77,123 +77,82 @@ class ParticipantesService:
             ])
             
     def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
-        """CORREGIDO: Convierte auth_id a participante_id con validaciones y auto-corrección"""
+        """Versión corregida para datos inconsistentes"""
         try:
-            # Validación crítica
-            if not auth_id or auth_id == "None" or str(auth_id).strip() == "":
-                print(f"Error: auth_id inválido: {auth_id}")
-                return None
-            
-            # Verificar UUID válido
-            try:
-                uuid.UUID(str(auth_id))
-            except ValueError:
-                print(f"Error: auth_id no es un UUID válido: {auth_id}")
-                return None
-        
-            # Método 1: Buscar directamente por auth_id
+            # Método 1: Buscar por auth_id real (del auth de Supabase)
             result = self.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-            
             if result.data:
                 return result.data[0]["id"]
-        
-            # Método 2: Fallback por email + autocorrección
-            print(f"Participante no encontrado con auth_id {auth_id}, buscando por email...")
             
-            user_result = self.supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
-        
+            # Método 2: Buscar por email usando el usuario.id como referencia
+            user_result = self.supabase.table("usuarios").select("email, auth_id").eq("id", auth_id).execute()
+            
             if user_result.data:
                 email = user_result.data[0]["email"]
-                print(f"Email encontrado: {email}")
+                real_auth_id = user_result.data[0]["auth_id"]
                 
-                participante_result = self.supabase.table("participantes").select("id, auth_id").eq("email", email).execute()
-            
+                participante_result = self.supabase.table("participantes").select("id").eq("email", email).execute()
+                
                 if participante_result.data:
-                    participante = participante_result.data[0]
-                    participante_id = participante["id"]
-                    participante_auth_id = participante["auth_id"]
+                    participante_id = participante_result.data[0]["id"]
                     
-                    # AUTOCORRECCIÓN: Si no tiene auth_id, asignarlo
-                    if not participante_auth_id:
-                        print(f"Corrigiendo auth_id null para participante {participante_id}")
-                        
-                        update_result = self.supabase.table("participantes").update({
-                            "auth_id": auth_id
-                        }).eq("id", participante_id).execute()
-                        
-                        if update_result.data:
-                            print(f"Auth_id corregido exitosamente")
-                            return participante_id
-                        else:
-                            print("Error actualizando auth_id")
-                            return participante_id
-                    else:
-                        return participante_id
-        
-            print(f"No se encontró participante para auth_id: {auth_id}")
+                    # Corregir auth_id si es necesario
+                    self.supabase.table("participantes").update({
+                        "auth_id": real_auth_id
+                    }).eq("id", participante_id).execute()
+                    
+                    return participante_id
+            
             return None
-        
+            
         except Exception as e:
             print(f"Error obteniendo participante_id: {e}")
             return None
 
 def verificar_acceso_alumno(session_state, supabase):
-    """Verifica que el usuario tenga acceso al área de alumnos - CORREGIDO"""
-    # Si ya viene con rol alumno → OK
+    """Verifica acceso con corrección de datos inconsistentes"""
     if session_state.role == "alumno":
         return True
 
-    # Verificar que tenemos datos de usuario
     if not hasattr(session_state, 'user') or not session_state.user:
-        st.error("🔒 No se han encontrado datos de usuario")
+        st.error("No se encontraron datos de usuario")
         st.stop()
         return False
 
-    # Obtener auth_id con validaciones
-    auth_id = session_state.user.get("id")
+    auth_id = session_state.user.get("id")  # Este es el usuario.id, NO el auth_id real
     
-    # Debug: mostrar qué auth_id se está recibiendo
-    print(f"Debug - auth_id recibido: {auth_id} (tipo: {type(auth_id)})")
-    
-    if not auth_id or auth_id == "None":
-        st.error("🔒 No se ha encontrado usuario autenticado")
-        print(f"Error: auth_id inválido en session_state: {auth_id}")
+    if not auth_id:
+        st.error("Usuario no autenticado correctamente")
         st.stop()
         return False
 
     try:
-        # Verificar si el usuario es participante
-        participante_id = get_participante_id_from_auth(supabase, auth_id)
+        # CORREGIDO: Buscar participante por email, no por auth_id confuso
+        user_email = session_state.user.get("email")
         
-        if participante_id:
-            # Forzamos rol alumno
+        if not user_email:
+            st.error("Email de usuario no disponible")
+            st.stop()
+            return False
+        
+        # Buscar participante directamente por email
+        participante_result = supabase.table("participantes").select("id, auth_id").eq(
+            "email", user_email
+        ).execute()
+        
+        if participante_result.data:
+            participante_id = participante_result.data[0]["id"]
             session_state.role = "alumno"
+            session_state.participante_id = participante_id
             return True
         else:
-            # Si no es participante, mostrar información de debug
-            st.error("🔒 Acceso restringido al área de alumnos")
-            
-            # Información de debug para administradores
-            if session_state.role == "admin":
-                st.info(f"Debug info - auth_id: {auth_id}")
-                
-                # Verificar si existe en usuarios
-                user_check = supabase.table("usuarios").select("email, rol").eq("auth_id", auth_id).execute()
-                if user_check.data:
-                    st.info(f"Usuario encontrado: {user_check.data[0]['email']} (rol: {user_check.data[0]['rol']})")
-                else:
-                    st.warning("Usuario no encontrado en tabla usuarios")
-                
-                # Verificar participantes
-                participantes_check = supabase.table("participantes").select("email").limit(5).execute()
-                st.info(f"Hay {len(participantes_check.data or [])} participantes en total")
-            
+            st.error("Acceso restringido al área de alumnos")
+            st.write(f"No se encontró participante con email: {user_email}")
             st.stop()
             return False
             
     except Exception as e:
         st.error(f"Error verificando acceso: {e}")
-        print(f"Error en verificar_acceso_alumno: {e}")
         st.stop()
         return False
             
@@ -683,11 +642,11 @@ def verificar_acceso_alumno(session_state, supabase):
             return self._handle_query_error("participantes con grupos N:N", e)
             
     def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
-        """CORREGIDO: Usa grupo_id directo en lugar de tabla N:N"""
+        """Obtiene todos los grupos de un participante específico."""
         try:
             # Verificar que el participante existe
             participante_check = self.supabase.table("participantes").select(
-                "empresa_id, grupo_id"
+                "empresa_id, grupo_id"  # ← CORREGIDO: añadir grupo_id
             ).eq("id", participante_id).execute()
         
             if not participante_check.data:
