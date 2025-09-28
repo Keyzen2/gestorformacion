@@ -870,7 +870,7 @@ def main(supabase, session_state):
         mostrar_mi_perfil(participantes_service, clases_service, session_state)
 
     with tabs[4]:
-    mostrar_mis_diplomas(participantes_service, session_state)
+        mostrar_mis_diplomas(participantes_service, session_state)
 
 if __name__ == "__main__":
     st.error("Este archivo debe ser ejecutado desde app.py")
