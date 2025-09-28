@@ -10,22 +10,62 @@ class ClasesService:
         self.supabase = supabase
         self.session_state = session_state
         self.role = session_state.role
-        self.user_id = session_state.user.get("id") if hasattr(session_state, 'user') else None
-        self.empresa_id = session_state.user.get("empresa_id") if hasattr(session_state, 'user') else None
+        self.user_id = session_state.user.get("id") if hasattr(session_state, 'user') and session_state.user else None
+        self.empresa_id = session_state.user.get("empresa_id") if hasattr(session_state, 'user') and session_state.user else None
 
     # =========================
-    # CACHE MANAGEMENT
+    # GESTIÓN DE CACHE
     # =========================
     
     def limpiar_cache_clases(self):
         """Limpia el cache relacionado con clases"""
         try:
-            self.get_clases_con_empresa.clear()
-            self.get_horarios_con_clase.clear()
-            self.get_estadisticas_clases.clear()
+            if hasattr(self.get_clases_con_empresa, 'clear'):
+                self.get_clases_con_empresa.clear()
+            if hasattr(self.get_horarios_con_clase, 'clear'):
+                self.get_horarios_con_clase.clear()
+            if hasattr(self.get_estadisticas_clases, 'clear'):
+                self.get_estadisticas_clases.clear()
             st.cache_data.clear()
         except:
             pass
+
+    # =========================
+    # GESTIÓN DE EMPRESAS
+    # =========================
+    
+    def _get_empresas_gestionadas(self) -> List[str]:
+        """Obtiene IDs de empresas que gestiona el usuario actual"""
+        try:
+            if self.role != "gestor" or not self.empresa_id:
+                return []
+            
+            result = self.supabase.table("empresas").select("id").or_(
+                f"id.eq.{self.empresa_id},empresa_matriz_id.eq.{self.empresa_id}"
+            ).execute()
+            
+            return [emp["id"] for emp in result.data or []]
+            
+        except Exception as e:
+            print(f"Error obteniendo empresas gestionadas: {e}")
+            return [self.empresa_id] if self.empresa_id else []
+
+    def _puede_modificar_clase(self, clase_id: str) -> bool:
+        """Verifica si el usuario puede modificar una clase"""
+        try:
+            if self.role == "admin":
+                return True
+            
+            if self.role == "gestor" and self.empresa_id:
+                clase = self.supabase.table("clases").select("empresa_id").eq("id", clase_id).execute()
+                if clase.data:
+                    empresas_gestionadas = self._get_empresas_gestionadas()
+                    return clase.data[0]["empresa_id"] in empresas_gestionadas
+            
+            return False
+            
+        except:
+            return False
 
     # =========================
     # CRUD CLASES
@@ -69,22 +109,6 @@ class ClasesService:
         except Exception as e:
             print(f"Error cargando clases: {e}")
             return pd.DataFrame()
-
-    def _get_empresas_gestionadas(self) -> List[str]:
-        """Obtiene IDs de empresas que gestiona el usuario actual"""
-        try:
-            if self.role != "gestor" or not self.empresa_id:
-                return []
-            
-            result = self.supabase.table("empresas").select("id").or_(
-                f"id.eq.{self.empresa_id},empresa_matriz_id.eq.{self.empresa_id}"
-            ).execute()
-            
-            return [emp["id"] for emp in result.data or []]
-            
-        except Exception as e:
-            print(f"Error obteniendo empresas gestionadas: {e}")
-            return [self.empresa_id] if self.empresa_id else []
 
     def crear_clase(self, datos_clase: Dict) -> Tuple[bool, Optional[str]]:
         """Crea una nueva clase"""
@@ -178,23 +202,6 @@ class ClasesService:
         except Exception as e:
             return False
 
-    def _puede_modificar_clase(self, clase_id: str) -> bool:
-        """Verifica si el usuario puede modificar una clase"""
-        try:
-            if self.role == "admin":
-                return True
-            
-            if self.role == "gestor" and self.empresa_id:
-                clase = self.supabase.table("clases").select("empresa_id").eq("id", clase_id).execute()
-                if clase.data:
-                    empresas_gestionadas = self._get_empresas_gestionadas()
-                    return clase.data[0]["empresa_id"] in empresas_gestionadas
-            
-            return False
-            
-        except:
-            return False
-
     # =========================
     # GESTIÓN DE HORARIOS
     # =========================
@@ -267,6 +274,47 @@ class ClasesService:
         except Exception as e:
             return False, f"Error creando horario: {e}"
 
+    def actualizar_horario(self, horario_id: str, datos_horario: Dict) -> bool:
+        """Actualiza un horario existente"""
+        try:
+            if not self._validar_datos_horario({**datos_horario, "clase_id": "dummy"}):
+                return False
+            
+            result = self.supabase.table("clases_horarios").update(datos_horario).eq("id", horario_id).execute()
+            
+            if result.data:
+                self.limpiar_cache_clases()
+                return True
+                
+            return False
+            
+        except Exception as e:
+            return False
+
+    def eliminar_horario(self, horario_id: str) -> bool:
+        """Elimina un horario (solo si no tiene reservas futuras)"""
+        try:
+            # Verificar reservas futuras
+            hoy = datetime.now().date().isoformat()
+            reservas_futuras = self.supabase.table("clases_reservas").select("id").eq(
+                "horario_id", horario_id
+            ).gte("fecha_clase", hoy).neq("estado", "CANCELADA").execute()
+            
+            if reservas_futuras.data:
+                return False
+            
+            # Eliminar horario
+            result = self.supabase.table("clases_horarios").delete().eq("id", horario_id).execute()
+            
+            if result.data:
+                self.limpiar_cache_clases()
+                return True
+                
+            return False
+            
+        except Exception as e:
+            return False
+
     def _validar_datos_horario(self, datos: Dict) -> bool:
         """Valida datos de horario"""
         campos_obligatorios = ["clase_id", "dia_semana", "hora_inicio", "hora_fin", "capacidad_maxima"]
@@ -315,17 +363,14 @@ class ClasesService:
             
             result = query.execute()
             
-            for horario_existente in result.data or []:
-                # Aquí verificarías solapamiento de horas si es necesario
-                pass
-            
-            return False  # Por simplicidad, no verificamos solapamiento por ahora
+            # Por simplicidad, no verificamos solapamiento por ahora
+            return False
             
         except Exception as e:
             return True  # Asumir conflicto en caso de error
 
     # =========================
-    # SISTEMA DE RESERVAS
+    # GESTIÓN DE RESERVAS
     # =========================
     
     def crear_reserva(self, participante_id: str, horario_id: str, fecha_clase: date) -> Tuple[bool, Optional[str]]:
@@ -371,52 +416,6 @@ class ClasesService:
         except Exception as e:
             return False, f"Error creando reserva: {e}"
 
-    def _verificar_disponibilidad_clase(self, horario_id: str, fecha_clase: date) -> Dict:
-        """Verifica disponibilidad usando función SQL"""
-        try:
-            result = self.supabase.rpc("verificar_disponibilidad_clase", {
-                "p_horario_id": horario_id,
-                "p_fecha_clase": fecha_clase.isoformat()
-            }).execute()
-            
-            if result.data:
-                return result.data
-            
-            return {"disponible": False, "error": "Error verificando disponibilidad"}
-            
-        except Exception as e:
-            return {"disponible": False, "error": str(e)}
-
-    def _verificar_limite_mensual(self, participante_id: str) -> bool:
-        """Verifica si el participante puede reservar más clases este mes"""
-        try:
-            mes_actual = datetime.now().month
-            año_actual = datetime.now().year
-            
-            suscripcion = self.supabase.table("participantes_suscripciones").select(
-                "clases_mensuales, clases_usadas_mes"
-            ).eq("participante_id", participante_id).eq("activa", True).execute()
-            
-            if not suscripcion.data:
-                return False  # No tiene suscripción activa
-            
-            sub = suscripcion.data[0]
-            return sub["clases_usadas_mes"] < sub["clases_mensuales"]
-            
-        except Exception as e:
-            return False
-
-    def _incrementar_contador_mensual(self, participante_id: str):
-        """Incrementa el contador de clases usadas este mes"""
-        try:
-            self.supabase.table("participantes_suscripciones").update({
-                "clases_usadas_mes": self.supabase.table("participantes_suscripciones").select("clases_usadas_mes").eq("participante_id", participante_id).execute().data[0]["clases_usadas_mes"] + 1,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("participante_id", participante_id).eq("activa", True).execute()
-            
-        except Exception as e:
-            print(f"Error incrementando contador: {e}")
-
     def cancelar_reserva(self, reserva_id: str, participante_id: str) -> bool:
         """Cancela una reserva"""
         try:
@@ -427,15 +426,6 @@ class ClasesService:
             
             if not reserva.data:
                 return False
-            
-            # Verificar que se puede cancelar (por ejemplo, hasta 2 horas antes)
-            fecha_clase = datetime.fromisoformat(reserva.data[0]["fecha_clase"])
-            ahora = datetime.now()
-            
-            if fecha_clase.date() == ahora.date():
-                # Si es el mismo día, verificar que falten al menos 2 horas
-                # (Esto es un ejemplo, ajusta según tu política)
-                pass
             
             # Cancelar reserva
             result = self.supabase.table("clases_reservas").update({
@@ -453,76 +443,40 @@ class ClasesService:
         except Exception as e:
             return False
 
-    def _decrementar_contador_mensual(self, participante_id: str):
-        """Decrementa el contador de clases usadas este mes"""
+    def marcar_asistencia(self, reserva_id: str, asistio: bool) -> bool:
+        """Marca asistencia de un participante a una clase"""
         try:
-            # Obtener contador actual
-            suscripcion = self.supabase.table("participantes_suscripciones").select(
-                "clases_usadas_mes"
-            ).eq("participante_id", participante_id).eq("activa", True).execute()
+            nuevo_estado = "ASISTIO" if asistio else "NO_ASISTIO"
             
-            if suscripcion.data:
-                nuevo_contador = max(0, suscripcion.data[0]["clases_usadas_mes"] - 1)
-                
-                self.supabase.table("participantes_suscripciones").update({
-                    "clases_usadas_mes": nuevo_contador,
-                    "updated_at": datetime.utcnow().isoformat()
-                }).eq("participante_id", participante_id).eq("activa", True).execute()
+            result = self.supabase.table("clases_reservas").update({
+                "estado": nuevo_estado,
+                "updated_at": datetime.utcnow().isoformat()
+            }).eq("id", reserva_id).execute()
+            
+            return bool(result.data)
             
         except Exception as e:
-            print(f"Error decrementando contador: {e}")
-
-    def get_reservas_participante(self, participante_id: str, fecha_inicio: Optional[date] = None, fecha_fin: Optional[date] = None) -> pd.DataFrame:
-        """Obtiene reservas de un participante"""
-        try:
-            query = self.supabase.table("clases_reservas").select("""
-                id, fecha_clase, estado, fecha_reserva, notas,
-                clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima),
-                clases_horarios!inner(clases!inner(nombre, categoria, color_cronograma))
-            """).eq("participante_id", participante_id)
-            
-            if fecha_inicio:
-                query = query.gte("fecha_clase", fecha_inicio.isoformat())
-            if fecha_fin:
-                query = query.lte("fecha_clase", fecha_fin.isoformat())
-            
-            result = query.order("fecha_clase", "clases_horarios.hora_inicio").execute()
-            
-            if result.data:
-                reservas = []
-                dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                
-                for reserva in result.data:
-                    horario = reserva["clases_horarios"]
-                    clase = horario["clases"]
-                    
-                    reserva_flat = {
-                        "id": reserva["id"],
-                        "fecha_clase": reserva["fecha_clase"],
-                        "estado": reserva["estado"],
-                        "clase_nombre": clase["nombre"],
-                        "categoria": clase["categoria"],
-                        "dia_semana": dias_semana[horario["dia_semana"]],
-                        "hora_inicio": horario["hora_inicio"],
-                        "hora_fin": horario["hora_fin"],
-                        "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}",
-                        "color": clase["color_cronograma"],
-                        "notas": reserva.get("notas", "")
-                    }
-                    reservas.append(reserva_flat)
-                
-                return pd.DataFrame(reservas)
-            
-            return pd.DataFrame()
-            
-        except Exception as e:
-            print(f"Error obteniendo reservas: {e}")
-            return pd.DataFrame()
+            return False
 
     # =========================
     # GESTIÓN DE SUSCRIPCIONES
     # =========================
     
+    def get_suscripcion_participante(self, participante_id: str) -> Optional[Dict]:
+        """Obtiene suscripción activa de un participante"""
+        try:
+            result = self.supabase.table("participantes_suscripciones").select("*").eq(
+                "participante_id", participante_id
+            ).eq("activa", True).execute()
+            
+            if result.data:
+                return result.data[0]
+            return None
+            
+        except Exception as e:
+            print(f"Error obteniendo suscripción: {e}")
+            return None
+
     def activar_suscripcion(self, participante_id: str, empresa_id: str, clases_mensuales: int) -> bool:
         """Activa suscripción de un participante"""
         try:
@@ -576,19 +530,57 @@ class ClasesService:
         except Exception as e:
             return False
 
-    def get_suscripcion_participante(self, participante_id: str) -> Optional[Dict]:
-        """Obtiene suscripción activa de un participante"""
+    def _verificar_limite_mensual(self, participante_id: str) -> bool:
+        """Verifica si el participante puede reservar más clases este mes"""
         try:
-            result = self.supabase.table("participantes_suscripciones").select("*").eq(
-                "participante_id", participante_id
-            ).eq("activa", True).execute()
+            suscripcion = self.supabase.table("participantes_suscripciones").select(
+                "clases_mensuales, clases_usadas_mes"
+            ).eq("participante_id", participante_id).eq("activa", True).execute()
             
-            if result.data:
-                return result.data[0]
-            return None
+            if not suscripcion.data:
+                return False  # No tiene suscripción activa
+            
+            sub = suscripcion.data[0]
+            return sub["clases_usadas_mes"] < sub["clases_mensuales"]
             
         except Exception as e:
-            return None
+            return False
+
+    def _incrementar_contador_mensual(self, participante_id: str):
+        """Incrementa el contador de clases usadas este mes"""
+        try:
+            suscripcion = self.supabase.table("participantes_suscripciones").select(
+                "clases_usadas_mes"
+            ).eq("participante_id", participante_id).eq("activa", True).execute()
+            
+            if suscripcion.data:
+                nuevo_contador = suscripcion.data[0]["clases_usadas_mes"] + 1
+                
+                self.supabase.table("participantes_suscripciones").update({
+                    "clases_usadas_mes": nuevo_contador,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("participante_id", participante_id).eq("activa", True).execute()
+            
+        except Exception as e:
+            print(f"Error incrementando contador: {e}")
+
+    def _decrementar_contador_mensual(self, participante_id: str):
+        """Decrementa el contador de clases usadas este mes"""
+        try:
+            suscripcion = self.supabase.table("participantes_suscripciones").select(
+                "clases_usadas_mes"
+            ).eq("participante_id", participante_id).eq("activa", True).execute()
+            
+            if suscripcion.data:
+                nuevo_contador = max(0, suscripcion.data[0]["clases_usadas_mes"] - 1)
+                
+                self.supabase.table("participantes_suscripciones").update({
+                    "clases_usadas_mes": nuevo_contador,
+                    "updated_at": datetime.utcnow().isoformat()
+                }).eq("participante_id", participante_id).eq("activa", True).execute()
+            
+        except Exception as e:
+            print(f"Error decrementando contador: {e}")
 
     # =========================
     # CALENDARIO Y DISPONIBILIDAD
@@ -652,259 +644,108 @@ class ClasesService:
             print(f"Error generando calendario: {e}")
             return []
 
-    # =========================
-    # MÉTRICAS Y ESTADÍSTICAS
-    # =========================
-    
-    @st.cache_data(ttl=600)
-    def get_estadisticas_clases(_self, empresa_id: Optional[str] = None) -> Dict[str, Any]:
-        """Obtiene estadísticas de clases"""
+    def _verificar_disponibilidad_clase(self, horario_id: str, fecha_clase: date) -> Dict:
+        """Verifica disponibilidad usando función SQL o lógica básica"""
         try:
-            stats = {}
-            
-            # Filtro de empresa
-            if not empresa_id and _self.role == "gestor" and _self.empresa_id:
-                empresas_gestionadas = _self._get_empresas_gestionadas()
-                empresa_filter = empresas_gestionadas
-            elif empresa_id:
-                empresa_filter = [empresa_id]
-            else:
-                empresa_filter = None
-            
-            # Total de clases
-            clases_query = _self.supabase.table("clases").select("id, activa")
-            if empresa_filter:
-                clases_query = clases_query.in_("empresa_id", empresa_filter)
-            
-            clases_result = clases_query.execute()
-            clases_data = clases_result.data or []
-            
-            stats["total_clases"] = len(clases_data)
-            stats["clases_activas"] = sum(1 for clase in clases_data if clase.get("activa", True))
-            
-            # Reservas de hoy
-            hoy = datetime.now().date().isoformat()
-            reservas_hoy_query = _self.supabase.table("clases_reservas").select(
-                "id, clases_horarios!inner(clases!inner(empresa_id))"
-            ).eq("fecha_clase", hoy).neq("estado", "CANCELADA")
-            
-            if empresa_filter:
-                # Aquí necesitarías filtrar por empresa, pero es complejo con las relaciones
+            # Intentar usar función RPC si existe
+            try:
+                result = self.supabase.rpc("verificar_disponibilidad_clase", {
+                    "p_horario_id": horario_id,
+                    "p_fecha_clase": fecha_clase.isoformat()
+                }).execute()
+                
+                if result.data:
+                    return result.data
+            except:
+                # Si no existe la función, usar lógica básica
                 pass
             
-            reservas_hoy_result = reservas_hoy_query.execute()
-            stats["reservas_hoy"] = len(reservas_hoy_result.data or [])
+            # Lógica básica de disponibilidad
+            horario = self.supabase.table("clases_horarios").select("capacidad_maxima").eq("id", horario_id).execute()
             
-            # Participantes con suscripción activa
-            suscripciones_query = _self.supabase.table("participantes_suscripciones").select("id")
-            if empresa_filter:
-                suscripciones_query = suscripciones_query.in_("empresa_id", empresa_filter)
+            if not horario.data:
+                return {"disponible": False, "error": "Horario no encontrado"}
             
-            suscripciones_result = suscripciones_query.eq("activa", True).execute()
-            stats["participantes_suscritos"] = len(suscripciones_result.data or [])
+            capacidad_maxima = horario.data[0]["capacidad_maxima"]
             
-            # Tasa de ocupación promedio
-            stats["ocupacion_promedio"] = _self._calcular_ocupacion_promedio(empresa_filter)
+            # Contar reservas activas para esa fecha y horario
+            reservas = self.supabase.table("clases_reservas").select("id").eq(
+                "horario_id", horario_id
+            ).eq("fecha_clase", fecha_clase.isoformat()).neq("estado", "CANCELADA").execute()
             
-            return stats
+            reservas_actuales = len(reservas.data or [])
+            cupos_libres = capacidad_maxima - reservas_actuales
             
-        except Exception as e:
             return {
-                "total_clases": 0,
-                "clases_activas": 0,
-                "reservas_hoy": 0,
-                "participantes_suscritos": 0,
-                "ocupacion_promedio": 0
+                "disponible": cupos_libres > 0,
+                "cupos_libres": cupos_libres,
+                "reservas_actuales": reservas_actuales,
+                "capacidad_maxima": capacidad_maxima
             }
-
-    def _calcular_ocupacion_promedio(self, empresa_filter: Optional[List[str]] = None) -> float:
-        """Calcula ocupación promedio de clases"""
-        try:
-            # Implementación simplificada
-            fecha_inicio = (datetime.now() - timedelta(days=7)).date()
-            fecha_fin = datetime.now().date()
-            
-            # Obtener horarios
-            horarios_query = self.supabase.table("clases_horarios").select(
-                "id, capacidad_maxima, clases!inner(empresa_id)"
-            ).eq("activo", True)
-            
-            if empresa_filter:
-                horarios_query = horarios_query.in_("clases.empresa_id", empresa_filter)
-            
-            horarios_result = horarios_query.execute()
-            horarios = horarios_result.data or []
-            
-            if not horarios:
-                return 0.0
-            
-            total_ocupacion = 0
-            total_horarios = 0
-            
-            for horario in horarios:
-                # Calcular ocupación de este horario en el período
-                reservas = self.supabase.table("clases_reservas").select("id").eq(
-                    "horario_id", horario["id"]
-                ).gte("fecha_clase", fecha_inicio.isoformat()).lte(
-                    "fecha_clase", fecha_fin.isoformat()
-                ).neq("estado", "CANCELADA").execute()
-                
-                num_reservas = len(reservas.data or [])
-                dias_periodo = (fecha_fin - fecha_inicio).days + 1
-                capacidad_total = horario["capacidad_maxima"] * dias_periodo
-                
-                if capacidad_total > 0:
-                    ocupacion = (num_reservas / capacidad_total) * 100
-                    total_ocupacion += ocupacion
-                    total_horarios += 1
-            
-            return round(total_ocupacion / total_horarios, 1) if total_horarios > 0 else 0.0
             
         except Exception as e:
-            return 0.0
+            return {"disponible": False, "error": str(e)}
 
-    def get_participantes_por_clase(self, clase_id: str, fecha_inicio: date, fecha_fin: date) -> pd.DataFrame:
-        """Obtiene participantes de una clase en un período"""
+    # =========================
+    # MÉTODOS PARA PARTICIPANTES/ALUMNOS
+    # =========================
+    
+    def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
+        """Obtiene participante_id desde auth_id para compatibilidad"""
+        try:
+            # Buscar directamente por auth_id en participantes
+            result = self.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+            return result.data[0]["id"] if result.data else None
+        except Exception as e:
+            print(f"Error obteniendo participante desde auth_id: {e}")
+            return None
+
+    def get_reservas_participante(self, participante_id: str, fecha_inicio: Optional[date] = None, fecha_fin: Optional[date] = None) -> pd.DataFrame:
+        """Obtiene reservas de un participante"""
         try:
             query = self.supabase.table("clases_reservas").select("""
-                id, fecha_clase, estado,
-                participantes!inner(id, nombre, apellidos, email),
-                clases_horarios!inner(dia_semana, hora_inicio, hora_fin)
-            """).eq("clases_horarios.clase_id", clase_id).gte(
-                "fecha_clase", fecha_inicio.isoformat()
-            ).lte("fecha_clase", fecha_fin.isoformat())
+                id, fecha_clase, estado, fecha_reserva, notas,
+                clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima),
+                clases_horarios!inner(clases!inner(nombre, categoria, color_cronograma))
+            """).eq("participante_id", participante_id)
+            
+            if fecha_inicio:
+                query = query.gte("fecha_clase", fecha_inicio.isoformat())
+            if fecha_fin:
+                query = query.lte("fecha_clase", fecha_fin.isoformat())
             
             result = query.order("fecha_clase", "clases_horarios.hora_inicio").execute()
             
             if result.data:
-                participantes = []
+                reservas = []
                 dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
                 
                 for reserva in result.data:
-                    participante = reserva["participantes"]
                     horario = reserva["clases_horarios"]
+                    clase = horario["clases"]
                     
-                    participante_info = {
-                        "reserva_id": reserva["id"],
+                    reserva_flat = {
+                        "id": reserva["id"],
                         "fecha_clase": reserva["fecha_clase"],
                         "estado": reserva["estado"],
-                        "participante_id": participante["id"],
-                        "nombre_completo": f"{participante['nombre']} {participante['apellidos']}",
-                        "email": participante["email"],
+                        "clase_nombre": clase["nombre"],
+                        "categoria": clase["categoria"],
                         "dia_semana": dias_semana[horario["dia_semana"]],
-                        "horario": f"{horario['hora_inicio']} - {horario['hora_fin']}"
+                        "hora_inicio": horario["hora_inicio"],
+                        "hora_fin": horario["hora_fin"],
+                        "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}",
+                        "color": clase["color_cronograma"],
+                        "notas": reserva.get("notas", "")
                     }
-                    participantes.append(participante_info)
+                    reservas.append(reserva_flat)
                 
-                return pd.DataFrame(participantes)
+                return pd.DataFrame(reservas)
             
             return pd.DataFrame()
             
         except Exception as e:
-            print(f"Error obteniendo participantes por clase: {e}")
+            print(f"Error obteniendo reservas: {e}")
             return pd.DataFrame()
-
-    # =========================
-    # GESTIÓN DE AVATARS
-    # =========================
-    
-    def subir_avatar(self, participante_id: str, archivo_bytes: bytes, nombre_archivo: str, mime_type: str) -> Tuple[bool, Optional[str]]:
-        """Sube avatar de participante a Supabase Storage"""
-        try:
-            # Generar nombre único para el archivo
-            extension = nombre_archivo.split('.')[-1] if '.' in nombre_archivo else 'jpg'
-            nombre_unico = f"avatar_{participante_id}_{int(datetime.now().timestamp())}.{extension}"
-            
-            # Subir a Supabase Storage
-            resultado = self.supabase.storage.from_("avatars").upload(
-                nombre_unico, archivo_bytes, {"content-type": mime_type}
-            )
-            
-            if resultado:
-                # Obtener URL pública
-                url_publica = self.supabase.storage.from_("avatars").get_public_url(nombre_unico)
-                
-                # Guardar en base de datos
-                datos_avatar = {
-                    "id": str(uuid.uuid4()),
-                    "participante_id": participante_id,
-                    "archivo_nombre": nombre_archivo,
-                    "archivo_url": url_publica,
-                    "mime_type": mime_type,
-                    "tamaño_bytes": len(archivo_bytes)
-                }
-                
-                # Eliminar avatar anterior si existe
-                self.eliminar_avatar(participante_id)
-                
-                # Insertar nuevo avatar
-                resultado_db = self.supabase.table("participantes_avatars").insert(datos_avatar).execute()
-                
-                if resultado_db.data:
-                    return True, url_publica
-            
-            return False, None
-            
-        except Exception as e:
-            return False, f"Error subiendo avatar: {e}"
-
-    def eliminar_avatar(self, participante_id: str) -> bool:
-        """Elimina avatar existente de un participante"""
-        try:
-            # Obtener avatar actual
-            avatar_actual = self.supabase.table("participantes_avatars").select("*").eq(
-                "participante_id", participante_id
-            ).execute()
-            
-            if avatar_actual.data:
-                avatar = avatar_actual.data[0]
-                
-                # Eliminar de storage
-                nombre_archivo = avatar["archivo_url"].split("/")[-1]
-                self.supabase.storage.from_("avatars").remove([nombre_archivo])
-                
-                # Eliminar de base de datos
-                self.supabase.table("participantes_avatars").delete().eq(
-                    "participante_id", participante_id
-                ).execute()
-            
-            return True
-            
-        except Exception as e:
-            return False
-
-    def get_avatar_url(self, participante_id: str) -> Optional[str]:
-        """Obtiene URL del avatar de un participante"""
-        try:
-            result = self.supabase.table("participantes_avatars").select("archivo_url").eq(
-                "participante_id", participante_id
-            ).execute()
-            
-            if result.data:
-                return result.data[0]["archivo_url"]
-            return None
-            
-        except Exception as e:
-            return None
-
-    # =========================
-    # FUNCIONES DE ADMINISTRACIÓN
-    # =========================
-    
-    def marcar_asistencia(self, reserva_id: str, asistio: bool) -> bool:
-        """Marca asistencia de un participante a una clase"""
-        try:
-            nuevo_estado = "ASISTIO" if asistio else "NO_ASISTIO"
-            
-            result = self.supabase.table("clases_reservas").update({
-                "estado": nuevo_estado,
-                "updated_at": datetime.utcnow().isoformat()
-            }).eq("id", reserva_id).execute()
-            
-            return bool(result.data)
-            
-        except Exception as e:
-            return False
 
     def get_clases_disponibles_participante(self, participante_id: str, fecha_inicio: date, fecha_fin: date) -> List[Dict]:
         """Obtiene clases disponibles para un participante específico"""
@@ -980,50 +821,112 @@ class ClasesService:
         except Exception as e:
             return {}
 
-    def actualizar_horario(self, horario_id: str, datos_horario: Dict) -> bool:
-        """Actualiza un horario existente"""
+    # =========================
+    # MÉTRICAS Y ESTADÍSTICAS
+    # =========================
+    
+    @st.cache_data(ttl=600)
+    def get_estadisticas_clases(_self, empresa_id: Optional[str] = None) -> Dict[str, Any]:
+        """Obtiene estadísticas de clases"""
         try:
-            if not self._validar_datos_horario({**datos_horario, "clase_id": "dummy"}):
-                return False
+            stats = {}
             
-            # Verificar conflictos excluyendo el horario actual
-            datos_temp = datos_horario.copy()
-            datos_temp["clase_id"] = "dummy"  # Se validará en la función
+            # Filtro de empresa
+            if not empresa_id and _self.role == "gestor" and _self.empresa_id:
+                empresas_gestionadas = _self._get_empresas_gestionadas()
+                empresa_filter = empresas_gestionadas
+            elif empresa_id:
+                empresa_filter = [empresa_id]
+            else:
+                empresa_filter = None
             
-            result = self.supabase.table("clases_horarios").update(datos_horario).eq("id", horario_id).execute()
+            # Total de clases
+            clases_query = _self.supabase.table("clases").select("id, activa")
+            if empresa_filter:
+                clases_query = clases_query.in_("empresa_id", empresa_filter)
             
-            if result.data:
-                self.limpiar_cache_clases()
-                return True
-                
-            return False
+            clases_result = clases_query.execute()
+            clases_data = clases_result.data or []
             
-        except Exception as e:
-            return False
-
-    def eliminar_horario(self, horario_id: str) -> bool:
-        """Elimina un horario (solo si no tiene reservas futuras)"""
-        try:
-            # Verificar reservas futuras
+            stats["total_clases"] = len(clases_data)
+            stats["clases_activas"] = sum(1 for clase in clases_data if clase.get("activa", True))
+            
+            # Reservas de hoy
             hoy = datetime.now().date().isoformat()
-            reservas_futuras = self.supabase.table("clases_reservas").select("id").eq(
-                "horario_id", horario_id
-            ).gte("fecha_clase", hoy).neq("estado", "CANCELADA").execute()
+            reservas_hoy_query = _self.supabase.table("clases_reservas").select(
+                "id, clases_horarios!inner(clases!inner(empresa_id))"
+            ).eq("fecha_clase", hoy).neq("estado", "CANCELADA")
             
-            if reservas_futuras.data:
-                return False
+            reservas_hoy_result = reservas_hoy_query.execute()
+            stats["reservas_hoy"] = len(reservas_hoy_result.data or [])
             
-            # Eliminar horario
-            result = self.supabase.table("clases_horarios").delete().eq("id", horario_id).execute()
+            # Participantes con suscripción activa
+            suscripciones_query = _self.supabase.table("participantes_suscripciones").select("id")
+            if empresa_filter:
+                suscripciones_query = suscripciones_query.in_("empresa_id", empresa_filter)
             
-            if result.data:
-                self.limpiar_cache_clases()
-                return True
-                
-            return False
+            suscripciones_result = suscripciones_query.eq("activa", True).execute()
+            stats["participantes_suscritos"] = len(suscripciones_result.data or [])
+            
+            # Tasa de ocupación promedio
+            stats["ocupacion_promedio"] = _self._calcular_ocupacion_promedio(empresa_filter)
+            
+            return stats
             
         except Exception as e:
-            return False
+            return {
+                "total_clases": 0,
+                "clases_activas": 0,
+                "reservas_hoy": 0,
+                "participantes_suscritos": 0,
+                "ocupacion_promedio": 0
+            }
+
+    def _calcular_ocupacion_promedio(self, empresa_filter: Optional[List[str]] = None) -> float:
+        """Calcula ocupación promedio de clases"""
+        try:
+            # Implementación simplificada
+            fecha_inicio = (datetime.now() - timedelta(days=7)).date()
+            fecha_fin = datetime.now().date()
+            
+            # Obtener horarios
+            horarios_query = self.supabase.table("clases_horarios").select(
+                "id, capacidad_maxima, clases!inner(empresa_id)"
+            ).eq("activo", True)
+            
+            if empresa_filter:
+                horarios_query = horarios_query.in_("clases.empresa_id", empresa_filter)
+            
+            horarios_result = horarios_query.execute()
+            horarios = horarios_result.data or []
+            
+            if not horarios:
+                return 0.0
+            
+            total_ocupacion = 0
+            total_horarios = 0
+            
+            for horario in horarios:
+                # Calcular ocupación de este horario en el período
+                reservas = self.supabase.table("clases_reservas").select("id").eq(
+                    "horario_id", horario["id"]
+                ).gte("fecha_clase", fecha_inicio.isoformat()).lte(
+                    "fecha_clase", fecha_fin.isoformat()
+                ).neq("estado", "CANCELADA").execute()
+                
+                num_reservas = len(reservas.data or [])
+                dias_periodo = (fecha_fin - fecha_inicio).days + 1
+                capacidad_total = horario["capacidad_maxima"] * dias_periodo
+                
+                if capacidad_total > 0:
+                    ocupacion = (num_reservas / capacidad_total) * 100
+                    total_ocupacion += ocupacion
+                    total_horarios += 1
+            
+            return round(total_ocupacion / total_horarios, 1) if total_horarios > 0 else 0.0
+            
+        except Exception as e:
+            return 0.0
 
     def get_ocupacion_detallada(self, fecha_inicio: date, fecha_fin: date, empresa_id: Optional[str] = None) -> pd.DataFrame:
         """Obtiene ocupación detallada por clase y horario"""
@@ -1087,18 +990,97 @@ class ClasesService:
             print(f"Error obteniendo ocupación detallada: {e}")
             return pd.DataFrame()
 
-    def reset_contadores_mensuales_manual(self) -> Tuple[bool, str]:
-        """Reset manual de contadores mensuales (para testing/admin)"""
+    # =========================
+    # FUNCIONES DE ADMINISTRACIÓN
+    # =========================
+    
+    def get_participantes_por_clase(self, clase_id: str, fecha_inicio: date, fecha_fin: date) -> pd.DataFrame:
+        """Obtiene participantes de una clase en un período"""
         try:
-            result = self.supabase.rpc("reset_clases_mensuales").execute()
+            query = self.supabase.table("clases_reservas").select("""
+                id, fecha_clase, estado,
+                participantes!inner(id, nombre, apellidos, email),
+                clases_horarios!inner(dia_semana, hora_inicio, hora_fin)
+            """).eq("clases_horarios.clase_id", clase_id).gte(
+                "fecha_clase", fecha_inicio.isoformat()
+            ).lte("fecha_clase", fecha_fin.isoformat())
             
-            if result:
-                return True, "Contadores mensuales reseteados correctamente"
-            else:
-                return False, "Error ejecutando reset"
+            result = query.order("fecha_clase", "clases_horarios.hora_inicio").execute()
+            
+            if result.data:
+                participantes = []
+                dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
                 
+                for reserva in result.data:
+                    participante = reserva["participantes"]
+                    horario = reserva["clases_horarios"]
+                    
+                    participante_info = {
+                        "reserva_id": reserva["id"],
+                        "fecha_clase": reserva["fecha_clase"],
+                        "estado": reserva["estado"],
+                        "participante_id": participante["id"],
+                        "nombre_completo": f"{participante['nombre']} {participante['apellidos']}",
+                        "email": participante["email"],
+                        "dia_semana": dias_semana[horario["dia_semana"]],
+                        "horario": f"{horario['hora_inicio']} - {horario['hora_fin']}"
+                    }
+                    participantes.append(participante_info)
+                
+                return pd.DataFrame(participantes)
+            
+            return pd.DataFrame()
+            
         except Exception as e:
-            return False, f"Error en reset manual: {e}"
+            print(f"Error obteniendo participantes por clase: {e}")
+            return pd.DataFrame()
+
+    def exportar_datos_clases(self, fecha_inicio: date, fecha_fin: date, tipo_export: str = "reservas") -> pd.DataFrame:
+        """Exporta datos de clases para análisis"""
+        try:
+            if tipo_export == "reservas":
+                # Exportar todas las reservas del período
+                query = self.supabase.table("clases_reservas").select("""
+                    id, fecha_clase, estado, fecha_reserva,
+                    participantes!inner(nombre, apellidos, email),
+                    clases_horarios!inner(dia_semana, hora_inicio, hora_fin,
+                        clases!inner(nombre, categoria))
+                """).gte("fecha_clase", fecha_inicio.isoformat()).lte("fecha_clase", fecha_fin.isoformat())
+                
+                result = query.execute()
+                
+                if result.data:
+                    export_data = []
+                    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                    
+                    for reserva in result.data:
+                        participante = reserva["participantes"]
+                        horario = reserva["clases_horarios"]
+                        clase = horario["clases"]
+                        
+                        row = {
+                            "Fecha Clase": reserva["fecha_clase"],
+                            "Clase": clase["nombre"],
+                            "Categoría": clase["categoria"],
+                            "Día Semana": dias_semana[horario["dia_semana"]],
+                            "Horario": f"{horario['hora_inicio']} - {horario['hora_fin']}",
+                            "Participante": f"{participante['nombre']} {participante['apellidos']}",
+                            "Email": participante["email"],
+                            "Estado": reserva["estado"],
+                            "Fecha Reserva": reserva["fecha_reserva"]
+                        }
+                        export_data.append(row)
+                    
+                    return pd.DataFrame(export_data)
+            
+            elif tipo_export == "ocupacion":
+                return self.get_ocupacion_detallada(fecha_inicio, fecha_fin)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            print(f"Error exportando datos: {e}")
+            return pd.DataFrame()
 
     def get_alertas_sistema(self) -> List[Dict[str, str]]:
         """Obtiene alertas del sistema de clases"""
@@ -1149,53 +1131,6 @@ class ClasesService:
             
         except Exception as e:
             return [{"tipo": "ERROR", "mensaje": f"Error obteniendo alertas: {e}"}]
-
-    def exportar_datos_clases(self, fecha_inicio: date, fecha_fin: date, tipo_export: str = "reservas") -> pd.DataFrame:
-        """Exporta datos de clases para análisis"""
-        try:
-            if tipo_export == "reservas":
-                # Exportar todas las reservas del período
-                query = self.supabase.table("clases_reservas").select("""
-                    id, fecha_clase, estado, fecha_reserva,
-                    participantes!inner(nombre, apellidos, email),
-                    clases_horarios!inner(dia_semana, hora_inicio, hora_fin,
-                        clases!inner(nombre, categoria))
-                """).gte("fecha_clase", fecha_inicio.isoformat()).lte("fecha_clase", fecha_fin.isoformat())
-                
-                result = query.execute()
-                
-                if result.data:
-                    export_data = []
-                    dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                    
-                    for reserva in result.data:
-                        participante = reserva["participantes"]
-                        horario = reserva["clases_horarios"]
-                        clase = horario["clases"]
-                        
-                        row = {
-                            "Fecha Clase": reserva["fecha_clase"],
-                            "Clase": clase["nombre"],
-                            "Categoría": clase["categoria"],
-                            "Día Semana": dias_semana[horario["dia_semana"]],
-                            "Horario": f"{horario['hora_inicio']} - {horario['hora_fin']}",
-                            "Participante": f"{participante['nombre']} {participante['apellidos']}",
-                            "Email": participante["email"],
-                            "Estado": reserva["estado"],
-                            "Fecha Reserva": reserva["fecha_reserva"]
-                        }
-                        export_data.append(row)
-                    
-                    return pd.DataFrame(export_data)
-            
-            elif tipo_export == "ocupacion":
-                return self.get_ocupacion_detallada(fecha_inicio, fecha_fin)
-            
-            return pd.DataFrame()
-            
-        except Exception as e:
-            print(f"Error exportando datos: {e}")
-            return pd.DataFrame()
 
 
 def get_clases_service(supabase, session_state) -> ClasesService:
