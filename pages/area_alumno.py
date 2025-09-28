@@ -54,19 +54,36 @@ def get_participante_id_from_auth(supabase, auth_id):
 # TAB 1: MIS GRUPOS FUNDAE
 # =========================
 def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_state):
-    """Muestra los grupos FUNDAE del participante (funcionalidad existente mejorada)."""
+    """Muestra los grupos FUNDAE del participante - VERSIÓN CORREGIDA"""
     st.header("📚 Mis Grupos FUNDAE")
     
-    # CORREGIDO: Usar auth_id directamente
+    # Debug del session_state
+    debug_session_state(session_state)
+    
     auth_id = session_state.user.get('id')
+    
+    if not auth_id or auth_id == "None":
+        st.error("❌ No se pudo obtener tu identificador de usuario")
+        return
+    
     participante_id = get_participante_id_from_auth(grupos_service.supabase, auth_id)
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
+        
+        # Información de ayuda
+        st.info("""
+        **Posibles causas:**
+        - Tu cuenta no está registrada como participante
+        - Falta la relación entre tu usuario y el registro de participante
+        - El administrador aún no ha completado tu perfil
+        
+        **Solución:** Contacta con el administrador del sistema.
+        """)
         return
-    
+
     try:
-        # Usar el participante_id obtenido correctamente
+        # Resto de la función igual...
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
         
         if df_grupos.empty:
@@ -181,11 +198,15 @@ def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
 # TAB 2: MIS CLASES RESERVADAS
 # =========================
 def mostrar_mis_clases_reservadas(clases_service, session_state):
-    """Muestra las clases que tiene reservadas el participante."""
+    """Muestra las clases reservadas - VERSIÓN CORREGIDA"""
     st.header("🏃‍♀️ Mis Clases Reservadas")
     
-    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
+    
+    if not auth_id or auth_id == "None":
+        st.error("❌ No se pudo obtener tu identificador de usuario")
+        return
+    
     participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
     
     if not participante_id:
@@ -359,10 +380,15 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
 # TAB 3: RESERVAR CLASES
 # =========================   
 def mostrar_reservar_clases(clases_service, session_state):
-    """Interfaz para reservar nuevas clases."""
+    """Reservar clases - VERSIÓN CORREGIDA"""
     st.header("📅 Reservar Clases")
     
     auth_id = session_state.user.get('id')
+    
+    if not auth_id or auth_id == "None":
+        st.error("❌ No se pudo obtener tu identificador de usuario")
+        return
+    
     participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
     
     if not participante_id:
@@ -501,11 +527,15 @@ def mostrar_reservar_clases(clases_service, session_state):
 # TAB 4: MI PERFIL
 # =========================
 def mostrar_mi_perfil(participantes_service, clases_service, session_state):
-    """Gestión del perfil del participante."""
+    """Mi perfil - VERSIÓN CORREGIDA"""
     st.header("👤 Mi Perfil")
     
-    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
+    
+    if not auth_id or auth_id == "None":
+        st.error("❌ No se pudo obtener tu identificador de usuario")
+        return
+    
     participante_id = get_participante_id_from_auth(participantes_service.supabase, auth_id)
     
     if not participante_id:
@@ -513,7 +543,10 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
         return
         
     try:
-        participante = participante_res.data[0]
+        participante_res = participantes_service.supabase.table("participantes").select("""
+            id, nombre, apellidos, email, telefono, nif, fecha_nacimiento, sexo,
+            empresa:empresas(nombre, tipo_empresa)
+        """).eq("id", participante_id).execute()
         
         # Layout en dos columnas
         col1, col2 = st.columns([1, 2])
