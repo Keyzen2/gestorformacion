@@ -252,27 +252,52 @@ class ClasesService:
     def crear_horario(self, datos_horario: Dict) -> Tuple[bool, Optional[str]]:
         """Crea un nuevo horario"""
         try:
+            # 1. Verificar que la clase existe y tenemos permisos
+            clase_check = self.supabase.table("clases").select("empresa_id, nombre").eq(
+                "id", datos_horario.get("clase_id")
+            ).execute()
+            
+            if not clase_check.data:
+                return False, "Clase no encontrada"
+            
+            clase_empresa_id = clase_check.data[0]["empresa_id"]
+            clase_nombre = clase_check.data[0]["nombre"]
+            
+            # 2. Verificar permisos sobre la clase
+            if self.role == "gestor" and self.empresa_id:
+                empresas_permitidas = self._get_empresas_gestionadas()
+                if clase_empresa_id not in empresas_permitidas:
+                    return False, f"No tienes permisos para modificar la clase '{clase_nombre}'"
+            
+            # 3. Generar ID y añadir a datos
             horario_id = str(uuid.uuid4())
             datos_horario["id"] = horario_id
             
-            # Validaciones
+            # 4. Debug: mostrar datos que se van a validar
+            print(f"Validando horario para clase: {clase_nombre}")
+            print(f"Datos: {datos_horario}")
+            
+            # 5. Validaciones de datos
             if not self._validar_datos_horario(datos_horario):
-                return False, "Datos de horario inválidos"
+                return False, "Datos de horario inválidos - verifica día, horas y capacidad"
             
-            # Verificar conflictos
+            # 6. Verificar conflictos de horario
             if self._verificar_conflicto_horario(datos_horario):
-                return False, "Ya existe un horario en ese día y hora para esta clase"
+                return False, f"Ya existe un horario activo en {datos_horario.get('dia_semana')} para esta clase"
             
+            # 7. Insertar en base de datos
             result = self.supabase.table("clases_horarios").insert(datos_horario).execute()
             
             if result.data:
                 self.limpiar_cache_clases()
+                print(f"Horario creado exitosamente: {horario_id}")
                 return True, horario_id
-            
-            return False, None
+            else:
+                return False, "Error al guardar en base de datos"
             
         except Exception as e:
-            return False, f"Error creando horario: {e}"
+            print(f"Error completo en crear_horario: {e}")
+            return False, f"Error creando horario: {str(e)}"
 
     def actualizar_horario(self, horario_id: str, datos_horario: Dict) -> bool:
         """Actualiza un horario existente"""
@@ -316,40 +341,65 @@ class ClasesService:
             return False
 
     def _validar_datos_horario(self, datos: Dict) -> bool:
-        """Valida datos de horario"""
-        campos_obligatorios = ["clase_id", "dia_semana", "hora_inicio", "hora_fin", "capacidad_maxima"]
-        
-        for campo in campos_obligatorios:
-            if campo not in datos:
-                return False
-        
-        # Validar día de semana
-        if not (0 <= datos["dia_semana"] <= 6):
-            return False
-        
-        # Validar capacidad
-        if datos["capacidad_maxima"] < 1:
-            return False
-        
-        # Validar horas
+        """Valida datos de horario con debug mejorado"""
         try:
-            if isinstance(datos["hora_inicio"], str):
-                hora_inicio = datetime.strptime(datos["hora_inicio"], "%H:%M").time()
-            else:
-                hora_inicio = datos["hora_inicio"]
-                
-            if isinstance(datos["hora_fin"], str):
-                hora_fin = datetime.strptime(datos["hora_fin"], "%H:%M").time()
-            else:
-                hora_fin = datos["hora_fin"]
-                
-            if hora_inicio >= hora_fin:
+            campos_obligatorios = ["clase_id", "dia_semana", "hora_inicio", "hora_fin", "capacidad_maxima"]
+            
+            # Verificar campos obligatorios
+            for campo in campos_obligatorios:
+                if campo not in datos or datos[campo] is None:
+                    print(f"Campo faltante o nulo: {campo}")
+                    return False
+            
+            # Validar día de semana (0=Lunes, 6=Domingo)
+            dia_semana = datos["dia_semana"]
+            if not isinstance(dia_semana, int) or not (0 <= dia_semana <= 6):
+                print(f"Día de semana inválido: {dia_semana} (debe ser 0-6)")
                 return False
+            
+            # Validar capacidad
+            capacidad = datos["capacidad_maxima"]
+            if not isinstance(capacidad, int) or capacidad < 1:
+                print(f"Capacidad inválida: {capacidad} (debe ser >= 1)")
+                return False
+            
+            # Validar y convertir horas
+            try:
+                hora_inicio_str = datos["hora_inicio"]
+                hora_fin_str = datos["hora_fin"]
                 
-        except ValueError:
-            return False
+                # Convertir a objetos time si son strings
+                if isinstance(hora_inicio_str, str):
+                    if len(hora_inicio_str) == 5:  # "HH:MM"
+                        hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M").time()
+                    else:
+                        hora_inicio = datetime.fromisoformat(hora_inicio_str).time()
+                else:
+                    hora_inicio = hora_inicio_str
+                    
+                if isinstance(hora_fin_str, str):
+                    if len(hora_fin_str) == 5:  # "HH:MM"
+                        hora_fin = datetime.strptime(hora_fin_str, "%H:%M").time()
+                    else:
+                        hora_fin = datetime.fromisoformat(hora_fin_str).time()
+                else:
+                    hora_fin = hora_fin_str
+                
+                # Verificar que hora_fin > hora_inicio
+                if hora_inicio >= hora_fin:
+                    print(f"Horas inválidas: inicio {hora_inicio} >= fin {hora_fin}")
+                    return False
+                    
+                print(f"Horario válido: {hora_inicio} - {hora_fin}")
+                return True
+                
+            except (ValueError, TypeError) as e:
+                print(f"Error procesando horas: {e}")
+                return False
         
-        return True
+        except Exception as e:
+            print(f"Error en validación: {e}")
+            return False
 
     def _verificar_conflicto_horario(self, datos: Dict, horario_excluir: Optional[str] = None) -> bool:
         """Verifica si hay conflicto de horarios"""
