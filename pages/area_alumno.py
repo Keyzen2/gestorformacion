@@ -617,25 +617,68 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 def main(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
-    # FORZAR RECARGA COMPLETA
-    modules_to_reload = [
-        'services.participantes_service',
-        'services.clases_service',
-        'services.grupos_service'
-    ]
-    
-    for module_name in modules_to_reload:
-        if module_name in sys.modules:
-            importlib.reload(sys.modules[module_name])
-    
     # Verificar acceso
     if not verificar_acceso_alumno(session_state, supabase):
         return
     
-    # Cargar servicios
-    participantes_service = get_participantes_service(supabase, session_state)
-    grupos_service = get_grupos_service(supabase, session_state)
-    clases_service = get_clases_service(supabase, session_state)
+    # CARGA ROBUSTA DE SERVICIOS con verificación y recarga
+    try:
+        # Intentar carga normal
+        participantes_service = get_participantes_service(supabase, session_state)
+        
+        # Verificar que el servicio tiene los métodos necesarios
+        if not hasattr(participantes_service, 'get_grupos_de_participante'):
+            st.warning("⚠️ Recargando servicios...")
+            
+            # Forzar recarga del módulo
+            import importlib
+            import sys
+            
+            modules_to_reload = [
+                'services.participantes_service',
+                'services.grupos_service', 
+                'services.clases_service'
+            ]
+            
+            for module_name in modules_to_reload:
+                if module_name in sys.modules:
+                    importlib.reload(sys.modules[module_name])
+            
+            # Reimportar después de la recarga
+            from services.participantes_service import get_participantes_service
+            from services.grupos_service import get_grupos_service
+            from services.clases_service import get_clases_service
+            
+            # Recrear servicios
+            participantes_service = get_participantes_service(supabase, session_state)
+            grupos_service = get_grupos_service(supabase, session_state)
+            clases_service = get_clases_service(supabase, session_state)
+            
+            # Verificar nuevamente
+            if not hasattr(participantes_service, 'get_grupos_de_participante'):
+                st.error("❌ Error crítico: No se pudo cargar el servicio de participantes correctamente")
+                st.info("Intenta recargar la página o contacta al administrador")
+                return
+            else:
+                st.success("✅ Servicios recargados correctamente")
+        else:
+            # Carga normal exitosa
+            grupos_service = get_grupos_service(supabase, session_state)
+            clases_service = get_clases_service(supabase, session_state)
+    
+    except Exception as e:
+        st.error(f"❌ Error cargando servicios: {e}")
+        st.info("Intenta recargar la página")
+        return
+    
+    # Debug opcional
+    if st.sidebar.checkbox("🔧 Mostrar debug", value=False):
+        with st.sidebar.expander("Debug Info"):
+            st.write("**Servicios cargados:**")
+            st.write(f"- Participantes: {type(participantes_service).__name__}")
+            st.write(f"- Grupos: {type(grupos_service).__name__}")
+            st.write(f"- Clases: {type(clases_service).__name__}")
+            st.write(f"- Método grupos disponible: {hasattr(participantes_service, 'get_grupos_de_participante')}")
     
     # Mostrar información del usuario
     st.caption(
