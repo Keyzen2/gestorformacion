@@ -142,9 +142,29 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                     empresa_id = empresa_options.get(empresa_seleccionada) if empresa_seleccionada else None
                     
                 else:
-                    # Para gestores, usar su empresa automáticamente
+                    # Para gestores, obtener nombre de empresa
                     empresa_id = session_state.user.get("empresa_id")
-                    st.info(f"Empresa: {session_state.user.get('empresa_nombre', 'Tu empresa')}")
+                    
+                    if empresa_id:
+                        try:
+                            # Buscar nombre de empresa en el DataFrame ya cargado
+                            df_empresas = empresas_service.get_empresas_con_jerarquia()
+                            empresa_row = df_empresas[df_empresas["id"] == empresa_id]
+                            
+                            if not empresa_row.empty:
+                                empresa_nombre = empresa_row.iloc[0]["nombre"]
+                            else:
+                                # Fallback: consulta directa
+                                empresa_info = empresas_service.supabase.table("empresas").select("nombre").eq("id", empresa_id).execute()
+                                empresa_nombre = empresa_info.data[0]["nombre"] if empresa_info.data else "Empresa no encontrada"
+                        except Exception as e:
+                            print(f"Error cargando empresa: {e}")
+                            empresa_nombre = "Error cargando empresa"
+                    else:
+                        empresa_nombre = "Sin empresa asignada"
+                        empresa_id = None
+                    
+                    st.info(f"Empresa: {empresa_nombre}")
                 
                 color_cronograma = st.color_picker(
                     "Color en cronograma",
@@ -390,30 +410,33 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
                 eliminar = False
         
         # Procesamiento
-        if submitted and not errores:
-            datos_horario = {
-                "clase_id": clase_id,
-                "dia_semana": dia_semana,
-                "hora_inicio": hora_inicio.strftime("%H:%M:%S"),  # Convertir a string formato HH:MM:SS
-                "hora_fin": hora_fin.strftime("%H:%M:%S"),        # Convertir a string formato HH:MM:SS
-                "capacidad_maxima": capacidad_maxima,
-                "activo": activo
-            }
-            
-            if es_creacion:
-                success, horario_id = clases_service.crear_horario(datos_horario)
-                if success:
-                    st.success("✅ Horario creado correctamente")
-                    st.rerun()
-                else:
-                    st.error("❌ Error creando el horario")
+        if submitted:
+            if errores:
+                st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
             else:
-                success = clases_service.actualizar_horario(horario_data["id"], datos_horario)
-                if success:
-                    st.success("✅ Horario actualizado correctamente")
-                    st.rerun()
+                datos_horario = {
+                    "clase_id": clase_id,
+                    "dia_semana": dia_semana,
+                    "hora_inicio": hora_inicio.strftime("%H:%M:%S"),
+                    "hora_fin": hora_fin.strftime("%H:%M:%S"),
+                    "capacidad_maxima": capacidad_maxima,
+                    "activo": activo
+                }
+                
+                if es_creacion:
+                    success, mensaje = clases_service.crear_horario(datos_horario)
+                    if success:
+                        st.success("✅ Horario creado correctamente")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Error creando el horario: {mensaje}")
                 else:
-                    st.error("❌ Error actualizando el horario")
+                    success = clases_service.actualizar_horario(horario_data["id"], datos_horario)
+                    if success:
+                        st.success("✅ Horario actualizado correctamente")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error actualizando el horario")
         
         if eliminar:
             if st.session_state.get(f"confirmar_eliminar_horario_{horario_data['id']}"):
