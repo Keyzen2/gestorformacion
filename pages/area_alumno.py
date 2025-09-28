@@ -723,6 +723,53 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
     except Exception as e:
         st.error(f"❌ Error cargando información del perfil: {e}")
 
+def mostrar_mis_diplomas(participantes_service, session_state):
+    """Muestra los diplomas del participante desde el bucket"""
+    st.header("📜 Mis Diplomas")
+    
+    participante_id = getattr(session_state, 'participante_id', None)
+    if not participante_id:
+        st.error("No se pudo identificar tu registro como participante")
+        return
+    
+    try:
+        diplomas_res = participantes_service.supabase.table("diplomas").select("""
+            id, archivo_nombre, archivo_url, created_at,
+            grupo:grupos(codigo_grupo, accion_formativa:acciones_formativas(nombre))
+        """).eq("participante_id", participante_id).order("created_at", desc=True).execute()
+        
+        if not diplomas_res.data:
+            st.info("📭 No tienes diplomas disponibles aún")
+            return
+        
+        st.success(f"Tienes {len(diplomas_res.data)} diploma(s)")
+        
+        for diploma in diplomas_res.data:
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.markdown(f"**📜 {diploma.get('archivo_nombre','Diploma')}**")
+                    if diploma.get('grupo'):
+                        grupo = diploma['grupo']
+                        st.caption(f"Grupo: {grupo.get('codigo_grupo','')}")
+                        if grupo.get('accion_formativa'):
+                            st.caption(f"Curso: {grupo['accion_formativa'].get('nombre','')}")
+                
+                with col2:
+                    if diploma.get('created_at'):
+                        fecha = pd.to_datetime(diploma['created_at']).strftime('%d/%m/%Y')
+                        st.write(f"📅 Emitido: {fecha}")
+                
+                with col3:
+                    if diploma.get('archivo_url'):
+                        st.link_button("📥 Descargar", diploma['archivo_url'], use_container_width=True)
+                    else:
+                        st.button("Sin archivo", disabled=True, use_container_width=True)
+    
+    except Exception as e:
+        st.error(f"❌ Error cargando diplomas: {e}")
+
 # =========================
 # MAIN FUNCTION
 # =========================
@@ -806,7 +853,8 @@ def main(supabase, session_state):
         "📚 Mis Grupos FUNDAE",
         "🏃‍♀️ Mis Clases", 
         "📅 Reservar Clases",
-        "👤 Mi Perfil"
+        "👤 Mi Perfil",
+        "📜 Mis Diplomas"
     ])
     
     with tabs[0]:
@@ -820,6 +868,9 @@ def main(supabase, session_state):
     
     with tabs[3]:
         mostrar_mi_perfil(participantes_service, clases_service, session_state)
+
+    with tabs[4]:
+    mostrar_mis_diplomas(participantes_service, session_state)
 
 if __name__ == "__main__":
     st.error("Este archivo debe ser ejecutado desde app.py")
