@@ -719,9 +719,9 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
         
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
-        
-        except Exception as e:
-            st.error(f"❌ Error cargando información del perfil: {e}")
+
+    except Exception as e:
+        st.error(f"❌ Error cargando información del perfil: {e}")
 
 # =========================
 # MAIN FUNCTION
