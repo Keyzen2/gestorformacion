@@ -522,89 +522,99 @@ def mostrar_reservar_clases(clases_service, session_state):
 def mostrar_mi_perfil(participantes_service, clases_service, session_state):
     """Mi perfil - VERSIÓN CORREGIDA"""
     st.header("👤 Mi Perfil")
-    
+
     # CORREGIDO: Obtener participante_id de forma más robusta
     participante_id = None
-    
-    if hasattr(session_state, 'participante_id'):
+
+    if hasattr(session_state, "participante_id"):
         participante_id = session_state.participante_id
     else:
-        auth_id = session_state.user.get('id')
+        auth_id = session_state.user.get("id")
         participante_id = participantes_service.get_participante_id_from_auth(auth_id)
         if participante_id:
             session_state.participante_id = participante_id
-    
+
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
         return
-        
+
     try:
         # Obtener datos del participante
-        participante_res = participantes_service.supabase.table("participantes").select("""
+        participante_res = participantes_service.supabase.table("participantes").select(
+            """
             id, nombre, apellidos, email, telefono, nif, fecha_nacimiento, sexo,
             empresa:empresas(nombre, tipo_empresa)
-        """).eq("id", participante_id).execute()
-        
+            """
+        ).eq("id", participante_id).execute()
+
         if not participante_res.data:
             st.error("❌ No se encontraron tus datos")
             return
-        
+
         participante = participante_res.data[0]
-        
+
         # Mostrar información del participante
         col1, col2 = st.columns(2)
-        
+
         with col1:
             st.markdown("### 📋 Información Personal")
             st.markdown(f"**👤 Nombre:** {participante.get('nombre', 'N/A')}")
             st.markdown(f"**👥 Apellidos:** {participante.get('apellidos', 'N/A')}")
             st.markdown(f"**📧 Email:** {participante.get('email', 'N/A')}")
             st.markdown(f"**📞 Teléfono:** {participante.get('telefono', 'No disponible')}")
-        
+
         with col2:
             st.markdown("### 🏢 Información Adicional")
             st.markdown(f"**🆔 Documento:** {participante.get('nif', 'No disponible')}")
-            
-            if participante.get('fecha_nacimiento'):
-                fecha_nac = pd.to_datetime(participante['fecha_nacimiento']).strftime('%d/%m/%Y')
+
+            if participante.get("fecha_nacimiento"):
+                fecha_nac = pd.to_datetime(participante["fecha_nacimiento"]).strftime("%d/%m/%Y")
                 st.markdown(f"**🎂 Fecha Nacimiento:** {fecha_nac}")
-            
+
             # Información de empresa
-            if participante.get('empresa'):
+            if participante.get("empresa"):
                 st.markdown(f"**🏢 Empresa:** {participante['empresa']['nombre']}")
-        
+
         # Estadísticas
         st.markdown("### 📊 Mis Estadísticas")
-        
+
         try:
             # Grupos FUNDAE
             grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
             num_grupos = len(grupos_participante) if not grupos_participante.empty else 0
-            
+
             # Suscripción de clases
             suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
-            
+
             col_stats1, col_stats2, col_stats3 = st.columns(3)
-            
+
             with col_stats1:
                 st.metric("🎓 Grupos FUNDAE", num_grupos)
-                
+
             with col_stats2:
                 if suscripcion_clases and suscripcion_clases.get("activa"):
-                    clases_disponibles = suscripcion_clases.get("clases_mensuales", 0) - suscripcion_clases.get("clases_usadas_mes", 0)
+                    clases_disponibles = (
+                        suscripcion_clases.get("clases_mensuales", 0)
+                        - suscripcion_clases.get("clases_usadas_mes", 0)
+                    )
                     st.metric("🏃‍♀️ Clases Disponibles", clases_disponibles)
                 else:
                     st.metric("🏃‍♀️ Clases Disponibles", 0)
-            
+
             with col_stats3:
                 # Diplomas obtenidos (si la funcionalidad existe)
                 try:
-                    diplomas_res = participantes_service.supabase.table("diplomas").select("id").eq("participante_id", participante_id).execute()
+                    diplomas_res = (
+                        participantes_service.supabase.table("diplomas")
+                        .select("id")
+                        .eq("participante_id", participante_id)
+                        .execute()
+                    )
                     num_diplomas = len(diplomas_res.data) if diplomas_res.data else 0
                     st.metric("📜 Diplomas", num_diplomas)
-                except:
+                except Exception:
                     st.metric("📜 Diplomas", "N/A")
-        
+
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
 
