@@ -205,7 +205,6 @@ class ClasesService:
     # =========================
     # GESTIÓN DE HORARIOS
     # =========================
-    
     @st.cache_data(ttl=300)
     def get_horarios_con_clase(_self, clase_id: Optional[str] = None):
         """Obtiene horarios con información de clase"""
@@ -219,10 +218,17 @@ class ClasesService:
             if clase_id:
                 query = query.eq("clase_id", clase_id)
             
-            # Filtrar según rol
+            # CORREGIDO: Filtrar según rol de forma más específica
             if _self.role == "gestor" and _self.empresa_id:
-                empresas_gestionadas = _self._get_empresas_gestionadas()
-                query = query.in_("clases.empresa_id", empresas_gestionadas)
+                # Primero obtener clases del gestor
+                clases_gestor = _self.supabase.table("clases").select("id").eq("empresa_id", _self.empresa_id).execute()
+                clases_ids = [c["id"] for c in clases_gestor.data or []]
+                
+                if clases_ids:
+                    query = query.in_("clase_id", clases_ids)
+                else:
+                    # Si no tiene clases, devolver DataFrame vacío
+                    return pd.DataFrame()
             
             result = query.order("dia_semana", "hora_inicio").execute()
             
