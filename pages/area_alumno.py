@@ -617,14 +617,21 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 def main(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
-    # FORZAR RECARGA DEL MÓDULO
-    if 'services.participantes_service' in sys.modules:
-        importlib.reload(sys.modules['services.participantes_service'])
+    # FORZAR RECARGA COMPLETA
+    modules_to_reload = [
+        'services.participantes_service',
+        'services.clases_service',
+        'services.grupos_service'
+    ]
+    
+    for module_name in modules_to_reload:
+        if module_name in sys.modules:
+            importlib.reload(sys.modules[module_name])
     
     # Verificar acceso
     if not verificar_acceso_alumno(session_state, supabase):
         return
-      
+    
     # Cargar servicios
     participantes_service = get_participantes_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
