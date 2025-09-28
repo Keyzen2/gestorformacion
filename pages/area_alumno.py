@@ -520,7 +520,7 @@ def mostrar_reservar_clases(clases_service, session_state):
 # TAB 4: MI PERFIL
 # =========================
 def mostrar_mi_perfil(participantes_service, clases_service, session_state):
-    """Mi perfil - VERSIÓN CORREGIDA"""
+    """Mi perfil con gestión de avatar - VERSIÓN ACTUALIZADA"""
     st.header("👤 Mi Perfil")
 
     # CORREGIDO: Obtener participante_id de forma más robusta
@@ -553,29 +553,81 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 
         participante = participante_res.data[0]
 
-        # Mostrar información del participante
-        col1, col2 = st.columns(2)
+        # Layout principal con avatar
+        col_avatar, col_info = st.columns([1, 3])
+        
+        with col_avatar:
+            st.markdown("### 📸 Avatar")
+            
+            # Obtener y mostrar avatar
+            avatar_info = participantes_service.get_avatar_participante(participante_id)
+            
+            if avatar_info:
+                st.image(avatar_info["archivo_url"], width=150, caption="Tu avatar")
+                st.caption(f"Subido: {pd.to_datetime(avatar_info['created_at']).strftime('%d/%m/%Y')}")
+                
+                # Botón eliminar avatar
+                if st.button("🗑️ Eliminar", type="secondary", use_container_width=True, key="eliminar_avatar"):
+                    if participantes_service.eliminar_avatar(participante_id):
+                        st.success("Avatar eliminado")
+                        st.rerun()
+                    else:
+                        st.error("Error eliminando avatar")
+            else:
+                # Avatar por defecto
+                st.image("https://via.placeholder.com/150x150/e1e1e1/999999?text=Sin+Avatar", width=150)
+                st.caption("Sin avatar")
+            
+            # Subir nuevo avatar
+            st.markdown("**📤 Cambiar Avatar**")
+            uploaded_file = st.file_uploader(
+                "Seleccionar imagen",
+                type=['png', 'jpg', 'jpeg'],
+                help="Max 2MB. Se ajustará a 150x150px",
+                key="avatar_upload",
+                label_visibility="collapsed"
+            )
+            
+            if uploaded_file:
+                # Preview
+                st.image(uploaded_file, width=150, caption="Vista previa")
+                
+                if st.button("💾 Guardar", type="primary", use_container_width=True, key="guardar_avatar"):
+                    with st.spinner("Subiendo..."):
+                        success = participantes_service.subir_avatar(participante_id, uploaded_file)
+                        if success:
+                            st.success("✅ Avatar actualizado")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error subiendo avatar")
 
-        with col1:
-            st.markdown("### 📋 Información Personal")
-            st.markdown(f"**👤 Nombre:** {participante.get('nombre', 'N/A')}")
-            st.markdown(f"**👥 Apellidos:** {participante.get('apellidos', 'N/A')}")
-            st.markdown(f"**📧 Email:** {participante.get('email', 'N/A')}")
-            st.markdown(f"**📞 Teléfono:** {participante.get('telefono', 'No disponible')}")
+        with col_info:
+            # Información del participante en dos columnas
+            col1, col2 = st.columns(2)
 
-        with col2:
-            st.markdown("### 🏢 Información Adicional")
-            st.markdown(f"**🆔 Documento:** {participante.get('nif', 'No disponible')}")
+            with col1:
+                st.markdown("### 📋 Información Personal")
+                st.markdown(f"**👤 Nombre:** {participante.get('nombre', 'N/A')}")
+                st.markdown(f"**👥 Apellidos:** {participante.get('apellidos', 'N/A')}")
+                st.markdown(f"**📧 Email:** {participante.get('email', 'N/A')}")
+                st.markdown(f"**📞 Teléfono:** {participante.get('telefono', 'No disponible')}")
 
-            if participante.get("fecha_nacimiento"):
-                fecha_nac = pd.to_datetime(participante["fecha_nacimiento"]).strftime("%d/%m/%Y")
-                st.markdown(f"**🎂 Fecha Nacimiento:** {fecha_nac}")
+            with col2:
+                st.markdown("### 🏢 Información Adicional")
+                st.markdown(f"**🆔 Documento:** {participante.get('nif', 'No disponible')}")
 
-            # Información de empresa
-            if participante.get("empresa"):
-                st.markdown(f"**🏢 Empresa:** {participante['empresa']['nombre']}")
+                if participante.get("fecha_nacimiento"):
+                    fecha_nac = pd.to_datetime(participante["fecha_nacimiento"]).strftime("%d/%m/%Y")
+                    st.markdown(f"**🎂 Fecha Nacimiento:** {fecha_nac}")
+                
+                if participante.get("sexo"):
+                    st.markdown(f"**⚥ Sexo:** {participante['sexo']}")
 
-        # Estadísticas
+                # Información de empresa
+                if participante.get("empresa"):
+                    st.markdown(f"**🏢 Empresa:** {participante['empresa']['nombre']}")
+
+        # Estadísticas mejoradas
         st.markdown("### 📊 Mis Estadísticas")
 
         try:
@@ -585,8 +637,16 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 
             # Suscripción de clases
             suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
+            
+            # Resumen mensual si tiene suscripción
+            resumen_clases = {}
+            if suscripcion_clases:
+                try:
+                    resumen_clases = clases_service.get_resumen_mensual_participante(participante_id)
+                except:
+                    pass
 
-            col_stats1, col_stats2, col_stats3 = st.columns(3)
+            col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
 
             with col_stats1:
                 st.metric("🎓 Grupos FUNDAE", num_grupos)
@@ -602,7 +662,13 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     st.metric("🏃‍♀️ Clases Disponibles", 0)
 
             with col_stats3:
-                # Diplomas obtenidos (si la funcionalidad existe)
+                if resumen_clases and resumen_clases.get("asistencias") is not None:
+                    st.metric("✅ Asistencias", resumen_clases.get("asistencias", 0))
+                else:
+                    st.metric("✅ Asistencias", "N/A")
+
+            with col_stats4:
+                # Diplomas obtenidos
                 try:
                     diplomas_res = (
                         participantes_service.supabase.table("diplomas")
@@ -614,6 +680,22 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     st.metric("📜 Diplomas", num_diplomas)
                 except Exception:
                     st.metric("📜 Diplomas", "N/A")
+            
+            # Información adicional de suscripción si existe
+            if suscripcion_clases and suscripcion_clases.get("activa"):
+                st.markdown("#### 🏃‍♀️ Estado de Suscripción")
+                
+                # Progreso mensual
+                clases_usadas = suscripcion_clases.get("clases_usadas_mes", 0)
+                clases_totales = suscripcion_clases.get("clases_mensuales", 1)
+                progreso = clases_usadas / max(1, clases_totales)
+                
+                st.progress(progreso, f"Clases este mes: {clases_usadas}/{clases_totales}")
+                
+                # Porcentaje de asistencia si hay datos
+                if resumen_clases and resumen_clases.get("porcentaje_asistencia") is not None:
+                    porcentaje = resumen_clases["porcentaje_asistencia"]
+                    st.metric("📈 % Asistencia", f"{porcentaje}%")
 
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
