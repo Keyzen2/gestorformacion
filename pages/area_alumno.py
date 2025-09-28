@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import importlib
+import sys
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional
 from services.participantes_service import get_participantes_service
@@ -615,10 +617,14 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 def main(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
+    # FORZAR RECARGA DEL MÓDULO
+    if 'services.participantes_service' in sys.modules:
+        importlib.reload(sys.modules['services.participantes_service'])
+    
     # Verificar acceso
     if not verificar_acceso_alumno(session_state, supabase):
         return
-    
+      
     # Cargar servicios
     participantes_service = get_participantes_service(supabase, session_state)
     grupos_service = get_grupos_service(supabase, session_state)
