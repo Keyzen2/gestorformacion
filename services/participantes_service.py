@@ -77,45 +77,45 @@ class ParticipantesService:
             ])
             
     def get_participante_id_from_auth(supabase, auth_id):
-    """Convierte auth_id a participante_id - CORREGIDO con validaciones"""
-    try:
-        # Validación crítica: verificar que auth_id no sea None, "None" o vacío
-        if not auth_id or auth_id == "None" or str(auth_id).strip() == "":
-            print(f"Error: auth_id inválido: {auth_id}")
-            return None
-            
-        # Verificar si es un UUID válido
-        import uuid
+        """Convierte auth_id a participante_id - CORREGIDO con validaciones"""
         try:
-            uuid.UUID(str(auth_id))
-        except ValueError:
-            print(f"Error: auth_id no es un UUID válido: {auth_id}")
+            # Validación crítica: verificar que auth_id no sea None, "None" o vacío
+            if not auth_id or auth_id == "None" or str(auth_id).strip() == "":
+                print(f"Error: auth_id inválido: {auth_id}")
+                return None
+            
+            # Verificar si es un UUID válido
+    
+            try:
+                uuid.UUID(str(auth_id))
+            except ValueError:
+                print(f"Error: auth_id no es un UUID válido: {auth_id}")
+                return None
+        
+            # Primero intentar buscar por auth_id en participantes
+            result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+        
+            if result.data:
+                return result.data[0]["id"]
+        
+            # Si no encuentra por auth_id, intentar buscar por email como fallback
+            # Primero obtener el email del usuario autenticado
+            user_result = supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
+        
+            if user_result.data:
+                email = user_result.data[0]["email"]
+                # Buscar participante por email
+                participante_result = supabase.table("participantes").select("id").eq("email", email).execute()
+            
+                if participante_result.data:
+                    return participante_result.data[0]["id"]
+        
+            print(f"No se encontró participante para auth_id: {auth_id}")
             return None
         
-        # Primero intentar buscar por auth_id en participantes
-        result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-        
-        if result.data:
-            return result.data[0]["id"]
-        
-        # Si no encuentra por auth_id, intentar buscar por email como fallback
-        # Primero obtener el email del usuario autenticado
-        user_result = supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
-        
-        if user_result.data:
-            email = user_result.data[0]["email"]
-            # Buscar participante por email
-            participante_result = supabase.table("participantes").select("id").eq("email", email).execute()
-            
-            if participante_result.data:
-                return participante_result.data[0]["id"]
-        
-        print(f"No se encontró participante para auth_id: {auth_id}")
-        return None
-        
-    except Exception as e:
-        print(f"Error obteniendo participante_id: {e}")
-        return None
+        except Exception as e:
+            print(f"Error obteniendo participante_id: {e}")
+            return None
 
 def verificar_acceso_alumno(session_state, supabase):
     """Verifica que el usuario tenga acceso al área de alumnos - CORREGIDO"""
