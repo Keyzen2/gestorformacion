@@ -363,14 +363,18 @@ class ClasesService:
                 print(f"Capacidad inválida: {capacidad} (debe ser >= 1)")
                 return False
             
-            # Validar y convertir horas
+            # CORREGIDO: Validar horas - el formato viene como "HH:MM:SS"
             try:
                 hora_inicio_str = datos["hora_inicio"]
                 hora_fin_str = datos["hora_fin"]
                 
-                # Convertir a objetos time si son strings
+                print(f"Procesando horas: {hora_inicio_str} -> {hora_fin_str}")
+                
+                # Manejar formato "HH:MM:SS" que viene del time_input
                 if isinstance(hora_inicio_str, str):
-                    if len(hora_inicio_str) == 5:  # "HH:MM"
+                    if len(hora_inicio_str) == 8:  # "HH:MM:SS"
+                        hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M:%S").time()
+                    elif len(hora_inicio_str) == 5:  # "HH:MM"
                         hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M").time()
                     else:
                         hora_inicio = datetime.fromisoformat(hora_inicio_str).time()
@@ -378,7 +382,9 @@ class ClasesService:
                     hora_inicio = hora_inicio_str
                     
                 if isinstance(hora_fin_str, str):
-                    if len(hora_fin_str) == 5:  # "HH:MM"
+                    if len(hora_fin_str) == 8:  # "HH:MM:SS"
+                        hora_fin = datetime.strptime(hora_fin_str, "%H:%M:%S").time()
+                    elif len(hora_fin_str) == 5:  # "HH:MM"
                         hora_fin = datetime.strptime(hora_fin_str, "%H:%M").time()
                     else:
                         hora_fin = datetime.fromisoformat(hora_fin_str).time()
@@ -395,6 +401,8 @@ class ClasesService:
                 
             except (ValueError, TypeError) as e:
                 print(f"Error procesando horas: {e}")
+                print(f"Tipo hora_inicio: {type(hora_inicio_str)}, valor: {hora_inicio_str}")
+                print(f"Tipo hora_fin: {type(hora_fin_str)}, valor: {hora_fin_str}")
                 return False
         
         except Exception as e:
