@@ -734,9 +734,9 @@ def mostrar_mis_diplomas(participantes_service, session_state):
     
     try:
         diplomas_res = participantes_service.supabase.table("diplomas").select("""
-            id, archivo_nombre, archivo_url, created_at,
+            id, archivo_nombre, url, fecha_subida,
             grupo:grupos(codigo_grupo, accion_formativa:acciones_formativas(nombre))
-        """).eq("participante_id", participante_id).order("created_at", desc=True).execute()
+        """).eq("participante_id", participante_id).order("fecha_subida", desc=True).execute()
         
         if not diplomas_res.data:
             st.info("📭 No tienes diplomas disponibles aún")
@@ -749,7 +749,9 @@ def mostrar_mis_diplomas(participantes_service, session_state):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 
                 with col1:
-                    st.markdown(f"**📜 {diploma.get('archivo_nombre','Diploma')}**")
+                    nombre_archivo = diploma.get('archivo_nombre', 'Diploma')
+                    st.markdown(f"**📜 {nombre_archivo}**")
+                    
                     if diploma.get('grupo'):
                         grupo = diploma['grupo']
                         st.caption(f"Grupo: {grupo.get('codigo_grupo','')}")
@@ -757,13 +759,13 @@ def mostrar_mis_diplomas(participantes_service, session_state):
                             st.caption(f"Curso: {grupo['accion_formativa'].get('nombre','')}")
                 
                 with col2:
-                    if diploma.get('created_at'):
-                        fecha = pd.to_datetime(diploma['created_at']).strftime('%d/%m/%Y')
+                    if diploma.get('fecha_subida'):
+                        fecha = pd.to_datetime(diploma['fecha_subida']).strftime('%d/%m/%Y')
                         st.write(f"📅 Emitido: {fecha}")
                 
                 with col3:
-                    if diploma.get('archivo_url'):
-                        st.link_button("📥 Descargar", diploma['archivo_url'], use_container_width=True)
+                    if diploma.get('url'):
+                        st.link_button("📥 Descargar", diploma['url'], use_container_width=True)
                     else:
                         st.button("Sin archivo", disabled=True, use_container_width=True)
     
