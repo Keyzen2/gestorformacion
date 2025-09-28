@@ -262,64 +262,36 @@ class AulasService:
             print(f"Error cargando reservas próximas: {e}")
             return pd.DataFrame()
 
-    def crear_reserva(self, participante_id: str, horario_id: str, fecha_clase: date) -> Tuple[bool, Optional[str]]:
-        """Crea una nueva reserva"""
+    def crear_reserva(self, datos_reserva: Dict) -> Tuple[bool, Optional[str]]:
+        """Crea una nueva reserva de aula"""
         try:
-            # Debug
-            print(f"Creando reserva para participante: {participante_id}")
-            print(f"Horario: {horario_id}, Fecha: {fecha_clase}")
-            
-            # Verificar suscripción activa
-            suscripcion = self.get_suscripcion_participante(participante_id)
-            if not suscripcion:
-                return False, "No tienes suscripción activa"
-            
-            print(f"Suscripción encontrada: {suscripcion}")
-            
-            # Verificar límite mensual
-            if suscripcion["clases_usadas_mes"] >= suscripcion["clases_mensuales"]:
-                return False, "Has alcanzado el límite de clases mensuales"
+            # Validaciones
+            if not self._validar_datos_reserva(datos_reserva):
+                return False, None
             
             # Verificar disponibilidad
-            disponibilidad = self._verificar_disponibilidad_clase(horario_id, fecha_clase)
-            if not disponibilidad.get("disponible", False):
-                return False, "No hay cupos disponibles"
+            if not self.verificar_disponibilidad_aula(
+                datos_reserva["aula_id"], 
+                datos_reserva["fecha_inicio"], 
+                datos_reserva["fecha_fin"]
+            ):
+                return False, "El aula no está disponible en esas fechas"
             
-            # Verificar reserva existente
-            reserva_existente = self.supabase.table("clases_reservas").select("id").eq(
-                "participante_id", participante_id
-            ).eq("horario_id", horario_id).eq("fecha_clase", fecha_clase.isoformat()).execute()
-            
-            if reserva_existente.data:
-                return False, "Ya tienes una reserva para esta clase"
-            
-            # Crear reserva
+            # Generar ID
             reserva_id = str(uuid.uuid4())
-            datos_reserva = {
-                "id": reserva_id,
-                "participante_id": participante_id,
-                "horario_id": horario_id,
-                "fecha_clase": fecha_clase.isoformat(),
-                "estado": "RESERVADA",
-                "fecha_reserva": datetime.utcnow().isoformat()
-            }
+            datos_reserva["id"] = reserva_id
+            datos_reserva["created_at"] = datetime.utcnow().isoformat()
             
-            print(f"Insertando reserva: {datos_reserva}")
-            result = self.supabase.table("clases_reservas").insert(datos_reserva).execute()
+            result = self.supabase.table("aula_reservas").insert(datos_reserva).execute()
             
             if result.data:
-                # IMPORTANTE: Incrementar contador
-                self._incrementar_contador_mensual(participante_id)
-                print(f"Reserva creada exitosamente: {reserva_id}")
                 return True, reserva_id
-            else:
-                print(f"Error en insert: {result}")
-                return False, "Error al guardar reserva"
+            
+            return False, None
             
         except Exception as e:
-            print(f"Error completo en crear_reserva: {e}")
-            return False, f"Error: {str(e)}"
-
+            return False, f"Error creando reserva: {e}"
+            
     def verificar_disponibilidad_aula(self, aula_id: str, fecha_inicio: str, fecha_fin: str, 
                                     reserva_excluir: Optional[str] = None) -> bool:
         """Verifica si un aula está disponible en un periodo"""
