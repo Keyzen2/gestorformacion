@@ -30,6 +30,7 @@ def verificar_acceso_alumno(session_state, supabase):
         st.stop()
         return False
 
+    # CORREGIDO: Buscar por auth_id en lugar de email
     participante = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
     if participante.data:
         # Forzamos rol alumno
@@ -41,12 +42,13 @@ def verificar_acceso_alumno(session_state, supabase):
     st.stop()
     return False
     
-def get_participante_id(supabase, auth_id):
-    """Convierte auth_id a participante_id"""
+def get_participante_id_from_auth(supabase, auth_id):
+    """Convierte auth_id a participante_id - CORREGIDO"""
     try:
         result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
         return result.data[0]["id"] if result.data else None
-    except:
+    except Exception as e:
+        st.error(f"Error obteniendo participante_id: {e}")
         return None
 # =========================
 # TAB 1: MIS GRUPOS FUNDAE
@@ -55,24 +57,20 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     """Muestra los grupos FUNDAE del participante (funcionalidad existente mejorada)."""
     st.header("📚 Mis Grupos FUNDAE")
     
+    # CORREGIDO: Usar auth_id directamente
     auth_id = session_state.user.get('id')
-    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
-    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
+    participante_id = get_participante_id_from_auth(grupos_service.supabase, auth_id)
+    
+    if not participante_id:
+        st.error("❌ No se pudo encontrar tu registro como participante")
+        return
     
     try:
-        # Obtener grupos del participante usando relación N:N
+        # Usar el participante_id obtenido correctamente
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
         
         if df_grupos.empty:
             st.info("📭 No estás inscrito en ningún grupo FUNDAE")
-            st.markdown("""
-            **¿Qué son los grupos FUNDAE?**
-            - Formación bonificada para trabajadores
-            - Cursos oficiales con certificación
-            - Financiados por FUNDAE (Fundación Estatal para la Formación en el Empleo)
-            
-            Contacta con tu empresa para inscribirte en grupos formativos.
-            """)
             return
         
         st.markdown(f"### 🎯 Tienes {len(df_grupos)} grupo(s) asignado(s)")
@@ -186,9 +184,13 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
     """Muestra las clases que tiene reservadas el participante."""
     st.header("🏃‍♀️ Mis Clases Reservadas")
     
+    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
-    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
-    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
+    participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
+    
+    if not participante_id:
+        st.error("❌ No se pudo encontrar tu registro como participante")
+        return
         
     try:
         # Verificar suscripción
@@ -360,18 +362,13 @@ def mostrar_reservar_clases(clases_service, session_state):
     """Interfaz para reservar nuevas clases."""
     st.header("📅 Reservar Clases")
     
+    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
-    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
-    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
+    participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
     
-    try:
-        # Verificar suscripción
-        suscripcion = clases_service.get_suscripcion_participante(participante_id)
-        
-        if not suscripcion or not suscripcion.get("activa"):
-            st.warning("⚠️ No tienes una suscripción activa")
-            st.info("Contacta con tu centro de formación para activar tu suscripción.")
-            return
+    if not participante_id:
+        st.error("❌ No se pudo encontrar tu registro como participante")
+        return
         
         # Verificar clases disponibles
         clases_disponibles = suscripcion.get("clases_mensuales", 0) - suscripcion.get("clases_usadas_mes", 0)
@@ -580,20 +577,13 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
     """Gestión del perfil del participante."""
     st.header("👤 Mi Perfil")
     
+    # CORREGIDO: Usar auth_id y función helper
     auth_id = session_state.user.get('id')
-    participante_res = supabase.table("vw_participantes_completo").select("participante_id").eq("auth_id", auth_id).execute()
-    participante_id = participante_res.data[0]["participante_id"] if participante_res.data else None
+    participante_id = get_participante_id_from_auth(participantes_service.supabase, auth_id)
     
-    try:
-        # Obtener datos del participante
-        participante_res = participantes_service.supabase.table("participantes").select("""
-            id, nombre, apellidos, email, telefono, nif, fecha_nacimiento, sexo,
-            empresa:empresas(nombre, tipo_empresa)
-        """).eq("id", participante_id).execute()
-        
-        if not participante_res.data:
-            st.error("❌ No se encontraron tus datos")
-            return
+    if not participante_id:
+        st.error("❌ No se pudo encontrar tu registro como participante")
+        return
         
         participante = participante_res.data[0]
         
