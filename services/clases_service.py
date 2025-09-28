@@ -752,48 +752,51 @@ class ClasesService:
                 clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima,
                     clases!inner(nombre, categoria, color_cronograma))
             """).eq("participante_id", participante_id)
-            
+        
             # Filtros de fecha
             if fecha_inicio:
                 query = query.gte("fecha_clase", fecha_inicio.isoformat())
             else:
-                # Por defecto, mostrar desde hoy
                 query = query.gte("fecha_clase", date.today().isoformat())
-            
+        
             if fecha_fin:
                 query = query.lte("fecha_clase", fecha_fin.isoformat())
-            
+        
             # Filtrar solo reservas activas (no canceladas)
             query = query.neq("estado", "CANCELADA")
+        
+            # Ordenar por fecha y hora de inicio
+            query = query.order("fecha_clase", desc=False)
+            query = query.order("hora_inicio", desc=False, foreign_table="clases_horarios")
+        
+            result = query.execute()
+        
+            if not result.data:
+                return pd.DataFrame()
+        
+            reservas = []
+            dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        
+            for reserva in result.data:
+                horario = reserva.get("clases_horarios", {})
+                clase = horario.get("clases", {})
             
-            result = query.order("fecha_clase", "clases_horarios.hora_inicio").execute()
-            
-            if result.data:
-                reservas = []
-                dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-                
-                for reserva in result.data:
-                    horario = reserva["clases_horarios"]
-                    clase = horario["clases"]
-                    
-                    reserva_flat = {
-                        "id": reserva["id"],
-                        "fecha_clase": reserva["fecha_clase"],
-                        "estado": reserva["estado"],
-                        "clase_nombre": clase["nombre"],
-                        "categoria": clase["categoria"],
-                        "dia_semana": dias_semana[horario["dia_semana"]],
-                        "hora_inicio": horario["hora_inicio"],
-                        "hora_fin": horario["hora_fin"],
-                        "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}",
-                        "color": clase["color_cronograma"]
-                    }
-                    reservas.append(reserva_flat)
-                
-                return pd.DataFrame(reservas)
-            
-            return pd.DataFrame()
-            
+                reserva_flat = {
+                    "id": reserva["id"],
+                    "fecha_clase": pd.to_datetime(reserva["fecha_clase"]).strftime("%d/%m/%Y"),
+                    "estado": reserva["estado"],
+                    "clase_nombre": clase.get("nombre", "Sin nombre"),
+                    "categoria": clase.get("categoria", ""),
+                    "dia_semana": dias_semana[horario.get("dia_semana", 0)],
+                    "hora_inicio": horario.get("hora_inicio", ""),
+                    "hora_fin": horario.get("hora_fin", ""),
+                    "horario_display": f"{horario.get('hora_inicio','')} - {horario.get('hora_fin','')}",
+                    "color": clase.get("color_cronograma", "#3498db")
+                }
+                reservas.append(reserva_flat)
+        
+            return pd.DataFrame(reservas)
+    
         except Exception as e:
             print(f"Error obteniendo reservas: {e}")
             return pd.DataFrame()
