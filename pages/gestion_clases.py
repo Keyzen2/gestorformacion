@@ -183,7 +183,7 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                 submitted = st.form_submit_button(
                     "➕ Crear Clase" if es_creacion else "💾 Guardar Cambios",
                     type="primary",
-                    use_container_width=True,
+                    use_container_width=True
                 )
             
             with col_btn2:
@@ -197,32 +197,33 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                     eliminar = False
             
             # Procesamiento
-            if submitted and not errores:
-                datos_clase = {
-                    "nombre": nombre,
-                    "descripcion": descripcion,
-                    "categoria": categoria,
-                    "color_cronograma": color_cronograma,
-                    "activa": activa,
-                    "empresa_id": empresa_id
-                }
-                elif submitted and errores:
+            if submitted:
+                if errores:
                     st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
-                                if es_creacion:
-                                    success, clase_id = clases_service.crear_clase(datos_clase)
-                                    
-                    if success:
-                        st.success("✅ Clase creada correctamente")
-                        st.rerun()
-                    else:
-                        st.error("❌ Error creando la clase")
                 else:
-                    success = clases_service.actualizar_clase(clase_data["id"], datos_clase)
-                    if success:
-                        st.success("✅ Clase actualizada correctamente")
-                        st.rerun()
+                    datos_clase = {
+                        "nombre": nombre,
+                        "descripcion": descripcion,
+                        "categoria": categoria,
+                        "color_cronograma": color_cronograma,
+                        "activa": activa,
+                        "empresa_id": empresa_id
+                    }
+                    
+                    if es_creacion:
+                        success, clase_id = clases_service.crear_clase(datos_clase)
+                        if success:
+                            st.success("✅ Clase creada correctamente")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error creando la clase")
                     else:
-                        st.error("❌ Error actualizando la clase")
+                        success = clases_service.actualizar_clase(clase_data["id"], datos_clase)
+                        if success:
+                            st.success("✅ Clase actualizada correctamente")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error actualizando la clase")
             
             if eliminar:
                 if st.session_state.get("confirmar_eliminar_clase"):
