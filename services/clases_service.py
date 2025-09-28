@@ -582,41 +582,50 @@ class ClasesService:
         except Exception as e:
             return False
 
-    def _incrementar_contador_mensual(self, participante_id: str):
+        def _incrementar_contador_mensual(self, participante_id: str):
         """Incrementa el contador de clases usadas este mes"""
         try:
-            suscripcion = self.supabase.table("participantes_suscripciones").select(
-                "clases_usadas_mes"
-            ).eq("participante_id", participante_id).eq("activa", True).execute()
+            sub_res = self.supabase.table("participantes_suscripciones")\
+                .select("id, clases_usadas_mes")\
+                .eq("participante_id", participante_id)\
+                .eq("activa", True)\
+                .single()\
+                .execute()
             
-            if suscripcion.data:
-                nuevo_contador = suscripcion.data[0]["clases_usadas_mes"] + 1
+            if sub_res.data:
+                usadas = sub_res.data.get("clases_usadas_mes") or 0
+                nuevo_contador = usadas + 1
                 
                 self.supabase.table("participantes_suscripciones").update({
                     "clases_usadas_mes": nuevo_contador,
                     "updated_at": datetime.utcnow().isoformat()
-                }).eq("participante_id", participante_id).eq("activa", True).execute()
-            
+                }).eq("id", sub_res.data["id"]).execute()
+        
         except Exception as e:
-            print(f"Error incrementando contador: {e}")
-
+            print(f"❌ Error incrementando contador: {e}")
+    
+    
     def _decrementar_contador_mensual(self, participante_id: str):
         """Decrementa el contador de clases usadas este mes"""
         try:
-            suscripcion = self.supabase.table("participantes_suscripciones").select(
-                "clases_usadas_mes"
-            ).eq("participante_id", participante_id).eq("activa", True).execute()
+            sub_res = self.supabase.table("participantes_suscripciones")\
+                .select("id, clases_usadas_mes")\
+                .eq("participante_id", participante_id)\
+                .eq("activa", True)\
+                .single()\
+                .execute()
             
-            if suscripcion.data:
-                nuevo_contador = max(0, suscripcion.data[0]["clases_usadas_mes"] - 1)
+            if sub_res.data:
+                usadas = sub_res.data.get("clases_usadas_mes") or 0
+                nuevo_contador = max(0, usadas - 1)
                 
                 self.supabase.table("participantes_suscripciones").update({
                     "clases_usadas_mes": nuevo_contador,
                     "updated_at": datetime.utcnow().isoformat()
-                }).eq("participante_id", participante_id).eq("activa", True).execute()
-            
+                }).eq("id", sub_res.data["id"]).execute()
+        
         except Exception as e:
-            print(f"Error decrementando contador: {e}")
+            print(f"❌ Error decrementando contador: {e}")
 
     # =========================
     # CALENDARIO Y DISPONIBILIDAD
