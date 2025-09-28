@@ -341,72 +341,44 @@ class ClasesService:
             return False
 
     def _validar_datos_horario(self, datos: Dict) -> bool:
-        """Valida datos de horario con debug mejorado"""
+        """Valida datos de horario"""
         try:
             campos_obligatorios = ["clase_id", "dia_semana", "hora_inicio", "hora_fin", "capacidad_maxima"]
             
             # Verificar campos obligatorios
             for campo in campos_obligatorios:
                 if campo not in datos or datos[campo] is None:
-                    print(f"Campo faltante o nulo: {campo}")
+                    print(f"Campo faltante: {campo}")
                     return False
             
-            # Validar día de semana (0=Lunes, 6=Domingo)
-            dia_semana = datos["dia_semana"]
-            if not isinstance(dia_semana, int) or not (0 <= dia_semana <= 6):
-                print(f"Día de semana inválido: {dia_semana} (debe ser 0-6)")
+            # Validar día de semana (0-6)
+            if not (0 <= datos["dia_semana"] <= 6):
+                print(f"Día inválido: {datos['dia_semana']}")
                 return False
             
             # Validar capacidad
-            capacidad = datos["capacidad_maxima"]
-            if not isinstance(capacidad, int) or capacidad < 1:
-                print(f"Capacidad inválida: {capacidad} (debe ser >= 1)")
+            if datos["capacidad_maxima"] < 1:
+                print(f"Capacidad inválida: {datos['capacidad_maxima']}")
                 return False
             
-            # CORREGIDO: Validar horas - el formato viene como "HH:MM:SS"
+            # Validar formato de horas (deben ser strings "HH:MM:SS")
             try:
-                hora_inicio_str = datos["hora_inicio"]
-                hora_fin_str = datos["hora_fin"]
+                hora_inicio = datetime.strptime(datos["hora_inicio"], "%H:%M:%S").time()
+                hora_fin = datetime.strptime(datos["hora_fin"], "%H:%M:%S").time()
                 
-                print(f"Procesando horas: {hora_inicio_str} -> {hora_fin_str}")
-                
-                # Manejar formato "HH:MM:SS" que viene del time_input
-                if isinstance(hora_inicio_str, str):
-                    if len(hora_inicio_str) == 8:  # "HH:MM:SS"
-                        hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M:%S").time()
-                    elif len(hora_inicio_str) == 5:  # "HH:MM"
-                        hora_inicio = datetime.strptime(hora_inicio_str, "%H:%M").time()
-                    else:
-                        hora_inicio = datetime.fromisoformat(hora_inicio_str).time()
-                else:
-                    hora_inicio = hora_inicio_str
-                    
-                if isinstance(hora_fin_str, str):
-                    if len(hora_fin_str) == 8:  # "HH:MM:SS"
-                        hora_fin = datetime.strptime(hora_fin_str, "%H:%M:%S").time()
-                    elif len(hora_fin_str) == 5:  # "HH:MM"
-                        hora_fin = datetime.strptime(hora_fin_str, "%H:%M").time()
-                    else:
-                        hora_fin = datetime.fromisoformat(hora_fin_str).time()
-                else:
-                    hora_fin = hora_fin_str
-                
-                # Verificar que hora_fin > hora_inicio
                 if hora_inicio >= hora_fin:
-                    print(f"Horas inválidas: inicio {hora_inicio} >= fin {hora_fin}")
+                    print(f"Hora fin debe ser posterior a hora inicio")
                     return False
                     
-                print(f"Horario válido: {hora_inicio} - {hora_fin}")
+                print(f"Validación exitosa: {hora_inicio} - {hora_fin}")
                 return True
                 
-            except (ValueError, TypeError) as e:
-                print(f"Error procesando horas: {e}")
-                print(f"Tipo hora_inicio: {type(hora_inicio_str)}, valor: {hora_inicio_str}")
-                print(f"Tipo hora_fin: {type(hora_fin_str)}, valor: {hora_fin_str}")
+            except ValueError as e:
+                print(f"Error formato horas: {e}")
                 return False
         
         except Exception as e:
-            print(f"Error en validación: {e}")
+            print(f"Error validación: {e}")
             return False
 
     def _verificar_conflicto_horario(self, datos: Dict, horario_excluir: Optional[str] = None) -> bool:
