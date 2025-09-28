@@ -309,12 +309,6 @@ def mostrar_cronograma_fullcalendar(aulas_service, session_state):
             aulas_ids
         )
         
-        # Debug info (removible en producción)
-        with st.expander("🔍 Debug Info"):
-            st.write(f"Se encontraron {len(eventos)} eventos")
-            if eventos:
-                st.write("Primer evento:", eventos[0])
-        
         # Configuración del calendario según documentación oficial
         calendar_options = {
             "editable": True,
@@ -465,6 +459,68 @@ def mostrar_cronograma_fullcalendar(aulas_service, session_state):
         with col4:
             st.markdown("**🔴 Bloqueada**")
             st.markdown("Aula no disponible")
+            
+    # =========================
+    # Exportar cronograma
+    # =========================
+    st.markdown("### 📤 Exportar Cronograma")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("📥 Exportar a Excel", key="export_cronograma_excel"):
+            try:
+                df_export = pd.DataFrame(eventos)
+                fecha_str = datetime.now().strftime("%Y%m%d")
+                filename = f"cronograma_aulas_{fecha_str}.xlsx"
+                export_excel(df_export, filename=filename, label="Cronograma exportado")
+            except Exception as e:
+                st.error(f"❌ Error exportando Excel: {e}")
+
+    with col2:
+        if st.button("🖨️ Exportar a PDF", key="export_cronograma_pdf"):
+            try:
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+                from reportlab.lib.pagesizes import A4
+                from reportlab.lib import colors
+                from reportlab.lib.styles import getSampleStyleSheet
+                from io import BytesIO
+
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=A4)
+                styles = getSampleStyleSheet()
+
+                data = [["Título", "Aula", "Inicio", "Fin", "Tipo", "Estado"]]
+                for ev in eventos:
+                    data.append([
+                        ev.get("title", ""),
+                        ev.get("extendedProps", {}).get("aula_nombre", ""),
+                        ev.get("start", ""),
+                        ev.get("end", ""),
+                        ev.get("extendedProps", {}).get("tipo_reserva", ""),
+                        ev.get("extendedProps", {}).get("estado", "")
+                    ])
+
+                table = Table(data, repeatRows=1)
+                table.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#0066cc")),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                    ("GRID", (0,0), (-1,-1), 0.5, colors.grey),
+                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                ]))
+
+                doc.build([Paragraph("Cronograma de Aulas", styles["Title"]), table])
+                buffer.seek(0)
+
+                st.download_button(
+                    label="📥 Descargar PDF",
+                    data=buffer,
+                    file_name=f"cronograma_aulas_{fecha_str}.pdf",
+                    mime="application/pdf"
+                )
+
+            except Exception as e:
+                st.error(f"❌ Error exportando PDF: {e}")
 
 def mostrar_cronograma_alternativo(aulas_service, session_state):
     """Vista alternativa si no funciona el calendario"""
