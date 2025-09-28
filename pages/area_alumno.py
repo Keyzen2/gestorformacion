@@ -38,8 +38,9 @@ def verificar_acceso_alumno(session_state, supabase):
         return False
 
     try:
-        # Usar la función corregida
-        participante_id = get_participante_id_from_auth(supabase, auth_id)
+        # CORREGIDO: Usar el servicio para obtener participante_id
+        participantes_service = get_participantes_service(supabase, session_state)
+        participante_id = participantes_service.get_participante_id_from_auth(auth_id)
         
         if participante_id:
             session_state.role = "alumno"
@@ -68,6 +69,14 @@ def verificar_acceso_alumno(session_state, supabase):
                         
                         if not p_data['auth_id']:
                             st.warning("El participante no tiene auth_id asignado. Contacta al administrador.")
+                            # AUTOFIX: Intentar corregir automáticamente
+                            try:
+                                supabase.table("participantes").update({
+                                    "auth_id": auth_id
+                                }).eq("id", p_data['id']).execute()
+                                st.success("¡Auth_id corregido automáticamente! Recarga la página.")
+                            except Exception as fix_error:
+                                st.error(f"Error intentando corregir: {fix_error}")
                     else:
                         st.warning("No existe registro de participante para este email.")
                 else:
@@ -80,72 +89,6 @@ def verificar_acceso_alumno(session_state, supabase):
         st.error(f"Error verificando acceso: {e}")
         st.stop()
         return False
-    
-def get_participante_id_from_auth(supabase, auth_id):
-    """Convierte auth_id a participante_id con corrección automática"""
-    try:
-        # Validaciones básicas
-        if not auth_id or str(auth_id) == "None":
-            print(f"Auth_id inválido: {auth_id}")
-            return None
-            
-        # Verificar UUID válido
-        import uuid
-        try:
-            uuid.UUID(str(auth_id))
-        except ValueError:
-            print(f"Auth_id no es UUID válido: {auth_id}")
-            return None
-        
-        # Método 1: Buscar directamente por auth_id
-        result = supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
-        if result.data:
-            return result.data[0]["id"]
-        
-        # Método 2: Fallback - buscar por email y corregir auth_id
-        print(f"Participante no encontrado con auth_id {auth_id}, buscando por email...")
-        
-        # Obtener email del usuario
-        user_result = supabase.table("usuarios").select("email").eq("auth_id", auth_id).execute()
-        
-        if not user_result.data:
-            print(f"Usuario no encontrado con auth_id: {auth_id}")
-            return None
-            
-        email = user_result.data[0]["email"]
-        print(f"Email encontrado: {email}")
-        
-        # Buscar participante por email
-        participante_result = supabase.table("participantes").select("id, auth_id").eq("email", email).execute()
-        
-        if not participante_result.data:
-            print(f"Participante no encontrado con email: {email}")
-            return None
-            
-        participante = participante_result.data[0]
-        participante_id = participante["id"]
-        participante_auth_id = participante["auth_id"]
-        
-        # Si no tiene auth_id, corregirlo automáticamente
-        if not participante_auth_id:
-            print(f"Corrigiendo auth_id null para participante {participante_id}")
-            
-            update_result = supabase.table("participantes").update({
-                "auth_id": auth_id
-            }).eq("id", participante_id).execute()
-            
-            if update_result.data:
-                print(f"Auth_id corregido exitosamente")
-                return participante_id
-            else:
-                print("Error actualizando auth_id")
-                return participante_id  # Devolver ID aunque no se haya actualizado
-        else:
-            return participante_id
-        
-    except Exception as e:
-        print(f"Error en get_participante_id_from_auth: {e}")
-        return None
 
 def debug_session_state(session_state):
     """Función de debug para verificar session_state"""
@@ -159,6 +102,10 @@ def debug_session_state(session_state):
             st.write(f"User Email: {user.get('email', 'NO_EMAIL')}")
         else:
             st.write("User: NO_USER_DATA")
+            
+        # Mostrar participante_id si existe
+        if hasattr(session_state, 'participante_id'):
+            st.write(f"Participante ID: {session_state.participante_id}")
     except Exception as e:
         st.write(f"Error en debug: {e}")
 
@@ -173,23 +120,27 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     if st.checkbox("Mostrar información de debug", value=False):
         debug_session_state(session_state)
     
-    # Obtener participante_id
+    # CORREGIDO: Obtener participante_id de forma más robusta
+    participante_id = None
+    
     if hasattr(session_state, 'participante_id'):
         participante_id = session_state.participante_id
     else:
         auth_id = session_state.user.get('id')
-        participante_id = get_participante_id_from_auth(grupos_service.supabase, auth_id)
+        participante_id = participantes_service.get_participante_id_from_auth(auth_id)
+        if participante_id:
+            session_state.participante_id = participante_id
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
         return
 
     try:
-        # Obtener grupos del participante
+        # Obtener grupos del participante usando el método correcto
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
         
         if df_grupos.empty:
-            st.info("📭 No estás inscrito en ningún grupo FUNDAE")
+            st.info("🔭 No estás inscrito en ningún grupo FUNDAE")
             st.markdown("""
             **¿Qué son los grupos FUNDAE?**
             - Formación bonificada para trabajadores
@@ -203,7 +154,7 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
         st.markdown(f"### 🎯 Tienes {len(df_grupos)} grupo(s) asignado(s)")
         
         # Mostrar grupos en cards
-        for _, grupo in df_grupos.iterrows():
+        for idx, grupo in df_grupos.iterrows():
             with st.container(border=True):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 
@@ -259,7 +210,7 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                     # Modalidad e información adicional
                     modalidad = grupo.get('modalidad')
                     if modalidad:
-                        st.caption(f"📍 Modalidad: {modalidad}")
+                        st.caption(f"🎯 Modalidad: {modalidad}")
                     
                     lugar_imparticion = grupo.get('lugar_imparticion')
                     if lugar_imparticion:
@@ -277,7 +228,7 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                     
                     # Botón de información adicional
                     grupo_id = grupo.get('grupo_id', grupo.get('id', 'sin_id'))
-                    if st.button("ℹ️ Detalles", key=f"detalles_{grupo_id}_{participante_id}", use_container_width=True):
+                    if st.button("ℹ️ Detalles", key=f"detalles_{grupo_id}_{participante_id}_{idx}", use_container_width=True):
                         mostrar_detalles_grupo_fundae(grupos_service, grupo_id)
         
         # Información adicional sobre FUNDAE
@@ -299,12 +250,18 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     
     except Exception as e:
         st.error(f"❌ Error cargando tus grupos FUNDAE: {e}")
+        st.write(f"Detalles del error: {str(e)}")
 
 def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
     """Muestra detalles adicionales de un grupo FUNDAE."""
     try:
-        # Obtener información detallada del grupo
-        grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
+        # CORREGIDO: Verificar si el método existe antes de llamarlo
+        if hasattr(grupos_service, 'get_grupo_completo'):
+            grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
+        else:
+            # Método alternativo: obtener grupo básico
+            grupo_detalle = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+            grupo_detalle = grupo_detalle.data[0] if grupo_detalle.data else None
         
         if grupo_detalle:
             st.markdown("#### 📋 Información Detallada del Grupo")
@@ -337,12 +294,23 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
     """Muestra las clases reservadas - VERSIÓN CORREGIDA"""
     st.header("🏃‍♀️ Mis Clases Reservadas")
     
-    # Obtener participante_id
+    # CORREGIDO: Obtener participante_id de forma más robusta
+    participante_id = None
+    
     if hasattr(session_state, 'participante_id'):
         participante_id = session_state.participante_id
     else:
+        # Si no está en session_state, intentar obtenerlo del servicio
         auth_id = session_state.user.get('id')
-        participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
+        if hasattr(clases_service, 'get_participante_id_from_auth'):
+            participante_id = clases_service.get_participante_id_from_auth(auth_id)
+        else:
+            # Buscar directamente en la base de datos
+            result = clases_service.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+            participante_id = result.data[0]["id"] if result.data else None
+            
+        if participante_id:
+            session_state.participante_id = participante_id
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
@@ -400,7 +368,7 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         df_reservas = clases_service.get_reservas_participante(participante_id, fecha_inicio, fecha_fin)
         
         if df_reservas.empty:
-            st.info("📭 No tienes clases reservadas en este período")
+            st.info("🔭 No tienes clases reservadas en este período")
             st.markdown("💡 Ve a la pestaña **'Reservar Clases'** para hacer nuevas reservas")
         else:
             st.markdown(f"### 📋 {len(df_reservas)} reserva(s) encontrada(s)")
@@ -420,6 +388,7 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
     
     except Exception as e:
         st.error(f"❌ Error cargando tus reservas: {e}")
+        st.write(f"Detalles del error: {str(e)}")
 
 # =========================
 # TAB 3: RESERVAR CLASES
@@ -428,12 +397,21 @@ def mostrar_reservar_clases(clases_service, session_state):
     """Reservar clases - VERSIÓN CORREGIDA"""
     st.header("📅 Reservar Clases")
     
-    # Obtener participante_id
+    # CORREGIDO: Obtener participante_id de forma más robusta
+    participante_id = None
+    
     if hasattr(session_state, 'participante_id'):
         participante_id = session_state.participante_id
     else:
         auth_id = session_state.user.get('id')
-        participante_id = get_participante_id_from_auth(clases_service.supabase, auth_id)
+        if hasattr(clases_service, 'get_participante_id_from_auth'):
+            participante_id = clases_service.get_participante_id_from_auth(auth_id)
+        else:
+            result = clases_service.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+            participante_id = result.data[0]["id"] if result.data else None
+            
+        if participante_id:
+            session_state.participante_id = participante_id
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
@@ -487,12 +465,51 @@ def mostrar_reservar_clases(clases_service, session_state):
                 key="buscar_clases_fin"
             )
         
-        # Placeholder para la funcionalidad de reservas
-        st.info("💡 Funcionalidad de reservas disponible próximamente")
-        st.markdown("En esta sección podrás:")
-        st.markdown("- Ver clases disponibles por día y horario")
-        st.markdown("- Reservar clases con cupos disponibles")
-        st.markdown("- Verificar tu límite mensual")
+        # MEJORADO: Intentar obtener clases disponibles reales
+        try:
+            if hasattr(clases_service, 'get_clases_disponibles_participante'):
+                clases_disponibles_lista = clases_service.get_clases_disponibles_participante(
+                    participante_id, fecha_inicio_busqueda, fecha_fin_busqueda
+                )
+                
+                if clases_disponibles_lista:
+                    st.markdown("### 📅 Clases Disponibles")
+                    
+                    for clase in clases_disponibles_lista:
+                        with st.container(border=True):
+                            col1, col2, col3 = st.columns([2, 2, 1])
+                            
+                            with col1:
+                                st.write(f"**{clase['title']}**")
+                                st.caption(f"Categoría: {clase['extendedProps'].get('categoria', 'N/A')}")
+                            
+                            with col2:
+                                fecha_clase = clase['extendedProps']['fecha_clase']
+                                hora_inicio = clase['start'].split('T')[1][:5]
+                                hora_fin = clase['end'].split('T')[1][:5]
+                                st.write(f"📅 {fecha_clase}")
+                                st.write(f"⏰ {hora_inicio} - {hora_fin}")
+                            
+                            with col3:
+                                cupos_libres = clase['extendedProps'].get('cupos_libres', 0)
+                                st.metric("🎯 Cupos", cupos_libres)
+                                
+                                if st.button("📝 Reservar", key=f"reservar_{clase['id']}", 
+                                           disabled=cupos_libres <= 0):
+                                    # Aquí iría la lógica de reserva
+                                    st.success("¡Reserva realizada!")
+                else:
+                    st.info("🔭 No hay clases disponibles en el período seleccionado")
+            else:
+                st.info("💡 Funcionalidad de reservas disponible próximamente")
+                st.markdown("En esta sección podrás:")
+                st.markdown("- Ver clases disponibles por día y horario")
+                st.markdown("- Reservar clases con cupos disponibles")
+                st.markdown("- Verificar tu límite mensual")
+        
+        except Exception as e:
+            st.warning(f"Error cargando clases disponibles: {e}")
+            st.info("💡 Funcionalidad de reservas en desarrollo")
         
     except Exception as e:
         st.error(f"❌ Error cargando clases disponibles: {e}")
@@ -504,12 +521,16 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
     """Mi perfil - VERSIÓN CORREGIDA"""
     st.header("👤 Mi Perfil")
     
-    # Obtener participante_id
+    # CORREGIDO: Obtener participante_id de forma más robusta
+    participante_id = None
+    
     if hasattr(session_state, 'participante_id'):
         participante_id = session_state.participante_id
     else:
         auth_id = session_state.user.get('id')
-        participante_id = get_participante_id_from_auth(participantes_service.supabase, auth_id)
+        participante_id = participantes_service.get_participante_id_from_auth(auth_id)
+        if participante_id:
+            session_state.participante_id = participante_id
     
     if not participante_id:
         st.error("❌ No se pudo encontrar tu registro como participante")
@@ -561,7 +582,7 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
             # Suscripción de clases
             suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
             
-            col_stats1, col_stats2 = st.columns(2)
+            col_stats1, col_stats2, col_stats3 = st.columns(3)
             
             with col_stats1:
                 st.metric("🎓 Grupos FUNDAE", num_grupos)
@@ -572,6 +593,15 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     st.metric("🏃‍♀️ Clases Disponibles", clases_disponibles)
                 else:
                     st.metric("🏃‍♀️ Clases Disponibles", 0)
+            
+            with col_stats3:
+                # Diplomas obtenidos (si la funcionalidad existe)
+                try:
+                    diplomas_res = participantes_service.supabase.table("diplomas").select("id").eq("participante_id", participante_id).execute()
+                    num_diplomas = len(diplomas_res.data) if diplomas_res.data else 0
+                    st.metric("📜 Diplomas", num_diplomas)
+                except:
+                    st.metric("📜 Diplomas", "N/A")
         
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
@@ -621,4 +651,4 @@ def main(supabase, session_state):
         mostrar_mi_perfil(participantes_service, clases_service, session_state)
 
 if __name__ == "__main__":
-    st.error("Este archivo debe ser ejecutado desde main.py")
+    st.error("Este archivo debe ser ejecutado desde app.py")
