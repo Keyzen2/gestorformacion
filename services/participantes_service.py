@@ -488,7 +488,25 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error al eliminar participante: {e}")
             return False
-            
+    def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
+        """Obtiene participante_id desde auth_id - CORREGIDO"""
+        try:
+            # Buscar directamente por auth_id en participantes
+            result = self.supabase.table("participantes").select("id").eq("auth_id", auth_id).execute()
+            return result.data[0]["id"] if result.data else None
+        except Exception as e:
+            print(f"Error obteniendo participante desde auth_id: {e}")
+            return None
+
+    def get_participante_desde_usuario_auth(self, auth_id: str) -> Optional[Dict]:
+        """Obtiene participante completo desde auth_id"""
+        try:
+            result = self.supabase.table("participantes").select("*").eq("auth_id", auth_id).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error obteniendo participante completo: {e}")
+            return None
+        
     def get_participantes_con_grupos_nn(self) -> pd.DataFrame:
         """NUEVO: Obtiene participantes con todos sus grupos usando tabla N:N."""
         try:
