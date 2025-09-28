@@ -737,18 +737,26 @@ class ClasesService:
             return None
 
     def get_reservas_participante(self, participante_id: str, fecha_inicio: Optional[date] = None, fecha_fin: Optional[date] = None) -> pd.DataFrame:
-        """Obtiene reservas de un participante"""
+        """Obtiene reservas de un participante con filtros de fecha"""
         try:
             query = self.supabase.table("clases_reservas").select("""
-                id, fecha_clase, estado, fecha_reserva, notas,
-                clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima),
-                clases_horarios!inner(clases!inner(nombre, categoria, color_cronograma))
+                id, fecha_clase, estado, fecha_reserva,
+                clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima,
+                    clases!inner(nombre, categoria, color_cronograma))
             """).eq("participante_id", participante_id)
             
+            # Filtros de fecha
             if fecha_inicio:
                 query = query.gte("fecha_clase", fecha_inicio.isoformat())
+            else:
+                # Por defecto, mostrar desde hoy
+                query = query.gte("fecha_clase", date.today().isoformat())
+            
             if fecha_fin:
                 query = query.lte("fecha_clase", fecha_fin.isoformat())
+            
+            # Filtrar solo reservas activas (no canceladas)
+            query = query.neq("estado", "CANCELADA")
             
             result = query.order("fecha_clase", "clases_horarios.hora_inicio").execute()
             
@@ -770,8 +778,7 @@ class ClasesService:
                         "hora_inicio": horario["hora_inicio"],
                         "hora_fin": horario["hora_fin"],
                         "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}",
-                        "color": clase["color_cronograma"],
-                        "notas": reserva.get("notas", "")
+                        "color": clase["color_cronograma"]
                     }
                     reservas.append(reserva_flat)
                 
