@@ -276,23 +276,28 @@ class ClasesService:
         """Obtiene los avatares de todos los participantes que tienen reserva en la misma clase y fecha."""
         try:
             result = self.supabase.table("clases_reservas").select("""
-                participantes(id,
-                    avatar:participantes_avatars(archivo_url)
+                participante_id,
+                participante:participantes(
+                    id,
+                    avatar:participantes_avatares(archivo_url)
                 )
             """).eq("horario_id", horario_id
             ).eq("fecha_clase", fecha_clase.isoformat()
             ).neq("estado", "CANCELADA").execute()
-            
+    
             avatares = []
             if result.data:
                 for r in result.data:
-                    participante = r.get("participantes", {})
-                    if participante.get("avatar"):
-                        avatares.append(participante["avatar"][0]["archivo_url"])
+                    participante = r.get("participante")
+                    if participante and participante.get("avatar"):
+                        # Puede haber varios avatares, cogemos el último subido
+                        avatares.append(participante["avatar"][-1]["archivo_url"])
             return avatares
+    
         except Exception as e:
             print("Error get_avatares_reserva:", e)
             return []
+
 
     # =========================
     # GESTIÓN DE HORARIOS
