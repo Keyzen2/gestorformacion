@@ -553,7 +553,3 @@ def main(supabase, session_state):
 
     st.divider()
     st.caption("💡 Gestiona usuarios administrativos del sistema desde esta interfaz centralizada.")
-
-
-    st.divider()
-    st.caption("💡 Gestiona usuarios administrativos del sistema desde esta interfaz centralizada.")
