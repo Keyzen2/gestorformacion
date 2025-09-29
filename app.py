@@ -1,24 +1,4 @@
-@staticmethod
-    def status_badge(status: str, text: str = ""):
-        """Crea badges de estado estilo TailAdmin"""
-        status_config = {
-            "ACTIVO": {"bg": "#dcfce7", "color": "#166534", "icon": "✅"},
-            "INACTIVO": {"bg": "#fee2e2", "color": "#991b1b", "icon": "❌"},
-            "PENDIENTE": {"bg": "#fef3c7", "color": "#92400e", "icon": "⏳"},
-            "FINALIZADO": {"bg": "#dbeafe", "color": "#1e40af", "icon": "🏁"}
-        }
-        
-        config = status_config.get(status.upper(), {"bg": "#f3f4f6", "color": "#374151", "icon": "📝"})
-        display_text = text or status
-        
-        return f"""
-        <span class="tailadmin-badge" style="
-            background: {config['bg']}; 
-            color: {config['color']};
-        ">
-            {config['icon']} {display_text}
-        </span>
-        """import os
+import os
 import sys
 import streamlit as st
 from supabase import create_client
@@ -141,7 +121,7 @@ def load_tailadmin_css():
         background: #f1f5f9 !important;
     }
 
-    /* === SIDEBAR SIEMPRE VISIBLE CON SCROLL === */
+    /* === SIDEBAR SIEMPRE VISIBLE === */
     section[data-testid="stSidebar"] {
         background: var(--tailadmin-sidebar) !important;
         border-right: 1px solid #334155 !important;
@@ -153,8 +133,6 @@ def load_tailadmin_css():
         transform: translateX(0) !important;
         width: auto !important;
         min-width: 244px !important;
-        overflow-y: auto !important;
-        height: 100vh !important;
     }
 
     section[data-testid="stSidebar"] * {
@@ -842,7 +820,7 @@ def login_view_tailadmin():
 # DASHBOARDS TAILADMIN POR ROL
 # =============================================================================
 def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
-    """Dashboard admin con métricas visibles"""
+    """Dashboard admin con diseño TailAdmin - SIN divs vacíos"""
     components = TailAdminComponents()
     
     # Header de bienvenida
@@ -855,7 +833,7 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     # Título principal
     st.markdown(f"## {ajustes.get('bienvenida_admin', 'Panel de Administración')}")
     
-    # Métricas principales - ESTAS SON LAS QUE FALTABAN
+    # Métricas principales
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -870,7 +848,7 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     with col4:
         components.metric_card("Grupos", str(metricas['grupos']), "👨‍🎓", "danger")
     
-    # Información adicional con info_card (ahora definida)
+    # Solo mostrar información útil - SIN gráficos vacíos
     st.markdown("### 📊 Información del Sistema")
     
     col1, col2 = st.columns(2)
@@ -1332,14 +1310,6 @@ def main():
         except Exception as e:
             st.error(f"❌ Error al cargar la aplicación: {e}")
             
-            # DEBUG - Mostrar información del estado
-            if st.session_state.get("rol") == "admin":
-                with st.expander("🔧 Información de Debug (Solo Admin)"):
-                    st.write("**Estado de sesión:**")
-                    st.write(f"- Authenticated: {st.session_state.get('authenticated')}")
-                    st.write(f"- Rol: {st.session_state.get('rol')}")
-                    st.write(f"- Usuario: {st.session_state.get('user', {}).get('nombre')}")
-            
             # Botón de recuperación
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
@@ -1352,3 +1322,4 @@ def main():
 # =============================================================================
 if __name__ == "__main__":
     main()
+
