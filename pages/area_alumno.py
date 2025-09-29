@@ -311,7 +311,6 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         
         # Mostrar estado actual
         col1, col2, col3 = st.columns(3)
-        
         with col1:
             st.metric("🎯 Clases Mensuales", suscripcion.get("clases_mensuales", 0))
         with col2:
@@ -324,14 +323,12 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         
         # Filtros de período
         col1, col2 = st.columns(2)
-        
         with col1:
             fecha_inicio = st.date_input(
                 "Ver reservas desde",
                 value=date.today(),
                 key="mis_reservas_inicio"
             )
-        
         with col2:
             fecha_fin = st.date_input(
                 "Hasta",
@@ -347,24 +344,35 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         else:
             st.markdown(f"### 📋 {len(df_reservas)} reserva(s) encontrada(s)")
             
-            # Mostrar reservas agrupadas por estado
-            reservas_futuras = df_reservas[df_reservas['fecha_clase'] >= date.today().isoformat()]
-            reservas_pasadas = df_reservas[df_reservas['fecha_clase'] < date.today().isoformat()]
+            # Separar futuras y pasadas
+            reservas_futuras = df_reservas[pd.to_datetime(df_reservas['fecha_clase'], dayfirst=True) >= pd.to_datetime(date.today())]
+            reservas_pasadas = df_reservas[pd.to_datetime(df_reservas['fecha_clase'], dayfirst=True) < pd.to_datetime(date.today())]
             
+            # Próximas clases con opción de cancelar
             if not reservas_futuras.empty:
                 st.markdown("#### 🔜 Próximas Clases")
-                st.dataframe(
-                    reservas_futuras[['clase_nombre', 'fecha_clase', 'horario_display', 'estado']],
-                    use_container_width=True,
-                    hide_index=True,
-                    column_config={
-                        "clase_nombre": "🏃‍♀️ Clase",
-                        "fecha_clase": "📅 Fecha",
-                        "horario_display": "⏰ Horario",
-                        "estado": "📊 Estado"
-                    }
-                )
+                for _, row in reservas_futuras.iterrows():
+                    with st.container(border=True):
+                        col1, col2, col3 = st.columns([3, 2, 1])
+                        
+                        with col1:
+                            st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
+                            st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
+                        
+                        with col2:
+                            st.write(f"📊 Estado: {row['estado']}")
+                        
+                        with col3:
+                            if row["estado"] == "RESERVADA":
+                                if st.button("❌ Cancelar", key=f"cancelar_{row['id']}"):
+                                    ok = clases_service.cancelar_reserva(row["id"], participante_id)
+                                    if ok:
+                                        st.success("Reserva cancelada")
+                                        st.rerun()
+                                    else:
+                                        st.error("No puedes cancelar (menos de 2h antes o error)")
             
+            # Historial de clases
             if not reservas_pasadas.empty:
                 with st.expander(f"📜 Historial ({len(reservas_pasadas)} clases)"):
                     st.dataframe(
