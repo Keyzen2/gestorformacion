@@ -5,7 +5,7 @@ from utils import subir_archivo_supabase, eliminar_archivo_supabase
 
 BUCKET_NAME = "documentos"  # Tu bucket actual
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("📁 Gestión Documental Avanzada")
     st.caption("Repositorio centralizado de documentos por empresa, grupo, módulo o usuario.")
 
