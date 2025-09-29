@@ -1,5 +1,3 @@
-# ===== VERSIONES ACTUALIZADAS COMPATIBLES =====
-
 # Streamlit actualizado con nuevas funcionalidades
 streamlit>=1.49.0
 
@@ -27,15 +25,10 @@ rich>=10.14.0,<14
 # Visualizaciones mejoradas
 altair>=5.5.0
 
-# IMPORTANTE: streamlit-aggrid puede tener conflictos
-# Probamos primero sin él para usar las nuevas funcionalidades nativas
 # streamlit-aggrid>=0.3.4.post3
 
 # Excel writing
 XlsxWriter>=3.0.0
-
-# ===== NUEVAS DEPENDENCIAS OPCIONALES =====
-# Para aprovechar las nuevas funcionalidades
 
 # Faker para datos de prueba
 faker>=24.0.0
@@ -43,10 +36,11 @@ faker>=24.0.0
 # Pillow para manejo de imágenes mejorado
 Pillow>=10.0.0
 
-# ===== COMPONENTES PARA PROYECTOS =====
-# Navegación horizontal moderna
 streamlit-option-menu>=0.3.6
+
 # Gráficos interactivos y Gantt charts
 plotly>=5.17.0
+streamlit-authenticator
+requests
+python-dotenv
 
-streamlit-calendar>=0.8.0
