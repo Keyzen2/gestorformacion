@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.subheader("📈 Indicadores de Calidad ISO 9001")
     st.caption("Análisis de desempeño del sistema de calidad basado en registros ISO.")
     st.divider()
