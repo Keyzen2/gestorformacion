@@ -565,6 +565,7 @@ def route():
 # =========================
 # DASHBOARDS DE BIENVENIDA
 # =========================
+
 def mostrar_dashboard_admin(ajustes, metricas):
     st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
     col1, col2, col3, col4 = st.columns(4)
@@ -573,7 +574,7 @@ def mostrar_dashboard_admin(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">🏢</div>
             <div class="metric-label">Empresas</div>
-            <div class="metric-value">{metricas['empresas']}</div>
+            <div class="metric-value">{metricas.get('empresas', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
     with col2:
@@ -581,7 +582,7 @@ def mostrar_dashboard_admin(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">👥</div>
             <div class="metric-label">Usuarios</div>
-            <div class="metric-value">{metricas['usuarios']}</div>
+            <div class="metric-value">{metricas.get('usuarios', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
     with col3:
@@ -589,7 +590,7 @@ def mostrar_dashboard_admin(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">📚</div>
             <div class="metric-label">Cursos</div>
-            <div class="metric-value">{metricas['cursos']}</div>
+            <div class="metric-value">{metricas.get('cursos', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
     with col4:
@@ -597,7 +598,7 @@ def mostrar_dashboard_admin(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">👨‍🎓</div>
             <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas['grupos']}</div>
+            <div class="metric-value">{metricas.get('grupos', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -626,7 +627,7 @@ def mostrar_dashboard_gestor(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">👨‍🎓</div>
             <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas['grupos']}</div>
+            <div class="metric-value">{metricas.get('grupos', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
         st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
@@ -635,7 +636,7 @@ def mostrar_dashboard_gestor(ajustes, metricas):
         <div class="metric-card fade-in">
             <div class="metric-icon">📂</div>
             <div class="metric-label">Documentos</div>
-            <div class="metric-value">{metricas['documentos']}</div>
+            <div class="metric-value">{metricas.get('documentos', 0)}</div>
         </div>
         """, unsafe_allow_html=True)
         st.caption(ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación."))
@@ -710,11 +711,13 @@ def mostrar_dashboard_comercial(ajustes):
 # =========================
 # Ejecución principal
 # =========================
-set_sidebar_visibility()
-
 if not st.session_state.get("role"):
+    # 👤 Usuario no logueado → mostrar login y ocultar sidebar
+    set_sidebar_visibility(False)
     login_view()
 else:
+    # 👤 Usuario logueado → mostrar sidebar dinámico
+    set_sidebar_visibility(True)
     try:
         route()
         page = st.session_state.get("page", None)
@@ -731,25 +734,32 @@ else:
                     mod_import.main(supabase_admin, st.session_state)
 
         else:
+            # =========================
+            # Dashboards de bienvenida por rol (usando ajustes_app)
+            # =========================
             rol = st.session_state.role
             ajustes = get_ajustes_app(supabase_admin)
 
             if rol == "admin":
-                metricas = get_metricas_admin()
+                with st.spinner("Cargando métricas..."):
+                    metricas = get_metricas_admin()
                 mostrar_dashboard_admin(ajustes, metricas)
+
             elif rol == "gestor":
                 empresa_id = st.session_state.user.get("empresa_id")
-                metricas = get_metricas_gestor(empresa_id) if empresa_id else {"grupos":0,"participantes":0,"documentos":0}
+                metricas = get_metricas_gestor(empresa_id) if empresa_id else {}
                 mostrar_dashboard_gestor(ajustes, metricas)
+
             elif rol == "alumno":
                 mostrar_dashboard_alumno(ajustes)
+
             elif rol == "comercial":
                 mostrar_dashboard_comercial(ajustes)
-
 
     except Exception as e:
         st.error(f"Error al cargar la página: {e}")
         st.exception(e)
+
 
 # =========================
 # Cerrar div de clase CSS
