@@ -1269,7 +1269,7 @@ def render_footer():
 # =============================================================================
 # ⚡ FUNCIÓN PRINCIPAL - ENTRY POINT PARA RAILWAY
 # =============================================================================
-def main():
+def render():
     """Función principal que ejecuta toda la aplicación"""
     
     # 1. Cargar estilos y ocultar elementos PRIMERO
@@ -1277,7 +1277,7 @@ def main():
     load_tailadmin_css()
     
     # 2. Verificar autenticación - CORREGIDO
-    usuario_autenticado = st.session_state.get("rol") or st.session_state.get("auth_session")
+    usuario_autenticado = st.session_state.get("authenticated", False)
     
     if not usuario_autenticado:
         # ============= MODO LOGIN =============
@@ -1304,7 +1304,7 @@ def main():
                 render_page()
             else:
                 # ============= DASHBOARDS DE BIENVENIDA =============
-                rol = st.session_state.rol
+                rol = st.session_state.get("rol")
                 ajustes = get_ajustes_app(
                     supabase_admin if supabase_admin else supabase_public,
                     campos=[
@@ -1339,10 +1339,4 @@ def main():
                 if st.button("🔄 Reiniciar Aplicación", use_container_width=True):
                     st.cache_data.clear()
                     st.rerun()
-
-# =============================================================================
-# 🎯 ENTRY POINT - EJECUTAR LA APLICACIÓN
-# =============================================================================
-if __name__ == "__main__":
-    main()
 
