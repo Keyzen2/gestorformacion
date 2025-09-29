@@ -744,7 +744,7 @@ def mostrar_mis_diplomas(participantes_service, session_state):
 # =========================
 # MAIN FUNCTION
 # =========================
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
     # Verificar acceso
@@ -843,5 +843,3 @@ def main(supabase, session_state):
     with tabs[4]:
         mostrar_mis_diplomas(participantes_service, session_state)
 
-if __name__ == "__main__":
-    st.error("Este archivo debe ser ejecutado desde app.py")
