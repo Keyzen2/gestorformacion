@@ -22,98 +22,140 @@ st.set_page_config(
 )
 
 # =========================
-# CSS GLOBAL - ESTILO TAILADMIN
+# CSS UNIFICADO - TailAdmin Style
 # =========================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-/* Reset */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+/* RESET */
+* {margin: 0; padding: 0; box-sizing: border-box;}
+html, body, [class*="css"] {font-family: 'Inter', sans-serif;}
 
-/* Ocultar menús nativos Streamlit */
-#MainMenu, footer, .stDeployButton, header[data-testid="stHeader"],
-button[kind="header"], [data-testid="stToolbar"] {
-    display: none !important;
-}
+/* APP BACKGROUND */
+.stApp {background: #f1f5f9 !important;}
 
-/* Sidebar fijo tipo TailAdmin */
+/* =============== SIDEBAR DARK =============== */
 section[data-testid="stSidebar"] {
-    background: #1f2937 !important; /* gris oscuro */
-    padding-top: 2rem !important;
-    min-width: 250px !important;
-    max-width: 250px !important;
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
+    border-right: 1px solid #334155 !important;
+    padding-top: 1rem !important;
 }
-section[data-testid="stSidebar"] * { color: #e5e7eb !important; }
+section[data-testid="stSidebar"] * {color: #e2e8f0 !important; font-size: 0.9rem;}
+section[data-testid="stSidebar"] h4 {
+    font-size: 0.75rem !important; 
+    text-transform: uppercase !important; 
+    color: #94a3b8 !important; 
+    margin: 1rem 0 0.5rem 0 !important;
+}
+section[data-testid="stSidebar"] hr {border-color: #334155 !important;}
+
+/* Botones sidebar */
 section[data-testid="stSidebar"] .stButton > button {
-    background: transparent !important;
-    border: none !important;
-    text-align: left !important;
-    width: 100% !important;
-    padding: 0.75rem 1rem !important;
-    font-weight: 500 !important;
-    font-size: 0.95rem !important;
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    color: #e2e8f0 !important;
     border-radius: 8px !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.75rem !important;
-    transition: background 0.2s ease !important;
+    padding: 0.6rem 1rem !important;
+    font-weight: 500 !important;
+    width: 100% !important;
+    text-align: left !important;
+    transition: all 0.2s ease !important;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
     background: rgba(255,255,255,0.1) !important;
-}
-section[data-testid="stSidebar"] h4 {
-    font-size: 0.75rem !important;
-    color: #9ca3af !important;
-    text-transform: uppercase !important;
-    margin: 1rem 1rem 0.5rem !important;
+    border-color: rgba(255,255,255,0.2) !important;
+    transform: translateX(4px);
 }
 
-/* Main content */
+/* =============== MAIN CONTENT =============== */
 .main .block-container {
+    background: #ffffff !important;
     padding: 2rem !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
     max-width: 1400px !important;
 }
 
-/* Cards TailAdmin */
-.metric-card {
-    background: white;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    padding: 1.5rem;
-    transition: all 0.2s ease;
-    text-align: center;
-}
-.metric-card:hover { border-color: #d1d5db; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.metric-icon {
-    font-size: 1.5rem;
-    margin-bottom: 0.5rem;
-    color: #3b82f6;
-}
-.metric-value { font-size: 1.75rem; font-weight: 700; color: #111827; }
-.metric-label { font-size: 0.875rem; color: #6b7280; }
+/* TITULOS */
+h1 {color: #1e293b !important; font-weight: 700 !important; margin-bottom: 1rem;}
+h2, h3 {color: #334155 !important; font-weight: 600 !important;}
 
-/* Login box */
-.login-container {
-    background: white;
-    border-radius: 16px;
-    padding: 2.5rem;
-    max-width: 420px;
-    margin: 4rem auto;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-    text-align: center;
+/* =============== CARDS / MÉTRICAS =============== */
+.metric-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    text-align: center !important;
+    transition: all 0.2s ease;
 }
-.login-logo {
-    width: 64px; height: 64px;
-    border-radius: 12px;
-    background: #3b82f6;
-    display: flex; align-items: center; justify-content: center;
-    color: white; font-size: 1.5rem;
-    margin: 0 auto 1.5rem;
+.metric-card:hover {box-shadow: 0 4px 10px rgba(0,0,0,0.08);}
+.metric-icon {font-size: 2rem; margin-bottom: 0.5rem;}
+.metric-label {color: #64748b; font-size: 0.85rem; font-weight: 500;}
+.metric-value {color: #1e293b; font-size: 1.5rem; font-weight: 700;}
+
+/* =============== INPUTS & BUTTONS =============== */
+.stTextInput > div > div > input, .stSelectbox select, textarea {
+    background: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 1rem !important;
+    font-size: 0.95rem !important;
+}
+.stTextInput > div > div > input:focus, textarea:focus, select:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.2) !important;
+    background: #fff !important;
+}
+
+.stButton > button {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 1.2rem !important;
+    font-weight: 600 !important;
+    transition: 0.2s;
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(59,130,246,0.4);
+}
+
+/* =============== ALERTS =============== */
+.stAlert {border-radius: 8px !important; border-left: 4px solid !important;}
+.stSuccess {border-left-color: #10b981 !important; background: #ecfdf5 !important;}
+.stError {border-left-color: #ef4444 !important; background: #fef2f2 !important;}
+.stInfo {border-left-color: #3b82f6 !important; background: #eff6ff !important;}
+.stWarning {border-left-color: #f59e0b !important; background: #fffbeb !important;}
+
+/* =============== TABLES =============== */
+[data-testid="stDataFrame"] table {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+[data-testid="stDataFrame"] th {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+}
+
+/* =============== TABS =============== */
+[data-testid="stTabs"] button {
+    background: #f1f5f9 !important;
+    border-radius: 8px 8px 0 0 !important;
+    padding: 0.6rem 1.2rem !important;
+}
+[data-testid="stTabs"] button[aria-selected="true"] {
+    background: #fff !important;
+    border-bottom: 2px solid #3b82f6 !important;
+    color: #1e293b !important;
+    font-weight: 600 !important;
 }
 </style>
 """, unsafe_allow_html=True)
+
 
 # =========================
 # Claves Supabase
