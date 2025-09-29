@@ -500,9 +500,8 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
         st.error("La fecha de inicio debe ser anterior a la fecha de fin")
         return
     
-    # Obtener reservas usando los servicios
+    # Obtener reservas usando el servicio
     try:
-        # Aquí necesitarías un método en clases_service para obtener reservas filtradas
         df_reservas = clases_service.get_reservas_periodo(fecha_inicio, fecha_fin, estado_filtro)
         
         if df_reservas.empty:
@@ -510,14 +509,15 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
         else:
             st.markdown(f"#### 📊 {len(df_reservas)} reservas encontradas")
             
-            # Tabla de reservas
-            evento_reserva = st.dataframe(
+            # Mostrar reservas con avatar usando st.data_editor
+            evento_reserva = st.data_editor(
                 df_reservas,
                 use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
                 column_config={
+                    "avatar_url": st.column_config.ImageColumn("🖼️ Avatar", width="small"),
                     "fecha_clase": st.column_config.DateColumn("📅 Fecha"),
                     "participante_nombre": "👤 Participante",
                     "clase_nombre": "🏃‍♀️ Clase",
