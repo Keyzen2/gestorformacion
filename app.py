@@ -24,10 +24,62 @@ st.set_page_config(
     }
 )
 
-# CSS moderno para startup look
+# CSS moderno para startup look + OCULTAR ELEMENTOS STREAMLIT
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ========================================
+   OCULTAR ELEMENTOS DE STREAMLIT
+   ======================================== */
+
+/* Ocultar menú hamburguesa completamente */
+#MainMenu {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Ocultar footer "Made with Streamlit" */
+footer {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Ocultar botón "Deploy" */
+.stDeployButton {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* Ocultar header completo (arriba derecha) */
+header[data-testid="stHeader"] {
+    visibility: hidden !important;
+    display: none !important;
+}
+
+/* CRÍTICO: Ocultar sidebar de páginas automático */
+section[data-testid="stSidebar"] {
+    display: none !important;
+}
+
+/* Ocultar el botón de ">" para expandir sidebar */
+button[kind="header"] {
+    display: none !important;
+}
+
+/* Ajustar espacio al ocultar header */
+.block-container {
+    padding-top: 1rem !important;
+}
+
+/* Prevenir que aparezca el sidebar al hacer hover */
+.css-1d391kg {
+    display: none !important;
+}
+
+/* ========================================
+   TU DISEÑO ORIGINAL (mantener igual)
+   ======================================== */
 
 /* Reset y base */
 html, body, [class*="css"] {
