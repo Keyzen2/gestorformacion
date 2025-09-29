@@ -1698,7 +1698,7 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
 # =========================
 # MAIN PARTICIPANTES
 # =========================
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("👥 Gestión de Participantes")
 
     participantes_service = get_participantes_service(supabase, session_state)
@@ -1814,6 +1814,3 @@ def main(supabase, session_state):
     with tabs[4]:
         mostrar_gestion_diplomas_participantes(supabase, session_state, participantes_service)
 
-if __name__ == "__main__":
-    # Este archivo debe ser importado desde main.py, no ejecutado directamente
-    st.error("Este archivo debe ser ejecutado desde main.py")
