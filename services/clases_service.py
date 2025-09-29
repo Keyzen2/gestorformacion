@@ -271,6 +271,28 @@ class ClasesService:
         except Exception as e:
             print("Error get_reservas_periodo:", e)
             return pd.DataFrame()
+            
+    def get_avatares_reserva(self, horario_id: str, fecha_clase: date) -> list:
+        """Obtiene los avatares de todos los participantes que tienen reserva en la misma clase y fecha."""
+        try:
+            result = self.supabase.table("clases_reservas").select("""
+                participantes(id,
+                    avatar:participantes_avatares(archivo_url)
+                )
+            """).eq("horario_id", horario_id
+            ).eq("fecha_clase", fecha_clase.isoformat()
+            ).neq("estado", "CANCELADA").execute()
+            
+            avatares = []
+            if result.data:
+                for r in result.data:
+                    participante = r.get("participantes", {})
+                    if participante.get("avatar"):
+                        avatares.append(participante["avatar"][0]["archivo_url"])
+            return avatares
+        except Exception as e:
+            print("Error get_avatares_reserva:", e)
+            return []
 
     # =========================
     # GESTIÓN DE HORARIOS
