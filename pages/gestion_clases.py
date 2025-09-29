@@ -503,7 +503,7 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     # Obtener reservas usando los servicios
     try:
         # Aquí necesitarías un método en clases_service para obtener reservas filtradas
-        df_reservas = obtener_reservas_periodo(clases_service, fecha_inicio, fecha_fin, estado_filtro)
+        df_reservas = clases_service.get_reservas_periodo(fecha_inicio, fecha_fin, estado_filtro)
         
         if df_reservas.empty:
             st.info("No hay reservas en el período seleccionado")
@@ -533,15 +533,6 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     
     except Exception as e:
         st.error(f"Error cargando reservas: {e}")
-
-def obtener_reservas_periodo(clases_service, fecha_inicio, fecha_fin, estado_filtro):
-    """Obtiene reservas del período con filtros."""
-    try:
-        # Esta función requeriría implementación en clases_service
-        # Por ahora usamos un DataFrame vacío como placeholder
-        return pd.DataFrame()
-    except:
-        return pd.DataFrame()
 
 def mostrar_gestion_asistencia(clases_service, reserva_data):
     """Formulario para gestionar asistencia."""
