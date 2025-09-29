@@ -534,12 +534,30 @@ def route():
 # Ejecución principal
 # =========================
 if not st.session_state.get("role"):
-    # 👤 Usuario no logueado → mostrar login y ocultar sidebar
-    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
+    # 👤 Usuario no logueado → activar modo login
+    st.markdown(
+        """
+        <script>
+        document.body.classList.remove('app-mode');
+        document.body.classList.add('login-mode');
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
     login_view()
+
 else:
-    # 👤 Usuario logueado → mostrar sidebar dinámico
-    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
+    # 👤 Usuario logueado → activar modo app
+    st.markdown(
+        """
+        <script>
+        document.body.classList.remove('login-mode');
+        document.body.classList.add('app-mode');
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
+    
     try:
         route()
         page = st.session_state.get("page", None)
