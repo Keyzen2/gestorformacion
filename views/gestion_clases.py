@@ -700,5 +700,3 @@ def render(supabase, session_state):
     with tabs[3]:
         mostrar_metricas_clases(clases_service, session_state)
 
-if __name__ == "__main__":
-    st.error("Este archivo debe ser ejecutado desde main.py")
