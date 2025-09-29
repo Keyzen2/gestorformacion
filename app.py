@@ -263,16 +263,21 @@ def do_logout():
 # Vista de login LIMPIA Y MODERNA
 # =========================
 def login_view():
-    """Pantalla de login minimalista."""
-    
+    """Pantalla de login minimalista con logo de empresa, barra de progreso y sidebar oculto."""
+
     ajustes = get_ajustes_app(supabase_public, campos=[
         "mensaje_login", "nombre_app", "logo_url"
     ])
-    
+
     mensaje_login = ajustes.get("mensaje_login", "Sistema integral de gestión FUNDAE")
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    logo_display = "📚" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="64" height="64" style="border-radius: 12px;">'
-    
+    # ✅ Logo original (recuperado del backup)
+    logo_display = (
+        f'<img src="{ajustes.get("logo_url")}" width="64" height="64" style="border-radius: 12px;">'
+        if ajustes.get("logo_url")
+        else "📚"
+    )
+
     # Container principal
     st.markdown(f"""
     <div class="login-container fade-in">
@@ -283,55 +288,60 @@ def login_view():
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     # Formulario de login centrado
     col1, col2, col3 = st.columns([1, 2, 1])
-    
+
     with col2:
         with st.form("form_login", clear_on_submit=False):
             st.markdown("#### Iniciar sesión")
-            
+
             email = st.text_input(
                 "Email",
                 placeholder="tu@empresa.com",
                 label_visibility="collapsed"
             )
-            
+
             password = st.text_input(
                 "Contraseña",
                 type="password",
                 placeholder="••••••••",
                 label_visibility="collapsed"
             )
-            
+
             submitted = st.form_submit_button(
                 "Iniciar sesión" if not st.session_state.get("login_loading") else "Iniciando...",
                 disabled=st.session_state.get("login_loading", False),
                 use_container_width=True
             )
-    
+
+    # ✅ Barra de progreso mientras intenta login
+    if st.session_state.get("login_loading", False):
+        st.progress(50, "Verificando credenciales...")
+
     if submitted:
         if not email or not password:
             st.warning("Por favor, introduce email y contraseña")
         else:
             st.session_state.login_loading = True
+
             try:
                 auth = supabase_public.auth.sign_in_with_password({
                     "email": email,
                     "password": password
                 })
-                
+
                 if not auth or not auth.user:
                     st.error("Credenciales incorrectas")
                     st.session_state.login_loading = False
                 else:
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.success("Sesión iniciada correctamente")
+                    st.success("✅ Sesión iniciada correctamente")
                     time.sleep(0.5)
                     st.session_state.login_loading = False
-                    st.rerun()
-                    
+                    st.rerun()   # 👈 fuerza a recargar app ya logueado
+
             except Exception as e:
                 st.error(f"Error al iniciar sesión: {e}")
                 st.session_state.login_loading = False
