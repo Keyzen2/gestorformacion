@@ -273,29 +273,31 @@ class ClasesService:
             return pd.DataFrame()
             
     def get_avatares_reserva(self, horario_id: str, fecha_clase: date) -> list:
-        """Obtiene los avatares de todos los participantes que tienen reserva en la misma clase y fecha."""
+        """Obtiene los avatares de los participantes con reserva en una clase/fecha."""
         try:
-            # 1. Obtener los participantes con reserva activa en esa clase
-            reservas = self.supabase.table("clases_reservas").select("participante_id").eq(
-                "horario_id", horario_id
-            ).eq("fecha_clase", fecha_clase.isoformat()
-            ).neq("estado", "CANCELADA").execute()
+            result = (
+                self.supabase.table("clases_reservas")
+                .select("""
+                    id,
+                    participante_id,
+                    participantes!clases_reservas_participante_id_fkey(
+                        id,
+                        participantes_avatars(archivo_url)
+                    )
+                """)
+                .eq("horario_id", horario_id)
+                .eq("fecha_clase", fecha_clase.isoformat())
+                .neq("estado", "CANCELADA")
+                .execute()
+            )
     
-            if not reservas.data:
-                return []
-    
-            participante_ids = [r["participante_id"] for r in reservas.data if r.get("participante_id")]
-    
-            # 2. Obtener los avatares de esos participantes
             avatares = []
-            if participante_ids:
-                avatars_res = self.supabase.table("participantes_avatares").select(
-                    "archivo_url, participante_id"
-                ).in_("participante_id", participante_ids).execute()
-    
-                if avatars_res.data:
-                    avatares = [a["archivo_url"] for a in avatars_res.data if a.get("archivo_url")]
-    
+            if result.data:
+                for r in result.data:
+                    participante = r.get("participantes", {})
+                    if participante and participante.get("participantes_avatars"):
+                        for avatar in participante["participantes_avatars"]:
+                            avatares.append(avatar["archivo_url"])
             return avatares
         except Exception as e:
             print("Error get_avatares_reserva:", e)
@@ -597,19 +599,41 @@ class ClasesService:
     # GESTIÓN DE SUSCRIPCIONES
     # =========================
     
-    def get_suscripcion_participante(self, participante_id: str) -> Optional[Dict]:
-        """Obtiene suscripción activa de un participante"""
+    def get_suscripcion_participante(self, participante_id: str):
+        """Devuelve la suscripción activa, reseteando el contador si cambió el mes."""
         try:
-            result = self.supabase.table("participantes_suscripciones").select("*").eq(
-                "participante_id", participante_id
-            ).eq("activa", True).execute()
-            
-            if result.data:
-                return result.data[0]
-            return None
-            
+            res = (
+                self.supabase.table("participantes_suscripciones")
+                .select("*")
+                .eq("participante_id", participante_id)
+                .eq("activa", True)
+                .maybe_single()
+                .execute()
+            )
+            if not res.data:
+                return None
+    
+            sus = res.data
+    
+            # Comprobar si estamos en un nuevo mes
+            hoy = date.today()
+            mes_actual = hoy.month
+            año_actual = hoy.year
+    
+            if sus.get("mes_actual") != mes_actual or sus.get("año_actual") != año_actual:
+                # Reiniciar contador
+                update_data = {
+                    "mes_actual": mes_actual,
+                    "año_actual": año_actual,
+                    "mes_referencia": f"{año_actual}-{mes_actual:02d}",
+                    "clases_usadas_mes": 0
+                }
+                self.supabase.table("participantes_suscripciones").update(update_data).eq("id", sus["id"]).execute()
+                sus.update(update_data)
+    
+            return sus
         except Exception as e:
-            print(f"Error obteniendo suscripción: {e}")
+            print("Error get_suscripcion_participante:", e)
             return None
 
     def activar_suscripcion(self, participante_id: str, empresa_id: str, clases_mensuales: int) -> bool:
