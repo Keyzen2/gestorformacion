@@ -275,29 +275,31 @@ class ClasesService:
     def get_avatares_reserva(self, horario_id: str, fecha_clase: date) -> list:
         """Obtiene los avatares de todos los participantes que tienen reserva en la misma clase y fecha."""
         try:
-            result = self.supabase.table("clases_reservas").select("""
-                participante_id,
-                participante:participantes(
-                    id,
-                    avatar:participantes_avatares(archivo_url)
-                )
-            """).eq("horario_id", horario_id
+            # 1. Obtener los participantes con reserva activa en esa clase
+            reservas = self.supabase.table("clases_reservas").select("participante_id").eq(
+                "horario_id", horario_id
             ).eq("fecha_clase", fecha_clase.isoformat()
             ).neq("estado", "CANCELADA").execute()
     
-            avatares = []
-            if result.data:
-                for r in result.data:
-                    participante = r.get("participante")
-                    if participante and participante.get("avatar"):
-                        # Puede haber varios avatares, cogemos el último subido
-                        avatares.append(participante["avatar"][-1]["archivo_url"])
-            return avatares
+            if not reservas.data:
+                return []
     
+            participante_ids = [r["participante_id"] for r in reservas.data if r.get("participante_id")]
+    
+            # 2. Obtener los avatares de esos participantes
+            avatares = []
+            if participante_ids:
+                avatars_res = self.supabase.table("participantes_avatares").select(
+                    "archivo_url, participante_id"
+                ).in_("participante_id", participante_ids).execute()
+    
+                if avatars_res.data:
+                    avatares = [a["archivo_url"] for a in avatars_res.data if a.get("archivo_url")]
+    
+            return avatares
         except Exception as e:
             print("Error get_avatares_reserva:", e)
             return []
-
 
     # =========================
     # GESTIÓN DE HORARIOS
