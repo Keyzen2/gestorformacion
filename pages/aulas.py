@@ -122,7 +122,9 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             st.info(f"Se mostrarán solo los primeros 7 días")
         
         # Crear matriz
-        header = ["Aula"] + [d.strftime('%a\n%d/%m') for d in dias]
+        # Mapeo de días a español
+        dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
+        header = ["Aula"] + [f"{dias_es[d.weekday()]}\n{d.strftime('%d/%m')}" for d in dias]
         datos_tabla = [header]
         
         for aula in aulas_list:
