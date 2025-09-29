@@ -140,6 +140,34 @@ html, body, [class*="css"] {
 .fade-in { animation: fadeIn 0.4s ease-out; }
 </style>
 """, unsafe_allow_html=True)
+
+# =========================
+# CSS Dinámico según estado de login
+# =========================
+def set_sidebar_visibility():
+    """Muestra u oculta el sidebar según login"""
+    if st.session_state.get("role"):
+        # Usuario logueado → mostrar sidebar
+        st.markdown("""
+        <style>
+        section[data-testid="stSidebar"] {
+            display: flex !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+    else:
+        # Usuario no logueado → ocultar sidebar
+        st.markdown("""
+        <style>
+        section[data-testid="stSidebar"] {
+            display: none !important;
+        }
+        button[data-testid="collapsedControl"] {
+            display: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
 # =========================
 # Claves Supabase
 # =========================
@@ -530,34 +558,163 @@ def route():
     
     st.sidebar.markdown("---")
     st.sidebar.caption(mensaje_footer)
+
+# =========================
+# DASHBOARDS DE BIENVENIDA
+# =========================
+def mostrar_dashboard_admin(ajustes, metricas):
+    st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">🏢</div>
+            <div class="metric-label">Empresas</div>
+            <div class="metric-value">{metricas['empresas']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👥</div>
+            <div class="metric-label">Usuarios</div>
+            <div class="metric-value">{metricas['usuarios']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📚</div>
+            <div class="metric-label">Cursos</div>
+            <div class="metric-value">{metricas['cursos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Grupos</div>
+            <div class="metric-value">{metricas['grupos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.subheader("⚡ Accesos Rápidos")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("👥 Usuarios", use_container_width=True):
+            st.session_state.page = "usuarios_empresas"
+            st.rerun()
+    with col2:
+        if st.button("🏢 Empresas", use_container_width=True):
+            st.session_state.page = "empresas"
+            st.rerun()
+    with col3:
+        if st.button("⚙️ Ajustes", use_container_width=True):
+            st.session_state.page = "ajustes_app"
+            st.rerun()
+
+
+def mostrar_dashboard_gestor(ajustes, metricas):
+    st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Grupos</div>
+            <div class="metric-value">{metricas['grupos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📂</div>
+            <div class="metric-label">Documentos</div>
+            <div class="metric-value">{metricas['documentos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación."))
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">🗂️</div>
+            <div class="metric-label">Doc. Avanzada</div>
+            <div class="metric-value">✔️</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_docu_avanzada", "Gestión documental avanzada."))
+
+
+def mostrar_dashboard_alumno(ajustes):
+    st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Mis Grupos</div>
+            <div class="metric-value">📘</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📜</div>
+            <div class="metric-label">Mis Diplomas</div>
+            <div class="metric-value">🏅</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."))
+
+    st.markdown("---")
+    st.info(ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."))
+
+
+def mostrar_dashboard_comercial(ajustes):
+    st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👥</div>
+            <div class="metric-label">Clientes</div>
+            <div class="metric-value">📋</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">💡</div>
+            <div class="metric-label">Oportunidades</div>
+            <div class="metric-value">📈</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📝</div>
+            <div class="metric-label">Tareas</div>
+            <div class="metric-value">✅</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."))
+
 # =========================
 # Ejecución principal
 # =========================
-if not st.session_state.get("role"):
-    # 👤 Usuario no logueado → activar modo login
-    st.markdown(
-        """
-        <script>
-        document.body.classList.remove('app-mode');
-        document.body.classList.add('login-mode');
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-    login_view()
+set_sidebar_visibility()  # 👈 asegura sidebar correcto según login
 
+if not st.session_state.get("role"):
+    # 🚪 Usuario no logueado → mostrar login
+    login_view()
 else:
-    # 👤 Usuario logueado → activar modo app
-    st.markdown(
-        """
-        <script>
-        document.body.classList.remove('login-mode');
-        document.body.classList.add('app-mode');
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
-    
+    # 👤 Usuario logueado → mostrar sidebar dinámico
+    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
     try:
         route()
         page = st.session_state.get("page", None)
@@ -574,67 +731,21 @@ else:
                     mod_import.main(supabase_admin, st.session_state)
 
         else:
-            # =========================
-            # Dashboards de bienvenida por rol (dinámico con ajustes_app)
-            # =========================
             rol = st.session_state.role
+            ajustes = get_ajustes_app(supabase_admin)
 
-            ajustes = get_ajustes_app(supabase_admin, campos=[
-                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial", "bienvenida_docu_avanzada",
-                "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
-                "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
-                "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
-                "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
-            ])
-
-            # --- PANEL ADMIN ---
             if rol == "admin":
-                st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
-
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.info(ajustes.get("tarjeta_admin_usuarios", ""))
-                with col2:
-                    st.info(ajustes.get("tarjeta_admin_empresas", ""))
-                with col3:
-                    st.info(ajustes.get("tarjeta_admin_ajustes", ""))
-
-            # --- PANEL GESTOR ---
+                metricas = get_metricas_admin()
+                mostrar_dashboard_admin(ajustes, metricas)
             elif rol == "gestor":
-                st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.info(ajustes.get("tarjeta_gestor_grupos", ""))
-                with col2:
-                    st.info(ajustes.get("tarjeta_gestor_documentos", ""))
-
-                if ajustes.get("tarjeta_gestor_docu_avanzada"):
-                    st.info(ajustes["tarjeta_gestor_docu_avanzada"])
-
-            # --- PANEL ALUMNO ---
+                empresa_id = st.session_state.user.get("empresa_id")
+                metricas = get_metricas_gestor(empresa_id) if empresa_id else {"grupos":0,"participantes":0,"documentos":0}
+                mostrar_dashboard_gestor(ajustes, metricas)
             elif rol == "alumno":
-                st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
-
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.info(ajustes.get("tarjeta_alumno_grupos", ""))
-                with col2:
-                    st.info(ajustes.get("tarjeta_alumno_diplomas", ""))
-                with col3:
-                    st.info(ajustes.get("tarjeta_alumno_seguimiento", ""))
-
-            # --- PANEL COMERCIAL ---
+                mostrar_dashboard_alumno(ajustes)
             elif rol == "comercial":
-                st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
+                mostrar_dashboard_comercial(ajustes)
 
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.info(ajustes.get("tarjeta_comercial_clientes", ""))
-                with col2:
-                    st.info(ajustes.get("tarjeta_comercial_oportunidades", ""))
-                with col3:
-                    st.info(ajustes.get("tarjeta_comercial_tareas", ""))
 
     except Exception as e:
         st.error(f"Error al cargar la página: {e}")
