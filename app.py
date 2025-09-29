@@ -388,33 +388,18 @@ def load_tailadmin_css():
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     }
 
-    /* === LOGIN TAILADMIN SIMPLIFICADO === */
+    /* === LOGIN TAILADMIN CON LOGO GRANDE === */
     .login-container {
-        max-width: 380px;
-        margin: 2rem auto;
-        padding: 2rem;
+        max-width: 350px !important;
+        margin: 1rem auto !important;
+        padding: 2rem 1.5rem !important;
         background: white;
         border-radius: 16px;
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
         border: 1px solid var(--tailadmin-border);
     }
 
-    .login-logo {
-        width: 64px;
-        height: 64px;
-        background: linear-gradient(135deg, var(--tailadmin-primary) 0%, #6366f1 100%);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 1.5rem;
-        font-weight: bold;
-        margin: 0 auto 1rem;
-        box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
-    }
-
-    /* === INPUTS LOGIN COMPACTOS === */
+    /* === INPUTS LOGIN === */
     .login-container .stTextInput > div > div > input {
         max-width: 280px !important;
         margin: 0 auto !important;
@@ -435,6 +420,15 @@ def load_tailadmin_css():
         max-width: 280px !important;
         margin: 1rem auto !important;
         display: block !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.95rem !important;
+    }
+
+    /* === TÍTULO LOGIN === */
+    .login-container h4 {
+        font-size: 1.1rem !important;
+        margin-bottom: 1.5rem !important;
+        text-align: center !important;
     }
 
     /* === BREADCRUMB === */
@@ -704,17 +698,12 @@ def do_logout():
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login simplificado con logo personalizado"""
-    
-    # Obtener ajustes
-    ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
-    mensaje_login = ajustes.get("mensaje_login", "Sistema integral de gestión FUNDAE")
-    nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
+    """Login con logo grande y limpio"""
     
     # Logo fijo de DataFor
     logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
 
-    # Fondo de pantalla limpio
+    # Fondo de pantalla
     st.markdown("""
     <div style="
         position: fixed;
@@ -725,43 +714,42 @@ def login_view_tailadmin():
     "></div>
     """, unsafe_allow_html=True)
 
-    # Container del login con logo personalizado
+    # Spacer mínimo
+    st.markdown('<div style="height: 3vh;"></div>', unsafe_allow_html=True)
+
+    # Logo grande centrado
     st.markdown(f"""
-    <div class="login-container">
-        <div style="text-align: center; margin-bottom: 1.5rem;">
-            <div style="
-                width: 80px; height: 80px;
-                margin: 0 auto 1rem;
-                border-radius: 16px;
-                overflow: hidden;
-                box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
-                border: 2px solid rgba(255, 255, 255, 0.2);
-            ">
-                <img src="{logo_datafor}" style="
-                    width: 100%; 
-                    height: 100%; 
-                    object-fit: contain;
-                    background: white;
-                    padding: 8px;
-                " alt="DataFor Logo">
-            </div>
-            <h1 style="margin: 0; color: #1c2434; font-size: 1.5rem; font-weight: 700;">Gestor Formación SaaS</h1>
-            <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.9rem;">{mensaje_login}</p>
-        </div>
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <img src="{logo_datafor}" style="
+            width: 150px; 
+            height: auto; 
+            object-fit: contain;
+            background: white;
+            padding: 20px;
+            border-radius: 16px;
+            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        " alt="DataFor Logo">
     </div>
     """, unsafe_allow_html=True)
 
-    # Formulario de login sin efectos
+    # Container del formulario de login
+    st.markdown("""
+    <div class="login-container">
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Formulario de login limpio
     with st.form("form_login", clear_on_submit=False):
         st.markdown("#### 🔐 Iniciar Sesión")
         
         email = st.text_input(
-            "📧 Email", 
+            "Email", 
             placeholder="usuario@empresa.com"
         )
         
         password = st.text_input(
-            "🔑 Contraseña", 
+            "Contraseña", 
             type="password",
             placeholder="••••••••"
         )
@@ -773,35 +761,35 @@ def login_view_tailadmin():
             use_container_width=True
         )
 
-    # Lógica de autenticación SIN efectos visuales
+    # Lógica de autenticación - CORREGIDA
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
         else:
-            # Marcar que estamos logueando sin mostrar efectos visuales
-            st.session_state.login_loading = True
-            
             try:
-                # Autenticación directa sin indicadores visuales
+                # Autenticación directa
                 auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if not auth or not auth.user:
-                    st.error("❌ Credenciales incorrectas")
-                    st.session_state.login_loading = False
-                else:
-                    # Configurar sesión y rerun inmediatamente
+                
+                if auth and auth.user:
+                    # CRÍTICO: Configurar sesión ANTES del rerun
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.session_state.login_loading = False
+                    st.success("✅ Acceso correcto")
+                    # Pequeño delay para mostrar el mensaje
+                    import time
+                    time.sleep(0.5)
                     st.rerun()
+                else:
+                    st.error("❌ Credenciales incorrectas")
+                    
             except Exception as e:
-                st.error(f"❌ Error al iniciar sesión: {e}")
-                st.session_state.login_loading = False
+                st.error(f"❌ Error: {e}")
 
-    # Pie simplificado con branding
+    # Pie compacto
     st.markdown("""
-    <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
-        <p style="color: #9ca3af; font-size: 0.75rem; margin: 0;">
-            © 2025 DataFor - Gestor Formación SaaS
+    <div style="text-align: center; margin-top: 2rem;">
+        <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin: 0;">
+            © 2025 DataFor
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1275,8 +1263,10 @@ def main():
     hide_streamlit_elements()
     load_tailadmin_css()
     
-    # 2. Verificar autenticación
-    if not st.session_state.get("rol"):
+    # 2. Verificar autenticación - CORREGIDO
+    usuario_autenticado = st.session_state.get("rol") or st.session_state.get("auth_session")
+    
+    if not usuario_autenticado:
         # ============= MODO LOGIN =============
         login_view_tailadmin()
         
