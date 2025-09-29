@@ -201,7 +201,25 @@ class ClasesService:
             
         except Exception as e:
             return False
-
+            
+    def get_reservas_por_horario(self, horario_id: str, fecha: Optional[date] = None):
+        """Obtiene reservas de un horario"""
+        try:
+            query = self.supabase.table("clases_reservas").select("""
+                id, estado, fecha_clase,
+                participantes(id, nombre, apellidos,
+                    avatar:participantes_avatares(archivo_url)
+                )
+            """).eq("horario_id", horario_id).neq("estado", "CANCELADA")
+            
+            if fecha:
+                query = query.eq("fecha_clase", fecha.isoformat())
+            
+            result = query.execute()
+            return result.data or []
+        except Exception as e:
+            print("Error get_reservas_por_horario:", e)
+            return []
     # =========================
     # GESTIÓN DE HORARIOS
     # =========================
