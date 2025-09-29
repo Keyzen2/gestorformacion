@@ -358,37 +358,6 @@ def get_metricas_admin():
         return {"empresas": empresas, "usuarios": usuarios, "cursos": cursos, "grupos": grupos}
     except:
         return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
-        
-def render_header():
-    """Header fijo con logo"""
-    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
-                               campos=["nombre_app", "logo_url"])
-    
-    logo = ajustes.get("logo_url", "")
-    nombre = ajustes.get("nombre_app", "Gestor de Formación")
-    
-    logo_html = f'<img src="{logo}" style="height: 40px; border-radius: 8px;">' if logo else "🚀"
-    
-    st.markdown(f"""
-    <div class="app-header">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <div style="font-size: 2rem;">{logo_html}</div>
-            <h2 style="margin: 0; font-size: 1.25rem; color: #1e293b;">{nombre}</h2>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def render_footer():
-    """Footer fijo"""
-    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
-                               campos=["mensaje_footer"])
-    mensaje = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación")
-    
-    st.markdown(f"""
-    <div class="app-footer">
-        <p style="margin: 0; font-size: 0.875rem; color: #64748b;">{mensaje}</p>
-    </div>
-    """, unsafe_allow_html=True)
     
 @st.cache_data(ttl=300)
 def get_metricas_gestor(empresa_id):
