@@ -1040,23 +1040,6 @@ def render_sidebar_tailadmin():
             " alt="DataFor">
         </div>
         
-        <!-- Avatar del usuario -->
-        <div style="
-            width: 36px; height: 36px; 
-            background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 1rem;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 2px 4px rgba(60, 80, 224, 0.3);
-        ">
-            {nombre_usuario[0].upper()}
-        </div>
-        
         <!-- Info del usuario -->
         <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.85rem;">{nombre_usuario}</p>
         <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">
