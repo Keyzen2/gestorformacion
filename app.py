@@ -578,7 +578,21 @@ class TailAdminComponents:
             </div>
         </div>
         """, unsafe_allow_html=True)
-
+    
+    @staticmethod
+    def info_card(title: str, content: str, icon: str = "📊"):
+        """Card informativa estilo TailAdmin"""
+        st.markdown(f"""
+        <div class="tailadmin-card">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 2rem;">{icon}</div>
+                <h3 style="margin: 0; color: #1c2434; font-size: 1.25rem;">{title}</h3>
+            </div>
+            <div style="color: #64748b; line-height: 1.6; white-space: pre-line;">
+                {content}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 # =============================================================================
 # CONFIGURACIÓN SUPABASE (RAILWAY COMPATIBLE)
 # =============================================================================
@@ -975,55 +989,40 @@ def render_sidebar_tailadmin():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
     empresa_id = st.session_state.user.get("empresa_id")
 
-    # Logo DataFor fijo
+    # Logo DataFor más grande
     logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
 
-    # Header del sidebar con logo DataFor + avatar usuario
+    # Header del sidebar con logo DataFor + info usuario (SIN avatar HTML)
     st.sidebar.markdown(f"""
     <div style="
         padding: 1rem 1rem 1.5rem; 
         border-bottom: 1px solid #334155; 
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
         text-align: center;
     ">
-        <!-- Logo DataFor -->
+        <!-- Logo DataFor MÁS GRANDE -->
         <div style="
-            width: 50px; 
-            height: 50px;
+            width: 140px; 
+            height: auto;
             margin: 0 auto 1rem;
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
             background: white;
-            padding: 6px;
+            padding: 12px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         ">
             <img src="{logo_datafor}" style="
                 width: 100%; 
-                height: 100%; 
+                height: auto; 
                 object-fit: contain;
             " alt="DataFor">
         </div>
         
-        <!-- Avatar del usuario -->
-        <div style="
-            width: 36px; height: 36px; 
-            background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            font-size: 1rem;
-            margin-bottom: 0.5rem;
-            box-shadow: 0 2px 4px rgba(60, 80, 224, 0.3);
-        ">
-            {nombre_usuario[0].upper()}
-        </div>
-        
-        <!-- Info del usuario -->
-        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.85rem;">{nombre_usuario}</p>
-        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">
+        <!-- Info del usuario SIN avatar HTML -->
+        <p style="margin: 0.5rem 0 0.25rem; font-weight: 600; color: #f1f5f9; font-size: 0.95rem;">
+            {nombre_usuario}
+        </p>
+        <p style="margin: 0; font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; font-weight: 500;">
             {rol.title() if rol else 'Usuario'}
         </p>
     </div>
@@ -1063,23 +1062,32 @@ def render_sidebar_tailadmin():
             return True  # Si no hay datos, permitir acceso (para admin)
         return modulos_dict.get(f"{modulo_key}_activo", False)
 
-    # Menú por roles CON verificación de módulos activos
+    # Menú por roles CON SECCIONES VISUALES MEJORADAS
     if rol == "admin":
         st.sidebar.markdown("#### ⚙️ Administración SaaS")
-        menu = {
+        st.sidebar.markdown("---")  # Separador visual
+        
+        admin_menu = {
             "📊 Panel Admin": "panel_admin",
             "👥 Usuarios": "usuarios_empresas", 
             "🏢 Empresas": "empresas",
             "⚙️ Ajustes": "ajustes_app"
         }
         
-    elif rol == "gestor":
-        st.sidebar.markdown("#### 🎓 Gestión de Formación")
-        menu = {}
+        for label, page_key in admin_menu.items():
+            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                st.session_state.page = page_key
+                st.rerun()
         
-        # Módulo de formación
+    elif rol == "gestor":
+        modulos_renderizados = False
+        
+        # MÓDULO DE FORMACIÓN
         if esta_modulo_activo("formacion", modulos_empresa):
-            menu.update({
+            st.sidebar.markdown("#### 🎓 Gestión de Formación")
+            st.sidebar.markdown("---")
+            
+            formacion_menu = {
                 "📊 Panel Gestor": "panel_gestor",
                 "🏢 Empresas": "empresas",
                 "📚 Acciones Formativas": "acciones_formativas",
@@ -1089,47 +1097,76 @@ def render_sidebar_tailadmin():
                 "🏫 Aulas": "aulas",
                 "📅 Gestión Clases": "gestion_clases",
                 "📂 Documentos": "documentos"
-            })
+            }
+            
+            for label, page_key in formacion_menu.items():
+                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                    st.session_state.page = page_key
+                    st.rerun()
+            
+            modulos_renderizados = True
         
-        # Módulo ISO (si está activo)
+        # MÓDULO ISO (si está activo)
         if esta_modulo_activo("iso", modulos_empresa):
             st.sidebar.markdown("#### 🏅 ISO 9001")
-            menu.update({
+            st.sidebar.markdown("---")
+            
+            iso_menu = {
                 "📊 Dashboard Calidad": "dashboard_calidad",
                 "❌ No Conformidades": "no_conformidades",
                 "🔧 Acciones Correctivas": "acciones_correctivas",
                 "🔍 Auditorías": "auditorias",
                 "📈 Indicadores": "indicadores",
                 "🎯 Objetivos Calidad": "objetivos_calidad"
-            })
+            }
+            
+            for label, page_key in iso_menu.items():
+                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                    st.session_state.page = page_key
+                    st.rerun()
+            
+            modulos_renderizados = True
         
-        # Módulo RGPD (si está activo)
+        # MÓDULO RGPD (si está activo)
         if esta_modulo_activo("rgpd", modulos_empresa):
             st.sidebar.markdown("#### 🔒 RGPD")
-            menu.update({
+            st.sidebar.markdown("---")
+            
+            rgpd_menu = {
                 "🛡️ Panel RGPD": "rgpd_panel",
                 "📋 Tratamientos": "rgpd_tratamientos",
                 "✅ Consentimientos": "rgpd_consentimientos"
-            })
+            }
+            
+            for label, page_key in rgpd_menu.items():
+                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                    st.session_state.page = page_key
+                    st.rerun()
+            
+            modulos_renderizados = True
         
-        # Módulo Documentación Avanzada (si está activo)
+        # MÓDULO DOCUMENTACIÓN AVANZADA (si está activo)
         if esta_modulo_activo("docu_avanzada", modulos_empresa):
             st.sidebar.markdown("#### 📚 Documentación Avanzada")
-            menu.update({
-                "📖 Gestión Documental": "documentacion_avanzada"
-            })
+            st.sidebar.markdown("---")
+            
+            if st.sidebar.button("📖 Gestión Documental", use_container_width=True, key="nav_documentacion_avanzada"):
+                st.session_state.page = "documentacion_avanzada"
+                st.rerun()
+            
+            modulos_renderizados = True
             
         # Si no hay módulos activos, mostrar mensaje
-        if not menu:
+        if not modulos_renderizados:
             st.sidebar.warning("⚠️ No tienes módulos activos")
         
     elif rol == "comercial":
-        st.sidebar.markdown("#### 💼 CRM Comercial")
-        menu = {}
-        
         # Verificar si CRM está activo
         if esta_modulo_activo("crm", modulos_crm):
-            menu = {
+            st.sidebar.markdown("#### 💼 CRM Comercial")
+            st.sidebar.markdown("---")
+            
+            crm_menu = {
                 "📊 Panel CRM": "crm_panel",
                 "👥 Clientes": "crm_clientes", 
                 "💡 Oportunidades": "crm_oportunidades",
@@ -1137,25 +1174,21 @@ def render_sidebar_tailadmin():
                 "📞 Comunicaciones": "crm_comunicaciones",
                 "📈 Estadísticas": "crm_estadisticas"
             }
+            
+            for label, page_key in crm_menu.items():
+                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                    st.session_state.page = page_key
+                    st.rerun()
         else:
             st.sidebar.warning("⚠️ Módulo CRM no activo")
-            menu = {}
         
     elif rol == "alumno":
         st.sidebar.markdown("#### 🎓 Área Estudiante")
-        # Los alumnos siempre tienen acceso a su área
-        menu = {
-            "📘 Mis Grupos": "area_alumno"
-        }
-    else:
-        menu = {}
-
-    # Renderizar menú solo si hay opciones disponibles
-    if menu:
-        for label, page_key in menu.items():
-            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                st.session_state.page = page_key
-                st.rerun()
+        st.sidebar.markdown("---")
+        
+        if st.sidebar.button("📘 Mis Grupos", use_container_width=True, key="nav_area_alumno"):
+            st.session_state.page = "area_alumno"
+            st.rerun()
     
     # Botón logout diferenciado
     st.sidebar.markdown("---")
