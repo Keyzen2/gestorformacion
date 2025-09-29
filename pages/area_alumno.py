@@ -679,31 +679,10 @@ def mostrar_mis_diplomas(participantes_service, session_state):
             return
         
         diplomas = diplomas_res.data
-        
-        # Mostrar diplomas
-        for diploma in diplomas:
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
-                    st.markdown(f"**📜 {diploma.get('archivo_nombre','Diploma')}**")
-                    if diploma.get("grupo"):
-                        st.caption(f"Grupo: {diploma['grupo'].get('codigo_grupo','')}")
-                        if diploma['grupo'].get('accion_formativa'):
-                            st.caption(f"Curso: {diploma['grupo']['accion_formativa'].get('nombre','')}")
-                    if diploma.get("fecha_subida"):
-                        fecha = pd.to_datetime(diploma["fecha_subida"]).strftime("%d/%m/%Y")
-                        st.write(f"📅 Emitido: {fecha}")
-                
-                with col2:
-                    if diploma.get("url"):
-                        st.link_button("📥 Descargar", diploma["url"], use_container_width=True)
-                    else:
-                        st.button("Sin archivo", disabled=True, use_container_width=True)
 
     except Exception as e:
         st.error(f"❌ Error cargando diplomas: {e}")
-
+        return   # 👈 muy importante para no seguir si falla la consulta
 
     # =========================
     # FILTROS AVANZADOS
@@ -712,21 +691,22 @@ def mostrar_mis_diplomas(participantes_service, session_state):
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        filtro_nombre = st.text_input("Buscar por nombre de archivo")
+        filtro_nombre = st.text_input("🔎 Nombre contiene")
     with col2:
-        fecha_inicio = st.date_input("Desde", value=None, key="filtro_diplomas_inicio")
+        filtro_fecha = st.date_input("📅 Emitido desde", value=None)
     with col3:
-        fecha_fin = st.date_input("Hasta", value=None, key="filtro_diplomas_fin")
+        filtro_curso = st.text_input("📘 Curso contiene")
 
     # Aplicar filtros
     if filtro_nombre:
         diplomas = [d for d in diplomas if filtro_nombre.lower() in d.get("archivo_nombre", "").lower()]
-    if fecha_inicio:
-        diplomas = [d for d in diplomas if pd.to_datetime(d["fecha_subida"]).date() >= fecha_inicio]
-    if fecha_fin:
-        diplomas = [d for d in diplomas if pd.to_datetime(d["fecha_subida"]).date() <= fecha_fin]
-
-    st.success(f"Se encontraron {len(diplomas)} diploma(s) tras aplicar filtros")
+    if filtro_fecha:
+        diplomas = [d for d in diplomas if d.get("fecha_subida") and pd.to_datetime(d["fecha_subida"]).date() >= filtro_fecha]
+    if filtro_curso:
+        diplomas = [
+            d for d in diplomas 
+            if d.get("grupo") and d["grupo"].get("accion_formativa") and filtro_curso.lower() in d["grupo"]["accion_formativa"]["nombre"].lower()
+        ]
 
     # =========================
     # LISTADO DE DIPLOMAS
@@ -736,28 +716,25 @@ def mostrar_mis_diplomas(participantes_service, session_state):
             col1, col2, col3 = st.columns([2, 2, 1])
             
             with col1:
-                nombre_archivo = diploma.get('archivo_nombre', 'Diploma')
+                nombre_archivo = diploma.get("archivo_nombre", "Diploma")
                 st.markdown(f"**📜 {nombre_archivo}**")
                 
-                if diploma.get('grupo'):
-                    grupo = diploma['grupo']
+                if diploma.get("grupo"):
+                    grupo = diploma["grupo"]
                     st.caption(f"Grupo: {grupo.get('codigo_grupo','')}")
-                    if grupo.get('accion_formativa'):
+                    if grupo.get("accion_formativa"):
                         st.caption(f"Curso: {grupo['accion_formativa'].get('nombre','')}")
             
             with col2:
-                if diploma.get('fecha_subida'):
-                    fecha = pd.to_datetime(diploma['fecha_subida']).strftime('%d/%m/%Y')
+                if diploma.get("fecha_subida"):
+                    fecha = pd.to_datetime(diploma["fecha_subida"]).strftime("%d/%m/%Y")
                     st.write(f"📅 Emitido: {fecha}")
             
             with col3:
-                if diploma.get('url'):
-                    st.link_button("📥 Descargar", diploma['url'], use_container_width=True)
+                if diploma.get("url"):
+                    st.link_button("📥 Descargar", diploma["url"], use_container_width=True)
                 else:
                     st.button("Sin archivo", disabled=True, use_container_width=True)
-
-        except Exception as e:
-            st.error(f"❌ Error cargando diplomas: {e}")
 
 
 # =========================
