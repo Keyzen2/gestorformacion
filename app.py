@@ -121,11 +121,18 @@ def load_tailadmin_css():
         background: #f1f5f9 !important;
     }
 
-    /* === SIDEBAR TAILADMIN OSCURO === */
+    /* === SIDEBAR SIEMPRE VISIBLE === */
     section[data-testid="stSidebar"] {
         background: var(--tailadmin-sidebar) !important;
         border-right: 1px solid #334155 !important;
         padding-top: 0 !important;
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: relative !important;
+        transform: translateX(0) !important;
+        width: auto !important;
+        min-width: 244px !important;
     }
 
     section[data-testid="stSidebar"] * {
@@ -587,15 +594,16 @@ supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
 
 # =============================================================================
-# ESTADO INICIAL - CORREGIDO PARA EVITAR ERRORES
+# ESTADO INICIAL - CON BANDERA DE AUTENTICACIÓN CLARA
 # =============================================================================
 for key, default in {
     "page": "home",
     "rol": None,
-    "role": None,  # ← AÑADIDO: Para compatibilidad con archivos que usan 'role'
+    "role": None,  # Para compatibilidad con archivos que usan 'role'
     "user": {},
     "auth_session": None,
-    "login_loading": False
+    "login_loading": False,
+    "authenticated": False  # 🔑 BANDERA CLARA de autenticación
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -687,6 +695,7 @@ def do_logout():
     st.session_state.clear()
     
     # Reinicializar variables críticas inmediatamente
+    st.session_state.authenticated = False  # ← Bandera clara
     st.session_state.rol = None
     st.session_state.role = None
     st.session_state.user = {}
@@ -755,7 +764,7 @@ def login_view_tailadmin():
             use_container_width=True
         )
 
-    # Lógica de autenticación COMPLETAMENTE LIMPIA
+    # Lógica de autenticación CON BANDERA CLARA
     if submitted:
         if not email or not password:
             st.error("⚠️ Por favor, completa todos los campos")
@@ -764,7 +773,9 @@ def login_view_tailadmin():
                 auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                 
                 if auth and auth.user:
+                    # 🔑 BANDERA CLARA DE AUTENTICACIÓN
                     st.session_state.auth_session = auth
+                    st.session_state.authenticated = True  # ← Marca inequívoca
                     set_user_role_from_db(auth.user.email)
                     st.rerun()
                 else:
