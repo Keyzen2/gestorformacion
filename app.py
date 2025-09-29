@@ -690,83 +690,59 @@ def route():
     st.sidebar.caption(ajustes.get("mensaje_footer", "© 2025 Gestor de Formación"))
 
 # =========================
-# Main
+# Ejecución principal
 # =========================
-if not st.session_state.role:
+if not st.session_state.get("role"):
+    # Usuario no logueado → login centrado
     login_view()
 else:
-    # Renderizar header y footer
-    render_header()
-    render_footer()
-    
-    route()
-    page = st.session_state.get("page")
-    
-    if page and page != "home":
-        with st.spinner("Cargando..."):
-            try:
-                if page == "panel_gestor":
-                    from pages.panel_gestor import main
-                    main(supabase_admin, st.session_state)
+    try:
+        # Sidebar dinámico
+        route()
+        page = st.session_state.get("page", None)
+
+        if page and page != "home":
+            with st.spinner(f"Cargando {page}..."):
+                if page == "panel_gestor" and st.session_state.role == "gestor":
+                    from pages.panel_gestor import main as panel_gestor_main
+                    panel_gestor_main(supabase_admin, st.session_state)
                 else:
-                    mod = __import__(f"pages.{page.replace('-', '_')}", fromlist=["main"])
-                    mod.main(supabase_admin, st.session_state)
-            except Exception as e:
-                st.error(f"Error: {e}")
-    else:
-        ajustes = get_ajustes_app(supabase_admin)
-        rol = st.session_state.role
-        
-        if rol == "admin":
-            st.title("Panel de Administración")
-            m = get_metricas_admin()
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Empresas", m['empresas'])
-            c2.metric("Usuarios", m['usuarios'])
-            c3.metric("Cursos", m['cursos'])
-            c4.metric("Grupos", m['grupos'])
-        
-        elif rol == "gestor":
-            st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
-            eid = st.session_state.user.get("empresa_id")
-            if eid:
-                m = get_metricas_gestor(eid)
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Grupos", m['grupos'])
-                c2.metric("Participantes", m['participantes'])
-                c3.metric("Documentos", m['documentos'])
-        
-        elif rol == "alumno":
-            st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
-            usuario_id = st.session_state.user.get("id")
-            
-            if usuario_id:
-                try:
-                    grupos = supabase_admin.table("participantes_grupos").select("grupo:grupos(codigo_grupo, estado)").eq("participante_id", usuario_id).execute()
-                    
-                    if grupos.data:
-                        activos = [g for g in grupos.data if g.get('grupo', {}).get('estado') != 'FINALIZADO']
-                        finalizados = [g for g in grupos.data if g.get('grupo', {}).get('estado') == 'FINALIZADO']
-                        
-                        c1, c2 = st.columns(2)
-                        c1.metric("Grupos Activos", len(activos))
-                        c2.metric("Grupos Completados", len(finalizados))
-                        
-                        if activos:
-                            st.subheader("Mis Grupos Activos")
-                            for item in activos[:5]:
-                                g = item.get('grupo', {})
-                                st.text(f"🟢 {g.get('codigo_grupo', 'N/A')}")
-                        
-                        st.markdown("---")
-                        if st.button("Ver Todos Mis Grupos y Diplomas", use_container_width=True):
-                            st.session_state.page = "area_alumno"
-                            st.rerun()
-                    else:
-                        st.info("No estás inscrito en ningún grupo")
-                except:
-                    st.warning("No se pudieron cargar tus grupos")
-        
-        elif rol == "comercial":
-            st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
-            st.info("Gestiona tu cartera desde el menú lateral")
+                    mod = page.replace("-", "_")
+                    mod_path = f"pages.{mod}"
+                    mod_import = __import__(mod_path, fromlist=["main"])
+                    mod_import.main(supabase_admin, st.session_state)
+
+        else:
+            # =========================
+            # Dashboards de bienvenida
+            # =========================
+            ajustes = get_ajustes_app(supabase_admin, campos=[
+                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
+                "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
+                "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
+                "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
+                "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+            ])
+
+            rol = st.session_state.role
+
+            if rol == "admin":
+                with st.spinner("Cargando métricas..."):
+                    metricas = get_metricas_admin()
+                mostrar_dashboard_admin(ajustes, metricas)
+
+            elif rol == "gestor":
+                empresa_id = st.session_state.user.get("empresa_id")
+                metricas = get_metricas_gestor(empresa_id) if empresa_id else {"grupos": 0, "participantes": 0, "documentos": 0}
+                mostrar_dashboard_gestor(ajustes, metricas)
+
+            elif rol == "alumno":
+                mostrar_dashboard_alumno(ajustes)
+
+            elif rol == "comercial":
+                mostrar_dashboard_comercial(ajustes)
+
+    except Exception as e:
+        st.error(f"Error al cargar la aplicación: {e}")
+        st.exception(e)
+
