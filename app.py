@@ -128,11 +128,11 @@ def load_tailadmin_css():
         margin: 1rem 0 !important;
     }
 
-    /* === BOTONES SIDEBAR === */
+    /* === BOTONES SIDEBAR MEJORADOS === */
     section[data-testid="stSidebar"] .stButton > button {
-        background: rgba(255,255,255,0.05) !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        color: #e2e8f0 !important;
+        background: rgba(255,255,255,0.1) !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+        color: #f1f5f9 !important;
         border-radius: 8px !important;
         padding: 0.75rem 1rem !important;
         font-weight: 500 !important;
@@ -143,21 +143,28 @@ def load_tailadmin_css():
     }
 
     section[data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(60, 80, 224, 0.2) !important;
+        background: rgba(60, 80, 224, 0.3) !important;
         border-color: var(--tailadmin-primary) !important;
+        color: white !important;
         transform: translateX(4px);
         box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
     }
 
-    # Main content con padding para header/footer fijos
+    section[data-testid="stSidebar"] .stButton > button:active,
+    section[data-testid="stSidebar"] .stButton > button:focus {
+        background: rgba(60, 80, 224, 0.2) !important;
+        color: white !important;
+        border-color: var(--tailadmin-primary) !important;
+    }
+
+    /* === MAIN CONTENT === */
     .main .block-container {
         background: #ffffff !important;
         padding: 2rem !important;
         border-radius: 12px !important;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
         max-width: 1600px !important;
-        margin: 1rem auto 2rem !important;
-        min-height: calc(100vh - 140px) !important; /* Espacio para header + footer */
+        margin: 1rem auto !important;
     }
 
     /* === TÍTULOS TAILADMIN === */
@@ -338,11 +345,11 @@ def load_tailadmin_css():
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     }
 
-    /* === LOGIN TAILADMIN === */
+    /* === LOGIN TAILADMIN SIMPLIFICADO === */
     .login-container {
-        max-width: 420px;
-        margin: 5rem auto;
-        padding: 2.5rem;
+        max-width: 380px;
+        margin: 2rem auto;
+        padding: 2rem;
         background: white;
         border-radius: 16px;
         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -350,18 +357,41 @@ def load_tailadmin_css():
     }
 
     .login-logo {
-        width: 80px;
-        height: 80px;
+        width: 64px;
+        height: 64px;
         background: linear-gradient(135deg, var(--tailadmin-primary) 0%, #6366f1 100%);
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         color: white;
-        font-size: 2rem;
+        font-size: 1.5rem;
         font-weight: bold;
-        margin: 0 auto 1.5rem;
+        margin: 0 auto 1rem;
         box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
+    }
+
+    /* === INPUTS LOGIN COMPACTOS === */
+    .login-container .stTextInput > div > div > input {
+        max-width: 280px !important;
+        margin: 0 auto !important;
+        background: #f8fafc !important;
+        border: 1.5px solid var(--tailadmin-border) !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.9rem !important;
+    }
+
+    .login-container .stTextInput > div > div > input:focus {
+        border-color: var(--tailadmin-primary) !important;
+        box-shadow: 0 0 0 3px rgba(60, 80, 224, 0.1) !important;
+    }
+
+    /* === BOTÓN LOGIN === */
+    .login-container .stButton > button {
+        max-width: 280px !important;
+        margin: 1rem auto !important;
+        display: block !important;
     }
 
     /* === BREADCRUMB === */
@@ -477,11 +507,12 @@ supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
 
 # =============================================================================
-# ESTADO INICIAL
+# ESTADO INICIAL - CORREGIDO PARA EVITAR ERRORES
 # =============================================================================
 for key, default in {
     "page": "home",
     "rol": None,
+    "role": None,  # ← AÑADIDO: Para compatibilidad con archivos que usan 'role'
     "user": {},
     "auth_session": None,
     "login_loading": False
@@ -535,14 +566,18 @@ def get_metricas_gestor(empresa_id):
         return {"grupos": 0, "participantes": 0, "documentos": 0}
 
 def set_user_role_from_db(email: str):
-    """Obtiene rol de usuario desde BD"""
+    """Obtiene rol de usuario desde BD y sincroniza ambas variables"""
     try:
         clean_email = email.strip().lower()
         res = supabase_public.table("usuarios").select("*").eq("email", clean_email).limit(1).execute()
         if res.data:
             row = res.data[0]
             rol = row.get("rol") or "alumno"
+            
+            # CRÍTICO: Sincronizar ambas variables para compatibilidad
             st.session_state.rol = rol
+            st.session_state.role = rol  # ← Para archivos que usan 'role'
+            
             st.session_state.user = {
                 "id": row.get("id"),
                 "auth_id": row.get("auth_id"),
@@ -552,27 +587,39 @@ def set_user_role_from_db(email: str):
             }
         else:
             st.session_state.rol = "alumno"
+            st.session_state.role = "alumno"  # ← Sincronizar
             st.session_state.user = {"email": clean_email, "empresa_id": None}
     except Exception as e:
         print(f"Error obteniendo rol: {e}")
         st.session_state.rol = "alumno"
+        st.session_state.role = "alumno"  # ← Sincronizar
         st.session_state.user = {"email": email, "empresa_id": None}
 
 def do_logout():
-    """Logout con limpieza completa"""
+    """Logout con limpieza completa y reinicialización"""
     try:
         supabase_public.auth.sign_out()
     except Exception:
         pass
+    
+    # Limpiar todo el estado
     st.cache_data.clear()
     st.session_state.clear()
+    
+    # Reinicializar variables críticas inmediatamente
+    st.session_state.rol = None
+    st.session_state.role = None
+    st.session_state.user = {}
+    st.session_state.page = "home"
+    st.session_state.auth_session = None
+    
     st.rerun()
 
 # =============================================================================
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login con diseño TailAdmin - Versión Production"""
+    """Login simplificado y centrado - sin scroll"""
     
     # Obtener ajustes
     ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
@@ -593,57 +640,44 @@ def login_view_tailadmin():
 
     # Logo dinámico
     logo_display = (
-        f'<img src="{logo_url}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;">'
+        f'<img src="{logo_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">'
         if logo_url else "🎓"
     )
 
-    # Container del login
+    # Container del login compacto
     st.markdown(f"""
     <div class="login-container">
-        <div style="text-align: center; margin-bottom: 2rem;">
+        <div style="text-align: center; margin-bottom: 1.5rem;">
             <div class="login-logo">{logo_display}</div>
-            <h1 style="margin: 0; color: #1c2434; font-size: 1.75rem; font-weight: 700;">Gestor Formación SaaS</h1>
-            <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.95rem;">{mensaje_login}</p>
+            <h1 style="margin: 0; color: #1c2434; font-size: 1.5rem; font-weight: 700;">Gestor Formación SaaS</h1>
+            <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.9rem;">{mensaje_login}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Formulario de login
+    # Formulario de login simplificado
     with st.form("form_login", clear_on_submit=False):
         st.markdown("#### 🔐 Iniciar Sesión")
         
         email = st.text_input(
             "📧 Email", 
-            placeholder="usuario@empresa.com",
-            help="Introduce tu email corporativo"
+            placeholder="usuario@empresa.com"
         )
         
         password = st.text_input(
             "🔑 Contraseña", 
             type="password",
-            placeholder="••••••••",
-            help="Tu contraseña segura"
+            placeholder="••••••••"
         )
         
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            remember_me = st.checkbox("Recordarme")
-        with col2:
-            st.markdown("""
-            <div style="text-align: right; margin-top: 1.5rem;">
-                <a href="#" style="color: #3c50e0; text-decoration: none; font-size: 0.875rem;">
-                    ¿Olvidaste tu contraseña?
-                </a>
-            </div>
-            """, unsafe_allow_html=True)
-        
+        # Solo botón de login - funcionalidades pendientes removidas
         submitted = st.form_submit_button(
             "🚀 Iniciar Sesión",
             disabled=st.session_state.get("login_loading", False),
             use_container_width=True
         )
 
-    # Lógica de autenticación
+    # Lógica de autenticación (sin cambios)
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
@@ -660,22 +694,18 @@ def login_view_tailadmin():
                         st.session_state.auth_session = auth
                         set_user_role_from_db(auth.user.email)
                         st.success("✅ Sesión iniciada correctamente")
-                        time.sleep(1)  # Pequeña pausa para mostrar el mensaje
+                        time.sleep(1)
                         st.session_state.login_loading = False
                         st.rerun()
                 except Exception as e:
                     st.error(f"❌ Error al iniciar sesión: {e}")
                     st.session_state.login_loading = False
 
-    # Pie del formulario
+    # Pie simplificado
     st.markdown("""
-    <div style="text-align: center; margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e2e8f0;">
-        <p style="color: #64748b; font-size: 0.875rem; margin: 0;">
-            ¿No tienes cuenta? 
-            <a href="#" style="color: #3c50e0; text-decoration: none;">Contacta con tu administrador</a>
-        </p>
-        <p style="color: #9ca3af; font-size: 0.75rem; margin: 0.5rem 0 0;">
-            © 2025 Gestor Formación SaaS. Todos los derechos reservados.
+    <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
+        <p style="color: #9ca3af; font-size: 0.75rem; margin: 0;">
+            © 2025 Gestor Formación SaaS
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -953,20 +983,10 @@ def render_sidebar_tailadmin():
             st.session_state.page = page_key
             st.rerun()
 
-    # Info adicional
+    # Info adicional (sin CSS visible)
     st.sidebar.markdown("---")
-    st.sidebar.markdown(f"""
-    <div style="
-        padding: 1rem; 
-        background: rgba(255,255,255,0.05); 
-        border-radius: 8px;
-        text-align: center;
-        margin-top: 1rem;
-    ">
-        <p style="margin: 0; font-size: 0.75rem; color: #94a3b8;">Gestor Formación SaaS</p>
-        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #64748b;">v2.1.0 TailAdmin</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.sidebar.markdown("**Sistema**: Gestor Formación SaaS")
+    st.sidebar.markdown("**Versión**: v2.1.0 TailAdmin")
 
 # =============================================================================
 # NAVEGACIÓN - COMPATIBLE CON RAILWAY (FUNCIONES render())
@@ -1034,115 +1054,15 @@ def render_page():
                         st.rerun()
 
 # =============================================================================
-# FUNCIONES HEADER Y FOOTER FIJOS
+# FUNCIONES HEADER Y FOOTER - REMOVIDOS (SIN HEADER/FOOTER FIJO)
 # =============================================================================
 def render_header():
-    """Header fijo superior con navegación y accesos rápidos"""
-    st.markdown("""
-    <div style="
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 60px;
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border-bottom: 1px solid #334155;
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 2rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    ">
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <div style="
-                width: 32px; height: 32px;
-                background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
-                border-radius: 6px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-weight: bold;
-                font-size: 1rem;
-            ">G</div>
-            <span style="color: white; font-weight: 600; font-size: 1.1rem;">
-                Gestor Formación SaaS
-            </span>
-        </div>
-        
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <div style="color: #94a3b8; font-size: 0.875rem;">
-                🕐 {datetime.now().strftime('%H:%M')} | 📅 {datetime.now().strftime('%d/%m/%Y')}
-            </div>
-            <div style="
-                background: rgba(60, 80, 224, 0.1);
-                border: 1px solid rgba(60, 80, 224, 0.2);
-                border-radius: 6px;
-                padding: 0.25rem 0.75rem;
-                color: #3c50e0;
-                font-size: 0.8rem;
-                font-weight: 500;
-            ">
-                🚀 Producción
-            </div>
-        </div>
-    </div>
-    
-    <!-- Spacer para compensar header fijo -->
-    <div style="height: 60px; margin-bottom: 1rem;"></div>
-    """, unsafe_allow_html=True)
+    """Header removido - sin header fijo para mejor estética"""
+    pass
 
 def render_footer():
-    """Footer fijo inferior con información del sistema"""
-    st.markdown("""
-    <div style="
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 40px;
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        border-top: 1px solid #334155;
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 2rem;
-        font-size: 0.8rem;
-        color: #94a3b8;
-    ">
-        <div style="display: flex; align-items: center; gap: 1.5rem;">
-            <span>© 2025 Gestor Formación SaaS</span>
-            <span>|</span>
-            <span>🔒 Conexión Segura</span>
-            <span>|</span>
-            <span>⚡ Railway Cloud</span>
-        </div>
-        
-        <div style="display: flex; align-items: center; gap: 1rem;">
-            <span>v2.1.0 TailAdmin</span>
-            <div style="
-                width: 8px; height: 8px;
-                background: #10b981;
-                border-radius: 50%;
-                animation: pulse 2s infinite;
-            "></div>
-            <span style="color: #10b981;">Online</span>
-        </div>
-    </div>
-    
-    <!-- Spacer para compensar footer fijo -->
-    <div style="height: 40px; margin-top: 2rem;"></div>
-    
-    <style>
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.5; }
-        100% { opacity: 1; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    """Footer removido - sin footer fijo para mejor estética"""  
+    pass
 
 # =============================================================================
 # ⚡ FUNCIÓN PRINCIPAL - ENTRY POINT PARA RAILWAY
