@@ -345,8 +345,9 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
             st.markdown(f"### 📋 {len(df_reservas)} reserva(s) encontrada(s)")
             
             # Separar futuras y pasadas
-            reservas_futuras = df_reservas[pd.to_datetime(df_reservas['fecha_clase'], dayfirst=True) >= pd.to_datetime(date.today())]
-            reservas_pasadas = df_reservas[pd.to_datetime(df_reservas['fecha_clase'], dayfirst=True) < pd.to_datetime(date.today())]
+            hoy = date.today()
+            reservas_futuras = df_reservas[df_reservas['fecha_clase'] >= hoy]
+            reservas_pasadas = df_reservas[df_reservas['fecha_clase'] < hoy]
             
             # Próximas clases con opción de cancelar
             if not reservas_futuras.empty:
