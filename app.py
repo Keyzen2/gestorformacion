@@ -250,12 +250,21 @@ html, body, [class*="css"] {
 # =========================
 # Claves Supabase
 # =========================
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_ANON_KEY = st.secrets["SUPABASE_ANON_KEY"]
-SUPABASE_SERVICE_ROLE_KEY = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
 
+# Intentar primero variables de entorno (Railway), luego secrets (Streamlit Cloud)
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY", "")
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")
+
+# Validación de variables críticas
+if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    st.error("⚠️ Error: Variables de Supabase no configuradas correctamente")
+    st.error("Por favor, configura SUPABASE_URL y SUPABASE_ANON_KEY en las variables de entorno")
+    st.stop()
+
+# Crear clientes Supabase
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
 
 # =========================
 # Estado inicial
