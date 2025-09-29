@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🛡️ Cumple RGPD")
     st.caption("Diagnóstico inicial y guía de cumplimiento para tu empresa.")
     st.divider()
