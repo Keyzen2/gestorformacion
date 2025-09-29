@@ -222,11 +222,13 @@ class ClasesService:
             return []
 
     def get_reservas_periodo(self, fecha_inicio: date, fecha_fin: date, estado: str = "Todas") -> pd.DataFrame:
-        """Obtiene todas las reservas de un periodo con datos de participante y clase."""
+        """Obtiene todas las reservas de un periodo con datos de participante y clase, incluyendo avatar."""
         try:
             query = self.supabase.table("clases_reservas").select("""
                 id, fecha_clase, estado,
-                participantes(nombre, apellidos),
+                participantes(id, nombre, apellidos,
+                    avatar:participantes_avatares(archivo_url)
+                ),
                 clases_horarios(hora_inicio, hora_fin,
                     clases(nombre)
                 )
@@ -248,13 +250,18 @@ class ClasesService:
                 reservas = []
                 for r in result.data:
                     participante = r.get("participantes", {})
+                    avatar_url = None
+                    if participante.get("avatar"):
+                        avatar_url = participante["avatar"][0]["archivo_url"]
                     horario = r.get("clases_horarios", {})
                     clase = horario.get("clases", {})
+                    
                     reservas.append({
                         "id": r["id"],
                         "fecha_clase": r["fecha_clase"],
                         "estado": r["estado"],
                         "participante_nombre": f"{participante.get('nombre','')} {participante.get('apellidos','')}",
+                        "avatar_url": avatar_url,
                         "clase_nombre": clase.get("nombre",""),
                         "horario": f"{horario.get('hora_inicio','')} - {horario.get('hora_fin','')}"
                     })
