@@ -142,36 +142,6 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # =========================
-# CSS Dinámico según estado de login
-# =========================
-def set_sidebar_visibility():
-    """Muestra u oculta el sidebar según login."""
-    if st.session_state.get("auth_session"):
-        # Usuario logueado → mostrar sidebar
-        st.markdown("""
-        <style>
-        section[data-testid="stSidebar"] {
-            display: flex !important;
-        }
-        button[data-testid="collapsedControl"] {
-            display: flex !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-    else:
-        # Usuario no logueado → ocultar sidebar
-        st.markdown("""
-        <style>
-        section[data-testid="stSidebar"] {
-            display: none !important;
-        }
-        button[data-testid="collapsedControl"] {
-            display: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-# =========================
 # Claves Supabase
 # =========================
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
@@ -202,9 +172,33 @@ for key, default in {
 # CSS Dinámico según estado de login
 # =========================
 if st.session_state.get("auth_session"):
-    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
+    # Usuario logueado - MOSTRAR sidebar
+    st.markdown("""
+    <div class="app-mode">
+    <style>
+    section[data-testid="stSidebar"] {
+        display: flex !important;
+        visibility: visible !important;
+    }
+    button[data-testid="collapsedControl"] {
+        display: block !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 else:
-    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
+    # Usuario NO logueado - OCULTAR sidebar
+    st.markdown("""
+    <div class="login-mode">
+    <style>
+    section[data-testid="stSidebar"] {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    button[data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # =========================
 # Funciones auxiliares
@@ -712,12 +706,10 @@ def mostrar_dashboard_comercial(ajustes):
 # Ejecución principal
 # =========================
 if not st.session_state.get("role"):
-    # 👤 Usuario no logueado → mostrar login y ocultar sidebar
-    set_sidebar_visibility(False)
+    # 👤 Usuario no logueado → mostrar login
     login_view()
 else:
-    # 👤 Usuario logueado → mostrar sidebar dinámico
-    set_sidebar_visibility(True)
+    # 👤 Usuario logueado → mostrar sidebar
     try:
         route()
         page = st.session_state.get("page", None)
