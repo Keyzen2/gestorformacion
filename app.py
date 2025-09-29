@@ -10,60 +10,120 @@ import time
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # =========================
-# Configuración de la página
+# Configuración
 # =========================
 st.set_page_config(
     page_title="Gestor de Formación",
     layout="wide",
-    initial_sidebar_state="expanded",  # Siempre visible
+    initial_sidebar_state="expanded",
     page_icon="🚀",
-    menu_items={
-        'Get Help': None,
-        'Report a bug': None,
-        'About': "# Gestor de Formación\n### Sistema integral de gestión empresarial"
-    }
+    menu_items=None
 )
 
 # =========================
-# CSS moderno para startup look
+# CSS DISEÑO SAAS PROFESIONAL
 # =========================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 /* Ocultar elementos Streamlit */
-#MainMenu, footer, .stDeployButton, header[data-testid="stHeader"] {
+#MainMenu, footer, .stDeployButton, header[data-testid="stHeader"],
+button[kind="header"], [data-testid="stToolbar"] {
     display: none !important;
 }
 
-/* Reset y base */
-html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-/* Container principal de login */
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Background global limpio */
+.stApp {
+    background: #f8fafc !important;
+}
+
+/* SIDEBAR CON COLOR DE CONTRASTE */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
+    border-right: 1px solid #334155 !important;
+    padding-top: 80px !important; /* Espacio para header */
+}
+
+section[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 0.625rem 1rem !important;
+    font-size: 0.9rem !important;
+    transition: all 0.2s ease !important;
+}
+
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+    transform: translateX(4px) !important;
+}
+
+section[data-testid="stSidebar"] h4 {
+    color: #94a3b8 !important;
+    font-size: 0.75rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    margin: 1.5rem 0 0.5rem 0 !important;
+}
+
+section[data-testid="stSidebar"] hr {
+    border-color: #334155 !important;
+    margin: 1rem 0 !important;
+}
+
+/* ÁREA PRINCIPAL CLARA */
+.main .block-container {
+    padding: 100px 2rem 80px 2rem !important;
+    max-width: 1400px !important;
+    background: #ffffff !important;
+    min-height: calc(100vh - 180px) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+}
+
+/* LOGIN - diseño especial */
+.login-mode .stApp {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.login-mode .main .block-container {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding-top: 2rem !important;
+}
+
 .login-container {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(20px);
     border-radius: 24px;
     padding: 3rem;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
     max-width: 480px;
     margin: 2rem auto;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.login-header {
-    text-align: center;
-    margin-bottom: 2rem;
 }
 
 .login-logo {
     width: 80px;
     height: 80px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #667eea, #764ba2);
     border-radius: 20px;
     margin: 0 auto 1rem;
     display: flex;
@@ -71,84 +131,165 @@ html, body, [class*="css"] {
     justify-content: center;
     font-size: 2rem;
     color: white;
-    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
-}
-
-.login-title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1a202c;
-    margin-bottom: 0.5rem;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.login-subtitle {
-    color: #4a5568;
-    font-size: 1rem;
 }
 
 /* Inputs */
 .stTextInput > div > div > input {
-    background: rgba(255, 255, 255, 0.9);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
-    padding: 0.75rem 1rem;
-    font-size: 1rem;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 0.95rem !important;
 }
 
 .stTextInput > div > div > input:focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    background: white;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.1) !important;
 }
 
-/* Botones */
-.stButton > button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    padding: 0.75rem 2rem;
-    font-weight: 600;
-    font-size: 1rem;
-    width: 100%;
-    margin-top: 1rem;
+/* Botones principales */
+.stButton > button[kind="primary"],
+.stButton > button:not([kind]) {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-weight: 600 !important;
 }
 
 .stButton > button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(59,130,246,0.3) !important;
 }
 
-@keyframes fadeInUp {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
+/* Métricas modernas */
+[data-testid="stMetric"] {
+    background: #ffffff !important;
+    padding: 1.5rem !important;
+    border-radius: 12px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
 }
 
-.fade-in-up {
-    animation: fadeInUp 0.6s ease-out;
+[data-testid="stMetricValue"] {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    color: #1e293b !important;
+}
+
+[data-testid="stMetricLabel"] {
+    font-size: 0.875rem !important;
+    color: #64748b !important;
+    font-weight: 500 !important;
+}
+
+/* Alertas */
+.stAlert {
+    border-radius: 8px !important;
+    border-left: 4px solid !important;
+}
+
+/* Títulos */
+h1 {
+    color: #1e293b !important;
+    font-weight: 700 !important;
+    margin-bottom: 1rem !important;
+}
+
+h2, h3 {
+    color: #334155 !important;
+    font-weight: 600 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # =========================
-# Claves Supabase
+# HEADER Y FOOTER DINÁMICOS
+# =========================
+def render_header():
+    """Header fijo profesional con logo y nombre de la app"""
+    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
+                               campos=["nombre_app", "logo_url", "color_primario"])
+    
+    logo_url = ajustes.get("logo_url", "")
+    nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
+    color = ajustes.get("color_primario", "#3b82f6")
+    
+    logo_html = f'<img src="{logo_url}" style="height: 40px; width: 40px; border-radius: 8px;">' if logo_url else "🚀"
+    
+    st.markdown(f"""
+    <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 70px;
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        padding: 0 2rem;
+        z-index: 999;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    ">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="font-size: 2rem;">{logo_html}</div>
+            <div>
+                <h2 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #1e293b;">
+                    {nombre_app}
+                </h2>
+                <p style="margin: 0; font-size: 0.75rem; color: #64748b;">
+                    Sistema de Gestión Empresarial
+                </p>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_footer():
+    """Footer fijo profesional"""
+    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
+                               campos=["mensaje_footer"])
+    
+    mensaje = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación")
+    
+    st.markdown(f"""
+    <div style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 2rem;
+        z-index: 998;
+    ">
+        <p style="margin: 0; font-size: 0.875rem; color: #64748b; text-align: center;">
+            {mensaje}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# =========================
+# Supabase
 # =========================
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or st.secrets.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-    st.error("⚠️ Error: Variables de Supabase no configuradas")
+    st.error("Variables de Supabase no configuradas")
     st.stop()
 
 supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
 
 # =========================
-# Estado inicial
+# Estado
 # =========================
 for key, default in {
     "page": "home",
@@ -161,64 +302,44 @@ for key, default in {
         st.session_state[key] = default
 
 # =========================
-# Funciones auxiliares
+# Funciones (mantener las mismas de antes)
 # =========================
 @st.cache_data(ttl=300)
 def get_metricas_admin():
     try:
-        empresas_res = supabase_admin.table("empresas").select("id", count="exact").execute()
-        usuarios_res = supabase_admin.table("usuarios").select("id", count="exact").execute()
-        cursos_res = supabase_admin.table("acciones_formativas").select("id", count="exact").execute()
-        grupos_res = supabase_admin.table("grupos").select("id", count="exact").execute()
-        
-        return {
-            "empresas": empresas_res.count or 0,
-            "usuarios": usuarios_res.count or 0,
-            "cursos": cursos_res.count or 0,
-            "grupos": grupos_res.count or 0
-        }
+        empresas = supabase_admin.table("empresas").select("id", count="exact").execute().count or 0
+        usuarios = supabase_admin.table("usuarios").select("id", count="exact").execute().count or 0
+        cursos = supabase_admin.table("acciones_formativas").select("id", count="exact").execute().count or 0
+        grupos = supabase_admin.table("grupos").select("id", count="exact").execute().count or 0
+        return {"empresas": empresas, "usuarios": usuarios, "cursos": cursos, "grupos": grupos}
     except:
         return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
 
 @st.cache_data(ttl=300)
 def get_metricas_gestor(empresa_id):
     try:
-        grupos_res = supabase_admin.table("grupos").select("id", count="exact").eq("empresa_id", empresa_id).execute()
-        participantes_res = supabase_admin.table("participantes").select("id", count="exact").eq("empresa_id", empresa_id).execute()
-        documentos_res = supabase_admin.table("documentos").select("id", count="exact").eq("empresa_id", empresa_id).execute()
-        
-        return {
-            "grupos": grupos_res.count or 0,
-            "participantes": participantes_res.count or 0,
-            "documentos": documentos_res.count or 0
-        }
+        grupos = supabase_admin.table("grupos").select("id", count="exact").eq("empresa_id", empresa_id).execute().count or 0
+        participantes = supabase_admin.table("participantes").select("id", count="exact").eq("empresa_id", empresa_id).execute().count or 0
+        documentos = supabase_admin.table("documentos").select("id", count="exact").eq("empresa_id", empresa_id).execute().count or 0
+        return {"grupos": grupos, "participantes": participantes, "documentos": documentos}
     except:
         return {"grupos": 0, "participantes": 0, "documentos": 0}
 
 def set_user_role_from_db(email: str):
     try:
-        clean_email = email.strip().lower()
-        res = supabase_public.table("usuarios").select("*").eq("email", clean_email).limit(1).execute()
+        res = supabase_public.table("usuarios").select("*").eq("email", email.strip().lower()).limit(1).execute()
         if res.data:
             row = res.data[0]
-            rol = row.get("rol") or "alumno"
-            st.session_state.role = rol
+            st.session_state.role = row.get("rol") or "alumno"
             st.session_state.user = {
                 "id": row.get("id"),
-                "auth_id": row.get("auth_id"),
                 "email": row.get("email"),
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
-            if rol == "comercial":
-                com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
-                if com_res.data:
-                    st.session_state.user["comercial_id"] = com_res.data[0]["id"]
         else:
             st.session_state.role = "alumno"
-            st.session_state.user = {"email": clean_email, "empresa_id": None}
-    except Exception as e:
-        st.error(f"Error al obtener rol: {e}")
+    except:
         st.session_state.role = "alumno"
 
 def do_logout():
@@ -230,37 +351,39 @@ def do_logout():
     st.session_state.clear()
     st.rerun()
 
+def is_module_active(empresa, empresa_crm, key, hoy, role):
+    if role == "alumno":
+        return False
+    if key == "formacion":
+        return empresa.get("formacion_activo", False)
+    if key == "iso":
+        return empresa.get("iso_activo", False)
+    if key == "rgpd":
+        return empresa.get("rgpd_activo", False)
+    if key == "crm":
+        return empresa_crm.get("crm_activo", False)
+    return False
+
 # =========================
-# Vista de login
+# Login
 # =========================
 def login_view():
-    """Pantalla de login con sidebar informativo."""
+    # Clase CSS para estilo login
+    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     
-    # Sidebar con información
     with st.sidebar:
         st.markdown("""
         <div style="text-align: center; padding: 2rem 1rem;">
-            <div style="
-                width: 60px; height: 60px;
-                background: linear-gradient(135deg, #667eea, #764ba2);
-                border-radius: 12px;
-                margin: 0 auto 1rem;
-                display: flex; align-items: center; justify-content: center;
-                font-size: 1.5rem; color: white;
-            ">🚀</div>
-            <h3 style="color: #667eea; font-size: 1.1rem; margin: 0;">Sistema de Gestión</h3>
-            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">Inicia sesión para acceder</p>
+            <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.1);
+                border-radius: 12px; margin: 0 auto 1rem; display: flex; align-items: center; 
+                justify-content: center; font-size: 1.5rem;">🚀</div>
+            <h3 style="font-size: 1.1rem;">Sistema de Gestión</h3>
+            <p style="font-size: 0.875rem; opacity: 0.8;">Inicia sesión para acceder</p>
         </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown("---")
-        
-        st.markdown("""
-        <div style="padding: 0 1rem;">
-            <p style="font-size: 0.875rem; color: #64748b; font-weight: 500; margin-bottom: 0.75rem;">
-                Módulos disponibles:
-            </p>
-            <div style="font-size: 0.875rem; color: #94a3b8; line-height: 1.8;">
+        <hr>
+        <div style="padding: 0 1rem; font-size: 0.875rem; opacity: 0.9;">
+            <p style="font-weight: 500;">Módulos:</p>
+            <div style="line-height: 1.8;">
                 <div>📚 Formación FUNDAE</div>
                 <div>📋 ISO 9001</div>
                 <div>🛡️ RGPD</div>
@@ -269,264 +392,181 @@ def login_view():
         </div>
         """, unsafe_allow_html=True)
     
-    # Obtener ajustes
     ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
+    logo = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes["logo_url"]}" width="80" height="80" style="border-radius: 20px;">'
     
-    mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales")
-    nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    logo_display = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="80" height="80" style="border-radius: 20px;">'
-    
-    # Container de login
     st.markdown(f"""
-    <div class="login-container fade-in-up">
-        <div class="login-header">
-            <div class="login-logo">{logo_display}</div>
-            <h1 class="login-title">{nombre_app}</h1>
-            <p class="login-subtitle">{mensaje_login}</p>
+    <div class="login-container">
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <div class="login-logo">{logo}</div>
+            <h1 style="font-size: 2rem; color: #1a202c; margin: 1rem 0 0.5rem;">{ajustes.get("nombre_app", "Gestor")}</h1>
+            <p style="color: #64748b;">{ajustes.get("mensaje_login", "Accede al sistema")}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Formulario
     col1, col2, col3 = st.columns([1, 2, 1])
-    
     with col2:
-        with st.form("form_login", clear_on_submit=False):
-            st.markdown("### 🔐 Iniciar sesión")
-            
-            email = st.text_input("Email", placeholder="tu@empresa.com")
-            password = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            
-            submitted = st.form_submit_button(
-                "🚀 Entrar" if not st.session_state.get("login_loading") else "⏳ Iniciando...",
-                disabled=st.session_state.get("login_loading", False)
-            )
+        with st.form("login"):
+            st.markdown("### Iniciar sesión")
+            email = st.text_input("Email", placeholder="tu@empresa.com", label_visibility="collapsed")
+            password = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
+            submitted = st.form_submit_button("Entrar", use_container_width=True)
     
-    if submitted:
-        if not email or not password:
-            st.warning("⚠️ Introduce email y contraseña")
-        else:
-            st.session_state.login_loading = True
-            
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                
-                if not auth or not auth.user:
-                    st.error("❌ Credenciales incorrectas")
-                    st.session_state.login_loading = False
-                else:
-                    st.session_state.auth_session = auth
-                    set_user_role_from_db(auth.user.email)
-                    st.success("✅ Sesión iniciada")
-                    time.sleep(0.5)
-                    st.session_state.login_loading = False
-                    st.rerun()
-                    
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-                st.session_state.login_loading = False
+    if submitted and email and password:
+        try:
+            auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+            if auth and auth.user:
+                st.session_state.auth_session = auth
+                set_user_role_from_db(auth.user.email)
+                st.success("Sesión iniciada")
+                time.sleep(0.5)
+                st.rerun()
+            else:
+                st.error("Credenciales incorrectas")
+        except Exception as e:
+            st.error(f"Error: {e}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# Verificación módulos
-# =========================
-def is_module_active(empresa, empresa_crm, key, hoy, role):
-    if role == "alumno":
-        return False
-
-    if key == "formacion":
-        return empresa.get("formacion_activo") and (not empresa.get("formacion_inicio") or pd.to_datetime(empresa.get("formacion_inicio")).date() <= hoy)
-    if key == "iso":
-        return empresa.get("iso_activo") and (not empresa.get("iso_inicio") or pd.to_datetime(empresa.get("iso_inicio")).date() <= hoy)
-    if key == "rgpd":
-        return empresa.get("rgpd_activo") and (not empresa.get("rgpd_inicio") or pd.to_datetime(empresa.get("rgpd_inicio")).date() <= hoy)
-    if key == "crm":
-        return empresa_crm.get("crm_activo") and (not empresa_crm.get("crm_inicio") or pd.to_datetime(empresa_crm.get("crm_inicio")).date() <= hoy)
-    if key == "docu_avanzada":
-        return empresa.get("docu_avanzada_activo") and (not empresa.get("docu_avanzada_inicio") or pd.to_datetime(empresa.get("docu_avanzada_inicio")).date() <= hoy)
-
-    return False
-
-# =========================
-# Sidebar y navegación
+# Navegación
 # =========================
 def route():
-    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
+    nombre = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
     
-    # Header sidebar
     st.sidebar.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white; padding: 1rem; border-radius: 12px;
-        margin-bottom: 1rem; text-align: center;
-    ">
-        <h3 style="margin: 0; font-weight: 600;">👋 Bienvenido</h3>
-        <p style="margin: 0.5rem 0 0; opacity: 0.9; font-size: 0.9rem;">{nombre_usuario}</p>
+    <div style="padding: 1rem; border-bottom: 1px solid #334155; margin-bottom: 1rem;">
+        <p style="margin: 0; font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.05em;">Bienvenido</p>
+        <p style="margin: 0.5rem 0 0; font-size: 1rem; font-weight: 600;">{nombre}</p>
     </div>
     """, unsafe_allow_html=True)
-
-    # Botón logout
-    if st.sidebar.button("🚪 Cerrar sesión", key="logout", type="secondary"):
+    
+    if st.sidebar.button("Cerrar sesión", key="logout", use_container_width=True):
         do_logout()
-
-    # Cargar empresa
+    
     empresa_id = st.session_state.user.get("empresa_id")
-    empresa = {}
-    empresa_crm = {}
+    empresa, empresa_crm = {}, {}
     hoy = datetime.today().date()
     
     if empresa_id:
         try:
-            empresa_res = supabase_admin.table("empresas").select(
-                "formacion_activo, formacion_inicio, formacion_fin, "
-                "iso_activo, iso_inicio, iso_fin, "
-                "rgpd_activo, rgpd_inicio, rgpd_fin, "
-                "docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin"
-            ).eq("id", empresa_id).execute()
-            empresa = empresa_res.data[0] if empresa_res.data else {}
-            
-            crm_res = supabase_admin.table("crm_empresas").select(
-                "crm_activo, crm_inicio, crm_fin"
-            ).eq("empresa_id", empresa_id).execute()
-            empresa_crm = crm_res.data[0] if crm_res.data else {}
+            e = supabase_admin.table("empresas").select("*").eq("id", empresa_id).execute()
+            empresa = e.data[0] if e.data else {}
+            c = supabase_admin.table("crm_empresas").select("*").eq("empresa_id", empresa_id).execute()
+            empresa_crm = c.data[0] if c.data else {}
         except:
             pass
-
+    
     st.session_state.empresa = empresa
     st.session_state.empresa_crm = empresa_crm
     rol = st.session_state.role
-
-    # Menús
+    
     if rol == "admin":
-        st.sidebar.markdown("#### 🧭 Administración")
-        base_menu = {
-            "Panel Admin": "panel_admin",
-            "Usuarios y Empresas": "usuarios_empresas",
-            "Empresas": "empresas",
-            "Ajustes": "ajustes_app"
-        }
-        for label, page_key in base_menu.items():
-            if st.sidebar.button(label, key=f"admin_{page_key}"):
-                st.session_state.page = page_key
-
+        st.sidebar.markdown("#### Administración")
+        for label, page in {"Panel": "panel_admin", "Usuarios": "usuarios_empresas", "Empresas": "empresas", "Ajustes": "ajustes_app"}.items():
+            if st.sidebar.button(label, key=f"a_{page}", use_container_width=True):
+                st.session_state.page = page
+    
     elif rol == "alumno":
-        st.sidebar.markdown("#### 🎓 Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_grupos"):
+        st.sidebar.markdown("#### Área del Alumno")
+        if st.sidebar.button("Mis Grupos", key="alumno", use_container_width=True):
             st.session_state.page = "area_alumno"
-
-    # Gestor
+    
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📊 Panel de Formación")
-        if st.sidebar.button("Panel del Gestor", key="panel_gestor"):
+        st.sidebar.markdown("#### Panel Gestor")
+        if st.sidebar.button("Panel", key="gestor", use_container_width=True):
             st.session_state.page = "panel_gestor"
-
-    # Formación
+    
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📚 Gestión de Formación")
-        
-        formacion_menu = {
-            "Acciones Formativas": "acciones_formativas",
-            "Grupos": "grupos",
-            "Participantes": "participantes",
-            "Tutores": "tutores",
-            "Aulas": "aulas",
-            "Gestión Clases": "gestion_clases",
-            "Proyectos": "proyectos",
-            "Documentos": "documentos"
-        }
-        
+        st.sidebar.markdown("#### Formación")
+        menu = {"Cursos": "acciones_formativas", "Grupos": "grupos", "Participantes": "participantes", "Tutores": "tutores", "Documentos": "documentos"}
         if rol == "gestor":
-            formacion_menu = {"Empresas": "empresas", **formacion_menu}
-        
-        for label, page_key in formacion_menu.items():
-            if st.sidebar.button(label, key=f"form_{page_key}"):
-                st.session_state.page = page_key
-
-    # ISO, RGPD, CRM (igual que antes)
-    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📋 ISO 9001")
-        iso_menu = {"No Conformidades": "no_conformidades", "Auditorías": "auditorias"}
-        for label, page_key in iso_menu.items():
-            if st.sidebar.button(label, key=f"iso_{page_key}"):
-                st.session_state.page = page_key
-
-    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 🛡️ RGPD")
-        rgpd_menu = {"Panel RGPD": "rgpd_panel", "Tratamientos": "rgpd_tratamientos"}
-        for label, page_key in rgpd_menu.items():
-            if st.sidebar.button(label, key=f"rgpd_{page_key}"):
-                st.session_state.page = page_key
-
-    if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### 📈 CRM")
-        crm_menu = {"Panel CRM": "crm_panel", "Clientes": "crm_clientes"}
-        for label, page_key in crm_menu.items():
-            if st.sidebar.button(label, key=f"crm_{page_key}"):
-                st.session_state.page = page_key
-
-    # Footer
-    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
-    st.sidebar.markdown("---")
-    st.sidebar.caption(ajustes.get("mensaje_footer", "© 2025 Gestor de Formación"))
+            menu = {"Empresas": "empresas", **menu}
+        for label, page in menu.items():
+            if st.sidebar.button(label, key=f"f_{page}", use_container_width=True):
+                st.session_state.page = page
 
 # =========================
-# Ejecución principal
+# Main
 # =========================
 if not st.session_state.role:
     login_view()
 else:
-    try:
-        route()
-        page = st.session_state.get("page", None)
-
-        if page and page != "home":
-            with st.spinner(f"Cargando {page}..."):
-                if page == "panel_gestor" and st.session_state.role == "gestor":
-                    from pages.panel_gestor import main as panel_gestor_main
-                    panel_gestor_main(supabase_admin, st.session_state)
+    # Renderizar header y footer
+    render_header()
+    render_footer()
+    
+    route()
+    page = st.session_state.get("page")
+    
+    if page and page != "home":
+        with st.spinner("Cargando..."):
+            try:
+                if page == "panel_gestor":
+                    from pages.panel_gestor import main
+                    main(supabase_admin, st.session_state)
                 else:
-                    mod = page.replace("-", "_")
-                    mod_path = f"pages.{mod}"
-                    mod_import = __import__(mod_path, fromlist=["main"])
-                    mod_import.main(supabase_admin, st.session_state)
-
-        else:
-            # Dashboard simple
-            rol = st.session_state.role
-            ajustes = get_ajustes_app(supabase_admin)
+                    mod = __import__(f"pages.{page.replace('-', '_')}", fromlist=["main"])
+                    mod.main(supabase_admin, st.session_state)
+            except Exception as e:
+                st.error(f"Error: {e}")
+    else:
+        ajustes = get_ajustes_app(supabase_admin)
+        rol = st.session_state.role
+        
+        if rol == "admin":
+            st.title("Panel de Administración")
+            m = get_metricas_admin()
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Empresas", m['empresas'])
+            c2.metric("Usuarios", m['usuarios'])
+            c3.metric("Cursos", m['cursos'])
+            c4.metric("Grupos", m['grupos'])
+        
+        elif rol == "gestor":
+            st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
+            eid = st.session_state.user.get("empresa_id")
+            if eid:
+                m = get_metricas_gestor(eid)
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Grupos", m['grupos'])
+                c2.metric("Participantes", m['participantes'])
+                c3.metric("Documentos", m['documentos'])
+        
+        elif rol == "alumno":
+            st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
+            usuario_id = st.session_state.user.get("id")
             
-            if rol == "admin":
-                st.title("Panel de Administración")
-                metricas = get_metricas_admin()
-                
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("Empresas", metricas['empresas'])
-                col2.metric("Usuarios", metricas['usuarios'])
-                col3.metric("Cursos", metricas['cursos'])
-                col4.metric("Grupos", metricas['grupos'])
-
-            elif rol == "gestor":
-                st.title("Panel del Gestor")
-                empresa_id = st.session_state.user.get("empresa_id")
-                if empresa_id:
-                    metricas = get_metricas_gestor(empresa_id)
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Grupos", metricas['grupos'])
-                    col2.metric("Participantes", metricas['participantes'])
-                    col3.metric("Documentos", metricas['documentos'])
-
-            elif rol == "alumno":
-                st.title("Área del Alumno")
-                st.info("Accede a tus grupos desde el menú lateral")
-
-            elif rol == "comercial":
-                st.title("Área Comercial")
-                st.info("Gestiona clientes desde el menú lateral")
-
-    except Exception as e:
-        st.error(f"Error: {e}")
-        st.exception(e)
+            if usuario_id:
+                try:
+                    grupos = supabase_admin.table("participantes_grupos").select("grupo:grupos(codigo_grupo, estado)").eq("participante_id", usuario_id).execute()
+                    
+                    if grupos.data:
+                        activos = [g for g in grupos.data if g.get('grupo', {}).get('estado') != 'FINALIZADO']
+                        finalizados = [g for g in grupos.data if g.get('grupo', {}).get('estado') == 'FINALIZADO']
+                        
+                        c1, c2 = st.columns(2)
+                        c1.metric("Grupos Activos", len(activos))
+                        c2.metric("Grupos Completados", len(finalizados))
+                        
+                        if activos:
+                            st.subheader("Mis Grupos Activos")
+                            for item in activos[:5]:
+                                g = item.get('grupo', {})
+                                st.text(f"🟢 {g.get('codigo_grupo', 'N/A')}")
+                        
+                        st.markdown("---")
+                        if st.button("Ver Todos Mis Grupos y Diplomas", use_container_width=True):
+                            st.session_state.page = "area_alumno"
+                            st.rerun()
+                    else:
+                        st.info("No estás inscrito en ningún grupo")
+                except:
+                    st.warning("No se pudieron cargar tus grupos")
+        
+        elif rol == "comercial":
+            st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
+            st.info("Gestiona tu cartera desde el menú lateral")
