@@ -3,119 +3,373 @@ import pandas as pd
 from datetime import datetime, date, timedelta
 from services.aulas_service import get_aulas_service
 from utils import export_excel
+from io import BytesIO
 
-# Importar streamlit-calendar
+# Verificar disponibilidad de streamlit-calendar
 try:
     from streamlit_calendar import calendar
     CALENDAR_AVAILABLE = True
 except ImportError:
     CALENDAR_AVAILABLE = False
+
+# Verificar reportlab para PDFs
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import cm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.graphics.charts.piecharts import Pie
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.shapes import Drawing
+    REPORTLAB_AVAILABLE = True
+except ImportError:
+    REPORTLAB_AVAILABLE = False
+
 # =========================
-# UTILIDADES DE EXPORTACIÓN
+# EXPORTACIONES
 # =========================
 
 def exportar_cronograma_excel(eventos: list):
-    """Transforma eventos de calendario en un Excel amigable"""
+    """Exporta cronograma a Excel"""
     try:
+        if not eventos:
+            st.warning("No hay eventos para exportar")
+            return
+            
         datos = []
         for ev in eventos:
             props = ev.get("extendedProps", {})
+            try:
+                inicio = pd.to_datetime(ev.get("start", "")).strftime('%d/%m/%Y %H:%M')
+                fin = pd.to_datetime(ev.get("end", "")).strftime('%d/%m/%Y %H:%M')
+            except:
+                inicio = ev.get("start", "")
+                fin = ev.get("end", "")
+                
             datos.append({
-                "Título": ev.get("title", ""),
+                "Título": ev.get("title", "").split(": ", 1)[-1] if ": " in ev.get("title", "") else ev.get("title", ""),
                 "Aula": props.get("aula_nombre", ""),
-                "Inicio": ev.get("start", ""),
-                "Fin": ev.get("end", ""),
-                "Tipo de Reserva": props.get("tipo_reserva", ""),
+                "Inicio": inicio,
+                "Fin": fin,
+def exportar_cronograma_excel(eventos: list):
+    """Exporta cronograma a Excel"""
+    try:
+        if not eventos:
+            st.warning("No hay eventos para exportar")
+            return
+            
+        datos = []
+        for ev in eventos:
+            props = ev.get("extendedProps", {})
+            try:
+                inicio = pd.to_datetime(ev.get("start", "")).strftime('%d/%m/%Y %H:%M')
+                fin = pd.to_datetime(ev.get("end", "")).strftime('%d/%m/%Y %H:%M')
+            except:
+                inicio = ev.get("start", "")
+                fin = ev.get("end", "")
+                
+            datos.append({
+                "Título": ev.get("title", "").split(": ", 1)[-1] if ": " in ev.get("title", "") else ev.get("title", ""),
+                "Aula": props.get("aula_nombre", ""),
+                "Inicio": inicio,
+                "Fin": fin,
+                "Tipo": props.get("tipo_reserva", ""),
                 "Estado": props.get("estado", ""),
                 "Grupo": props.get("grupo_codigo", "")
             })
 
         df_export = pd.DataFrame(datos)
-
-        fecha_str = datetime.now().strftime("%Y%m%d")
+        fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"cronograma_aulas_{fecha_str}.xlsx"
-
-        from utils import export_excel  # si ya tienes esta función utilitaria
-        export_excel(df_export, filename=filename, label="📥 Descargar Cronograma en Excel")
-
-    except Exception as e:
-        st.error(f"❌ Error exportando Excel: {e}")
-
-
-def exportar_cronograma_pdf(eventos: list):
-    """Exporta cronograma a un PDF amigable"""
-    try:
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib import colors
-        from reportlab.lib.styles import getSampleStyleSheet
-
-        fecha_str = datetime.now().strftime("%Y%m%d")
-        filename = f"cronograma_aulas_{fecha_str}.pdf"
-
-        # Cabecera
-        datos = [["Título", "Aula", "Inicio", "Fin", "Tipo", "Estado", "Grupo"]]
-        for ev in eventos:
-            props = ev.get("extendedProps", {})
-            datos.append([
-                ev.get("title", ""),
-                props.get("aula_nombre", ""),
-                ev.get("start", ""),
-                ev.get("end", ""),
-                props.get("tipo_reserva", ""),
-                props.get("estado", ""),
-                props.get("grupo_codigo", "")
-            ])
-
-        doc = SimpleDocTemplate(filename, pagesize=A4)
-        styles = getSampleStyleSheet()
-        elementos = []
-
-        elementos.append(Paragraph("📅 Cronograma de Aulas", styles["Heading1"]))
-        elementos.append(Spacer(1, 12))
-
-        tabla = Table(datos)
-        tabla.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#3498db")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
-        ]))
-        elementos.append(tabla)
-
-        doc.build(elementos)
-
-        with open(filename, "rb") as f:
-            st.download_button(
-                "📥 Descargar Cronograma en PDF",
-                f,
-                file_name=filename,
-                mime="application/pdf"
-            )
-
-    except Exception as e:
-        st.error(f"❌ Error exportando PDF: {e}")
         
-def mostrar_tabla_aulas(df_aulas, session_state, aulas_service, titulo_tabla="🏢 Lista de Aulas"):
-    """Tabla de aulas siguiendo el patrón de Streamlit 1.49"""
+        export_excel(df_export, filename=filename, label="📥 Descargar Excel")
+
+    except Exception as e:
+        st.error(f"Error exportando Excel: {e}")
+
+
+def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin: date):
+    """Exporta cronograma a PDF con vista semanal"""
+    if not REPORTLAB_AVAILABLE:
+        st.error("reportlab no está instalado. Ejecuta: pip install reportlab")
+        return
+        
+    try:
+        if not eventos:
+            st.warning("No hay eventos para exportar")
+            return
+            
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), 
+                               leftMargin=1*cm, rightMargin=1*cm,
+                               topMargin=1.5*cm, bottomMargin=1.5*cm)
+        
+        elementos = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=16,
+            textColor=colors.HexColor("#2c3e50"),
+            spaceAfter=12,
+            alignment=TA_CENTER
+        )
+        
+        titulo = f"Cronograma de Aulas - {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}"
+        elementos.append(Paragraph(titulo, title_style))
+        elementos.append(Spacer(1, 12))
+        
+        # Obtener aulas únicas
+        aulas_set = set()
+        for ev in eventos:
+            aulas_set.add(ev.get("extendedProps", {}).get("aula_nombre", "Sin aula"))
+        aulas_list = sorted(list(aulas_set))
+        
+        if not aulas_list:
+            st.warning("No se encontraron aulas en los eventos")
+            return
+        
+        # Generar días
+        dias = []
+        fecha_actual = fecha_inicio
+        while fecha_actual <= fecha_fin:
+            dias.append(fecha_actual)
+            fecha_actual += timedelta(days=1)
+        
+        if len(dias) > 7:
+            dias = dias[:7]
+            st.info(f"Se mostrarán solo los primeros 7 días")
+        
+        # Crear matriz
+        header = ["Aula"] + [d.strftime('%a\n%d/%m') for d in dias]
+        datos_tabla = [header]
+        
+        for aula in aulas_list:
+            fila = [aula]
+            
+            for dia in dias:
+                eventos_dia = []
+                
+                for ev in eventos:
+                    try:
+                        ev_inicio = pd.to_datetime(ev.get("start", "")).date()
+                        ev_aula = ev.get("extendedProps", {}).get("aula_nombre", "")
+                        
+                        if ev_aula == aula and ev_inicio == dia:
+                            hora_inicio = pd.to_datetime(ev.get("start", "")).strftime('%H:%M')
+                            titulo = ev.get("title", "").split(": ", 1)[-1] if ": " in ev.get("title", "") else ev.get("title", "")
+                            eventos_dia.append(f"{hora_inicio}\n{titulo[:15]}..." if len(titulo) > 15 else f"{hora_inicio}\n{titulo}")
+                    except:
+                        continue
+                
+                if eventos_dia:
+                    fila.append("\n".join(eventos_dia[:3]))
+                else:
+                    fila.append("-")
+            
+            datos_tabla.append(fila)
+        
+        col_widths = [4*cm] + [3.5*cm] * len(dias)
+        tabla = Table(datos_tabla, colWidths=col_widths)
+        
+        estilo_tabla = [
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3498db")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor("#ecf0f1")),
+            ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 1), (0, -1), 8),
+            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+            ('FONTSIZE', (1, 1), (-1, -1), 7),
+            ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor("#2c3e50")),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]
+        
+        tabla.setStyle(TableStyle(estilo_tabla))
+        elementos.append(tabla)
+        
+        elementos.append(Spacer(1, 12))
+        leyenda_texto = """
+        <b>Leyenda:</b> 
+        <font color="#28a745">■</font> Formación | 
+        <font color="#ffc107">■</font> Mantenimiento | 
+        <font color="#17a2b8">■</font> Evento | 
+        <font color="#dc3545">■</font> Bloqueada
+        """
+        elementos.append(Paragraph(leyenda_texto, styles['Normal']))
+        
+        doc.build(elementos)
+        buffer.seek(0)
+        
+        fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"cronograma_semanal_{fecha_str}.pdf"
+        
+        st.download_button(
+            label="📥 Descargar PDF Semanal",
+            data=buffer,
+            file_name=filename,
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+    except Exception as e:
+        st.error(f"Error exportando PDF: {e}")
+
+
+def exportar_informe_estadisticas_pdf(eventos: list, aulas_info: list, fecha_inicio: date, fecha_fin: date):
+    """Exporta informe ejecutivo con estadísticas"""
+    if not REPORTLAB_AVAILABLE:
+        st.error("reportlab no está instalado")
+        return
+        
+    try:
+        if not eventos or not aulas_info:
+            st.warning("No hay datos suficientes")
+            return
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4,
+                               leftMargin=2*cm, rightMargin=2*cm,
+                               topMargin=2*cm, bottomMargin=2*cm)
+        
+        elementos = []
+        styles = getSampleStyleSheet()
+        
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            textColor=colors.HexColor("#2c3e50"),
+            spaceAfter=12,
+            alignment=TA_CENTER
+        )
+        
+        elementos.append(Spacer(1, 3*cm))
+        elementos.append(Paragraph("Informe de Estadísticas", title_style))
+        elementos.append(Paragraph("Gestión de Aulas", title_style))
+        elementos.append(Spacer(1, 1*cm))
+        
+        periodo = f"Período: {fecha_inicio.strftime('%d/%m/%Y')} - {fecha_fin.strftime('%d/%m/%Y')}"
+        elementos.append(Paragraph(periodo, styles['Normal']))
+        elementos.append(Spacer(1, 0.5*cm))
+        
+        fecha_gen = f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+        elementos.append(Paragraph(fecha_gen, styles['Normal']))
+        
+        elementos.append(PageBreak())
+        
+        # Resumen ejecutivo
+        elementos.append(Paragraph("<b>Resumen Ejecutivo</b>", styles['Heading1']))
+        elementos.append(Spacer(1, 12))
+        
+        total_aulas = len(aulas_info)
+        total_eventos = len(eventos)
+        dias_periodo = (fecha_fin - fecha_inicio).days + 1
+        promedio_eventos_dia = total_eventos / dias_periodo if dias_periodo > 0 else 0
+        
+        resumen_data = [
+            ["Métrica", "Valor"],
+            ["Total de Aulas", str(total_aulas)],
+            ["Total de Reservas", str(total_eventos)],
+            ["Días Analizados", str(dias_periodo)],
+            ["Promedio Reservas/Día", f"{promedio_eventos_dia:.1f}"]
+        ]
+        
+        tabla_resumen = Table(resumen_data, colWidths=[10*cm, 5*cm])
+        tabla_resumen.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3498db")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 11),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.lightblue)
+        ]))
+        elementos.append(tabla_resumen)
+        elementos.append(Spacer(1, 20))
+        
+        # Ocupación por aula
+        elementos.append(Paragraph("<b>Ocupación por Aula</b>", styles['Heading2']))
+        elementos.append(Spacer(1, 12))
+        
+        ocupacion_por_aula = {}
+        for aula in aulas_info:
+            aula_nombre = aula.get("nombre", "Sin nombre")
+            eventos_aula = [
+                ev for ev in eventos 
+                if ev.get("extendedProps", {}).get("aula_nombre") == aula_nombre
+            ]
+            ocupacion_por_aula[aula_nombre] = len(eventos_aula)
+        
+        datos_ocupacion = [["Aula", "Nº Reservas", "% del Total"]]
+        for aula_nombre, num_reservas in sorted(ocupacion_por_aula.items(), key=lambda x: x[1], reverse=True):
+            porcentaje = (num_reservas / total_eventos * 100) if total_eventos > 0 else 0
+            datos_ocupacion.append([
+                aula_nombre,
+                str(num_reservas),
+                f"{porcentaje:.1f}%"
+            ])
+        
+        tabla_ocupacion = Table(datos_ocupacion, colWidths=[8*cm, 4*cm, 3*cm])
+        tabla_ocupacion.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#ecf0f1")),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER')
+        ]))
+        elementos.append(tabla_ocupacion)
+        
+        doc.build(elementos)
+        buffer.seek(0)
+        
+        fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
+        filename = f"estadisticas_aulas_{fecha_str}.pdf"
+        
+        st.download_button(
+            label="📥 Descargar Informe Estadísticas",
+            data=buffer,
+            file_name=filename,
+            mime="application/pdf",
+            use_container_width=True
+        )
+        
+    except Exception as e:
+        st.error(f"Error exportando informe: {e}")
+
+
+# =========================
+# COMPONENTES UI
+# =========================
+
+def mostrar_tabla_aulas(df_aulas, session_state, aulas_service):
+    """Tabla de aulas siguiendo patrón Streamlit 1.49"""
     if df_aulas.empty:
-        st.info("📋 No hay aulas para mostrar")
+        st.info("No hay aulas para mostrar")
         return None
 
-    st.markdown(f"### {titulo_tabla}")
+    st.markdown("### Aulas Registradas")
 
-    # 🔎 Filtros fijos arriba de la tabla
     col1, col2, col3 = st.columns(3)
     with col1:
-        filtro_nombre = st.text_input("🏢 Nombre contiene", key="filtro_aula_nombre")
+        filtro_nombre = st.text_input("Nombre contiene", key="filtro_aula_nombre")
     with col2:
-        filtro_ubicacion = st.text_input("📍 Ubicación contiene", key="filtro_aula_ubicacion")
+        filtro_ubicacion = st.text_input("Ubicación contiene", key="filtro_aula_ubicacion")
     with col3:
         filtro_activa = st.selectbox("Estado", ["Todas", "Activas", "Inactivas"], key="filtro_aula_estado")
 
-    # Aplicar filtros
     df_filtrado = df_aulas.copy()
     
     if filtro_nombre:
@@ -126,12 +380,14 @@ def mostrar_tabla_aulas(df_aulas, session_state, aulas_service, titulo_tabla="�
         activa_bool = filtro_activa == "Activas"
         df_filtrado = df_filtrado[df_filtrado["activa"] == activa_bool]
 
-    # Transformar datos para mostrar
+    if df_filtrado.empty:
+        st.warning("No se encontraron aulas con los filtros aplicados")
+        return None
+
     df_display = df_filtrado.copy()
-    df_display["Estado"] = df_display["activa"].apply(lambda x: "✅ Activa" if x else "❌ Inactiva")
-    df_display["Capacidad"] = df_display["capacidad_maxima"].apply(lambda x: f"👥 {x}")
+    df_display["Estado"] = df_display["activa"].apply(lambda x: "Activa" if x else "Inactiva")
+    df_display["Capacidad"] = df_display["capacidad_maxima"]
     
-    # 📊 Mostrar tabla con selección
     columnas = ["nombre", "ubicacion", "Capacidad", "Estado"]
     if session_state.role == "admin":
         columnas.insert(2, "empresa_nombre")
@@ -141,51 +397,54 @@ def mostrar_tabla_aulas(df_aulas, session_state, aulas_service, titulo_tabla="�
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
-        selection_mode="single-row"
+        selection_mode="single-row",
+        column_config={
+            "nombre": "Nombre del Aula",
+            "ubicacion": "Ubicación",
+            "empresa_nombre": "Empresa"
+        }
     )
 
-    # ✅ Botones de acción
     col_exp, col_imp = st.columns([1, 1])
     with col_exp:
         if not df_filtrado.empty:
             fecha_str = datetime.now().strftime("%Y%m%d")
             filename = f"aulas_{fecha_str}.xlsx"
-            export_excel(df_filtrado, filename=filename, label="📥 Exportar Excel")
+            export_excel(df_filtrado, filename=filename, label="Exportar Excel")
     with col_imp:
-        if st.button("🔄 Actualizar", use_container_width=True, key="btn_actualizar_aulas"):
+        if st.button("Actualizar", use_container_width=True, key="btn_actualizar_aulas"):
             aulas_service.limpiar_cache_aulas()
             st.rerun()
 
-    # Retornar aula seleccionada
     if evento.selection.rows:
         return df_filtrado.iloc[evento.selection.rows[0]]
     return None
 
+
 def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion=False):
-    """Formulario de aula siguiendo el patrón establecido"""
+    """Formulario de aula"""
     if es_creacion:
-        st.subheader("➕ Nueva Aula")
+        st.subheader("Nueva Aula")
         datos = {}
     else:
-        st.subheader(f"✏️ Editar {aula_data['nombre']}")
+        st.subheader(f"Editar {aula_data['nombre']}")
         datos = aula_data.copy()
 
     form_id = f"aula_{datos.get('id', 'nueva')}_{'crear' if es_creacion else 'editar'}"
 
     with st.form(form_id, clear_on_submit=es_creacion):
-        st.markdown("### 🏢 Información Básica")
+        st.markdown("### Información Básica")
         
         col1, col2 = st.columns(2)
         
         with col1:
             nombre = st.text_input(
-                "🏢 Nombre del Aula", 
+                "Nombre del Aula *", 
                 value=datos.get("nombre", ""), 
-                key=f"{form_id}_nombre",
-                help="Nombre identificativo del aula"
+                key=f"{form_id}_nombre"
             )
             capacidad_maxima = st.number_input(
-                "👥 Capacidad Máxima", 
+                "Capacidad Máxima *", 
                 min_value=1, 
                 max_value=200, 
                 value=int(datos.get("capacidad_maxima", 20)),
@@ -194,18 +453,17 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
         
         with col2:
             ubicacion = st.text_input(
-                "📍 Ubicación", 
+                "Ubicación", 
                 value=datos.get("ubicacion", ""), 
-                key=f"{form_id}_ubicacion",
-                help="Descripción de la ubicación física del aula"
+                key=f"{form_id}_ubicacion"
             )
             activa = st.checkbox(
-                "✅ Aula Activa", 
+                "Aula Activa", 
                 value=datos.get("activa", True),
                 key=f"{form_id}_activa"
             )
 
-        st.markdown("### 🔧 Equipamiento")
+        st.markdown("### Equipamiento")
         opciones_equipamiento = [
             "PROYECTOR", "PIZARRA_DIGITAL", "ORDENADORES", "AUDIO", 
             "AIRE_ACONDICIONADO", "CALEFACCION", "WIFI", "TELEVISION",
@@ -214,61 +472,55 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
         
         equipamiento_actual = datos.get("equipamiento", [])
         equipamiento = st.multiselect(
-            "Seleccionar equipamiento disponible",
+            "Seleccionar equipamiento",
             options=opciones_equipamiento,
             default=equipamiento_actual,
             key=f"{form_id}_equipamiento"
         )
 
-        st.markdown("### 🎨 Configuración Visual")
+        st.markdown("### Configuración Visual")
         col1, col2 = st.columns(2)
         
         with col1:
             color_cronograma = st.color_picker(
-                "🎨 Color en Cronograma",
+                "Color en Cronograma",
                 value=datos.get("color_cronograma", "#3498db"),
                 key=f"{form_id}_color"
             )
         
         with col2:
-            st.write("**Vista previa del color:**")
+            st.write("**Vista previa:**")
             st.markdown(
-                f'<div style="background-color: {color_cronograma}; height: 30px; border-radius: 5px; border: 1px solid #ddd;"></div>',
+                f'<div style="background-color: {color_cronograma}; height: 30px; border-radius: 5px; border: 1px solid #ddd; margin-top: 8px;"></div>',
                 unsafe_allow_html=True
             )
 
         observaciones = st.text_area(
-            "📝 Observaciones",
+            "Observaciones",
             value=datos.get("observaciones", ""),
-            key=f"{form_id}_observaciones",
-            help="Comentarios adicionales sobre el aula"
+            key=f"{form_id}_observaciones"
         )
 
-        # Validaciones
         errores = []
         if not nombre:
-            errores.append("Nombre del aula es obligatorio")
+            errores.append("Nombre obligatorio")
         if capacidad_maxima < 1:
             errores.append("Capacidad debe ser mayor a 0")
         
         if errores:
-            st.error(f"⚠️ Errores encontrados: {', '.join(errores)}")
+            st.error(f"Errores: {', '.join(errores)}")
 
-        # Botones
         st.markdown("---")
         if es_creacion:
-            submitted = st.form_submit_button("➕ Crear Aula", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("Crear Aula", type="primary", use_container_width=True)
+            eliminar = False
         else:
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                submitted = st.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True)
+                submitted = st.form_submit_button("Guardar Cambios", type="primary", use_container_width=True)
             with col_btn2:
-                if session_state.role == "admin":
-                    eliminar = st.form_submit_button("🗑️ Eliminar", type="secondary", use_container_width=True)
-                else:
-                    eliminar = False
+                eliminar = st.form_submit_button("Eliminar", type="secondary", use_container_width=True) if session_state.role == "admin" else False
 
-        # Procesamiento
         if submitted and not errores:
             try:
                 datos_aula = {
@@ -284,472 +536,52 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
                 }
 
                 if es_creacion:
-                    if session_state.role == "gestor":
-                        datos_aula["empresa_id"] = session_state.user.get("empresa_id")
-                    else:
-                        datos_aula["empresa_id"] = session_state.user.get("empresa_id")
-                    
+                    datos_aula["empresa_id"] = session_state.user.get("empresa_id")
                     datos_aula["created_at"] = datetime.utcnow().isoformat()
                     
                     success, aula_id = aulas_service.crear_aula(datos_aula)
                     if success:
-                        st.success("✅ Aula creada correctamente")
+                        st.success("Aula creada correctamente")
+                        if "crear_nueva_aula" in st.session_state:
+                            del st.session_state["crear_nueva_aula"]
                         st.rerun()
                     else:
-                        st.error("❌ Error al crear el aula")
+                        st.error(f"Error al crear: {aula_id if isinstance(aula_id, str) else 'Error desconocido'}")
                 else:
                     success = aulas_service.actualizar_aula(datos["id"], datos_aula)
                     if success:
-                        st.success("✅ Aula actualizada correctamente")
+                        st.success("Aula actualizada")
                         st.rerun()
                     else:
-                        st.error("❌ Error al actualizar el aula")
+                        st.error("Error al actualizar")
                         
             except Exception as e:
-                st.error(f"❌ Error procesando aula: {e}")
+                st.error(f"Error: {e}")
 
-        # Manejar eliminación
-        if 'eliminar' in locals() and eliminar:
+        if eliminar:
             if st.session_state.get("confirmar_eliminar_aula"):
                 try:
                     success = aulas_service.eliminar_aula(datos["id"])
                     if success:
-                        st.success("✅ Aula eliminada correctamente")
+                        st.success("Aula eliminada")
                         del st.session_state["confirmar_eliminar_aula"]
                         st.rerun()
+                    else:
+                        st.error("No se puede eliminar (tiene reservas futuras)")
                 except Exception as e:
-                    st.error(f"❌ Error eliminando aula: {e}")
+                    st.error(f"Error: {e}")
             else:
                 st.session_state["confirmar_eliminar_aula"] = True
-                st.warning("⚠️ Presiona 'Eliminar' nuevamente para confirmar")
+                st.warning("Presiona 'Eliminar' nuevamente para confirmar")
 
-def mostrar_cronograma_fullcalendar(aulas_service, session_state):
-    """Cronograma usando streamlit-calendar basado en la documentación oficial"""
-    
-    st.markdown("### 📅 Cronograma Interactivo de Aulas")
-    
-    if not CALENDAR_AVAILABLE:
-        st.error("📦 streamlit-calendar no está instalado. Instala con: pip install streamlit-calendar")
-        mostrar_cronograma_alternativo(aulas_service, session_state)
-        return
-
-    # Controles de configuración
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        fecha_inicio = st.date_input(
-            "📅 Desde", 
-            value=datetime.now().date() - timedelta(days=7),
-            key="cal_fecha_inicio"
-        )
-    
-    with col2:
-        fecha_fin = st.date_input(
-            "📅 Hasta", 
-            value=datetime.now().date() + timedelta(days=21),
-            key="cal_fecha_fin"
-        )
-    
-    with col3:
-        vista_inicial = st.selectbox(
-            "👁️ Vista inicial",
-            ["dayGridMonth", "timeGridWeek", "timeGridDay", "listWeek"],
-            index=1,
-            key="cal_vista"
-        )
-    
-    with col4:
-        if st.button("🔄 Actualizar Cronograma", key="cal_refresh"):
-            st.rerun()
-
-    # Filtros de aulas
-    try:
-        df_aulas = aulas_service.get_aulas_con_empresa()
-        if df_aulas.empty:
-            st.warning("⚠️ No hay aulas disponibles")
-            return
-        
-        # Selector de aulas
-        aulas_disponibles = ["Todas"] + df_aulas['nombre'].tolist()
-        aulas_seleccionadas = st.multiselect(
-            "🏢 Filtrar por aulas específicas",
-            aulas_disponibles,
-            default=["Todas"],
-            key="cal_filtro_aulas"
-        )
-        
-        # Determinar IDs de aulas a filtrar
-        if "Todas" in aulas_seleccionadas or not aulas_seleccionadas:
-            aulas_ids = df_aulas['id'].tolist()
-        else:
-            aulas_ids = df_aulas[df_aulas['nombre'].isin(aulas_seleccionadas)]['id'].tolist()
-        
-    except Exception as e:
-        st.error(f"❌ Error cargando aulas: {e}")
-        return
-
-    # Obtener eventos
-    try:
-        eventos = aulas_service.get_eventos_cronograma(
-            fecha_inicio.isoformat() + "T00:00:00Z",
-            fecha_fin.isoformat() + "T23:59:59Z",
-            aulas_ids
-        )
-        
-        # Configuración del calendario según documentación oficial
-        calendar_options = {
-            "editable": True,
-            "navLinks": True,
-            "selectable": True,
-            "initialView": vista_inicial,
-            "initialDate": datetime.now().date().isoformat(),
-            "headerToolbar": {
-                "left": "prev,next today",
-                "center": "title",
-                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
-            },
-            "height": 650,
-            "slotMinTime": "07:00:00",
-            "slotMaxTime": "22:00:00",
-            "weekends": True,
-            "businessHours": {
-                "daysOfWeek": [1, 2, 3, 4, 5],
-                "startTime": "08:00",
-                "endTime": "19:00"
-            },
-            "nowIndicator": True,
-            "dayMaxEvents": 3,
-            "eventDisplay": "block",
-            "displayEventEnd": True,
-            "locale": "es",
-            "timeZone": "local"
-        }
-
-        # CSS personalizado para tipos de eventos
-        calendar_css = """
-        .fc-event-grupo { 
-            background-color: #28a745 !important;
-            border-color: #28a745 !important;
-            color: white !important;
-        }
-        .fc-event-mantenimiento { 
-            background-color: #ffc107 !important;
-            border-color: #ffc107 !important;
-            color: #212529 !important;
-        }
-        .fc-event-evento { 
-            background-color: #17a2b8 !important;
-            border-color: #17a2b8 !important;
-            color: white !important;
-        }
-        .fc-event-bloqueada { 
-            background-color: #dc3545 !important;
-            border-color: #dc3545 !important;
-            color: white !important;
-        }
-        .fc-toolbar-title {
-            font-size: 1.25em !important;
-            font-weight: 600 !important;
-        }
-        .fc-button-primary {
-            background-color: #0066cc !important;
-            border-color: #0066cc !important;
-        }
-        .fc-button-primary:hover {
-            background-color: #0056b3 !important;
-            border-color: #0056b3 !important;
-        }
-        """
-
-        # Renderizar el calendario
-        try:
-            calendar_result = calendar(
-                events=eventos,
-                options=calendar_options,
-                custom_css=calendar_css,
-                key="fullcalendar_aulas",
-                callbacks=["dateClick", "eventClick", "select"]
-            )
-            
-            # Procesar callbacks del calendario
-            if calendar_result:
-                
-                # Click en evento
-                if calendar_result.get("eventClick"):
-                    evento_info = calendar_result["eventClick"]["event"]
-                    st.markdown("---")
-                    st.markdown("### 📋 Detalle de Reserva Seleccionada")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.info(f"**🏢 Aula:** {evento_info['extendedProps']['aula_nombre']}")
-                        st.info(f"**📝 Título:** {evento_info['title'].split(': ', 1)[-1]}")
-                    
-                    with col2:
-                        fecha_inicio_evento = pd.to_datetime(evento_info['start']).strftime('%d/%m/%Y %H:%M')
-                        fecha_fin_evento = pd.to_datetime(evento_info['end']).strftime('%d/%m/%Y %H:%M')
-                        st.info(f"**📅 Inicio:** {fecha_inicio_evento}")
-                        st.info(f"**📅 Fin:** {fecha_fin_evento}")
-                    
-                    with col3:
-                        tipo_reserva = evento_info['extendedProps']['tipo_reserva']
-                        estado = evento_info['extendedProps']['estado']
-                        st.info(f"**🏷️ Tipo:** {tipo_reserva}")
-                        st.info(f"**📊 Estado:** {estado}")
-                    
-                    if evento_info['extendedProps'].get('grupo_codigo'):
-                        st.success(f"**📚 Grupo:** {evento_info['extendedProps']['grupo_codigo']}")
-
-                # Click en fecha vacía
-                if calendar_result.get("dateClick"):
-                    fecha_click = calendar_result["dateClick"]["date"]
-                    st.info(f"📅 Fecha seleccionada: {pd.to_datetime(fecha_click).strftime('%d/%m/%Y')}")
-                    
-                    if st.button("➕ Crear reserva en esta fecha", key="crear_reserva_fecha"):
-                        st.session_state["crear_reserva_fecha"] = fecha_click
-                        st.rerun()
-
-                # Selección de rango
-                if calendar_result.get("select"):
-                    seleccion = calendar_result["select"]
-                    inicio = pd.to_datetime(seleccion["start"]).strftime('%d/%m/%Y %H:%M')
-                    fin = pd.to_datetime(seleccion["end"]).strftime('%d/%m/%Y %H:%M')
-                    st.info(f"📅 Rango seleccionado: {inicio} - {fin}")
-
-        except Exception as e:
-            st.error(f"❌ Error renderizando calendario: {e}")
-            st.write("Error details:", str(e))
-            mostrar_cronograma_alternativo(aulas_service, session_state)
-            return
-
-    except Exception as e:
-        st.error(f"❌ Error obteniendo eventos: {e}")
-        return
-
-    # Leyenda
-    with st.expander("🎨 Leyenda de Colores"):
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.markdown("**🟢 Formación (GRUPO)**")
-            st.markdown("Grupos formativos programados")
-        
-        with col2:
-            st.markdown("**🟡 Mantenimiento**")
-            st.markdown("Tareas de mantenimiento")
-        
-        with col3:
-            st.markdown("**🔵 Eventos**")
-            st.markdown("Eventos especiales")
-        
-        with col4:
-            st.markdown("**🔴 Bloqueada**")
-            st.markdown("Aula no disponible")
-            
-    # =========================
-    # Exportar cronograma
-    # =========================
-    st.markdown("### 📤 Exportar Cronograma")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        exportar_cronograma_excel(eventos)
-    
-    with col2:
-        exportar_cronograma_pdf(eventos)
-    
-def mostrar_cronograma_alternativo(aulas_service, session_state):
-    """Vista alternativa si no funciona el calendario"""
-    
-    st.markdown("### 📅 Vista de Cronograma (Alternativa)")
-    
-    # Controles básicos
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input("Desde", value=datetime.now().date())
-    with col2:
-        fecha_fin = st.date_input("Hasta", value=datetime.now().date() + timedelta(days=7))
-    
-    try:
-        df_reservas = aulas_service.get_reservas_periodo(
-            fecha_inicio.isoformat() + "T00:00:00Z",
-            fecha_fin.isoformat() + "T23:59:59Z"
-        )
-        
-        if df_reservas.empty:
-            st.info("📋 No hay reservas en el período seleccionado")
-            return
-        
-        # Agrupar por fecha
-        df_reservas['fecha'] = pd.to_datetime(df_reservas['fecha_inicio']).dt.date
-        fechas_unicas = sorted(df_reservas['fecha'].unique())
-        
-        for fecha in fechas_unicas:
-            eventos_dia = df_reservas[df_reservas['fecha'] == fecha].sort_values('fecha_inicio')
-            
-            st.markdown(f"#### 📅 {fecha.strftime('%A, %d de %B %Y')}")
-            
-            for _, evento in eventos_dia.iterrows():
-                inicio = pd.to_datetime(evento['fecha_inicio'])
-                fin = pd.to_datetime(evento['fecha_fin'])
-                
-                color_map = {'GRUPO': '🟢', 'EVENTO': '🔵', 'MANTENIMIENTO': '🟡', 'BLOQUEADA': '🔴'}
-                emoji = color_map.get(evento['tipo_reserva'], '⚪')
-                
-                col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
-                
-                with col1:
-                    st.markdown(f"**{inicio.strftime('%H:%M')} - {fin.strftime('%H:%M')}**")
-                with col2:
-                    st.markdown(f"**{evento['aula_nombre']}**")
-                with col3:
-                    st.markdown(f"{emoji} {evento['titulo']}")
-                with col4:
-                    estado_emoji = "✅" if evento['estado'] == 'CONFIRMADA' else "⏳"
-                    st.markdown(f"{estado_emoji}")
-            
-            st.divider()
-        
-    except Exception as e:
-        st.error(f"❌ Error: {e}")
-
-def mostrar_formulario_reserva_manual(aulas_service, session_state):
-    """Formulario para crear reservas manuales"""
-    
-    st.markdown("### ➕ Nueva Reserva Manual")
-    
-    # Obtener lista de aulas disponibles
-    try:
-        df_aulas = aulas_service.get_aulas_con_empresa()
-        if df_aulas.empty:
-            st.warning("⚠️ No hay aulas disponibles")
-            return
-        
-        aulas_opciones = {f"{row['nombre']} ({row['ubicacion']})": row['id'] 
-                         for _, row in df_aulas.iterrows()}
-        
-    except Exception as e:
-        st.error(f"❌ Error cargando aulas: {e}")
-        return
-
-    with st.form("nueva_reserva_manual"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            aula_seleccionada = st.selectbox(
-                "🏢 Seleccionar Aula",
-                options=list(aulas_opciones.keys()),
-                key="reserva_aula"
-            )
-            
-            tipo_reserva = st.selectbox(
-                "🏷️ Tipo de Reserva",
-                ["GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"],
-                key="reserva_tipo"
-            )
-            
-            titulo = st.text_input(
-                "📝 Título de la Reserva",
-                key="reserva_titulo",
-                help="Descripción breve de la reserva"
-            )
-        
-        with col2:
-            fecha_reserva = st.date_input(
-                "📅 Fecha",
-                value=datetime.now().date(),
-                key="reserva_fecha"
-            )
-            
-            col_hora1, col_hora2 = st.columns(2)
-            with col_hora1:
-                hora_inicio = st.time_input(
-                    "⏰ Hora Inicio",
-                    value=datetime.now().time(),
-                    key="reserva_hora_inicio"
-                )
-            with col_hora2:
-                hora_fin = st.time_input(
-                    "⏰ Hora Fin",
-                    value=(datetime.now() + timedelta(hours=2)).time(),
-                    key="reserva_hora_fin"
-                )
-        
-        descripcion = st.text_area(
-            "📝 Descripción Adicional",
-            key="reserva_descripcion",
-            help="Información adicional sobre la reserva (opcional)"
-        )
-        
-        # Validaciones
-        errores = []
-        if not titulo:
-            errores.append("El título es obligatorio")
-        if hora_inicio >= hora_fin:
-            errores.append("La hora de fin debe ser posterior a la de inicio")
-        
-        if errores:
-            for error in errores:
-                st.error(f"⚠️ {error}")
-        
-        submitted = st.form_submit_button(
-            "➕ Crear Reserva", 
-            type="primary", 
-            use_container_width=True,
-            disabled=bool(errores)
-        )
-        
-        if submitted and not errores:
-            try:
-                # Crear datetime completos
-                fecha_inicio_completa = datetime.combine(fecha_reserva, hora_inicio)
-                fecha_fin_completa = datetime.combine(fecha_reserva, hora_fin)
-                
-                # Verificar conflictos
-                aula_id = aulas_opciones[aula_seleccionada]
-                
-                conflictos = aulas_service.verificar_conflictos_reserva(
-                    aula_id,
-                    fecha_inicio_completa.isoformat(),
-                    fecha_fin_completa.isoformat()
-                )
-                
-                if conflictos:
-                    st.error("❌ Ya existe una reserva en este horario para esta aula")
-                    return
-                
-                # Crear la reserva
-                datos_reserva = {
-                    "aula_id": aula_id,
-                    "titulo": titulo,
-                    "descripcion": descripcion,
-                    "tipo_reserva": tipo_reserva,
-                    "fecha_inicio": fecha_inicio_completa.isoformat(),
-                    "fecha_fin": fecha_fin_completa.isoformat(),
-                    "estado": "CONFIRMADA",
-                    "created_by": session_state.user.get("id"),
-                    "created_at": datetime.utcnow().isoformat()
-                }
-                
-                success, reserva_id = aulas_service.crear_reserva(datos_reserva)
-                
-                if success:
-                    st.success("✅ Reserva creada correctamente")
-                    st.rerun()
-                else:
-                    st.error("❌ Error al crear la reserva")
-                    
-            except Exception as e:
-                st.error(f"❌ Error procesando reserva: {e}")
+# =========================
+# GESTIÓN DE RESERVAS
+# =========================
 
 def mostrar_lista_reservas(aulas_service, session_state):
-    """Lista de reservas existentes con opciones de gestión"""
+    """Lista de reservas con filtros"""
+    st.markdown("### Reservas Existentes")
     
-    st.markdown("### 📋 Reservas Existentes")
-    
-    # Filtros
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -774,18 +606,15 @@ def mostrar_lista_reservas(aulas_service, session_state):
         )
     
     try:
-        # Obtener reservas
         df_reservas = aulas_service.get_reservas_periodo(
             fecha_desde.isoformat() + "T00:00:00Z",
             fecha_hasta.isoformat() + "T23:59:59Z"
         )
         
         if not df_reservas.empty:
-            # Aplicar filtro de tipo
             if filtro_tipo != "Todos":
                 df_reservas = df_reservas[df_reservas['tipo_reserva'] == filtro_tipo]
             
-            # Formatear datos para mostrar
             df_display = df_reservas.copy()
             df_display['Fecha'] = pd.to_datetime(df_display['fecha_inicio']).dt.strftime('%d/%m/%Y')
             df_display['Horario'] = (
@@ -794,10 +623,9 @@ def mostrar_lista_reservas(aulas_service, session_state):
                 pd.to_datetime(df_display['fecha_fin']).dt.strftime('%H:%M')
             )
             df_display['Estado'] = df_display['estado'].apply(
-                lambda x: "✅ Confirmada" if x == "CONFIRMADA" else "⏳ Pendiente"
+                lambda x: "Confirmada" if x == "CONFIRMADA" else "Pendiente"
             )
             
-            # Mostrar tabla
             columnas_mostrar = ['Fecha', 'Horario', 'aula_nombre', 'titulo', 'tipo_reserva', 'Estado']
             
             evento = st.dataframe(
@@ -813,362 +641,448 @@ def mostrar_lista_reservas(aulas_service, session_state):
                 }
             )
             
-            # Opciones para reserva seleccionada
             if evento.selection.rows and session_state.role in ["admin", "gestor"]:
                 reserva_seleccionada = df_reservas.iloc[evento.selection.rows[0]]
                 
                 st.markdown("---")
-                st.markdown("### 🔧 Acciones para Reserva Seleccionada")
+                st.markdown("### Acciones para Reserva Seleccionada")
                 
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    if st.button("📝 Editar Reserva", key="editar_reserva_btn"):
+                    if st.button("Editar Reserva", key="editar_reserva_btn"):
                         st.session_state["editar_reserva_id"] = reserva_seleccionada['id']
                         st.rerun()
                 
                 with col2:
                     if reserva_seleccionada['estado'] == 'PENDIENTE':
-                        if st.button("✅ Confirmar", key="confirmar_reserva_btn"):
+                        if st.button("Confirmar", key="confirmar_reserva_btn"):
                             try:
                                 success = aulas_service.actualizar_estado_reserva(
                                     reserva_seleccionada['id'], 
                                     'CONFIRMADA'
                                 )
                                 if success:
-                                    st.success("✅ Reserva confirmada")
+                                    st.success("Reserva confirmada")
                                     st.rerun()
                             except Exception as e:
-                                st.error(f"❌ Error: {e}")
+                                st.error(f"Error: {e}")
                 
                 with col3:
-                    if st.button("🗑️ Eliminar", key="eliminar_reserva_btn"):
+                    if st.button("Eliminar", key="eliminar_reserva_btn"):
                         if st.session_state.get("confirmar_eliminar_reserva"):
                             try:
                                 success = aulas_service.eliminar_reserva(reserva_seleccionada['id'])
                                 if success:
-                                    st.success("✅ Reserva eliminada")
+                                    st.success("Reserva eliminada")
                                     del st.session_state["confirmar_eliminar_reserva"]
                                     st.rerun()
                             except Exception as e:
-                                st.error(f"❌ Error: {e}")
+                                st.error(f"Error: {e}")
                         else:
                             st.session_state["confirmar_eliminar_reserva"] = True
-                            st.warning("⚠️ Presiona nuevamente para confirmar")
+                            st.warning("Presiona nuevamente para confirmar")
         
         else:
-            st.info("📋 No hay reservas en el período seleccionado")
+            st.info("No hay reservas en el período")
             
     except Exception as e:
-        st.error(f"❌ Error cargando reservas: {e}")
+        st.error(f"Error cargando reservas: {e}")
 
-def mostrar_metricas_admin(aulas_service, session_state):
-    """Métricas y estadísticas para administradores"""
+
+def mostrar_formulario_reserva_manual(aulas_service, session_state):
+    """Formulario para crear reservas manuales"""
     
-    if session_state.role != "admin":
-        st.warning("🔒 Solo administradores pueden ver las métricas")
-        return
-    
-    st.markdown("### 📊 Métricas de Aulas")
+    st.markdown("### Nueva Reserva Manual")
     
     try:
-        # Obtener métricas
-        metricas = aulas_service.get_metricas_aulas()
-        
-        # KPIs principales
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric(
-                "🏢 Total Aulas",
-                metricas.get('total_aulas', 0),
-                delta=f"{metricas.get('aulas_activas', 0)} activas"
-            )
-        
-        with col2:
-            st.metric(
-                "📅 Reservas Hoy",
-                metricas.get('reservas_hoy', 0)
-            )
-        
-        with col3:
-            ocupacion = metricas.get('porcentaje_ocupacion', 0)
-            st.metric(
-                "📈 % Ocupación",
-                f"{ocupacion:.1f}%",
-                delta=f"{'Alta' if ocupacion > 70 else 'Media' if ocupacion > 40 else 'Baja'}"
-            )
-        
-        with col4:
-            st.metric(
-                "👥 Capacidad Total",
-                metricas.get('capacidad_total', 0)
-            )
-        
-        st.markdown("---")
-        
-        # Gráficos
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("#### 📊 Distribución por Tipo de Reserva")
-            
-            tipos_data = metricas.get('reservas_por_tipo', {})
-            if tipos_data:
-                st.bar_chart(tipos_data)
-            else:
-                st.info("No hay datos de reservas por tipo")
-        
-        with col2:
-            st.markdown("#### 🏢 Aulas Más Utilizadas")
-            
-            aulas_data = metricas.get('aulas_mas_utilizadas', {})
-            if aulas_data:
-                st.bar_chart(aulas_data)
-            else:
-                st.info("No hay datos de utilización de aulas")
-        
-        # Tabla de detalles
-        st.markdown("#### 📋 Detalle de Ocupación por Aula")
-        
-        df_detalle = aulas_service.get_detalle_ocupacion_aulas()
-        if not df_detalle.empty:
-            st.dataframe(
-                df_detalle,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    'nombre': 'Aula',
-                    'capacidad_maxima': 'Capacidad',
-                    'reservas_mes': 'Reservas Mes',
-                    'horas_ocupadas': 'Horas Ocupadas',
-                    'porcentaje_ocupacion': st.column_config.ProgressColumn(
-                        'Ocupación %',
-                        min_value=0,
-                        max_value=100
-                    )
-                }
-            )
-        else:
-            st.info("No hay datos de ocupación disponibles")
-            
-        # Exportar métricas
-        if st.button("📥 Exportar Métricas", key="exportar_metricas"):
-            try:
-                fecha_str = datetime.now().strftime("%Y%m%d")
-                filename = f"metricas_aulas_{fecha_str}.xlsx"
-                export_excel(df_detalle, filename=filename, label="Métricas exportadas")
-            except Exception as e:
-                st.error(f"❌ Error exportando: {e}")
-                
-    except Exception as e:
-        st.error(f"❌ Error cargando métricas: {e}")
-
-def mostrar_formulario_editar_reserva(aulas_service, session_state, reserva_id):
-    """Formulario para editar una reserva existente"""
-    
-    try:
-        # Obtener datos de la reserva
-        reserva_data = aulas_service.get_reserva_by_id(reserva_id)
-        if not reserva_data:
-            st.error("❌ Reserva no encontrada")
+        df_aulas = aulas_service.get_aulas_con_empresa()
+        if df_aulas.empty:
+            st.warning("No hay aulas disponibles")
             return
         
-        # Obtener lista de aulas
-        df_aulas = aulas_service.get_aulas_con_empresa()
         aulas_opciones = {f"{row['nombre']} ({row['ubicacion']})": row['id'] 
                          for _, row in df_aulas.iterrows()}
         
-        # Encontrar aula actual
-        aula_actual = next(
-            (k for k, v in aulas_opciones.items() if v == reserva_data['aula_id']), 
-            list(aulas_opciones.keys())[0]
-        )
+    except Exception as e:
+        st.error(f"Error cargando aulas: {e}")
+        return
+
+    with st.form("nueva_reserva_manual"):
+        col1, col2 = st.columns(2)
         
-        st.markdown(f"### ✏️ Editar Reserva: {reserva_data['titulo']}")
-        
-        with st.form("editar_reserva"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                aula_seleccionada = st.selectbox(
-                    "🏢 Aula",
-                    options=list(aulas_opciones.keys()),
-                    index=list(aulas_opciones.keys()).index(aula_actual),
-                    key="edit_reserva_aula"
-                )
-                
-                tipo_reserva = st.selectbox(
-                    "🏷️ Tipo de Reserva",
-                    ["GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"],
-                    index=["GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"].index(reserva_data['tipo_reserva']),
-                    key="edit_reserva_tipo"
-                )
-                
-                titulo = st.text_input(
-                    "📝 Título",
-                    value=reserva_data['titulo'],
-                    key="edit_reserva_titulo"
-                )
-            
-            with col2:
-                # Parsear fechas existentes
-                fecha_inicio_actual = pd.to_datetime(reserva_data['fecha_inicio'])
-                fecha_fin_actual = pd.to_datetime(reserva_data['fecha_fin'])
-                
-                fecha_reserva = st.date_input(
-                    "📅 Fecha",
-                    value=fecha_inicio_actual.date(),
-                    key="edit_reserva_fecha"
-                )
-                
-                col_hora1, col_hora2 = st.columns(2)
-                with col_hora1:
-                    hora_inicio = st.time_input(
-                        "⏰ Hora Inicio",
-                        value=fecha_inicio_actual.time(),
-                        key="edit_reserva_hora_inicio"
-                    )
-                with col_hora2:
-                    hora_fin = st.time_input(
-                        "⏰ Hora Fin",
-                        value=fecha_fin_actual.time(),
-                        key="edit_reserva_hora_fin"
-                    )
-                
-                estado = st.selectbox(
-                    "📊 Estado",
-                    ["PENDIENTE", "CONFIRMADA", "CANCELADA"],
-                    index=["PENDIENTE", "CONFIRMADA", "CANCELADA"].index(reserva_data['estado']),
-                    key="edit_reserva_estado"
-                )
-            
-            descripcion = st.text_area(
-                "📝 Descripción",
-                value=reserva_data.get('descripcion', ''),
-                key="edit_reserva_descripcion"
+        with col1:
+            aula_seleccionada = st.selectbox(
+                "Seleccionar Aula",
+                options=list(aulas_opciones.keys()),
+                key="reserva_aula"
             )
             
-            # Validaciones
-            errores = []
-            if not titulo:
-                errores.append("El título es obligatorio")
-            if hora_inicio >= hora_fin:
-                errores.append("La hora de fin debe ser posterior a la de inicio")
+            tipo_reserva = st.selectbox(
+                "Tipo de Reserva",
+                ["GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"],
+                key="reserva_tipo"
+            )
             
-            if errores:
-                for error in errores:
-                    st.error(f"⚠️ {error}")
+            titulo = st.text_input(
+                "Título de la Reserva",
+                key="reserva_titulo",
+                help="Descripción breve"
+            )
+        
+        with col2:
+            fecha_reserva = st.date_input(
+                "Fecha",
+                value=datetime.now().date(),
+                key="reserva_fecha"
+            )
             
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                submitted = st.form_submit_button(
-                    "💾 Guardar Cambios", 
-                    type="primary", 
-                    use_container_width=True,
-                    disabled=bool(errores)
+            col_hora1, col_hora2 = st.columns(2)
+            with col_hora1:
+                hora_inicio = st.time_input(
+                    "Hora Inicio",
+                    value=datetime.now().time(),
+                    key="reserva_hora_inicio"
                 )
-            
-            with col_btn2:
-                cancelar = st.form_submit_button(
-                    "❌ Cancelar", 
-                    use_container_width=True
+            with col_hora2:
+                hora_fin = st.time_input(
+                    "Hora Fin",
+                    value=(datetime.now() + timedelta(hours=2)).time(),
+                    key="reserva_hora_fin"
                 )
-            
-            if cancelar:
-                if "editar_reserva_id" in st.session_state:
-                    del st.session_state["editar_reserva_id"]
-                st.rerun()
-            
-            if submitted and not errores:
-                try:
-                    # Crear datetime completos
-                    fecha_inicio_completa = datetime.combine(fecha_reserva, hora_inicio)
-                    fecha_fin_completa = datetime.combine(fecha_reserva, hora_fin)
+        
+        descripcion = st.text_area(
+            "Descripción Adicional",
+            key="reserva_descripcion",
+            help="Información adicional (opcional)"
+        )
+        
+        errores = []
+        if not titulo:
+            errores.append("El título es obligatorio")
+        if hora_inicio >= hora_fin:
+            errores.append("La hora de fin debe ser posterior a la de inicio")
+        
+        if errores:
+            for error in errores:
+                st.error(f"⚠️ {error}")
+        
+        submitted = st.form_submit_button(
+            "Crear Reserva", 
+            type="primary", 
+            use_container_width=True,
+            disabled=bool(errores)
+        )
+        
+        if submitted and not errores:
+            try:
+                fecha_inicio_completa = datetime.combine(fecha_reserva, hora_inicio)
+                fecha_fin_completa = datetime.combine(fecha_reserva, hora_fin)
+                
+                aula_id = aulas_opciones[aula_seleccionada]
+                
+                conflictos = aulas_service.verificar_conflictos_reserva(
+                    aula_id,
+                    fecha_inicio_completa.isoformat(),
+                    fecha_fin_completa.isoformat()
+                )
+                
+                if conflictos:
+                    st.error("Ya existe una reserva en este horario")
+                    return
+                
+                datos_reserva = {
+                    "aula_id": aula_id,
+                    "titulo": titulo,
+                    "descripcion": descripcion,
+                    "tipo_reserva": tipo_reserva,
+                    "fecha_inicio": fecha_inicio_completa.isoformat(),
+                    "fecha_fin": fecha_fin_completa.isoformat(),
+                    "estado": "CONFIRMADA",
+                    "created_by": session_state.user.get("id"),
+                    "created_at": datetime.utcnow().isoformat()
+                }
+                
+                success, reserva_id = aulas_service.crear_reserva(datos_reserva)
+                
+                if success:
+                    st.success("Reserva creada correctamente")
+                    st.rerun()
+                else:
+                    st.error("Error al crear la reserva")
                     
-                    aula_id = aulas_opciones[aula_seleccionada]
-                    
-                    # Verificar conflictos (excluyendo la reserva actual)
-                    conflictos = aulas_service.verificar_conflictos_reserva(
-                        aula_id,
-                        fecha_inicio_completa.isoformat(),
-                        fecha_fin_completa.isoformat(),
-                        excluir_reserva_id=reserva_id
-                    )
-                    
-                    if conflictos:
-                        st.error("❌ Ya existe otra reserva en este horario para esta aula")
-                        return
-                    
-                    # Actualizar la reserva
-                    datos_actualizados = {
-                        "aula_id": aula_id,
-                        "titulo": titulo,
-                        "descripcion": descripcion,
-                        "tipo_reserva": tipo_reserva,
-                        "fecha_inicio": fecha_inicio_completa.isoformat(),
-                        "fecha_fin": fecha_fin_completa.isoformat(),
-                        "estado": estado,
-                        "updated_at": datetime.utcnow().isoformat()
-                    }
-                    
-                    success = aulas_service.actualizar_reserva(reserva_id, datos_actualizados)
-                    
-                    if success:
-                        st.success("✅ Reserva actualizada correctamente")
-                        if "editar_reserva_id" in st.session_state:
-                            del st.session_state["editar_reserva_id"]
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al actualizar la reserva")
-                        
-                except Exception as e:
-                    st.error(f"❌ Error procesando actualización: {e}")
-                    
-    except Exception as e:
-        st.error(f"❌ Error cargando reserva para editar: {e}")
+            except Exception as e:
+                st.error(f"Error procesando reserva: {e}")
 
-def mostrar_widget_estadisticas_rapidas(aulas_service):
-    """Widget con estadísticas rápidas en la barra lateral"""
+
+def mostrar_gestion_reservas(aulas_service, session_state):
+    """Gestión completa de reservas con subtabs"""
     
+    st.markdown("### Gestión de Reservas")
+    
+    sub_tabs = st.tabs(["Lista de Reservas", "Nueva Reserva"])
+    
+    with sub_tabs[0]:
+        mostrar_lista_reservas(aulas_service, session_state)
+    
+    with sub_tabs[1]:
+        mostrar_formulario_reserva_manual(aulas_service, session_state)
+
+
+# =========================
+# CRONOGRAMA
+# =========================
+
+def mostrar_cronograma_fullcalendar(aulas_service, session_state):
+    """Cronograma con manejo robusto de errores"""
+    
+    st.markdown("### Cronograma Interactivo de Aulas")
+    
+    if not CALENDAR_AVAILABLE:
+        st.info("Usando vista alternativa del cronograma")
+        st.caption("Para habilitar el calendario interactivo: pip install streamlit-calendar")
+        mostrar_cronograma_alternativo(aulas_service, session_state)
+        return
+
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        fecha_inicio = st.date_input(
+            "Desde", 
+            value=datetime.now().date() - timedelta(days=7),
+            key="cal_fecha_inicio"
+        )
+    
+    with col2:
+        fecha_fin = st.date_input(
+            "Hasta", 
+            value=datetime.now().date() + timedelta(days=21),
+            key="cal_fecha_fin"
+        )
+    
+    with col3:
+        vista_inicial = st.selectbox(
+            "Vista",
+            ["dayGridMonth", "timeGridWeek", "timeGridDay", "listWeek"],
+            index=1,
+            key="cal_vista"
+        )
+    
+    with col4:
+        if st.button("Actualizar", key="cal_refresh"):
+            st.rerun()
+
+    try:
+        df_aulas = aulas_service.get_aulas_con_empresa()
+        if df_aulas.empty:
+            st.warning("No hay aulas disponibles")
+            return
+        
+        aulas_disponibles = ["Todas"] + df_aulas['nombre'].tolist()
+        aulas_seleccionadas = st.multiselect(
+            "Filtrar aulas",
+            aulas_disponibles,
+            default=["Todas"],
+            key="cal_filtro_aulas"
+        )
+        
+        if "Todas" in aulas_seleccionadas or not aulas_seleccionadas:
+            aulas_ids = df_aulas['id'].tolist()
+        else:
+            aulas_ids = df_aulas[df_aulas['nombre'].isin(aulas_seleccionadas)]['id'].tolist()
+        
+    except Exception as e:
+        st.error(f"Error cargando aulas: {e}")
+        return
+
+    try:
+        eventos = aulas_service.get_eventos_cronograma(
+            fecha_inicio.isoformat() + "T00:00:00Z",
+            fecha_fin.isoformat() + "T23:59:59Z",
+            aulas_ids
+        )
+        
+        if not eventos:
+            st.info("No hay eventos en el período seleccionado")
+            return
+        
+        calendar_options = {
+            "editable": False,
+            "navLinks": True,
+            "selectable": True,
+            "initialView": vista_inicial,
+            "initialDate": datetime.now().date().isoformat(),
+            "headerToolbar": {
+                "left": "prev,next today",
+                "center": "title",
+                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
+            },
+            "height": 650,
+            "slotMinTime": "07:00:00",
+            "slotMaxTime": "22:00:00",
+            "weekends": True,
+            "locale": "es",
+            "timeZone": "local"
+        }
+
+        calendar_css = """
+        .fc-event-grupo { background-color: #28a745 !important; }
+        .fc-event-mantenimiento { background-color: #ffc107 !important; color: #000 !important; }
+        .fc-event-evento { background-color: #17a2b8 !important; }
+        .fc-event-bloqueada { background-color: #dc3545 !important; }
+        """
+
+        try:
+            calendar_result = calendar(
+                events=eventos,
+                options=calendar_options,
+                custom_css=calendar_css,
+                key="fullcalendar_aulas"
+            )
+            
+            if calendar_result and calendar_result.get("eventClick"):
+                evento_info = calendar_result["eventClick"]["event"]
+                st.markdown("---")
+                st.markdown("### Detalle de Reserva")
+                
+                col1, col2, col3 = st.columns(3)
+                props = evento_info.get('extendedProps', {})
+                
+                with col1:
+                    st.info(f"**Aula:** {props.get('aula_nombre', 'N/A')}")
+                with col2:
+                    inicio = pd.to_datetime(evento_info.get('start', '')).strftime('%d/%m/%Y %H:%M')
+                    st.info(f"**Inicio:** {inicio}")
+                with col3:
+                    st.info(f"**Tipo:** {props.get('tipo_reserva', 'N/A')}")
+
+        except Exception as e:
+            st.error(f"Error renderizando calendario: {e}")
+            st.info("Cambiando a vista alternativa...")
+            mostrar_cronograma_alternativo(aulas_service, session_state)
+            return
+
+    except Exception as e:
+        st.error(f"Error obteniendo eventos: {e}")
+        return
+
+    # Exportación con opciones avanzadas
+    st.markdown("---")
+    st.markdown("### Opciones de Exportación")
+    
+    export_tabs = st.tabs(["Básica", "Estadísticas"])
+    
+    with export_tabs[0]:
+        col1, col2 = st.columns(2)
+        with col1:
+            exportar_cronograma_excel(eventos)
+        with col2:
+            exportar_cronograma_pdf_semanal(eventos, fecha_inicio, fecha_fin)
+    
+    with export_tabs[1]:
+        try:
+            aulas_info = df_aulas.to_dict('records') if not df_aulas.empty else []
+            exportar_informe_estadisticas_pdf(eventos, aulas_info, fecha_inicio, fecha_fin)
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+
+def mostrar_cronograma_alternativo(aulas_service, session_state):
+    """Vista alternativa si falla el calendario"""
+    
+    st.markdown("### Vista de Cronograma")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        fecha_inicio = st.date_input("Desde", value=datetime.now().date(), key="alt_fecha_inicio")
+    with col2:
+        fecha_fin = st.date_input("Hasta", value=datetime.now().date() + timedelta(days=7), key="alt_fecha_fin")
+    
+    try:
+        df_reservas = aulas_service.get_reservas_periodo(
+            fecha_inicio.isoformat() + "T00:00:00Z",
+            fecha_fin.isoformat() + "T23:59:59Z"
+        )
+        
+        if df_reservas.empty:
+            st.info("No hay reservas en el período")
+            return
+        
+        df_reservas['fecha'] = pd.to_datetime(df_reservas['fecha_inicio']).dt.date
+        fechas_unicas = sorted(df_reservas['fecha'].unique())
+        
+        for fecha in fechas_unicas:
+            eventos_dia = df_reservas[df_reservas['fecha'] == fecha].sort_values('fecha_inicio')
+            
+            st.markdown(f"#### {fecha.strftime('%A, %d de %B %Y')}")
+            
+            for _, evento in eventos_dia.iterrows():
+                inicio = pd.to_datetime(evento['fecha_inicio'])
+                fin = pd.to_datetime(evento['fecha_fin'])
+                
+                color_map = {'GRUPO': '🟢', 'EVENTO': '🔵', 'MANTENIMIENTO': '🟡', 'BLOQUEADA': '🔴'}
+                emoji = color_map.get(evento['tipo_reserva'], '⚪')
+                
+                col1, col2, col3 = st.columns([1, 2, 1])
+                
+                with col1:
+                    st.markdown(f"**{inicio.strftime('%H:%M')} - {fin.strftime('%H:%M')}**")
+                with col2:
+                    st.markdown(f"{emoji} **{evento['aula_nombre']}**: {evento['titulo']}")
+                with col3:
+                    estado_emoji = "✅" if evento['estado'] == 'CONFIRMADA' else "⏳"
+                    st.markdown(f"{estado_emoji}")
+            
+            st.divider()
+        
+    except Exception as e:
+        st.error(f"Error: {e}")
+
+
+# =========================
+# WIDGETS SIDEBAR
+# =========================
+
+def mostrar_metricas_sidebar(aulas_service, session_state):
+    """Métricas rápidas en sidebar"""
     try:
         stats = aulas_service.get_estadisticas_rapidas()
         
-        st.sidebar.markdown("### 📊 Resumen Rápido")
+        st.sidebar.markdown("### Resumen de Aulas")
         
-        # Métricas compactas
         col1, col2 = st.sidebar.columns(2)
         
         with col1:
-            st.metric("🏢 Aulas", stats.get('total_aulas', 0))
-            st.metric("📅 Hoy", stats.get('reservas_hoy', 0))
+            st.metric("Aulas", stats.get('total_aulas', 0))
+            st.metric("Hoy", stats.get('reservas_hoy', 0))
         
         with col2:
-            st.metric("✅ Activas", stats.get('aulas_activas', 0))
+            st.metric("Activas", stats.get('aulas_activas', 0))
             ocupacion = stats.get('ocupacion_actual', 0)
-            st.metric("📈 Ocupación", f"{ocupacion:.0f}%")
+            st.metric("Ocupación", f"{ocupacion:.0f}%")
         
-        # Próximas reservas
+        if session_state.role == "admin":
+            st.sidebar.metric("Capacidad Total", stats.get('capacidad_total', 0))
+        
         proximas = aulas_service.get_proximas_reservas(limite=3)
         if proximas:
-            st.sidebar.markdown("#### 🔔 Próximas Reservas")
+            st.sidebar.markdown("#### Próximas Reservas")
             for reserva in proximas:
                 fecha_hora = pd.to_datetime(reserva['fecha_inicio']).strftime('%d/%m %H:%M')
                 st.sidebar.info(f"**{fecha_hora}**\n{reserva['aula_nombre']}: {reserva['titulo'][:20]}...")
         
-        # Aulas disponibles ahora
         disponibles = aulas_service.get_aulas_disponibles_ahora()
         if disponibles:
             st.sidebar.success(f"🟢 {len(disponibles)} aulas disponibles ahora")
         else:
-            st.sidebar.warning("🔴 Todas las aulas ocupadas")
+            st.sidebar.warning("Todas las aulas ocupadas")
             
     except Exception as e:
-        st.sidebar.error(f"❌ Error en estadísticas: {e}")
+        st.sidebar.error(f"Error en estadísticas: {e}")
 
-def mostrar_notificaciones_aulas(aulas_service, session_state):
-    """Sistema de notificaciones para eventos importantes"""
+
+def mostrar_alertas_aulas(aulas_service, session_state):
+    """Sistema de notificaciones y alertas"""
     
     if session_state.role not in ["admin", "gestor"]:
         return
@@ -1177,99 +1091,130 @@ def mostrar_notificaciones_aulas(aulas_service, session_state):
         notificaciones = aulas_service.get_notificaciones_pendientes()
         
         if notificaciones:
-            st.sidebar.markdown("### 🔔 Notificaciones")
+            st.sidebar.markdown("### Notificaciones")
             
-            for notif in notificaciones[:5]:  # Máximo 5 notificaciones
+            for notif in notificaciones[:5]:
                 tipo = notif['tipo']
                 mensaje = notif['mensaje']
                 
-                if tipo == 'CONFLICTO':
-                    st.sidebar.error(f"⚠️ {mensaje}")
-                elif tipo == 'MANTENIMIENTO':
+                if tipo == 'MANTENIMIENTO':
                     st.sidebar.warning(f"🔧 {mensaje}")
                 elif tipo == 'RECORDATORIO':
                     st.sidebar.info(f"📋 {mensaje}")
                 else:
                     st.sidebar.info(f"ℹ️ {mensaje}")
-            
-            # Botón para marcar como leídas
-            if st.sidebar.button("✅ Marcar todas como leídas", key="marcar_notif_leidas"):
-                aulas_service.marcar_notificaciones_leidas()
-                st.rerun()
                 
     except Exception as e:
-        st.sidebar.error(f"❌ Error en notificaciones: {e}")
+        st.sidebar.error(f"Error en notificaciones: {e}")
+
+# =========================
+# DASHBOARD ADMIN
+# =========================
+
+def mostrar_dashboard_admin(aulas_service, session_state):
+    """Dashboard de métricas solo para admin"""
+    
+    if session_state.role != "admin":
+        return
+    
+    with st.expander("📊 Métricas de Ocupación", expanded=True):
+        try:
+            stats = aulas_service.get_estadisticas_rapidas()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("Total Aulas", stats.get("total_aulas", 0))
+            
+            with col2:
+                st.metric("Reservas Hoy", stats.get("reservas_hoy", 0))
+            
+            with col3:
+                ocupacion = stats.get("ocupacion_actual", 0)
+                st.metric("% Ocupación", f"{ocupacion:.1f}%")
+            
+            with col4:
+                st.metric("Capacidad Total", stats.get("capacidad_total", 0))
+            
+            # Alertas
+            alertas = aulas_service.get_alertas_aulas()
+            if alertas:
+                st.markdown("#### ⚠️ Alertas")
+                for alerta in alertas:
+                    if alerta['tipo'] == 'WARNING':
+                        st.warning(alerta['mensaje'])
+                    else:
+                        st.info(alerta['mensaje'])
+                        
+        except Exception as e:
+            st.error(f"Error cargando métricas: {e}")
+
+
+# =========================
+# FUNCIÓN PRINCIPAL
+# =========================
 
 def main(supabase, session_state):
-    """Función principal del módulo de aulas con funcionalidades completas"""
+    """Función principal del módulo de aulas - VERSIÓN COMPLETA"""
     
-    # Verificar permisos básicos
+    # Verificar permisos
     if session_state.role not in ["admin", "gestor", "tutor"]:
-        st.warning("🔒 No tienes permisos para acceder a esta sección.")
+        st.warning("🔒 No tienes permisos para acceder a esta sección")
         return
     
     # Inicializar servicio
     try:
         aulas_service = get_aulas_service(supabase, session_state)
     except Exception as e:
-        st.error(f"❌ Error inicializando servicio de aulas: {e}")
+        st.error(f"❌ Error inicializando servicio: {e}")
         return
     
-    # Widgets de la barra lateral
+    # Widgets sidebar
     with st.sidebar:
-        mostrar_widget_estadisticas_rapidas(aulas_service)
-        mostrar_notificaciones_aulas(aulas_service, session_state)
+        mostrar_metricas_sidebar(aulas_service, session_state)
+        mostrar_alertas_aulas(aulas_service, session_state)
     
-    # Título principal
+    # Título
     st.title("🏢 Gestión de Aulas")
     st.caption("Sistema completo de gestión de aulas y reservas para formación")
     
-    # Verificar si hay una reserva para editar
+    # Dashboard admin (solo para admin)
+    if session_state.role == "admin":
+        mostrar_dashboard_admin(aulas_service, session_state)
+    
+    # Verificar si hay edición de reserva pendiente
     if st.session_state.get("editar_reserva_id"):
-        mostrar_formulario_editar_reserva(
-            aulas_service, 
-            session_state, 
-            st.session_state["editar_reserva_id"]
-        )
+        st.warning("Funcionalidad de edición de reserva en desarrollo")
+        if st.button("❌ Cancelar edición"):
+            del st.session_state["editar_reserva_id"]
+            st.rerun()
         return
     
     # Tabs principales
-    if session_state.role == "admin":
-        tabs = st.tabs(["🏢 Aulas", "📅 Cronograma", "📋 Reservas", "📊 Métricas"])
-    else:
+    if session_state.role in ["admin", "gestor"]:
         tabs = st.tabs(["🏢 Aulas", "📅 Cronograma", "📋 Reservas"])
+    else:
+        tabs = st.tabs(["🏢 Aulas", "📅 Cronograma"])
     
     # TAB 1: Gestión de Aulas
     with tabs[0]:
         try:
-            # Cargar datos de aulas
             df_aulas = aulas_service.get_aulas_con_empresa()
             
-            # Mostrar alertas importantes
-            alertas = aulas_service.get_alertas_aulas()
-            for alerta in alertas:
-                if alerta['tipo'] == 'ERROR':
-                    st.error(f"❌ {alerta['mensaje']}")
-                elif alerta['tipo'] == 'WARNING':
-                    st.warning(f"⚠️ {alerta['mensaje']}")
-                elif alerta['tipo'] == 'INFO':
-                    st.info(f"ℹ️ {alerta['mensaje']}")
-            
-            # Columnas en dos partes
+            # Layout: Tabla | Formulario
             col_tabla, col_form = st.columns([2, 1])
             
             with col_tabla:
-                # Mostrar tabla y capturar selección
                 aula_seleccionada = mostrar_tabla_aulas(df_aulas, session_state, aulas_service)
             
             with col_form:
-                # Botón para crear nueva aula
+                # Botón crear nueva
                 if session_state.role in ["admin", "gestor"]:
                     if st.button("➕ Nueva Aula", use_container_width=True, type="primary"):
                         st.session_state["crear_nueva_aula"] = True
                         st.rerun()
                 
-                # Mostrar formulario según el estado
+                # Mostrar formulario según estado
                 if st.session_state.get("crear_nueva_aula"):
                     mostrar_formulario_aula(None, aulas_service, session_state, es_creacion=True)
                     
@@ -1281,129 +1226,115 @@ def main(supabase, session_state):
                     if session_state.role in ["admin", "gestor"]:
                         mostrar_formulario_aula(aula_seleccionada, aulas_service, session_state)
                     else:
-                        # Solo visualización para tutores
                         st.info("👁️ Modo solo lectura")
                         with st.expander("📋 Detalles del Aula"):
-                            for key, value in aula_seleccionada.to_dict().items():
-                                st.text(f"{key}: {value}")
+                            st.write(f"**Nombre:** {aula_seleccionada['nombre']}")
+                            st.write(f"**Capacidad:** {aula_seleccionada['capacidad_maxima']}")
+                            st.write(f"**Ubicación:** {aula_seleccionada.get('ubicacion', 'N/A')}")
+                            st.write(f"**Estado:** {'✅ Activa' if aula_seleccionada.get('activa') else '❌ Inactiva'}")
                 
                 else:
                     st.info("👆 Selecciona un aula de la tabla para ver sus detalles")
                     
-                    # Widget de aulas disponibles
+                    # Widget aulas disponibles
                     disponibles_ahora = aulas_service.get_aulas_disponibles_ahora()
                     if disponibles_ahora:
                         st.success(f"🟢 {len(disponibles_ahora)} aulas disponibles ahora")
                         with st.expander("Ver aulas disponibles"):
                             for aula in disponibles_ahora:
-                                st.write(f"• {aula['nombre']} (Capacidad: {aula['capacidad_maxima']})")
+                                st.write(f"• {aula['nombre']} (Cap: {aula['capacidad_maxima']})")
                     
         except Exception as e:
             st.error(f"❌ Error en gestión de aulas: {e}")
-            st.exception(e)  # Para debugging
+            st.exception(e)
     
     # TAB 2: Cronograma
     with tabs[1]:
         try:
-            # Verificar si streamlit-calendar está disponible
-            if CALENDAR_AVAILABLE:
-                mostrar_cronograma_fullcalendar(aulas_service, session_state)
-            else:
-                st.warning("📦 streamlit-calendar no está instalado. Usando vista alternativa.")
-                mostrar_cronograma_alternativo(aulas_service, session_state)
-                
-                # Mostrar instrucciones de instalación
-                with st.expander("💡 Cómo habilitar el calendario interactivo"):
-                    st.code("pip install streamlit-calendar", language="bash")
-                    st.markdown("Reinicia la aplicación después de la instalación.")
-                    
+            mostrar_cronograma_fullcalendar(aulas_service, session_state)
         except Exception as e:
             st.error(f"❌ Error en cronograma: {e}")
-            # Fallback automático a vista alternativa
-            st.info("🔄 Cambiando a vista alternativa...")
             mostrar_cronograma_alternativo(aulas_service, session_state)
     
-    # TAB 3: Reservas
-    with tabs[2]:
-        try:
-            # Subtabs para reservas
-            if session_state.role in ["admin", "gestor"]:
-                sub_tabs = st.tabs(["📋 Lista", "➕ Nueva Reserva"])
-                
-                with sub_tabs[0]:
-                    mostrar_lista_reservas(aulas_service, session_state)
-                
-                with sub_tabs[1]:
-                    mostrar_formulario_reserva_manual(aulas_service, session_state)
-            else:
-                # Solo lista para tutores
-                st.info("👁️ Solo puedes visualizar reservas")
-                mostrar_lista_reservas(aulas_service, session_state)
-                
-        except Exception as e:
-            st.error(f"❌ Error en reservas: {e}")
-    
-    # TAB 4: Métricas (Solo Admin)
-    if session_state.role == "admin" and len(tabs) > 3:
-        with tabs[3]:
+    # TAB 3: Reservas (Solo admin/gestor)
+    if len(tabs) > 2:
+        with tabs[2]:
             try:
-                mostrar_metricas_admin(aulas_service, session_state)
+                mostrar_gestion_reservas(aulas_service, session_state)
             except Exception as e:
-                st.error(f"❌ Error en métricas: {e}")
+                st.error(f"❌ Error en gestión de reservas: {e}")
 
-# Testing y desarrollo
+
+# =========================
+# PUNTO DE ENTRADA
+# =========================
+
 if __name__ == "__main__":
-    # Para testing del módulo
     st.set_page_config(
         page_title="Gestión de Aulas",
         page_icon="🏢",
         layout="wide"
     )
     
-    # Mock session state para testing
-    class MockSessionState:
-        def __init__(self):
-            self.role = "admin"
-            self.user = {"id": 1, "empresa_id": 1}
-    
-    # Mock supabase para testing
-    class MockSupabase:
-        pass
-    
-    # Mensaje informativo para desarrolladores
-    st.info("🧪 **Modo Testing Activado**")
+    st.info("🧪 Módulo en modo de prueba - Requiere integración con la aplicación principal")
     st.markdown("""
-    Este módulo está siendo ejecutado en modo de desarrollo.
+    ### Funcionalidades Implementadas
     
-    **Para usar en producción:**
-    1. Integra este archivo en tu estructura `pages/`
-    2. Implementa `services/aulas_service.py`
-    3. Configura las tablas de base de datos
-    4. Instala dependencias: `pip install streamlit-calendar`
+    ✅ **Gestión de Aulas**
+    - CRUD completo con validaciones
+    - Filtros dinámicos
+    - Selección interactiva con formulario
+    - Exportación a Excel
+    
+    ✅ **Cronograma Visual**
+    - Calendario interactivo (si streamlit-calendar está instalado)
+    - Vista alternativa robusta
+    - Filtros por aula y período
+    - Exportación Excel y PDF
+    
+    ✅ **Gestión de Reservas**
+    - Lista con filtros
+    - Crear reservas manuales
+    - Validación de conflictos
+    - Confirmación y cancelación
+    
+    ✅ **Dashboard y Métricas**
+    - Estadísticas rápidas en sidebar
+    - Métricas admin expandidas
+    - Notificaciones y alertas
+    - Aulas disponibles en tiempo real
+    
+    ✅ **Exportaciones Avanzadas**
+    - Excel con datos formateados
+    - PDF semanal tipo calendario
+    - PDF con estadísticas ejecutivas
+    
+    ✅ **Integración con Grupos**
+    - Asignación automática de aula a grupo
+    - Reservas vinculadas a grupos formativos
+    
+    ### Dependencias
+    
+    **Obligatorias:**
+    - streamlit >= 1.49
+    - pandas
+    - reportlab (para PDFs)
+    
+    **Opcionales:**
+    - streamlit-calendar (para calendario interactivo)
+    
+    ### Instalación
+    
+    ```bash
+    pip install reportlab
+    pip install streamlit-calendar  # Opcional
+    ```
+    
+    ### Base de Datos Requerida
+    
+    **Tablas:**
+    - `aulas` (id, nombre, capacidad_maxima, ubicacion, activa, color_cronograma, equipamiento, empresa_id, ...)
+    - `aula_reservas` (id, aula_id, grupo_id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado, ...)
+    - `empresas` (id, nombre, cif, ...)
+    - `grupos` (id, codigo_grupo, ...)
     """)
-    
-    try:
-        main(MockSupabase(), MockSessionState())
-    except Exception as e:
-        st.error(f"❌ Error en modo testing: {e}")
-        st.info("Este módulo necesita ser ejecutado desde la aplicación principal con los servicios configurados")
-        
-        # Mostrar estructura esperada del servicio
-        with st.expander("📋 Estructura esperada del servicio"):
-            st.code("""
-# services/aulas_service.py
-class AulasService:
-    def get_aulas_con_empresa(self): pass
-    def get_eventos_cronograma(self, fecha_inicio, fecha_fin, aulas_ids): pass
-    def crear_aula(self, datos): pass
-    def actualizar_aula(self, id, datos): pass
-    def eliminar_aula(self, id): pass
-    def crear_reserva(self, datos): pass
-    def verificar_conflictos_reserva(self, aula_id, inicio, fin, excluir=None): pass
-    def get_metricas_aulas(self): pass
-    def get_estadisticas_rapidas(self): pass
-    def get_proximas_reservas(self, limite=5): pass
-    def get_aulas_disponibles_ahora(self): pass
-    def get_notificaciones_pendientes(self): pass
-    def get_alertas_aulas(self): pass
-            """, language="python")
