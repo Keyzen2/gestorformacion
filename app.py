@@ -454,66 +454,61 @@ def is_module_active(empresa, empresa_crm, key, hoy, rol):
 # Login
 # =========================
 def login_view():
-    # Clase CSS para estilo login
-    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
-    
-    with st.sidebar:
-        st.markdown("""
-        <div style="text-align: center; padding: 2rem 1rem;">
-            <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.1);
-                border-radius: 12px; margin: 0 auto 1rem; display: flex; align-items: center; 
-                justify-content: center; font-size: 1.5rem;">🚀</div>
-            <h3 style="font-size: 1.1rem;">Sistema de Gestión</h3>
-            <p style="font-size: 0.875rem; opacity: 0.8;">Inicia sesión para acceder</p>
-        </div>
-        <hr>
-        <div style="padding: 0 1rem; font-size: 0.875rem; opacity: 0.9;">
-            <p style="font-weight: 500;">Módulos:</p>
-            <div style="line-height: 1.8;">
-                <div>📚 Formación FUNDAE</div>
-                <div>📋 ISO 9001</div>
-                <div>🛡️ RGPD</div>
-                <div>📈 CRM</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
-    logo = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes["logo_url"]}" width="80" height="80" style="border-radius: 20px;">'
-    
+    ajustes = get_ajustes_app(supabase_public, campos=[
+        "mensaje_login", "nombre_app", "logo_url"
+    ])
+
+    mensaje_login = ajustes.get("mensaje_login", "Accede con tus credenciales")
+    nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
+    logo_display = "📚" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="64" height="64" style="border-radius: 12px;">'
+
     st.markdown(f"""
-    <div class="login-container">
-        <div style="text-align: center; margin-bottom: 2rem;">
-            <div class="login-logo">{logo}</div>
-            <h1 style="font-size: 2rem; color: #1a202c; margin: 1rem 0 0.5rem;">{ajustes.get("nombre_app", "Gestor")}</h1>
-            <p style="color: #64748b;">{ajustes.get("mensaje_login", "Accede al sistema")}</p>
+    <div class="login-container fade-in">
+        <div class="login-header">
+            <div class="login-logo">{logo_display}</div>
+            <h1 class="login-title">{nombre_app}</h1>
+            <p class="login-subtitle">{mensaje_login}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
+
+    col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        with st.form("login"):
-            st.markdown("### Iniciar sesión")
+        with st.form("form_login", clear_on_submit=False):
+            st.markdown("#### Iniciar sesión")
+
             email = st.text_input("Email", placeholder="tu@empresa.com", label_visibility="collapsed")
-            password = st.text_input("Contraseña", type="password", placeholder="Contraseña", label_visibility="collapsed")
-            submitted = st.form_submit_button("Entrar", use_container_width=True)
-    
-    if submitted and email and password:
-        try:
-            auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-            if auth and auth.user:
-                st.session_state.auth_session = auth
-                set_user_role_from_db(auth.user.email)
-                st.success("Sesión iniciada")
-                time.sleep(0.5)
-                st.rerun()
-            else:
-                st.error("Credenciales incorrectas")
-        except Exception as e:
-            st.error(f"Error: {e}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+            password = st.text_input("Contraseña", type="password", placeholder="••••••••", label_visibility="collapsed")
+
+            submitted = st.form_submit_button(
+                "Iniciar sesión" if not st.session_state.get("login_loading") else "Iniciando...",
+                disabled=st.session_state.get("login_loading", False),
+                use_container_width=True
+            )
+
+    if submitted:
+        if not email or not password:
+            st.warning("Introduce email y contraseña")
+        else:
+            st.session_state.login_loading = True
+            try:
+                auth = supabase_public.auth.sign_in_with_password({
+                    "email": email,
+                    "password": password
+                })
+                if not auth or not auth.user:
+                    st.error("Credenciales incorrectas")
+                    st.session_state.login_loading = False
+                else:
+                    st.session_state.auth_session = auth
+                    set_user_role_from_db(auth.user.email)
+                    st.success("Sesión iniciada correctamente")
+                    time.sleep(0.5)
+                    st.session_state.login_loading = False
+                    st.rerun()
+            except Exception as e:
+                st.error(f"Error al iniciar sesión: {e}")
+                st.session_state.login_loading = False
 
 # =========================
 # Navegación COMPLETA
