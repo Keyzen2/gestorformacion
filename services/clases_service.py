@@ -220,6 +220,51 @@ class ClasesService:
         except Exception as e:
             print("Error get_reservas_por_horario:", e)
             return []
+
+    def get_reservas_periodo(self, fecha_inicio: date, fecha_fin: date, estado: str = "Todas") -> pd.DataFrame:
+        """Obtiene todas las reservas de un periodo con datos de participante y clase."""
+        try:
+            query = self.supabase.table("clases_reservas").select("""
+                id, fecha_clase, estado,
+                participantes(nombre, apellidos),
+                clases_horarios(hora_inicio, hora_fin,
+                    clases(nombre)
+                )
+            """).gte("fecha_clase", fecha_inicio.isoformat()
+            ).lte("fecha_clase", fecha_fin.isoformat())
+            
+            if estado != "Todas":
+                estado_map = {
+                    "Reservadas": "RESERVADA",
+                    "Asistió": "ASISTIO",
+                    "No Asistió": "NO_ASISTIO",
+                    "Canceladas": "CANCELADA"
+                }
+                query = query.eq("estado", estado_map.get(estado, estado))
+            
+            result = query.order("fecha_clase").execute()
+            
+            if result.data:
+                reservas = []
+                for r in result.data:
+                    participante = r.get("participantes", {})
+                    horario = r.get("clases_horarios", {})
+                    clase = horario.get("clases", {})
+                    reservas.append({
+                        "id": r["id"],
+                        "fecha_clase": r["fecha_clase"],
+                        "estado": r["estado"],
+                        "participante_nombre": f"{participante.get('nombre','')} {participante.get('apellidos','')}",
+                        "clase_nombre": clase.get("nombre",""),
+                        "horario": f"{horario.get('hora_inicio','')} - {horario.get('hora_fin','')}"
+                    })
+                return pd.DataFrame(reservas)
+            
+            return pd.DataFrame()
+        except Exception as e:
+            print("Error get_reservas_periodo:", e)
+            return pd.DataFrame()
+
     # =========================
     # GESTIÓN DE HORARIOS
     # =========================
