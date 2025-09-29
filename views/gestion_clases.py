@@ -658,7 +658,7 @@ def mostrar_metricas_clases(clases_service, session_state):
 # =========================
 # MAIN FUNCTION
 # =========================
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("🏃‍♀️ Gestión de Clases")
     
     # Verificar permisos
