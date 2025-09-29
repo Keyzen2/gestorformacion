@@ -293,7 +293,7 @@ def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
 # TAB 2: MIS CLASES RESERVADAS
 # =========================
 def mostrar_mis_clases_reservadas(clases_service, session_state):
-    """Muestra las clases reservadas del participante"""
+    """Muestra las clases reservadas del participante con avatares de otros alumnos"""
     st.header("🏃‍♀️ Mis Clases Reservadas")
     
     participante_id = getattr(session_state, 'participante_id', None)
@@ -309,7 +309,7 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
             st.warning("No tienes una suscripción activa de clases")
             return
         
-        # Mostrar estado actual
+        # Métricas
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("🎯 Clases Mensuales", suscripcion.get("clases_mensuales", 0))
@@ -321,120 +321,94 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         
         st.divider()
         
-        # Filtros de período
+        # Filtros
         col1, col2 = st.columns(2)
         with col1:
-            fecha_inicio = st.date_input(
-                "Ver reservas desde",
-                value=date.today(),
-                key="mis_reservas_inicio"
-            )
+            fecha_inicio = st.date_input("Ver reservas desde", value=date.today(), key="mis_reservas_inicio")
         with col2:
-            fecha_fin = st.date_input(
-                "Hasta",
-                value=date.today() + timedelta(days=30),
-                key="mis_reservas_fin"
-            )
+            fecha_fin = st.date_input("Hasta", value=date.today() + timedelta(days=30), key="mis_reservas_fin")
         
         # Obtener reservas
         df_reservas = clases_service.get_reservas_participante(participante_id, fecha_inicio, fecha_fin)
         
         if df_reservas.empty:
             st.info("No tienes clases reservadas en este período")
-        else:
-            st.markdown(f"### 📋 {len(df_reservas)} reserva(s) encontrada(s)")
-            
-            # Separar futuras y pasadas
-            hoy = date.today()
-            reservas_futuras = df_reservas[df_reservas['fecha_clase'] >= hoy]
-            reservas_pasadas = df_reservas[df_reservas['fecha_clase'] < hoy]
-            
-            # Próximas clases con opción de cancelar
-            if not reservas_futuras.empty:
-                st.markdown("#### 🔜 Próximas Clases")
-                for _, row in reservas_futuras.iterrows():
-                    with st.container(border=True):
-                        col1, col2, col3 = st.columns([3, 2, 1])
+            return
+        
+        hoy = date.today()
+        reservas_futuras = df_reservas[df_reservas['fecha_clase'] >= hoy]
+        reservas_pasadas = df_reservas[df_reservas['fecha_clase'] < hoy]
+        
+        # Próximas clases
+        if not reservas_futuras.empty:
+            st.markdown("#### 🔜 Próximas Clases")
+            for _, row in reservas_futuras.iterrows():
+                with st.container(border=True):
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
+                        st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
                         
-                        with col1:
-                            st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
-                            st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
-                            
-                            # 🔥 Avatares de otros participantes
-                            avatares = clases_service.get_avatares_reserva(
-                                row["horario_id"], 
-                                date.fromisoformat(str(row["fecha_clase"]))
-                            )
-                            if avatares:
-                                cols = st.columns(len(avatares))
-                                for idx, avatar_url in enumerate(avatares):
-                                    with cols[idx]:
-                                        st.image(
-                                            avatar_url,
-                                            width=40,
-                                            output_format="PNG",
-                                            caption="",
-                                            use_column_width=False
-                                        )
-                        
-                        with col2:
-                            st.write(f"📊 Estado: {row['estado']}")
-                        
-                        with col3:
-                            if row["estado"] == "RESERVADA":
-                                if st.button("❌ Cancelar", key=f"cancelar_{row['id']}"):
-                                    ok = clases_service.cancelar_reserva(row["id"], participante_id)
-                                    if ok:
-                                        st.success("Reserva cancelada")
-                                        st.rerun()
-                                    else:
-                                        st.error("No puedes cancelar (menos de 2h antes o error)")
-            
-            # Historial de clases
-            if not reservas_pasadas.empty:
-                with st.expander(f"📜 Historial ({len(reservas_pasadas)} clases)"):
-                    st.dataframe(
-                        reservas_pasadas[['clase_nombre', 'fecha_clase', 'horario_display', 'estado']],
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                        # Avatares de otros alumnos
+                        avatares = clases_service.get_avatares_reserva(row["horario_id"], date.fromisoformat(str(row["fecha_clase"])))
+                        if avatares:
+                            st.caption("👥 Participantes:")
+                            cols = st.columns(len(avatares))
+                            for idx, avatar_url in enumerate(avatares):
+                                with cols[idx]:
+                                    st.image(avatar_url, width=32, caption="", output_format="PNG")
+                    
+                    with col2:
+                        st.write(f"📊 Estado: {row['estado']}")
+                    
+                    with col3:
+                        if row["estado"] == "RESERVADA":
+                            if st.button("❌ Cancelar", key=f"cancelar_{row['id']}"):
+                                ok = clases_service.cancelar_reserva(row["id"], participante_id)
+                                if ok:
+                                    st.success("Reserva cancelada")
+                                    st.rerun()
+                                else:
+                                    st.error("No puedes cancelar (menos de 2h antes o error)")
+        
+        # Historial
+        if not reservas_pasadas.empty:
+            with st.expander(f"📜 Historial ({len(reservas_pasadas)} clases)"):
+                st.dataframe(
+                    reservas_pasadas[['clase_nombre', 'fecha_clase', 'horario_display', 'estado']],
+                    use_container_width=True,
+                    hide_index=True
+                )
     
     except Exception as e:
         st.error(f"Error cargando tus reservas: {e}")
+
 
 # =========================
 # TAB 3: RESERVAR CLASES
 # =========================   
 def mostrar_reservar_clases(clases_service, session_state):
-    """Reservar clases - VERSIÓN CORREGIDA"""
+    """Reservar clases mostrando también los avatares de alumnos que ya reservaron"""
     st.header("📅 Reservar Clases")
     
-    # Obtener participante_id
     participante_id = getattr(session_state, 'participante_id', None)
     if not participante_id:
         st.error("No se pudo identificar tu registro como participante")
         return
     
     try:
-        # Verificar suscripción
         suscripcion = clases_service.get_suscripcion_participante(participante_id)
-        
         if not suscripcion or not suscripcion.get("activa"):
             st.warning("No tienes una suscripción activa")
-            st.info("Contacta con tu centro de formación para activar tu suscripción.")
             return
         
-        # Mostrar estado de suscripción
+        # Métricas
         col1, col2, col3 = st.columns(3)
-        
         clases_disponibles = suscripcion.get("clases_mensuales", 0) - suscripcion.get("clases_usadas_mes", 0)
-        
-        with col1:
-            st.metric("⚡ Clases Disponibles", clases_disponibles)
-        with col2:
-            st.metric("✅ Usadas Este Mes", suscripcion.get("clases_usadas_mes", 0))
-        with col3:
-            st.metric("🎯 Total Mensuales", suscripcion.get("clases_mensuales", 0))
+        with col1: st.metric("⚡ Disponibles", clases_disponibles)
+        with col2: st.metric("✅ Usadas", suscripcion.get("clases_usadas_mes", 0))
+        with col3: st.metric("🎯 Mensuales", suscripcion.get("clases_mensuales", 0))
         
         if clases_disponibles <= 0:
             st.error("Has agotado tus clases mensuales")
@@ -442,72 +416,63 @@ def mostrar_reservar_clases(clases_service, session_state):
         
         st.divider()
         
-        # Selector de período
+        # Periodo
         col1, col2 = st.columns(2)
-        
         with col1:
-            fecha_inicio_busqueda = st.date_input(
-                "Ver clases desde",
-                value=date.today(),
-                min_value=date.today(),
-                key="buscar_clases_inicio"
-            )
-        
+            fecha_inicio_busqueda = st.date_input("Ver clases desde", value=date.today(), min_value=date.today(), key="buscar_clases_inicio")
         with col2:
-            fecha_fin_busqueda = st.date_input(
-                "Hasta",
-                value=date.today() + timedelta(days=14),
-                min_value=date.today(),
-                key="buscar_clases_fin"
-            )
+            fecha_fin_busqueda = st.date_input("Hasta", value=date.today() + timedelta(days=14), min_value=date.today(), key="buscar_clases_fin")
         
-        # Obtener clases disponibles
-        clases_disponibles_lista = clases_service.get_clases_disponibles_participante(
-            participante_id, fecha_inicio_busqueda, fecha_fin_busqueda
-        )
+        # Obtener clases
+        clases_disponibles_lista = clases_service.get_clases_disponibles_participante(participante_id, fecha_inicio_busqueda, fecha_fin_busqueda)
         
-        if clases_disponibles_lista:
-            st.markdown("### 📅 Clases Disponibles para Reservar")
-            
-            for clase in clases_disponibles_lista:
-                with st.container(border=True):
-                    col1, col2, col3 = st.columns([2, 2, 1])
-                    
-                    with col1:
-                        st.write(f"**{clase['title']}**")
-                        st.caption(f"Categoría: {clase['extendedProps'].get('categoria', 'N/A')}")
-                    
-                    with col2:
-                        fecha_clase = clase['extendedProps']['fecha_clase']
-                        hora_inicio = clase['start'].split('T')[1][:5]
-                        hora_fin = clase['end'].split('T')[1][:5]
-                        st.write(f"📅 {pd.to_datetime(fecha_clase).strftime('%d/%m/%Y')}")
-                        st.write(f"⏰ {hora_inicio} - {hora_fin}")
-                    
-                    with col3:
-                        cupos_libres = clase['extendedProps'].get('cupos_libres', 0)
-                        st.metric("🎯 Cupos", cupos_libres)
-                        
-                        reserva_key = f"reservar_{clase['id']}"
-                        if st.button("📝 Reservar", key=reserva_key, disabled=cupos_libres <= 0, use_container_width=True):
-                            # Realizar reserva
-                            fecha_clase_obj = pd.to_datetime(fecha_clase).date()
-                            success, mensaje = clases_service.crear_reserva(
-                                participante_id, 
-                                clase['horario_id'], 
-                                fecha_clase_obj
-                            )
-                            
-                            if success:
-                                st.success("¡Reserva realizada correctamente!")
-                                st.rerun()
-                            else:
-                                st.error(f"Error en la reserva: {mensaje}")
-        else:
+        if not clases_disponibles_lista:
             st.info("No hay clases disponibles en el período seleccionado")
+            return
         
-    except Exception as e:
-        st.error(f"Error cargando clases disponibles: {e}")
+        st.markdown("### 📅 Clases Disponibles para Reservar")
+        
+        for clase in clases_disponibles_lista:
+            with st.container(border=True):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.write(f"**{clase['title']}**")
+                    st.caption(f"Categoría: {clase['extendedProps'].get('categoria', 'N/A')}")
+                    
+                    # Avatares de quienes ya reservaron
+                    avatares = clases_service.get_avatares_reserva(
+                        clase["horario_id"], 
+                        pd.to_datetime(clase['extendedProps']['fecha_clase']).date()
+                    )
+                    if avatares:
+                        st.caption("👥 Ya reservados:")
+                        cols = st.columns(len(avatares))
+                        for idx, avatar_url in enumerate(avatares):
+                            with cols[idx]:
+                                st.image(avatar_url, width=32, caption="", output_format="PNG")
+                
+                with col2:
+                    fecha_clase = clase['extendedProps']['fecha_clase']
+                    hora_inicio = clase['start'].split('T')[1][:5]
+                    hora_fin = clase['end'].split('T')[1][:5]
+                    st.write(f"📅 {pd.to_datetime(fecha_clase).strftime('%d/%m/%Y')}")
+                    st.write(f"⏰ {hora_inicio} - {hora_fin}")
+                
+                with col3:
+                    cupos_libres = clase['extendedProps'].get('cupos_libres', 0)
+                    st.metric("🎯 Cupos", cupos_libres)
+                    
+                    reserva_key = f"reservar_{clase['id']}"
+                    if st.button("📝 Reservar", key=reserva_key, disabled=cupos_libres <= 0, use_container_width=True):
+                        fecha_clase_obj = pd.to_datetime(fecha_clase).date()
+                        success, mensaje = clases_service.crear_reserva(participante_id, clase['horario_id'], fecha_clase_obj)
+                        if success:
+                            st.success("¡Reserva realizada correctamente!")
+                            st.rerun()
+                        else:
+                            st.error(f"Error en la reserva: {mensaje}")
+
 
 # =========================
 # TAB 4: MI PERFIL
