@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 👥 Clientes CRM")
     st.caption("Base de clientes vinculada al módulo CRM.")
     st.divider()
