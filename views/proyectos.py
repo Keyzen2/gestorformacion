@@ -12,7 +12,7 @@ except ImportError:
     OPTION_MENU_AVAILABLE = False
     st.warning("⚠️ Para mejor experiencia, instala: pip install streamlit-option-menu")
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Página principal de gestión de proyectos"""
     
     # Verificar permisos
