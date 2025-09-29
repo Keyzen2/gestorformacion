@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from utils import generar_pdf  # Asegúrate de tener esta función en utils.py
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.subheader("📑 Informe de Auditoría ISO 9001")
     st.caption("Generación de informe consolidado para presentar en auditorías internas o externas.")
     st.divider()
