@@ -227,6 +227,18 @@ class AulasService:
             print(f"Error cargando reservas: {e}")
             return pd.DataFrame()
 
+    def get_reservas_proximas(self, dias: int = 30) -> pd.DataFrame:
+        """Obtiene reservas próximas según rol"""
+        try:
+            fecha_inicio = datetime.utcnow().isoformat()
+            fecha_fin = (datetime.utcnow() + timedelta(days=dias)).isoformat()
+            
+            return self.get_reservas_periodo(fecha_inicio, fecha_fin)
+            
+        except Exception as e:
+            print(f"Error cargando reservas próximas: {e}")
+            return pd.DataFrame()
+
     def crear_reserva(self, datos_reserva: Dict) -> Tuple[bool, Optional[str]]:
         """Crea una nueva reserva de aula"""
         try:
@@ -272,6 +284,42 @@ class AulasService:
             
         except Exception as e:
             return False
+
+    def obtener_conflictos_detallados(self, aula_id: str, fecha_inicio: str, fecha_fin: str, 
+                                    reserva_excluir: Optional[str] = None) -> List[Dict]:
+        """Obtiene detalles de los conflictos de disponibilidad"""
+        try:
+            query = self.supabase.table("aula_reservas").select("""
+                id, titulo, fecha_inicio, fecha_fin, tipo_reserva, estado,
+                grupos(codigo_grupo)
+            """).eq("aula_id", aula_id).neq("estado", "CANCELADA").or_(
+                f"and(fecha_inicio.lte.{fecha_fin},fecha_fin.gte.{fecha_inicio})"
+            )
+            
+            if reserva_excluir:
+                query = query.neq("id", reserva_excluir)
+            
+            result = query.execute()
+            
+            conflictos = []
+            for reserva in result.data or []:
+                inicio_dt = pd.to_datetime(reserva["fecha_inicio"])
+                fin_dt = pd.to_datetime(reserva["fecha_fin"])
+                
+                conflicto = {
+                    "id": reserva["id"],
+                    "titulo": reserva["titulo"],
+                    "tipo_reserva": reserva["tipo_reserva"],
+                    "fecha_inicio": inicio_dt.strftime('%d/%m/%Y %H:%M'),
+                    "fecha_fin": fin_dt.strftime('%d/%m/%Y %H:%M'),
+                    "grupo_codigo": reserva.get("grupos", {}).get("codigo_grupo") if reserva.get("grupos") else None
+                }
+                conflictos.append(conflicto)
+            
+            return conflictos
+            
+        except Exception as e:
+            return []
 
     def _validar_datos_reserva(self, datos: Dict) -> bool:
         """Valida datos de reserva"""
@@ -421,6 +469,230 @@ class AulasService:
                 "capacidad_total": 0
             }
 
+    @st.cache_data(ttl=600)
+    def get_estadisticas_aulas(_self) -> Dict[str, Any]:
+        """Obtiene estadísticas generales de aulas (con cache)"""
+        try:
+            stats = {}
+            
+            aulas_query = _self.supabase.table("aulas").select("id, activa, empresa_id")
+            
+            if _self.role == "gestor" and _self.empresa_id:
+                empresas_gestionadas = _self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            aulas_data = aulas_result.data or []
+            
+            stats["total_aulas"] = len(aulas_data)
+            stats["aulas_activas"] = sum(1 for aula in aulas_data if aula.get("activa", True))
+            stats["aulas_inactivas"] = stats["total_aulas"] - stats["aulas_activas"]
+            
+            hoy_inicio = datetime.now().strftime("%Y-%m-%d") + "T00:00:00Z"
+            hoy_fin = datetime.now().strftime("%Y-%m-%d") + "T23:59:59Z"
+            
+            reservas_query = _self.supabase.table("aula_reservas").select(
+                "id, aulas!inner(empresa_id)"
+            ).gte("fecha_inicio", hoy_inicio).lte("fecha_inicio", hoy_fin)
+            
+            if _self.role == "gestor" and _self.empresa_id:
+                empresas_gestionadas = _self._get_empresas_gestionadas()
+                reservas_query = reservas_query.in_("aulas.empresa_id", empresas_gestionadas)
+            
+            reservas_result = reservas_query.execute()
+            stats["reservas_hoy"] = len(reservas_result.data or [])
+            
+            stats["ocupacion_promedio"] = _self._calcular_ocupacion_promedio()
+            
+            return stats
+            
+        except Exception as e:
+            return {
+                "total_aulas": 0,
+                "aulas_activas": 0,
+                "aulas_inactivas": 0,
+                "reservas_hoy": 0,
+                "ocupacion_promedio": 0
+            }
+
+    def _calcular_ocupacion_promedio(self) -> float:
+        """Calcula la ocupación promedio de las aulas"""
+        try:
+            fecha_inicio = (datetime.now() - timedelta(days=30)).isoformat()
+            fecha_fin = datetime.now().isoformat()
+            
+            aulas = self.supabase.table("aulas").select("id").execute()
+            total_aulas = len(aulas.data or [])
+            
+            if total_aulas == 0:
+                return 0.0
+            
+            reservas = self.supabase.table("aula_reservas").select("id").gte(
+                "fecha_inicio", fecha_inicio
+            ).lte("fecha_fin", fecha_fin).execute()
+            
+            total_reservas = len(reservas.data or [])
+            ocupacion = min((total_reservas / total_aulas) * 10, 100) if total_aulas > 0 else 0
+            
+            return round(ocupacion, 1)
+            
+        except:
+            return 0.0
+
+    @st.cache_data(ttl=600)
+    def get_ocupacion_por_aula(_self) -> pd.DataFrame:
+        """Obtiene ocupación por aula individual (con cache)"""
+        try:
+            aulas_query = _self.supabase.table("aulas").select("id, nombre, empresa_id")
+            
+            if _self.role == "gestor" and _self.empresa_id:
+                empresas_gestionadas = _self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            aulas = aulas_result.data or []
+            
+            if not aulas:
+                return pd.DataFrame()
+            
+            fecha_inicio = (datetime.now() - timedelta(days=30)).isoformat()
+            fecha_fin = datetime.now().isoformat()
+            
+            ocupacion_data = []
+            
+            for aula in aulas:
+                reservas = _self.supabase.table("aula_reservas").select("id").eq(
+                    "aula_id", aula["id"]
+                ).gte("fecha_inicio", fecha_inicio).lte("fecha_fin", fecha_fin).execute()
+                
+                num_reservas = len(reservas.data or [])
+                ocupacion_porcentaje = min(num_reservas * 5, 100)
+                
+                ocupacion_data.append({
+                    "nombre": aula["nombre"],
+                    "reservas": num_reservas,
+                    "ocupacion_porcentaje": ocupacion_porcentaje
+                })
+            
+            return pd.DataFrame(ocupacion_data)
+            
+        except Exception as e:
+            return pd.DataFrame()
+
+    def get_metricas_aulas(self) -> Dict[str, Any]:
+        """Obtiene métricas completas para el dashboard de admin"""
+        try:
+            metricas = {}
+            
+            stats_basicas = self.get_estadisticas_aulas()
+            metricas.update(stats_basicas)
+            
+            fecha_inicio_mes = datetime.now().replace(day=1).isoformat()
+            fecha_fin_mes = datetime.now().isoformat()
+            
+            reservas_mes = self.supabase.table("aula_reservas").select(
+                "tipo_reserva"
+            ).gte("fecha_inicio", fecha_inicio_mes).lte("fecha_fin", fecha_fin_mes)
+            
+            if self.role == "gestor" and self.empresa_id:
+                reservas_mes = reservas_mes.select("tipo_reserva, aulas!inner(empresa_id)")
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                reservas_mes = reservas_mes.in_("aulas.empresa_id", empresas_gestionadas)
+            
+            result_reservas = reservas_mes.execute()
+            
+            tipos_count = {}
+            for reserva in result_reservas.data or []:
+                tipo = reserva["tipo_reserva"]
+                tipos_count[tipo] = tipos_count.get(tipo, 0) + 1
+            
+            metricas["reservas_por_tipo"] = tipos_count
+            
+            aulas_query = self.supabase.table("aulas").select("capacidad_maxima, empresa_id").eq("activa", True)
+            
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            capacidad_total = sum(aula.get("capacidad_maxima", 0) for aula in aulas_result.data or [])
+            metricas["capacidad_total"] = capacidad_total
+            
+            metricas["aulas_mas_utilizadas"] = {}
+            
+            if metricas["total_aulas"] > 0:
+                metricas["porcentaje_ocupacion"] = (metricas["reservas_hoy"] / metricas["total_aulas"]) * 100
+            else:
+                metricas["porcentaje_ocupacion"] = 0
+            
+            return metricas
+            
+        except Exception as e:
+            print(f"Error obteniendo métricas completas: {e}")
+            return {
+                "total_aulas": 0,
+                "aulas_activas": 0,
+                "reservas_hoy": 0,
+                "capacidad_total": 0,
+                "porcentaje_ocupacion": 0,
+                "reservas_por_tipo": {},
+                "aulas_mas_utilizadas": {}
+            }
+
+    def get_detalle_ocupacion_aulas(self) -> pd.DataFrame:
+        """Obtiene detalle de ocupación por aula para el dashboard"""
+        try:
+            aulas_query = self.supabase.table("aulas").select("id, nombre, capacidad_maxima, empresa_id")
+            
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            aulas = aulas_result.data or []
+            
+            if not aulas:
+                return pd.DataFrame()
+            
+            fecha_inicio_mes = datetime.now().replace(day=1).isoformat()
+            fecha_fin_mes = datetime.now().isoformat()
+            
+            detalle_data = []
+            
+            for aula in aulas:
+                reservas_mes = self.supabase.table("aula_reservas").select("id, fecha_inicio, fecha_fin").eq(
+                    "aula_id", aula["id"]
+                ).gte("fecha_inicio", fecha_inicio_mes).lte("fecha_fin", fecha_fin_mes).execute()
+                
+                num_reservas = len(reservas_mes.data or [])
+                
+                horas_ocupadas = 0
+                for reserva in reservas_mes.data or []:
+                    try:
+                        inicio = pd.to_datetime(reserva["fecha_inicio"])
+                        fin = pd.to_datetime(reserva["fecha_fin"])
+                        horas = (fin - inicio).total_seconds() / 3600
+                        horas_ocupadas += horas
+                    except:
+                        pass
+                
+                horas_disponibles_mes = 30 * 12
+                porcentaje_ocupacion = min((horas_ocupadas / horas_disponibles_mes) * 100, 100) if horas_disponibles_mes > 0 else 0
+                
+                detalle_data.append({
+                    "nombre": aula["nombre"],
+                    "capacidad_maxima": aula["capacidad_maxima"],
+                    "reservas_mes": num_reservas,
+                    "horas_ocupadas": round(horas_ocupadas, 1),
+                    "porcentaje_ocupacion": round(porcentaje_ocupacion, 1)
+                })
+            
+            return pd.DataFrame(detalle_data)
+            
+        except Exception as e:
+            print(f"Error obteniendo detalle de ocupación: {e}")
+            return pd.DataFrame()
+
     def get_proximas_reservas(self, limite: int = 5) -> List[Dict]:
         """Obtiene las próximas reservas"""
         try:
@@ -482,6 +754,30 @@ class AulasService:
             print(f"Error obteniendo aulas disponibles: {e}")
             return []
 
+    def get_aulas_disponibles_periodo(self, fecha_inicio: str, fecha_fin: str) -> List[Dict]:
+        """Obtiene aulas disponibles en un periodo específico"""
+        try:
+            aulas_query = self.supabase.table("aulas").select(
+                "id, nombre, capacidad_maxima, ubicacion"
+            ).eq("activa", True)
+            
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                aulas_query = aulas_query.in_("empresa_id", empresas_gestionadas)
+            
+            aulas_result = aulas_query.execute()
+            aulas = aulas_result.data or []
+            
+            aulas_disponibles = []
+            for aula in aulas:
+                if self.verificar_disponibilidad_aula(aula["id"], fecha_inicio, fecha_fin):
+                    aulas_disponibles.append(aula)
+            
+            return aulas_disponibles
+            
+        except Exception as e:
+            return []
+
     def get_notificaciones_pendientes(self) -> List[Dict]:
         """Obtiene notificaciones pendientes para el usuario"""
         try:
@@ -520,6 +816,14 @@ class AulasService:
             print(f"Error obteniendo notificaciones: {e}")
             return []
 
+    def marcar_notificaciones_leidas(self) -> bool:
+        """Marca las notificaciones como leídas (placeholder)"""
+        try:
+            return True
+        except Exception as e:
+            print(f"Error marcando notificaciones como leídas: {e}")
+            return False
+
     def get_alertas_aulas(self) -> List[Dict]:
         """Obtiene alertas importantes sobre aulas"""
         try:
@@ -544,6 +848,27 @@ class AulasService:
                         "tipo": "WARNING",
                         "mensaje": f"El aula '{aula['nombre']}' no tiene reservas en los últimos 30 días"
                     })
+            
+            ahora = datetime.now().isoformat()
+            una_semana = (datetime.now() + timedelta(days=7)).isoformat()
+            
+            reservas_proximas = self.supabase.table("aula_reservas").select(
+                "aula_id"
+            ).gte("fecha_inicio", ahora).lte("fecha_inicio", una_semana).execute()
+            
+            aulas_con_reservas = {}
+            for reserva in reservas_proximas.data or []:
+                aula_id = reserva["aula_id"]
+                aulas_con_reservas[aula_id] = aulas_con_reservas.get(aula_id, 0) + 1
+            
+            for aula_id, num_reservas in aulas_con_reservas.items():
+                if num_reservas > 10:
+                    aula_info = next((a for a in aulas_result.data if a["id"] == aula_id), None)
+                    if aula_info:
+                        alertas.append({
+                            "tipo": "INFO",
+                            "mensaje": f"El aula '{aula_info['nombre']}' tiene alta demanda esta semana ({num_reservas} reservas)"
+                        })
             
             return alertas[:3]
             
@@ -619,6 +944,37 @@ class AulasService:
     # INTEGRACIÓN CON GRUPOS
     # =========================
     
+    def get_grupos_basicos(self):
+        """Método para obtener grupos - integración con grupos_service"""
+        try:
+            query = self.supabase.table("grupos").select("""
+                id, codigo_grupo, fecha_inicio, fecha_fin_prevista, estado,
+                acciones_formativas(nombre)
+            """)
+            
+            if self.role == "gestor" and self.empresa_id:
+                empresas_gestionadas = self._get_empresas_gestionadas()
+                query = query.in_("empresa_id", empresas_gestionadas)
+            
+            result = query.execute()
+            
+            if result.data:
+                grupos = []
+                for grupo in result.data:
+                    grupo_flat = {
+                        **grupo,
+                        "accion_nombre": grupo.get("acciones_formativas", {}).get("nombre", "Sin acción") if grupo.get("acciones_formativas") else "Sin acción"
+                    }
+                    grupo_flat.pop("acciones_formativas", None)
+                    grupos.append(grupo_flat)
+                
+                return pd.DataFrame(grupos)
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            return pd.DataFrame()
+
     def asignar_aula_a_grupo(self, grupo_id: str, aula_id: str, fecha_inicio: str, fecha_fin: str) -> Tuple[bool, Optional[str]]:
         """Crea reserva automática al asignar aula a grupo"""
         try:
