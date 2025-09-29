@@ -544,13 +544,9 @@ def route():
     # --- Alumno ---
     if rol == "alumno":
         st.sidebar.markdown("### 🎓 Área del Alumno")
-        alumno_menu = {
-            "Mis Grupos": "area_alumno",
-            "Mis Diplomas": "area_alumno",  # mismo módulo, diferente tab interna
-        }
-        for label, page_key in alumno_menu.items():
-            if st.sidebar.button(label, key=f"alumno_{page_key}", type="secondary", use_container_width=True):
-                st.session_state.page = page_key
+        
+        if st.sidebar.button("Mis Grupos", key="alumno_grupos", type="secondary", use_container_width=True):
+            st.session_state.page = "area_alumno"
 
     # --- Panel Gestor ---
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
