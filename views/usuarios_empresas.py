@@ -433,7 +433,7 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
 # =========================
 # MAIN
 # =========================
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("👥 Gestión de Usuarios del Sistema")
     st.caption("Administradores, gestores y comerciales. Los alumnos se crean desde Participantes.")
 
