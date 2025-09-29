@@ -179,7 +179,7 @@ def mostrar_metricas_sistema(df_acciones, df_grupos, user_role):
 # FUNCIÓN PRINCIPAL
 # =========================
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Función principal con diseño moderno y esquemas FUNDAE reales."""
     
     # Aplicar estilos modernos
