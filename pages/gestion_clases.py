@@ -464,60 +464,6 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
             else:
                 st.session_state[f"confirmar_eliminar_horario_{horario_data['id']}"] = True
                 st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
-                
-@st.cache_data(ttl=300)
-def get_horarios_con_clase(self, clase_id: Optional[str] = None):
-    """Obtiene horarios con información de clase"""
-    try:
-        query = self.supabase.table("clases_horarios").select("""
-            id, dia_semana, hora_inicio, hora_fin, capacidad_maxima, activo,
-            created_at, clase_id,
-            clases!inner(nombre, categoria, empresa_id, activa)
-        """)
-        
-        if clase_id:
-            query = query.eq("clase_id", clase_id)
-        
-        # CORREGIDO: Filtrar según rol de forma más específica
-        if self.role == "gestor" and self.empresa_id:
-            # Obtener IDs de clases que puede gestionar
-            clases_query = self.supabase.table("clases").select("id").eq("empresa_id", self.empresa_id).execute()
-            clases_ids = [c["id"] for c in clases_query.data or []]
-            
-            if clases_ids:
-                if clase_id and clase_id not in clases_ids:
-                    # Si pide una clase específica que no puede gestionar
-                    return pd.DataFrame()
-                elif not clase_id:
-                    # Si no especifica clase, filtrar por todas sus clases
-                    query = query.in_("clase_id", clases_ids)
-            else:
-                return pd.DataFrame()
-        
-        result = query.order("dia_semana", "hora_inicio").execute()
-        
-        if result.data:
-            horarios = []
-            dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            
-            for horario in result.data:
-                horario_flat = {
-                    **horario,
-                    "clase_nombre": horario["clases"]["nombre"],
-                    "clase_categoria": horario["clases"]["categoria"],
-                    "dia_nombre": dias_semana[horario["dia_semana"]],
-                    "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}"
-                }
-                horario_flat.pop("clases", None)
-                horarios.append(horario_flat)
-            
-            return pd.DataFrame(horarios)
-        
-        return pd.DataFrame()
-        
-    except Exception as e:
-        print(f"Error cargando horarios: {e}")
-        return pd.DataFrame()
         
 # =========================
 # GESTIÓN DE RESERVAS (TAB 3)
