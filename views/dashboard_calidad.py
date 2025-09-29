@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.subheader("📊 Dashboard de Calidad ISO 9001")
     st.caption("Panel visual con KPIs, objetivos y seguimiento del sistema de gestión de calidad.")
     st.divider()
