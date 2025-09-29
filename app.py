@@ -437,8 +437,8 @@ def do_logout():
     st.session_state.clear()
     st.rerun()
 
-def is_module_active(empresa, empresa_crm, key, hoy, role):
-    if role == "alumno":
+def is_module_active(empresa, empresa_crm, key, hoy, rol):
+    if rol == "alumno":
         return False
     if key == "formacion":
         return empresa.get("formacion_activo", False)
