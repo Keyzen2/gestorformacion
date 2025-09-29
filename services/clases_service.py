@@ -277,7 +277,7 @@ class ClasesService:
         try:
             result = self.supabase.table("clases_reservas").select("""
                 participantes(id,
-                    avatar:participantes_avatares(archivo_url)
+                    avatar:participantes_avatars(archivo_url)
                 )
             """).eq("horario_id", horario_id
             ).eq("fecha_clase", fecha_clase.isoformat()
