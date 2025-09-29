@@ -53,28 +53,6 @@ def exportar_cronograma_excel(eventos: list):
                 "Aula": props.get("aula_nombre", ""),
                 "Inicio": inicio,
                 "Fin": fin,
-def exportar_cronograma_excel(eventos: list):
-    """Exporta cronograma a Excel"""
-    try:
-        if not eventos:
-            st.warning("No hay eventos para exportar")
-            return
-            
-        datos = []
-        for ev in eventos:
-            props = ev.get("extendedProps", {})
-            try:
-                inicio = pd.to_datetime(ev.get("start", "")).strftime('%d/%m/%Y %H:%M')
-                fin = pd.to_datetime(ev.get("end", "")).strftime('%d/%m/%Y %H:%M')
-            except:
-                inicio = ev.get("start", "")
-                fin = ev.get("end", "")
-                
-            datos.append({
-                "Título": ev.get("title", "").split(": ", 1)[-1] if ": " in ev.get("title", "") else ev.get("title", ""),
-                "Aula": props.get("aula_nombre", ""),
-                "Inicio": inicio,
-                "Fin": fin,
                 "Tipo": props.get("tipo_reserva", ""),
                 "Estado": props.get("estado", ""),
                 "Grupo": props.get("grupo_codigo", "")
