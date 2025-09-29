@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 st.set_page_config(
     page_title="Gestor de Formación",
     layout="wide",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="expanded",  # ← Siempre expandido
     page_icon="📚",
     menu_items=None
 )
@@ -288,31 +288,51 @@ def do_logout():
 # Vista de login LIMPIA Y MODERNA
 # =========================
 def login_view():
-    """Pantalla de login minimalista con logo de empresa, barra de progreso y sidebar oculto."""
-
-    ajustes = get_ajustes_app(supabase_public, campos=[
-        "mensaje_login", "nombre_app", "logo_url"
-    ])
-
-    mensaje_login = ajustes.get("mensaje_login", "Sistema integral de gestión FUNDAE")
-    nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    # ✅ Logo original (recuperado del backup)
-    logo_display = (
-        f'<img src="{ajustes.get("logo_url")}" width="64" height="64" style="border-radius: 12px;">'
-        if ajustes.get("logo_url")
-        else "📚"
-    )
-
-    # Container principal
-    st.markdown(f"""
-    <div class="login-container fade-in">
-        <div class="login-header">
-            <div class="login-logo">{logo_display}</div>
-            <h1 class="login-title">{nombre_app}</h1>
-            <p class="login-subtitle">{mensaje_login}</p>
+    """Pantalla de login con diseño startup moderno."""
+    
+    # Sidebar con información mientras no está logueado
+    with st.sidebar:
+        st.markdown("""
+        <div style="padding: 2rem 1rem; text-align: center;">
+            <div style="
+                width: 60px;
+                height: 60px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 12px;
+                margin: 0 auto 1rem;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.5rem;
+                color: white;
+            ">🚀</div>
+            <h3 style="color: #667eea; font-size: 1.1rem; font-weight: 600; margin: 0;">
+                Sistema de Gestión
+            </h3>
+            <p style="color: #94a3b8; font-size: 0.875rem; margin-top: 0.5rem;">
+                Inicia sesión para acceder
+            </p>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        st.markdown("""
+        <div style="padding: 0 1rem;">
+            <p style="font-size: 0.875rem; color: #64748b; margin-bottom: 0.75rem; font-weight: 500;">
+                📋 Módulos disponibles:
+            </p>
+            <div style="font-size: 0.875rem; color: #94a3b8; line-height: 1.8;">
+                <div style="margin-bottom: 0.5rem;">📚 Formación FUNDAE</div>
+                <div style="margin-bottom: 0.5rem;">📋 ISO 9001</div>
+                <div style="margin-bottom: 0.5rem;">🛡️ RGPD</div>
+                <div>📈 CRM</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Añadir clase CSS para ocultar header
+    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
 
     # Formulario de login centrado
     col1, col2, col3 = st.columns([1, 2, 1])
