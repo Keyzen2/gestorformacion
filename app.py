@@ -688,7 +688,136 @@ def route():
     ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
     st.sidebar.markdown("---")
     st.sidebar.caption(ajustes.get("mensaje_footer", "© 2025 Gestor de Formación"))
+    
+# =========================
+# Dashboards de bienvenida
+# =========================
+def mostrar_dashboard_admin(ajustes, metricas):
+    st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">🏢</div>
+            <div class="metric-label">Empresas</div>
+            <div class="metric-value">{metricas['empresas']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👥</div>
+            <div class="metric-label">Usuarios</div>
+            <div class="metric-value">{metricas['usuarios']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📚</div>
+            <div class="metric-label">Cursos</div>
+            <div class="metric-value">{metricas['cursos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col4:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Grupos</div>
+            <div class="metric-value">{metricas['grupos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
 
+
+def mostrar_dashboard_gestor(ajustes, metricas):
+    st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Grupos</div>
+            <div class="metric-value">{metricas['grupos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📂</div>
+            <div class="metric-label">Documentos</div>
+            <div class="metric-value">{metricas['documentos']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación."))
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">🗂️</div>
+            <div class="metric-label">Doc. Avanzada</div>
+            <div class="metric-value">✔️</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_gestor_docu_avanzada", "Gestión documental avanzada."))
+
+
+def mostrar_dashboard_alumno(ajustes):
+    st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👨‍🎓</div>
+            <div class="metric-label">Mis Grupos</div>
+            <div class="metric-value">📘</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📜</div>
+            <div class="metric-label">Mis Diplomas</div>
+            <div class="metric-value">🏅</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."))
+
+    st.markdown("---")
+    st.info(ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."))
+
+
+def mostrar_dashboard_comercial(ajustes):
+    st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">👥</div>
+            <div class="metric-label">Clientes</div>
+            <div class="metric-value">📋</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."))
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">💡</div>
+            <div class="metric-label">Oportunidades</div>
+            <div class="metric-value">📈</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card fade-in">
+            <div class="metric-icon">📝</div>
+            <div class="metric-label">Tareas</div>
+            <div class="metric-value">✅</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.caption(ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."))
+        
 # =========================
 # Ejecución principal
 # =========================
