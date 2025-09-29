@@ -677,6 +677,31 @@ def mostrar_mis_diplomas(participantes_service, session_state):
             return
         
         diplomas = diplomas_res.data
+        
+        # Mostrar diplomas
+        for diploma in diplomas:
+            with st.container(border=True):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.markdown(f"**📜 {diploma.get('archivo_nombre','Diploma')}**")
+                    if diploma.get("grupo"):
+                        st.caption(f"Grupo: {diploma['grupo'].get('codigo_grupo','')}")
+                        if diploma['grupo'].get('accion_formativa'):
+                            st.caption(f"Curso: {diploma['grupo']['accion_formativa'].get('nombre','')}")
+                    if diploma.get("fecha_subida"):
+                        fecha = pd.to_datetime(diploma["fecha_subida"]).strftime("%d/%m/%Y")
+                        st.write(f"📅 Emitido: {fecha}")
+                
+                with col2:
+                    if diploma.get("url"):
+                        st.link_button("📥 Descargar", diploma["url"], use_container_width=True)
+                    else:
+                        st.button("Sin archivo", disabled=True, use_container_width=True)
+
+    except Exception as e:
+        st.error(f"❌ Error cargando diplomas: {e}")
+
 
         # =========================
         # FILTROS AVANZADOS
