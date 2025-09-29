@@ -459,20 +459,17 @@ def login_view():
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1,2,1])
-    with col2:
+     with col2:
         with st.form("form_login", clear_on_submit=False):
-            st.markdown("#### Iniciar sesión")
-
-            email = st.text_input("Email", placeholder="tu@empresa.com", label_visibility="collapsed")
-            password = st.text_input("Contraseña", type="password", placeholder="••••••••", label_visibility="collapsed")
-
+            st.markdown("### 🔐 Iniciar sesión")
+            
+            email = st.text_input("Email", placeholder="tu@empresa.com")
+            password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+            
             submitted = st.form_submit_button(
-                "Iniciar sesión" if not st.session_state.get("login_loading") else "Iniciando...",
-                disabled=st.session_state.get("login_loading", False),
-                use_container_width=True
+                "🚀 Entrar" if not st.session_state.get("login_loading") else "⏳ Iniciando...",
+                disabled=st.session_state.get("login_loading", False)
             )
-    # Cerrar div login-mode
-    st.markdown('</div>', unsafe_allow_html=True)
     
     if submitted:
         if not email or not password:
