@@ -756,8 +756,8 @@ def mostrar_mis_diplomas(participantes_service, session_state):
                 else:
                     st.button("Sin archivo", disabled=True, use_container_width=True)
 
-    except Exception as e:
-        st.error(f"❌ Error cargando diplomas: {e}")
+        except Exception as e:
+            st.error(f"❌ Error cargando diplomas: {e}")
 
 
 # =========================
