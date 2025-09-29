@@ -685,9 +685,9 @@ else:
                 </div>
                 """, unsafe_allow_html=True)
 
-except Exception as e:
-        st.error(f"Error al cargar la página: {e}")
-        st.exception(e)
+    except Exception as e:
+            st.error(f"Error al cargar la página: {e}")
+            st.exception(e)
 
 # =========================
 # Cierre del div CSS dinámico
