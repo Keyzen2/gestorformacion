@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 📊 Panel RGPD")
     st.caption("Resumen visual del cumplimiento RGPD de tu empresa.")
     st.divider()
