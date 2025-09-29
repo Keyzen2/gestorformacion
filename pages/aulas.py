@@ -680,8 +680,13 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state):
             st.warning("No hay aulas disponibles")
             return
         
-        aulas_opciones = {f"{row['nombre']} ({row['ubicacion']})": row['id'] 
-                         for _, row in df_aulas.iterrows()}
+        aulas_opciones = {}
+        for _, row in df_aulas.iterrows():
+            if row.get('ubicacion') and str(row['ubicacion']).strip():
+                nombre_display = f"{row['nombre']} ({row['ubicacion']})"
+            else:
+                nombre_display = row['nombre']
+            aulas_opciones[nombre_display] = row['id']
         
     except Exception as e:
         st.error(f"Error cargando aulas: {e}")
@@ -812,66 +817,49 @@ def mostrar_gestion_reservas(aulas_service, session_state):
 # CRONOGRAMA
 # =========================
 
-def mostrar_cronograma_fullcalendar(aulas_service, session_state):
-    """Cronograma con manejo robusto de errores"""
-    # DEBUG TEMPORAL
-    st.write(f"DEBUG: CALENDAR_AVAILABLE = {CALENDAR_AVAILABLE}")
+def mostrar_cronograma_simple(aulas_service, session_state):
+    """Cronograma simplificado sin dependencias externas"""
     
-    st.markdown("### Cronograma Interactivo de Aulas")
+    st.markdown("### Cronograma de Aulas")
     
-    if not CALENDAR_AVAILABLE:
-        st.info("Usando vista alternativa del cronograma")
-        st.caption("Para habilitar el calendario interactivo: pip install streamlit-calendar")
-        mostrar_cronograma_alternativo(aulas_service, session_state)
-        return
-
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         fecha_inicio = st.date_input(
             "Desde", 
             value=datetime.now().date() - timedelta(days=7),
-            key="cal_fecha_inicio"
+            key="crono_fecha_inicio"
         )
     
     with col2:
         fecha_fin = st.date_input(
             "Hasta", 
-            value=datetime.now().date() + timedelta(days=21),
-            key="cal_fecha_fin"
+            value=datetime.now().date() + timedelta(days=14),
+            key="crono_fecha_fin"
         )
     
     with col3:
-        vista_inicial = st.selectbox(
-            "Vista",
-            ["dayGridMonth", "timeGridWeek", "timeGridDay", "listWeek"],
-            index=1,
-            key="cal_vista"
-        )
-    
-    with col4:
-        if st.button("Actualizar", key="cal_refresh"):
+        if st.button("Actualizar", key="crono_refresh"):
             st.rerun()
 
     try:
         df_aulas = aulas_service.get_aulas_con_empresa()
-        if df_aulas.empty:
+        if not df_aulas.empty:
+            aulas_disponibles = ["Todas"] + df_aulas['nombre'].tolist()
+            aulas_seleccionadas = st.multiselect(
+                "Filtrar por aulas",
+                aulas_disponibles,
+                default=["Todas"],
+                key="crono_filtro_aulas"
+            )
+            
+            if "Todas" in aulas_seleccionadas or not aulas_seleccionadas:
+                aulas_ids = df_aulas['id'].tolist()
+            else:
+                aulas_ids = df_aulas[df_aulas['nombre'].isin(aulas_seleccionadas)]['id'].tolist()
+        else:
             st.warning("No hay aulas disponibles")
             return
-        
-        aulas_disponibles = ["Todas"] + df_aulas['nombre'].tolist()
-        aulas_seleccionadas = st.multiselect(
-            "Filtrar aulas",
-            aulas_disponibles,
-            default=["Todas"],
-            key="cal_filtro_aulas"
-        )
-        
-        if "Todas" in aulas_seleccionadas or not aulas_seleccionadas:
-            aulas_ids = df_aulas['id'].tolist()
-        else:
-            aulas_ids = df_aulas[df_aulas['nombre'].isin(aulas_seleccionadas)]['id'].tolist()
-        
     except Exception as e:
         st.error(f"Error cargando aulas: {e}")
         return
@@ -887,85 +875,19 @@ def mostrar_cronograma_fullcalendar(aulas_service, session_state):
             st.info("No hay eventos en el período seleccionado")
             return
         
-        calendar_options = {
-            "editable": False,
-            "navLinks": True,
-            "selectable": True,
-            "initialView": vista_inicial,
-            "initialDate": datetime.now().date().isoformat(),
-            "headerToolbar": {
-                "left": "prev,next today",
-                "center": "title",
-                "right": "dayGridMonth,timeGridWeek,timeGridDay,listWeek"
-            },
-            "height": 650,
-            "slotMinTime": "07:00:00",
-            "slotMaxTime": "22:00:00",
-            "weekends": True,
-            "locale": "es",
-            "timeZone": "local"
-        }
-
-        calendar_css = """
-        .fc-event-grupo { background-color: #28a745 !important; }
-        .fc-event-mantenimiento { background-color: #ffc107 !important; color: #000 !important; }
-        .fc-event-evento { background-color: #17a2b8 !important; }
-        .fc-event-bloqueada { background-color: #dc3545 !important; }
-        """
-
-        try:
-            calendar_result = calendar(
-                events=eventos,
-                options=calendar_options,
-                custom_css=calendar_css,
-                key="fullcalendar_aulas"
-            )
-            
-            if calendar_result and calendar_result.get("eventClick"):
-                evento_info = calendar_result["eventClick"]["event"]
-                st.markdown("---")
-                st.markdown("### Detalle de Reserva")
-                
-                col1, col2, col3 = st.columns(3)
-                props = evento_info.get('extendedProps', {})
-                
-                with col1:
-                    st.info(f"**Aula:** {props.get('aula_nombre', 'N/A')}")
-                with col2:
-                    inicio = pd.to_datetime(evento_info.get('start', '')).strftime('%d/%m/%Y %H:%M')
-                    st.info(f"**Inicio:** {inicio}")
-                with col3:
-                    st.info(f"**Tipo:** {props.get('tipo_reserva', 'N/A')}")
-
-        except Exception as e:
-            st.error(f"Error renderizando calendario: {e}")
-            st.info("Cambiando a vista alternativa...")
-            mostrar_cronograma_alternativo(aulas_service, session_state)
-            return
-
-    except Exception as e:
-        st.error(f"Error obteniendo eventos: {e}")
-        return
-
-    # Exportación con opciones avanzadas
-    st.markdown("---")
-    st.markdown("### Opciones de Exportación")
-    
-    export_tabs = st.tabs(["Básica", "Estadísticas"])
-    
-    with export_tabs[0]:
+        mostrar_cronograma_alternativo(aulas_service, session_state)
+        
+        st.markdown("---")
+        st.markdown("### Exportar")
         col1, col2 = st.columns(2)
+        
         with col1:
             exportar_cronograma_excel(eventos)
         with col2:
             exportar_cronograma_pdf_semanal(eventos, fecha_inicio, fecha_fin)
-    
-    with export_tabs[1]:
-        try:
-            aulas_info = df_aulas.to_dict('records') if not df_aulas.empty else []
-            exportar_informe_estadisticas_pdf(eventos, aulas_info, fecha_inicio, fecha_fin)
-        except Exception as e:
-            st.error(f"Error: {e}")
+            
+    except Exception as e:
+        st.error(f"Error obteniendo eventos: {e}")
 
 
 def mostrar_cronograma_alternativo(aulas_service, session_state):
@@ -1232,7 +1154,7 @@ def main(supabase, session_state):
     # TAB 2: Cronograma
     with tabs[1]:
         try:
-            mostrar_cronograma_fullcalendar(aulas_service, session_state)
+            mostrar_cronograma_simple(aulas_service, session_state)
         except Exception as e:
             st.error(f"❌ Error en cronograma: {e}")
             mostrar_cronograma_alternativo(aulas_service, session_state)
