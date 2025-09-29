@@ -557,150 +557,330 @@ def route():
     st.sidebar.caption(mensaje_footer)
 
 # =========================
-# DASHBOARDS DE BIENVENIDA
+# DASHBOARDS DE BIENVENIDA MEJORADOS
 # =========================
 
 def mostrar_dashboard_admin(ajustes, metricas):
+    """Dashboard admin con datos dinámicos y accionables."""
+    
     st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
+    
+    # Métricas principales con acciones directas
     col1, col2, col3, col4 = st.columns(4)
+    
     with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">🏢</div>
-            <div class="metric-label">Empresas</div>
-            <div class="metric-value">{metricas.get('empresas', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👥</div>
-            <div class="metric-label">Usuarios</div>
-            <div class="metric-value">{metricas.get('usuarios', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📚</div>
-            <div class="metric-label">Cursos</div>
-            <div class="metric-value">{metricas.get('cursos', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas.get('grupos', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("⚡ Accesos Rápidos")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("👥 Usuarios", use_container_width=True):
-            st.session_state.page = "usuarios_empresas"
-            st.rerun()
-    with col2:
-        if st.button("🏢 Empresas", use_container_width=True):
+        st.metric(
+            label="🏢 Empresas",
+            value=metricas.get('empresas', 0),
+            help=ajustes.get("tarjeta_admin_empresas", "Gestión de empresas")
+        )
+        if st.button("Gestionar", key="btn_empresas", use_container_width=True):
             st.session_state.page = "empresas"
             st.rerun()
+    
+    with col2:
+        st.metric(
+            label="👥 Usuarios",
+            value=metricas.get('usuarios', 0),
+            help=ajustes.get("tarjeta_admin_usuarios", "Alta y permisos de usuarios")
+        )
+        if st.button("Gestionar", key="btn_usuarios", use_container_width=True):
+            st.session_state.page = "usuarios_empresas"
+            st.rerun()
+    
     with col3:
-        if st.button("⚙️ Ajustes", use_container_width=True):
+        st.metric(
+            label="📚 Cursos",
+            value=metricas.get('cursos', 0),
+            help="Acciones formativas disponibles en el sistema"
+        )
+        if st.button("Ver Cursos", key="btn_cursos", use_container_width=True):
+            st.session_state.page = "acciones_formativas"
+            st.rerun()
+    
+    with col4:
+        st.metric(
+            label="👨‍🎓 Grupos",
+            value=metricas.get('grupos', 0),
+            help="Grupos formativos activos"
+        )
+        if st.button("Ver Grupos", key="btn_grupos", use_container_width=True):
+            st.session_state.page = "grupos"
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Información adicional dinámica
+    try:
+        # Obtener datos recientes
+        grupos_recientes = supabase_admin.table("grupos")\
+            .select("id, codigo_grupo, fecha_inicio, accion_formativa:acciones_formativas(nombre)")\
+            .order("created_at", desc=True)\
+            .limit(5)\
+            .execute()
+        
+        if grupos_recientes.data:
+            st.subheader("📋 Últimos Grupos Creados")
+            
+            for grupo in grupos_recientes.data:
+                accion_nombre = grupo.get('accion_formativa', {}).get('nombre', 'N/A') if grupo.get('accion_formativa') else 'N/A'
+                fecha_inicio = grupo.get('fecha_inicio', 'Sin fecha')
+                
+                col1, col2, col3 = st.columns([2, 2, 1])
+                with col1:
+                    st.text(f"📌 {grupo.get('codigo_grupo', 'Sin código')}")
+                with col2:
+                    st.caption(f"{accion_nombre}")
+                with col3:
+                    st.caption(f"📅 {fecha_inicio}")
+            
+            st.markdown("---")
+    except Exception as e:
+        st.caption("⚠️ No se pudieron cargar los grupos recientes")
+    
+    # Acceso rápido a configuración
+    st.subheader("⚙️ Configuración")
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🎨 Ajustes de la App", use_container_width=True):
             st.session_state.page = "ajustes_app"
             st.rerun()
+    
+    with col2:
+        if st.button("📊 Métricas Globales", use_container_width=True):
+            st.session_state.page = "panel_admin"
+            st.rerun()
+    
+    with col3:
+        st.caption(ajustes.get("tarjeta_admin_ajustes", "Configuración global"))
 
 
 def mostrar_dashboard_gestor(ajustes, metricas):
+    """Dashboard gestor con datos específicos de su empresa."""
+    
     st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
+    
+    empresa_id = st.session_state.user.get("empresa_id")
+    
+    # Métricas de actividad
     col1, col2, col3 = st.columns(3)
+    
     with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas.get('grupos', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
+        grupos_total = metricas.get('grupos', 0)
+        st.metric(
+            label="👨‍🎓 Grupos",
+            value=grupos_total,
+            help=ajustes.get("tarjeta_gestor_grupos", "Grupos de formación")
+        )
+        if st.button("Gestionar Grupos", key="btn_grupos_gestor", use_container_width=True):
+            st.session_state.page = "grupos"
+            st.rerun()
+    
     with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📂</div>
-            <div class="metric-label">Documentos</div>
-            <div class="metric-value">{metricas.get('documentos', 0)}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación."))
+        participantes_total = metricas.get('participantes', 0)
+        st.metric(
+            label="👥 Participantes",
+            value=participantes_total,
+            help="Total de alumnos en tu empresa"
+        )
+        if st.button("Ver Participantes", key="btn_part_gestor", use_container_width=True):
+            st.session_state.page = "participantes"
+            st.rerun()
+    
     with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">🗂️</div>
-            <div class="metric-label">Doc. Avanzada</div>
-            <div class="metric-value">✔️</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_docu_avanzada", "Gestión documental avanzada."))
+        documentos_total = metricas.get('documentos', 0)
+        st.metric(
+            label="📄 Documentos",
+            value=documentos_total,
+            help=ajustes.get("tarjeta_gestor_documentos", "Documentación de formación")
+        )
+        if st.button("Ver Documentos", key="btn_docs_gestor", use_container_width=True):
+            st.session_state.page = "documentos"
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Datos contextuales de la empresa
+    try:
+        # Grupos activos/finalizados
+        grupos_por_estado = supabase_admin.table("grupos")\
+            .select("estado", count="exact")\
+            .eq("empresa_id", empresa_id)\
+            .execute()
+        
+        if grupos_por_estado.data:
+            st.subheader("📊 Estado de Grupos")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            # Contar por estado
+            abiertos = sum(1 for g in grupos_por_estado.data if g.get('estado') == 'ABIERTO')
+            finalizados = sum(1 for g in grupos_por_estado.data if g.get('estado') == 'FINALIZADO')
+            en_proceso = sum(1 for g in grupos_por_estado.data if g.get('estado') == 'FINALIZAR')
+            
+            with col1:
+                st.info(f"**🟢 Abiertos:** {abiertos}")
+            with col2:
+                st.warning(f"**🟡 Finalizando:** {en_proceso}")
+            with col3:
+                st.success(f"**✅ Finalizados:** {finalizados}")
+        
+        # Grupos recientes de esta empresa
+        grupos_recientes = supabase_admin.table("grupos")\
+            .select("codigo_grupo, fecha_inicio, estado")\
+            .eq("empresa_id", empresa_id)\
+            .order("created_at", desc=True)\
+            .limit(3)\
+            .execute()
+        
+        if grupos_recientes.data:
+            st.markdown("---")
+            st.subheader("📋 Últimos Grupos")
+            
+            for grupo in grupos_recientes.data:
+                estado_emoji = {
+                    'ABIERTO': '🟢',
+                    'FINALIZAR': '🟡',
+                    'FINALIZADO': '✅'
+                }.get(grupo.get('estado', 'ABIERTO'), '⚪')
+                
+                st.text(f"{estado_emoji} {grupo.get('codigo_grupo', 'N/A')} - {grupo.get('fecha_inicio', 'Sin fecha')}")
+    
+    except Exception as e:
+        st.caption("⚠️ No se pudieron cargar datos adicionales")
+    
+    st.markdown("---")
+    st.info("💡 " + ajustes.get("tarjeta_gestor_docu_avanzada", "Accede a la documentación avanzada desde el menú lateral"))
 
 
 def mostrar_dashboard_alumno(ajustes):
+    """Dashboard alumno con información personalizada."""
+    
     st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Mis Grupos</div>
-            <div class="metric-value">📘</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📜</div>
-            <div class="metric-label">Mis Diplomas</div>
-            <div class="metric-value">🏅</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."))
-
-    st.markdown("---")
-    st.info(ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."))
+    
+    usuario_id = st.session_state.user.get("id")
+    
+    if usuario_id:
+        try:
+            # Obtener grupos del alumno
+            mis_grupos = supabase_admin.table("participantes_grupos")\
+                .select("grupo:grupos(id, codigo_grupo, estado, accion_formativa:acciones_formativas(nombre))")\
+                .eq("participante_id", usuario_id)\
+                .execute()
+            
+            if mis_grupos.data:
+                grupos_activos = [g for g in mis_grupos.data if g.get('grupo', {}).get('estado') != 'FINALIZADO']
+                grupos_finalizados = [g for g in mis_grupos.data if g.get('grupo', {}).get('estado') == 'FINALIZADO']
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.metric(
+                        label="📚 Grupos Activos",
+                        value=len(grupos_activos),
+                        help=ajustes.get("tarjeta_alumno_grupos", "Tus grupos actuales")
+                    )
+                
+                with col2:
+                    st.metric(
+                        label="🎓 Grupos Completados",
+                        value=len(grupos_finalizados),
+                        help=ajustes.get("tarjeta_alumno_diplomas", "Grupos con diploma disponible")
+                    )
+                
+                st.markdown("---")
+                
+                # Mostrar grupos activos
+                if grupos_activos:
+                    st.subheader("📖 Mis Grupos Activos")
+                    for item in grupos_activos[:5]:
+                        grupo = item.get('grupo', {})
+                        accion = grupo.get('accion_formativa', {})
+                        st.text(f"🟢 {grupo.get('codigo_grupo', 'N/A')} - {accion.get('nombre', 'Curso sin nombre')}")
+                
+                # Botón de acceso
+                st.markdown("---")
+                if st.button("Ver Todos Mis Grupos y Diplomas", use_container_width=True):
+                    st.session_state.page = "area_alumno"
+                    st.rerun()
+            
+            else:
+                st.info("📚 Aún no estás inscrito en ningún grupo. Contacta con tu gestor.")
+        
+        except Exception as e:
+            st.warning("⚠️ No se pudieron cargar tus grupos")
+    else:
+        st.info("📝 " + ajustes.get("tarjeta_alumno_seguimiento", "Accede al área de alumno desde el menú"))
 
 
 def mostrar_dashboard_comercial(ajustes):
-    st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👥</div>
-            <div class="metric-label">Clientes</div>
-            <div class="metric-value">📋</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."))
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">💡</div>
-            <div class="metric-label">Oportunidades</div>
-            <div class="metric-value">📈</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📝</div>
-            <div class="metric-label">Tareas</div>
-            <div class="metric-value">✅</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."))
+    """Dashboard comercial con datos de CRM."""
+    
+    st.title(ajustes.get("bienvenida_comercial", "Área Comercial - CRM"))
+    
+    comercial_id = st.session_state.user.get("comercial_id")
+    
+    if comercial_id:
+        try:
+            # Métricas CRM reales
+            clientes = supabase_admin.table("crm_clientes")\
+                .select("id", count="exact")\
+                .eq("comercial_id", comercial_id)\
+                .execute()
+            
+            oportunidades = supabase_admin.table("crm_oportunidades")\
+                .select("id, estado", count="exact")\
+                .eq("comercial_id", comercial_id)\
+                .execute()
+            
+            tareas_pendientes = supabase_admin.table("crm_tareas")\
+                .select("id", count="exact")\
+                .eq("comercial_id", comercial_id)\
+                .eq("completada", False)\
+                .execute()
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    label="👥 Mis Clientes",
+                    value=clientes.count or 0,
+                    help=ajustes.get("tarjeta_comercial_clientes", "Cartera de clientes")
+                )
+                if st.button("Ver Clientes", key="btn_clientes", use_container_width=True):
+                    st.session_state.page = "crm_clientes"
+                    st.rerun()
+            
+            with col2:
+                oport_abiertas = sum(1 for o in (oportunidades.data or []) if o.get('estado') == 'ABIERTA')
+                st.metric(
+                    label="💼 Oportunidades",
+                    value=f"{oport_abiertas}/{oportunidades.count or 0}",
+                    delta="Abiertas/Total",
+                    help=ajustes.get("tarjeta_comercial_oportunidades", "Oportunidades de venta")
+                )
+                if st.button("Ver Oportunidades", key="btn_oport", use_container_width=True):
+                    st.session_state.page = "crm_oportunidades"
+                    st.rerun()
+            
+            with col3:
+                st.metric(
+                    label="✅ Tareas Pendientes",
+                    value=tareas_pendientes.count or 0,
+                    help=ajustes.get("tarjeta_comercial_tareas", "Tareas por completar")
+                )
+                if st.button("Ver Tareas", key="btn_tareas", use_container_width=True):
+                    st.session_state.page = "crm_tareas"
+                    st.rerun()
+            
+            st.markdown("---")
+            st.info("📊 Accede al panel CRM completo desde el menú lateral")
+        
+        except Exception as e:
+            st.warning("⚠️ No se pudieron cargar métricas CRM")
+    else:
+        st.info("💼 Configura tu perfil comercial para ver estadísticas")
 
 # =========================
 # Ejecución principal
@@ -751,7 +931,6 @@ else:
     except Exception as e:
         st.error(f"Error al cargar la página: {e}")
         st.exception(e)
-
 
 # =========================
 # Cerrar div de clase CSS
