@@ -2101,7 +2101,7 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
 # FUNCIÓN PRINCIPAL
 # =========================
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Función principal de gestión de grupos con diseño consistente a participantes/empresas."""
     st.title("👥 Gestión de Grupos FUNDAE")
     st.caption("🎯 Creación y administración de grupos formativos con jerarquía empresarial")
