@@ -511,85 +511,87 @@ def login_view():
                 st.session_state.login_loading = False
 
 # =========================
-# Navegación COMPLETA
+# Sidebar y navegación
 # =========================
 def route():
-    nombre = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
-    
+    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
+
+    # Header del sidebar
     st.sidebar.markdown(f"""
-    <div style="padding: 1rem; border-bottom: 1px solid #334155; margin-bottom: 1rem;">
-        <p style="margin: 0; font-size: 0.75rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.05em;">Bienvenido</p>
-        <p style="margin: 0.5rem 0 0; font-size: 1rem; font-weight: 600;">{nombre}</p>
+    <div style="padding: 1rem 0; border-bottom: 1px solid #e2e8f0; margin-bottom: 1rem;">
+        <p style="margin: 0; font-size: 0.875rem; color: #64748b;">Bienvenido</p>
+        <p style="margin: 0.25rem 0 0; font-weight: 600; color: #1e293b;">{nombre_usuario}</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.sidebar.button("Cerrar sesión", key="logout", use_container_width=True):
+
+    # Botón de logout
+    if st.sidebar.button("Cerrar sesión", key="logout", type="secondary", use_container_width=True):
         do_logout()
-    
+
+    # Variables de empresa / rol
     empresa_id = st.session_state.user.get("empresa_id")
-    empresa, empresa_crm = {}, {}
+    empresa = {}
+    empresa_crm = {}
     hoy = datetime.today().date()
-    
+
     if empresa_id:
         try:
-            e = supabase_admin.table("empresas").select(
-                "formacion_activo, formacion_inicio, formacion_fin, "
-                "iso_activo, iso_inicio, iso_fin, "
-                "rgpd_activo, rgpd_inicio, rgpd_fin, "
+            empresa_res = supabase_admin.table("empresas").select(
+                "formacion_activo, formacion_inicio, formacion_fin,"
+                "iso_activo, iso_inicio, iso_fin,"
+                "rgpd_activo, rgpd_inicio, rgpd_fin,"
                 "docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin"
             ).eq("id", empresa_id).execute()
-            empresa = e.data[0] if e.data else {}
-            
-            c = supabase_admin.table("crm_empresas").select(
+            empresa = empresa_res.data[0] if empresa_res.data else {}
+
+            crm_res = supabase_admin.table("crm_empresas").select(
                 "crm_activo, crm_inicio, crm_fin"
             ).eq("empresa_id", empresa_id).execute()
-            empresa_crm = c.data[0] if c.data else {}
-        except:
-            pass
-    
+            empresa_crm = crm_res.data[0] if crm_res.data else {}
+        except Exception:
+            st.sidebar.error("Error al cargar configuración de la empresa")
+
     st.session_state.empresa = empresa
     st.session_state.empresa_crm = empresa_crm
-    rol = st.session_state.role
-    
-    # ============================================
-    # MENÚ ADMIN
-    # ============================================
+    rol = st.session_state.rol
+
+    # =========================
+    # Menús según rol
+    # =========================
+
+    # --- Admin ---
     if rol == "admin":
-        st.sidebar.markdown("#### Administración SaaS")
+        st.sidebar.markdown("### ⚙️ Administración")
         admin_menu = {
             "Panel Admin": "panel_admin",
             "Usuarios y Empresas": "usuarios_empresas",
             "Empresas": "empresas",
-            "Ajustes de la App": "ajustes_app"
+            "Ajustes": "ajustes_app"
         }
-        for label, page in admin_menu.items():
-            if st.sidebar.button(label, key=f"admin_{page}", use_container_width=True):
-                st.session_state.page = page
-    
-    # ============================================
-    # MENÚ ALUMNO
-    # ============================================
-    elif rol == "alumno":
-        st.sidebar.markdown("#### Área del Alumno")
-        if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_grupos", use_container_width=True):
-            st.session_state.page = "area_alumno"
-    
-    # ============================================
-    # PANEL GESTOR
-    # ============================================
+        for label, page_key in admin_menu.items():
+            if st.sidebar.button(label, key=f"admin_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Alumno ---
+    if rol == "alumno":
+        st.sidebar.markdown("### 🎓 Área del Alumno")
+        alumno_menu = {
+            "Mis Grupos": "area_alumno",
+            "Mis Diplomas": "area_alumno",  # mismo módulo, diferente tab interna
+        }
+        for label, page_key in alumno_menu.items():
+            if st.sidebar.button(label, key=f"alumno_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Panel Gestor ---
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Panel de Formación")
-        if st.sidebar.button("Panel del Gestor", key="panel_gestor", use_container_width=True):
+        st.sidebar.markdown("### 📋 Panel del Gestor")
+        if st.sidebar.button("Panel Gestor", key="panel_gestor", type="secondary", use_container_width=True):
             st.session_state.page = "panel_gestor"
-    
-    # ============================================
-    # MÓDULO FORMACIÓN
-    # ============================================
+
+    # --- Módulo Formación ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Gestión de Formación")
-        
+        st.sidebar.markdown("### 📚 Formación")
         formacion_menu = {
             "Acciones Formativas": "acciones_formativas",
             "Grupos": "grupos",
@@ -600,21 +602,15 @@ def route():
             "Proyectos": "proyectos",
             "Documentos": "documentos"
         }
-        
         if rol == "gestor":
-            # Gestor ve Empresas primero
             formacion_menu = {"Empresas": "empresas", **formacion_menu}
-        
-        for label, page in formacion_menu.items():
-            if st.sidebar.button(label, key=f"form_{page}", use_container_width=True):
-                st.session_state.page = page
-    
-    # ============================================
-    # MÓDULO ISO 9001
-    # ============================================
+        for label, page_key in formacion_menu.items():
+            if st.sidebar.button(label, key=f"form_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Módulo ISO ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Gestión ISO 9001")
+        st.sidebar.markdown("### 📑 ISO 9001")
         iso_menu = {
             "No Conformidades": "no_conformidades",
             "Acciones Correctivas": "acciones_correctivas",
@@ -624,194 +620,55 @@ def route():
             "Objetivos de Calidad": "objetivos_calidad",
             "Informe Auditoría": "informe_auditoria"
         }
-        for label, page in iso_menu.items():
-            if st.sidebar.button(label, key=f"iso_{page}", use_container_width=True):
-                st.session_state.page = page
-    
-    # ============================================
-    # MÓDULO RGPD
-    # ============================================
+        for label, page_key in iso_menu.items():
+            if st.sidebar.button(label, key=f"iso_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Módulo RGPD ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Gestión RGPD")
+        st.sidebar.markdown("### 🛡️ RGPD")
         rgpd_menu = {
             "Panel RGPD": "rgpd_panel",
             "Tareas RGPD": "rgpd_planner",
             "Diagnóstico Inicial": "rgpd_inicio",
             "Tratamientos": "rgpd_tratamientos",
             "Cláusulas y Consentimientos": "rgpd_consentimientos",
-            "Encargados del Tratamiento": "rgpd_encargados",
-            "Derechos de los Interesados": "rgpd_derechos",
+            "Encargados": "rgpd_encargados",
+            "Derechos": "rgpd_derechos",
             "Evaluación de Impacto": "rgpd_evaluacion",
             "Medidas de Seguridad": "rgpd_medidas",
             "Incidencias": "rgpd_incidencias"
         }
-        for label, page in rgpd_menu.items():
-            if st.sidebar.button(label, key=f"rgpd_{page}", use_container_width=True):
-                st.session_state.page = page
-    
-    # ============================================
-    # MÓDULO CRM
-    # ============================================
+        for label, page_key in rgpd_menu.items():
+            if st.sidebar.button(label, key=f"rgpd_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Módulo CRM ---
     if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Gestión CRM")
+        st.sidebar.markdown("### 📈 CRM")
         crm_menu = {
             "Panel CRM": "crm_panel",
             "Clientes": "crm_clientes",
             "Oportunidades": "crm_oportunidades",
-            "Tareas y Seguimiento": "crm_tareas",
+            "Tareas": "crm_tareas",
             "Comunicaciones": "crm_comunicaciones",
             "Estadísticas": "crm_estadisticas"
         }
-        for label, page in crm_menu.items():
-            if st.sidebar.button(label, key=f"crm_{page}", use_container_width=True):
-                st.session_state.page = page
-    
-    # ============================================
-    # MÓDULO DOCUMENTACIÓN AVANZADA
-    # ============================================
+        for label, page_key in crm_menu.items():
+            if st.sidebar.button(label, key=f"crm_{page_key}", type="secondary", use_container_width=True):
+                st.session_state.page = page_key
+
+    # --- Módulo Docu Avanzada ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Documentación Avanzada")
-        if st.sidebar.button("Gestión Documental", key="docu_avanzada", use_container_width=True):
+        st.sidebar.markdown("### 📁 Documentación Avanzada")
+        if st.sidebar.button("Gestión Documental", key="docu_avanzada", type="secondary", use_container_width=True):
             st.session_state.page = "documentacion_avanzada"
-    
-    # ============================================
-    # FOOTER SIDEBAR
-    # ============================================
+
+    # Footer dinámico
     ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
     st.sidebar.markdown("---")
     st.sidebar.caption(ajustes.get("mensaje_footer", "© 2025 Gestor de Formación"))
-    
-# =========================
-# Dashboards de bienvenida
-# =========================
-def mostrar_dashboard_admin(ajustes, metricas):
-    st.title(ajustes.get("bienvenida_admin", "Panel de Administración"))
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">🏢</div>
-            <div class="metric-label">Empresas</div>
-            <div class="metric-value">{metricas['empresas']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👥</div>
-            <div class="metric-label">Usuarios</div>
-            <div class="metric-value">{metricas['usuarios']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📚</div>
-            <div class="metric-label">Cursos</div>
-            <div class="metric-value">{metricas['cursos']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas['grupos']}</div>
-        </div>
-        """, unsafe_allow_html=True)
 
-
-def mostrar_dashboard_gestor(ajustes, metricas):
-    st.title(ajustes.get("bienvenida_gestor", "Panel del Gestor"))
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Grupos</div>
-            <div class="metric-value">{metricas['grupos']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos de alumnos."))
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📂</div>
-            <div class="metric-label">Documentos</div>
-            <div class="metric-value">{metricas['documentos']}</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_documentos", "Sube y organiza la documentación."))
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">🗂️</div>
-            <div class="metric-label">Doc. Avanzada</div>
-            <div class="metric-value">✔️</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_gestor_docu_avanzada", "Gestión documental avanzada."))
-
-
-def mostrar_dashboard_alumno(ajustes):
-    st.title(ajustes.get("bienvenida_alumno", "Área del Alumno"))
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👨‍🎓</div>
-            <div class="metric-label">Mis Grupos</div>
-            <div class="metric-value">📘</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_alumno_grupos", "Consulta a qué grupos perteneces."))
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📜</div>
-            <div class="metric-label">Mis Diplomas</div>
-            <div class="metric-value">🏅</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_alumno_diplomas", "Descarga tus diplomas disponibles."))
-
-    st.markdown("---")
-    st.info(ajustes.get("tarjeta_alumno_seguimiento", "Accede al progreso de tu formación."))
-
-
-def mostrar_dashboard_comercial(ajustes):
-    st.title(ajustes.get("bienvenida_comercial", "Área Comercial"))
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">👥</div>
-            <div class="metric-label">Clientes</div>
-            <div class="metric-value">📋</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_clientes", "Consulta y gestiona tu cartera de clientes."))
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">💡</div>
-            <div class="metric-label">Oportunidades</div>
-            <div class="metric-value">📈</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_oportunidades", "Registra y da seguimiento a nuevas oportunidades."))
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card fade-in">
-            <div class="metric-icon">📝</div>
-            <div class="metric-label">Tareas</div>
-            <div class="metric-value">✅</div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.caption(ajustes.get("tarjeta_comercial_tareas", "Organiza tus visitas y recordatorios."))
         
 # =========================
 # Ejecución principal
