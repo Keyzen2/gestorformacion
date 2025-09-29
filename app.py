@@ -426,13 +426,11 @@ def login_view():
 
     st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     
-    ajustes = get_ajustes_app(supabase_public, campos=[
-        "mensaje_login", "nombre_app", "logo_url"
-    ])
-
-    mensaje_login = ajustes.get("mensaje_login", "Accede con tus credenciales")
+    ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
+    
+    mensaje_login = ajustes.get("mensaje_login", "Accede al gestor con tus credenciales")
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    logo_display = "📚" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="64" height="64" style="border-radius: 12px;">'
+    logo_display = "🚀" if not ajustes.get("logo_url") else f'<img src="{ajustes.get("logo_url")}" width="80" height="80" style="border-radius: 20px;">'
 
     st.markdown(f"""
     <div class="login-container fade-in">
