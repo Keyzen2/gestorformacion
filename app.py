@@ -388,47 +388,46 @@ def load_tailadmin_css():
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
     }
 
-    /* === LOGIN TAILADMIN CON LOGO GRANDE === */
+    /* === FORMULARIO LOGIN PERSONALIZADO === */
     .login-container {
-        max-width: 350px !important;
-        margin: 1rem auto !important;
-        padding: 2rem 1.5rem !important;
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        border: 1px solid var(--tailadmin-border);
+        display: none !important; /* Ocultar contenedor vacío */
     }
-
-    /* === INPUTS LOGIN === */
-    .login-container .stTextInput > div > div > input {
-        max-width: 280px !important;
+    
+    /* Estilos para inputs del formulario */
+    form[data-testid="form"] .stTextInput > div > div > input {
+        max-width: 300px !important;
         margin: 0 auto !important;
-        background: #f8fafc !important;
-        border: 1.5px solid var(--tailadmin-border) !important;
+        background: rgba(255, 255, 255, 0.9) !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.3) !important;
         border-radius: 8px !important;
         padding: 0.75rem 1rem !important;
-        font-size: 0.9rem !important;
-    }
-
-    .login-container .stTextInput > div > div > input:focus {
-        border-color: var(--tailadmin-primary) !important;
-        box-shadow: 0 0 0 3px rgba(60, 80, 224, 0.1) !important;
-    }
-
-    /* === BOTÓN LOGIN === */
-    .login-container .stButton > button {
-        max-width: 280px !important;
-        margin: 1rem auto !important;
-        display: block !important;
-        padding: 0.75rem 1rem !important;
         font-size: 0.95rem !important;
+        backdrop-filter: blur(5px) !important;
     }
 
-    /* === TÍTULO LOGIN === */
-    .login-container h4 {
-        font-size: 1.1rem !important;
-        margin-bottom: 1.5rem !important;
-        text-align: center !important;
+    form[data-testid="form"] .stTextInput > div > div > input:focus {
+        border-color: #3c50e0 !important;
+        box-shadow: 0 0 0 3px rgba(60, 80, 224, 0.2) !important;
+        background: rgba(255, 255, 255, 0.95) !important;
+    }
+
+    /* Botón del formulario de login */
+    form[data-testid="form"] .stButton > button {
+        max-width: 300px !important;
+        margin: 1.5rem auto !important;
+        display: block !important;
+        padding: 0.8rem 1.5rem !important;
+        font-size: 1rem !important;
+        font-weight: 600 !important;
+        background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 10px rgba(60, 80, 224, 0.3) !important;
+    }
+
+    form[data-testid="form"] .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 15px rgba(60, 80, 224, 0.4) !important;
     }
 
     /* === BREADCRUMB === */
@@ -700,7 +699,7 @@ def do_logout():
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login con logo grande y limpio"""
+    """Login con logo y formulario más arriba + footer copyright"""
     
     # Logo fijo de DataFor
     logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
@@ -716,34 +715,42 @@ def login_view_tailadmin():
     "></div>
     """, unsafe_allow_html=True)
 
-    # Spacer mínimo
-    st.markdown('<div style="height: 3vh;"></div>', unsafe_allow_html=True)
+    # Spacer más pequeño para subir todo
+    st.markdown('<div style="height: 1vh;"></div>', unsafe_allow_html=True)
 
-    # Logo grande centrado
+    # Logo más grande centrado y más arriba
     st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 2rem;">
+    <div style="text-align: center; margin-bottom: 1.5rem;">
         <img src="{logo_datafor}" style="
-            width: 150px; 
+            width: 200px; 
             height: auto; 
             object-fit: contain;
             background: white;
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 15px 30px -8px rgba(0, 0, 0, 0.25);
+            border: 2px solid rgba(255, 255, 255, 0.4);
         " alt="DataFor Logo">
     </div>
     """, unsafe_allow_html=True)
 
-    # Container del formulario de login
-    st.markdown("""
-    <div class="login-container">
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Formulario de login limpio
+    # Formulario de login SIN contenedor blanco
     with st.form("form_login", clear_on_submit=False):
-        st.markdown("#### 🔐 Iniciar Sesión")
+        # Container personalizado para el formulario
+        st.markdown("""
+        <div style="
+            max-width: 350px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        ">
+        """, unsafe_allow_html=True)
+        
+        st.markdown("### 🔐 Iniciar Sesión")
         
         email = st.text_input(
             "Email", 
@@ -762,6 +769,8 @@ def login_view_tailadmin():
             disabled=st.session_state.get("login_loading", False),
             use_container_width=True
         )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Lógica de autenticación - SIN EFECTOS VISUALES
     if submitted:
@@ -783,11 +792,34 @@ def login_view_tailadmin():
             except Exception as e:
                 st.error(f"❌ Error: {e}")
 
-    # Pie compacto
+    # Footer fijo en la parte inferior
     st.markdown("""
-    <div style="text-align: center; margin-top: 2rem;">
-        <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin: 0;">
-            © 2025 DataFor
+    <div style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 0.3);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 1rem;
+        text-align: center;
+        z-index: 1000;
+    ">
+        <p style="
+            color: rgba(255, 255, 255, 0.9); 
+            font-size: 0.85rem; 
+            margin: 0;
+            font-weight: 500;
+        ">
+            © 2025 DataFor Solutions - Gestor Formación SaaS
+        </p>
+        <p style="
+            color: rgba(255, 255, 255, 0.7); 
+            font-size: 0.75rem; 
+            margin: 0.25rem 0 0;
+        ">
+            Todos los derechos reservados • Versión 2.1.0
         </p>
     </div>
     """, unsafe_allow_html=True)
