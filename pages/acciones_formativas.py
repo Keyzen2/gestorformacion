@@ -4,7 +4,7 @@ from datetime import datetime
 from utils import export_csv, export_excel
 from services.data_service import get_data_service
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("📚 Gestión de Acciones Formativas")
     st.caption("Catálogo de cursos y acciones formativas para FUNDAE")
 
