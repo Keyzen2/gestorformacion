@@ -13,18 +13,63 @@ from utils import get_ajustes_app
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # =============================================================================
-# CONFIGURACIÓN DE PÁGINA + TAILADMIN INTEGRATION
+# CONFIGURACIÓN PÁGINA + OCULTAR MENÚS STREAMLIT
 # =============================================================================
 st.set_page_config(
-    page_title="Sistema FUNDAE - TailAdmin",
+    page_title="Gestor Formación SaaS",
     layout="wide",
     initial_sidebar_state="expanded",
     page_icon="🎓",
-    menu_items=None
+    menu_items={
+        'Get Help': None,
+        'Report a bug': None,
+        'About': None
+    }
 )
 
 # =============================================================================
-# CSS TAILADMIN COMPLETO - REEMPLAZA TU CSS ACTUAL
+# OCULTAR MENÚS Y ELEMENTOS STREAMLIT EN PRODUCCIÓN
+# =============================================================================
+def hide_streamlit_elements():
+    """Oculta elementos de Streamlit no deseados en producción"""
+    st.markdown("""
+    <style>
+    /* Ocultar menú hamburguesa */
+    #MainMenu {visibility: hidden;}
+    
+    /* Ocultar footer "Made with Streamlit" */
+    footer {visibility: hidden;}
+    
+    /* Ocultar header de Streamlit */
+    header {visibility: hidden;}
+    
+    /* Ocultar botón de deploy */
+    .stDeployButton {visibility: hidden;}
+    
+    /* Ocultar "Running" indicator */
+    .stAppRunning {visibility: hidden;}
+    
+    /* Ocultar toolbar superior */
+    .stToolbar {visibility: hidden;}
+    
+    /* Ocultar decoración superior */
+    div[data-testid="stDecoration"] {visibility: hidden;}
+    
+    /* Ocultar viewerBadge_container */
+    .viewerBadge_container__1QSob {visibility: hidden;}
+    
+    /* Ocultar elemento que dice "Rerun" */
+    [data-testid="stStatusWidget"] {visibility: hidden;}
+    
+    /* Espaciado superior mejorado */
+    .main > div {
+        padding-top: 0rem;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# =============================================================================
+# CSS TAILADMIN COMPLETO
 # =============================================================================
 def load_tailadmin_css():
     """CSS TailAdmin completo integrado con tu sistema FUNDAE"""
@@ -104,14 +149,15 @@ def load_tailadmin_css():
         box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
     }
 
-    /* === MAIN CONTENT === */
+    # Main content con padding para header/footer fijos
     .main .block-container {
         background: #ffffff !important;
         padding: 2rem !important;
         border-radius: 12px !important;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
         max-width: 1600px !important;
-        margin-top: 1rem !important;
+        margin: 1rem auto 2rem !important;
+        min-height: calc(100vh - 140px) !important; /* Espacio para header + footer */
     }
 
     /* === TÍTULOS TAILADMIN === */
@@ -156,12 +202,6 @@ def load_tailadmin_css():
         margin: 0.5rem 0 0 !important;
         opacity: 0.9;
         color: white !important;
-    }
-
-    .tailadmin-metric-icon {
-        font-size: 2.5rem;
-        margin-bottom: 0.5rem;
-        opacity: 0.8;
     }
 
     /* === CARD GENÉRICA === */
@@ -344,18 +384,13 @@ def load_tailadmin_css():
         .tailadmin-card {
             padding: 1rem !important;
         }
-        
-        .tailadmin-metric {
-            padding: 1rem !important;
-        }
     }
     </style>
     """, unsafe_allow_html=True)
 
 # =============================================================================
-# COMPONENTES TAILADMIN PARA FUNDAE
+# COMPONENTES TAILADMIN
 # =============================================================================
-
 class TailAdminComponents:
     """Componentes TailAdmin adaptados para FUNDAE"""
     
@@ -383,21 +418,6 @@ class TailAdminComponents:
             <div style="font-size: 2.5rem; margin-bottom: 0.5rem; opacity: 0.8;">{icon}</div>
             <h3 style="font-size: 2.5rem; font-weight: 700; margin: 0; color: white;">{value}</h3>
             <p style="font-size: 0.875rem; margin: 0.5rem 0 0; opacity: 0.9; color: white;">{title}</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    @staticmethod
-    def info_card(title: str, content: str, icon: str = "ℹ️"):
-        """Tarjeta informativa"""
-        st.markdown(f"""
-        <div class="tailadmin-card">
-            <div style="display: flex; align-items: flex-start; gap: 1rem;">
-                <span style="font-size: 1.5rem;">{icon}</span>
-                <div style="flex: 1;">
-                    <h4 style="margin: 0 0 0.5rem; color: #1c2434; font-weight: 600;">{title}</h4>
-                    <p style="margin: 0; color: #64748b; line-height: 1.5;">{content}</p>
-                </div>
-            </div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -443,7 +463,7 @@ class TailAdminComponents:
         """, unsafe_allow_html=True)
 
 # =============================================================================
-# CONEXIÓN SUPABASE (MANTIENE TU CONFIGURACIÓN)
+# CONFIGURACIÓN SUPABASE (RAILWAY COMPATIBLE)
 # =============================================================================
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY", "")
@@ -457,7 +477,7 @@ supabase_public = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPABASE_SERVICE_ROLE_KEY else None
 
 # =============================================================================
-# ESTADO INICIAL (MANTIENE TU LÓGICA)
+# ESTADO INICIAL
 # =============================================================================
 for key, default in {
     "page": "home",
@@ -470,11 +490,11 @@ for key, default in {
         st.session_state[key] = default
 
 # =============================================================================
-# FUNCIONES AUXILIARES (MANTIENE TUS FUNCIONES + MEJORAS TAILADMIN)
+# FUNCIONES AUXILIARES (MISMA LÓGICA, MEJORADO MANEJO ERRORES)
 # =============================================================================
 @st.cache_data(ttl=300)
 def get_metricas_admin():
-    """Obtiene métricas con manejo de errores mejorado"""
+    """Obtiene métricas admin con manejo robusto de errores"""
     try:
         if not supabase_admin:
             return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
@@ -491,12 +511,12 @@ def get_metricas_admin():
             "grupos": total_grupos
         }
     except Exception as e:
-        st.error(f"Error obteniendo métricas admin: {e}")
+        print(f"Error obteniendo métricas admin: {e}")
         return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
 
 @st.cache_data(ttl=300)
 def get_metricas_gestor(empresa_id):
-    """Obtiene métricas del gestor con manejo de errores"""
+    """Obtiene métricas del gestor"""
     try:
         if not supabase_admin or not empresa_id:
             return {"grupos": 0, "participantes": 0, "documentos": 0}
@@ -511,11 +531,11 @@ def get_metricas_gestor(empresa_id):
             "documentos": documentos_res.count or 0
         }
     except Exception as e:
-        st.error(f"Error obteniendo métricas gestor: {e}")
+        print(f"Error obteniendo métricas gestor: {e}")
         return {"grupos": 0, "participantes": 0, "documentos": 0}
 
 def set_user_role_from_db(email: str):
-    """Obtiene rol de usuario (mantiene tu lógica)"""
+    """Obtiene rol de usuario desde BD"""
     try:
         clean_email = email.strip().lower()
         res = supabase_public.table("usuarios").select("*").eq("email", clean_email).limit(1).execute()
@@ -534,7 +554,7 @@ def set_user_role_from_db(email: str):
             st.session_state.rol = "alumno"
             st.session_state.user = {"email": clean_email, "empresa_id": None}
     except Exception as e:
-        st.error(f"Error obteniendo rol: {e}")
+        print(f"Error obteniendo rol: {e}")
         st.session_state.rol = "alumno"
         st.session_state.user = {"email": email, "empresa_id": None}
 
@@ -549,25 +569,23 @@ def do_logout():
     st.rerun()
 
 # =============================================================================
-# LOGIN TAILADMIN (REEMPLAZA TU LOGIN_VIEW)
+# LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login con diseño TailAdmin completo"""
+    """Login con diseño TailAdmin - Versión Production"""
     
-    # Obtener ajustes (mantiene tu lógica)
+    # Obtener ajustes
     ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
     mensaje_login = ajustes.get("mensaje_login", "Sistema integral de gestión FUNDAE")
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
     logo_url = ajustes.get("logo_url", "")
 
-    # Fondo de pantalla de login
+    # Fondo de pantalla
     st.markdown("""
     <div style="
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         z-index: -1;
     "></div>
@@ -579,18 +597,18 @@ def login_view_tailadmin():
         if logo_url else "🎓"
     )
 
-    # Formulario de login TailAdmin
+    # Container del login
     st.markdown(f"""
     <div class="login-container">
         <div style="text-align: center; margin-bottom: 2rem;">
             <div class="login-logo">{logo_display}</div>
-            <h1 style="margin: 0; color: #1c2434; font-size: 1.75rem; font-weight: 700;">{nombre_app}</h1>
+            <h1 style="margin: 0; color: #1c2434; font-size: 1.75rem; font-weight: 700;">Gestor Formación SaaS</h1>
             <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.95rem;">{mensaje_login}</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Formulario (mantiene tu lógica)
+    # Formulario de login
     with st.form("form_login", clear_on_submit=False):
         st.markdown("#### 🔐 Iniciar Sesión")
         
@@ -612,7 +630,7 @@ def login_view_tailadmin():
             remember_me = st.checkbox("Recordarme")
         with col2:
             st.markdown("""
-            <div style="text-align: right;">
+            <div style="text-align: right; margin-top: 1.5rem;">
                 <a href="#" style="color: #3c50e0; text-decoration: none; font-size: 0.875rem;">
                     ¿Olvidaste tu contraseña?
                 </a>
@@ -625,27 +643,29 @@ def login_view_tailadmin():
             use_container_width=True
         )
 
-    # Lógica de autenticación (mantiene tu lógica)
+    # Lógica de autenticación
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
         else:
             st.session_state.login_loading = True
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if not auth or not auth.user:
-                    st.error("❌ Credenciales incorrectas")
+            
+            with st.spinner("🔄 Verificando credenciales..."):
+                try:
+                    auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                    if not auth or not auth.user:
+                        st.error("❌ Credenciales incorrectas")
+                        st.session_state.login_loading = False
+                    else:
+                        st.session_state.auth_session = auth
+                        set_user_role_from_db(auth.user.email)
+                        st.success("✅ Sesión iniciada correctamente")
+                        time.sleep(1)  # Pequeña pausa para mostrar el mensaje
+                        st.session_state.login_loading = False
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al iniciar sesión: {e}")
                     st.session_state.login_loading = False
-                else:
-                    st.session_state.auth_session = auth
-                    set_user_role_from_db(auth.user.email)
-                    st.success("✅ Sesión iniciada correctamente")
-                    time.sleep(0.5)
-                    st.session_state.login_loading = False
-                    st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error al iniciar sesión: {e}")
-                st.session_state.login_loading = False
 
     # Pie del formulario
     st.markdown("""
@@ -655,13 +675,13 @@ def login_view_tailadmin():
             <a href="#" style="color: #3c50e0; text-decoration: none;">Contacta con tu administrador</a>
         </p>
         <p style="color: #9ca3af; font-size: 0.75rem; margin: 0.5rem 0 0;">
-            © 2025 Sistema FUNDAE. Todos los derechos reservados.
+            © 2025 Gestor Formación SaaS. Todos los derechos reservados.
         </p>
     </div>
     """, unsafe_allow_html=True)
 
 # =============================================================================
-# DASHBOARDS TAILADMIN (REEMPLAZA TUS DASHBOARDS ACTUALES)  
+# DASHBOARDS TAILADMIN POR ROL
 # =============================================================================
 def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     """Dashboard admin con diseño TailAdmin"""
@@ -676,3 +696,526 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     
     # Título principal
     st.markdown(f"## {ajustes.get('bienvenida_admin', 'Panel de Administración')}")
+    
+    # Métricas principales
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        components.metric_card("Empresas", str(metricas['empresas']), "🏢", "primary")
+    
+    with col2:
+        components.metric_card("Usuarios", str(metricas['usuarios']), "👥", "success")
+    
+    with col3:
+        components.metric_card("Cursos", str(metricas['cursos']), "📚", "warning")
+    
+    with col4:
+        components.metric_card("Grupos", str(metricas['grupos']), "👨‍🎓", "danger")
+    
+    # Sección de gráficos
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown('<div class="tailadmin-card">', unsafe_allow_html=True)
+        st.subheader("📈 Evolución Mensual")
+        
+        # Gráfico de ejemplo con datos simulados
+        dates = pd.date_range(start='2024-01-01', periods=12, freq='M')
+        usuarios_data = [50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215]
+        
+        fig = px.line(
+            x=dates, y=usuarios_data,
+            title="Usuarios Registrados por Mes",
+            color_discrete_sequence=['#3c50e0']
+        )
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#64748b'),
+            showlegend=False,
+            margin=dict(t=40, b=40, l=40, r=40)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="tailadmin-card">', unsafe_allow_html=True)
+        st.subheader("📊 Distribución por Roles")
+        
+        # Gráfico de donut
+        labels = ['Administradores', 'Gestores', 'Alumnos', 'Comerciales']
+        values = [5, 25, 60, 10]
+        colors = ['#3c50e0', '#10b981', '#fbbf24', '#f87171']
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.6,
+            marker_colors=colors
+        )])
+        fig.update_layout(
+            showlegend=True,
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#64748b'),
+            margin=dict(t=40, b=40, l=40, r=40)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+def mostrar_dashboard_gestor_tailadmin(ajustes, metricas):
+    """Dashboard gestor con diseño TailAdmin"""
+    components = TailAdminComponents()
+    
+    # Header de bienvenida
+    user_name = st.session_state.user.get("nombre", "Gestor")
+    components.header_welcome(user_name, "Gestión de Formación")
+    
+    # Breadcrumb
+    components.breadcrumb(["Dashboard", "Panel del Gestor"])
+    
+    # Título
+    st.markdown(f"## {ajustes.get('bienvenida_gestor', 'Panel del Gestor')}")
+    
+    # Métricas del gestor
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        components.metric_card("Grupos", str(metricas.get('grupos', 0)), "👨‍🎓", "primary")
+        st.caption(ajustes.get("tarjeta_gestor_grupos", "Crea y gestiona grupos formativos"))
+    
+    with col2:
+        components.metric_card("Participantes", str(metricas.get('participantes', 0)), "🧑‍🎓", "success")
+        st.caption("Alumnos inscritos en tus grupos")
+    
+    with col3:
+        components.metric_card("Documentos", str(metricas.get('documentos', 0)), "📂", "warning")
+        st.caption(ajustes.get("tarjeta_gestor_documentos", "Documentación y certificados"))
+
+def mostrar_dashboard_alumno_tailadmin(ajustes):
+    """Dashboard alumno con diseño TailAdmin"""
+    components = TailAdminComponents()
+    
+    # Header
+    user_name = st.session_state.user.get("nombre", "Alumno")
+    components.header_welcome(user_name, "Área del Estudiante")
+    
+    # Breadcrumb
+    components.breadcrumb(["Dashboard", "Área del Alumno"])
+    
+    # Título
+    st.markdown(f"## {ajustes.get('bienvenida_alumno', 'Área del Alumno')}")
+    
+    # Cards informativas
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown('<div class="tailadmin-card" style="text-align: center; padding: 2rem;">', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📘</div>
+        <h3 style="color: #1c2434; margin: 0;">Mis Grupos</h3>
+        <p style="color: #64748b; margin: 0.5rem 0 0;">Consulta tus grupos activos</p>
+        """, unsafe_allow_html=True)
+        if st.button("Ver Mis Grupos", key="btn_grupos_alumno"):
+            st.session_state.page = "area_alumno"
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="tailadmin-card" style="text-align: center; padding: 2rem;">', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="font-size: 3rem; margin-bottom: 1rem;">🎓</div>
+        <h3 style="color: #1c2434; margin: 0;">Mis Certificados</h3>
+        <p style="color: #64748b; margin: 0.5rem 0 0;">Descarga tus diplomas</p>
+        """, unsafe_allow_html=True)
+        if st.button("Ver Certificados", key="btn_certificados_alumno"):
+            st.info("Funcionalidad en desarrollo")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+def mostrar_dashboard_comercial_tailadmin(ajustes):
+    """Dashboard comercial con diseño TailAdmin"""
+    components = TailAdminComponents()
+    
+    # Header
+    user_name = st.session_state.user.get("nombre", "Comercial")
+    components.header_welcome(user_name, "Área Comercial CRM")
+    
+    # Breadcrumb
+    components.breadcrumb(["Dashboard", "Área Comercial"])
+    
+    # Título
+    st.markdown(f"## {ajustes.get('bienvenida_comercial', 'Área Comercial')}")
+    
+    # Métricas CRM
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        components.metric_card("Clientes", "45", "👥", "primary")
+        st.caption(ajustes.get("tarjeta_comercial_clientes", "Gestiona tu cartera"))
+    
+    with col2:
+        components.metric_card("Oportunidades", "12", "💡", "success")
+        st.caption(ajustes.get("tarjeta_comercial_oportunidades", "Nuevas oportunidades"))
+    
+    with col3:
+        components.metric_card("Tareas", "8", "📝", "warning")
+        st.caption(ajustes.get("tarjeta_comercial_tareas", "Tus recordatorios"))
+
+# =============================================================================
+# SIDEBAR TAILADMIN
+# =============================================================================
+def render_sidebar_tailadmin():
+    """Sidebar con navegación estilo TailAdmin"""
+    
+    rol = st.session_state.get("rol")
+    nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
+    
+    # Header del sidebar con avatar
+    st.sidebar.markdown(f"""
+    <div style="
+        padding: 1.5rem; 
+        border-bottom: 1px solid #334155; 
+        margin-bottom: 1.5rem;
+        text-align: center;
+    ">
+        <div style="
+            width: 48px; height: 48px; 
+            background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1.25rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
+        ">
+            {nombre_usuario[0].upper()}
+        </div>
+        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.9rem;">{nombre_usuario}</p>
+        <p style="margin: 0.25rem 0 0; font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;">
+            {rol.title() if rol else 'Usuario'}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Botón logout
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, help="Cerrar sesión"):
+        do_logout()
+
+    st.sidebar.markdown("---")
+
+    # Menú por roles
+    if rol == "admin":
+        st.sidebar.markdown("#### ⚙️ Administración SaaS")
+        menu = {
+            "📊 Panel Admin": "panel_admin",
+            "👥 Usuarios": "usuarios_empresas", 
+            "🏢 Empresas": "empresas",
+            "⚙️ Ajustes": "ajustes_app"
+        }
+        
+    elif rol == "gestor":
+        st.sidebar.markdown("#### 🎓 Gestión de Formación")
+        menu = {
+            "📊 Panel Gestor": "panel_gestor",
+            "🏢 Empresas": "empresas",
+            "📚 Acciones Formativas": "acciones_formativas",
+            "👨‍🎓 Grupos": "grupos",
+            "🧑‍🎓 Participantes": "participantes", 
+            "👩‍🏫 Tutores": "tutores",
+            "🏫 Aulas": "aulas",
+            "📅 Gestión Clases": "gestion_clases",
+            "📂 Documentos": "documentos"
+        }
+        
+    elif rol == "alumno":
+        st.sidebar.markdown("#### 🎓 Área Estudiante")
+        menu = {
+            "📘 Mis Grupos": "area_alumno"
+        }
+        
+    elif rol == "comercial":
+        st.sidebar.markdown("#### 💼 CRM Comercial")
+        menu = {
+            "📊 Panel CRM": "crm_panel",
+            "👥 Clientes": "crm_clientes", 
+            "💡 Oportunidades": "crm_oportunidades",
+            "📝 Tareas": "crm_tareas"
+        }
+    else:
+        menu = {}
+
+    # Renderizar menú
+    for label, page_key in menu.items():
+        if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+            st.session_state.page = page_key
+            st.rerun()
+
+    # Info adicional
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"""
+    <div style="
+        padding: 1rem; 
+        background: rgba(255,255,255,0.05); 
+        border-radius: 8px;
+        text-align: center;
+        margin-top: 1rem;
+    ">
+        <p style="margin: 0; font-size: 0.75rem; color: #94a3b8;">Gestor Formación SaaS</p>
+        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #64748b;">v2.1.0 TailAdmin</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# =============================================================================
+# NAVEGACIÓN - COMPATIBLE CON RAILWAY (FUNCIONES render())
+# =============================================================================
+def render_page():
+    """Renderiza páginas - Compatible con Railway donde usamos render()"""
+    page = st.session_state.get("page", "home")
+
+    if page and page != "home":
+        with st.spinner(f"⏳ Cargando {page.replace('_', ' ').title()}..."):
+            try:
+                # Mapeo de páginas a módulos - MISMO QUE TIENES
+                page_map = {
+                    "panel_admin": "panel_admin",
+                    "usuarios_empresas": "usuarios_empresas",
+                    "empresas": "empresas",
+                    "ajustes_app": "ajustes_app",
+                    "panel_gestor": "panel_gestor",
+                    "acciones_formativas": "acciones_formativas",
+                    "grupos": "grupos",
+                    "participantes": "participantes",
+                    "tutores": "tutores",
+                    "aulas": "aulas",
+                    "gestion_clases": "gestion_clases",
+                    "proyectos": "proyectos",
+                    "documentos": "documentos",
+                    "area_alumno": "area_alumno",
+                    "no_conformidades": "no_conformidades",
+                    "acciones_correctivas": "acciones_correctivas",
+                    "auditorias": "auditorias",
+                    "indicadores": "indicadores",
+                    "dashboard_calidad": "dashboard_calidad",
+                    "objetivos_calidad": "objetivos_calidad",
+                    "informe_auditoria": "informe_auditoria",
+                    "rgpd_panel": "rgpd_panel",
+                    "rgpd_tratamientos": "rgpd_tratamientos",
+                    "rgpd_consentimientos": "rgpd_consentimientos",
+                    "crm_panel": "crm_panel",
+                    "crm_clientes": "crm_clientes",
+                    "crm_oportunidades": "crm_oportunidades",
+                    "crm_tareas": "crm_tareas",
+                    "crm_comunicaciones": "crm_comunicaciones",
+                    "crm_estadisticas": "crm_estadisticas",
+                    "documentacion_avanzada": "documentacion_avanzada"
+                }
+
+                if page in page_map:
+                    # CLAVE: Importa el módulo y llama render() (no main())
+                    view_module = __import__(f"views.{page_map[page]}", fromlist=["render"])
+                    view_module.render(supabase_admin, st.session_state)
+                else:
+                    st.error(f"❌ Página '{page}' no encontrada")
+                    st.info("🏠 Volviendo al dashboard principal...")
+                    if st.button("Ir al Dashboard"):
+                        st.session_state.page = "home"
+                        st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Error al cargar página: {e}")
+                st.exception(e)
+                
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    if st.button("🔄 Reintentar", use_container_width=True):
+                        st.rerun()
+
+# =============================================================================
+# FUNCIONES HEADER Y FOOTER FIJOS
+# =============================================================================
+def render_header():
+    """Header fijo superior con navegación y accesos rápidos"""
+    st.markdown("""
+    <div style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-bottom: 1px solid #334155;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    ">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="
+                width: 32px; height: 32px;
+                background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-weight: bold;
+                font-size: 1rem;
+            ">G</div>
+            <span style="color: white; font-weight: 600; font-size: 1.1rem;">
+                Gestor Formación SaaS
+            </span>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="color: #94a3b8; font-size: 0.875rem;">
+                🕐 {datetime.now().strftime('%H:%M')} | 📅 {datetime.now().strftime('%d/%m/%Y')}
+            </div>
+            <div style="
+                background: rgba(60, 80, 224, 0.1);
+                border: 1px solid rgba(60, 80, 224, 0.2);
+                border-radius: 6px;
+                padding: 0.25rem 0.75rem;
+                color: #3c50e0;
+                font-size: 0.8rem;
+                font-weight: 500;
+            ">
+                🚀 Producción
+            </div>
+        </div>
+    </div>
+    
+    <!-- Spacer para compensar header fijo -->
+    <div style="height: 60px; margin-bottom: 1rem;"></div>
+    """, unsafe_allow_html=True)
+
+def render_footer():
+    """Footer fijo inferior con información del sistema"""
+    st.markdown("""
+    <div style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 40px;
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        border-top: 1px solid #334155;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2rem;
+        font-size: 0.8rem;
+        color: #94a3b8;
+    ">
+        <div style="display: flex; align-items: center; gap: 1.5rem;">
+            <span>© 2025 Gestor Formación SaaS</span>
+            <span>|</span>
+            <span>🔒 Conexión Segura</span>
+            <span>|</span>
+            <span>⚡ Railway Cloud</span>
+        </div>
+        
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <span>v2.1.0 TailAdmin</span>
+            <div style="
+                width: 8px; height: 8px;
+                background: #10b981;
+                border-radius: 50%;
+                animation: pulse 2s infinite;
+            "></div>
+            <span style="color: #10b981;">Online</span>
+        </div>
+    </div>
+    
+    <!-- Spacer para compensar footer fijo -->
+    <div style="height: 40px; margin-top: 2rem;"></div>
+    
+    <style>
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# =============================================================================
+# ⚡ FUNCIÓN PRINCIPAL - ENTRY POINT PARA RAILWAY
+# =============================================================================
+def main():
+    """Función principal que ejecuta toda la aplicación"""
+    
+    # 1. Cargar estilos y ocultar elementos
+    hide_streamlit_elements()
+    load_tailadmin_css()
+    
+    # 2. Verificar autenticación
+    if not st.session_state.get("rol"):
+        # ============= MODO LOGIN =============
+        login_view_tailadmin()
+        
+    else:
+        # ============= MODO APLICACIÓN =============
+        
+        try:
+            # Header y footer (opcional)
+            render_header()
+            render_footer()
+
+            # Sidebar TailAdmin
+            render_sidebar_tailadmin()
+
+            # Contenido principal
+            page = st.session_state.get("page", "home")
+
+            if page and page != "home":
+                render_page()
+            else:
+                # ============= DASHBOARDS DE BIENVENIDA =============
+                rol = st.session_state.rol
+                ajustes = get_ajustes_app(
+                    supabase_admin if supabase_admin else supabase_public,
+                    campos=[
+                        "bienvenida_admin", "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
+                        "bienvenida_gestor", "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
+                        "bienvenida_alumno", "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
+                        "bienvenida_comercial", "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+                    ]
+                )
+
+                if rol == "admin":
+                    metricas = get_metricas_admin()
+                    mostrar_dashboard_admin_tailadmin(ajustes, metricas)
+
+                elif rol == "gestor":
+                    empresa_id = st.session_state.user.get("empresa_id")
+                    metricas = get_metricas_gestor(empresa_id) if empresa_id else {}
+                    mostrar_dashboard_gestor_tailadmin(ajustes, metricas)
+
+                elif rol == "alumno":
+                    mostrar_dashboard_alumno_tailadmin(ajustes)
+
+                elif rol == "comercial":
+                    mostrar_dashboard_comercial_tailadmin(ajustes)
+
+        except Exception as e:
+            st.error(f"❌ Error al cargar la aplicación: {e}")
+            st.exception(e)
+            
+            # Botón de recuperación
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("🔄 Reiniciar Aplicación", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+
+# =============================================================================
+# 🎯 ENTRY POINT - EJECUTAR LA APLICACIÓN
+# =============================================================================
+if __name__ == "__main__":
+    main()
