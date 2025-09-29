@@ -1084,13 +1084,22 @@ def render_sidebar_tailadmin():
 
     # Menú por roles CON verificación de módulos activos
     if rol == "admin":
+        # Bloque Administración SaaS
         st.sidebar.markdown("#### ⚙️ Administración SaaS")
-        menu = {
+        st.sidebar.markdown("---")
+        admin_menu = {
             "📊 Panel Admin": "panel_admin",
             "👥 Usuarios": "usuarios_empresas", 
             "🏢 Empresas": "empresas",
             "⚙️ Ajustes": "ajustes_app"
         }
+        for label, page_key in admin_menu.items():
+            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                st.session_state.page = page_key
+                st.rerun()
+        
+        # Además mostrar TODOS los módulos como si fuera gestor + comercial
+        render_modulos_empresa(modulos_empresa, modulos_crm)
         
     elif rol == "gestor":
         st.sidebar.markdown("#### 🎓 Gestión de Formación")
