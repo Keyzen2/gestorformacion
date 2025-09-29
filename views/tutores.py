@@ -26,7 +26,7 @@ def cargar_localidades_optimizado(_supabase, provincia_id):
     except:
         return {}
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("👨‍🏫 Gestión de Tutores")
     st.caption("Gestión de tutores internos y externos vinculados a grupos formativos")
 
