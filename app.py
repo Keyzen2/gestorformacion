@@ -377,7 +377,7 @@ def set_user_role_from_db(email: str):
         if res.data:
             row = res.data[0]
             rol = row.get("rol") or "alumno"
-            st.session_state.role = rol
+            st.session_state.rol = rol
             st.session_state.user = {
                 "id": row.get("id"),
                 "auth_id": row.get("auth_id"),
@@ -390,11 +390,11 @@ def set_user_role_from_db(email: str):
                 if com_res.data:
                     st.session_state.user["comercial_id"] = com_res.data[0]["id"]
         else:
-            st.session_state.role = "alumno"
+            st.session_state.rol = "alumno"
             st.session_state.user = {"email": clean_email, "empresa_id": None}
     except Exception as e:
         st.error(f"No se pudo obtener el rol del usuario: {e}")
-        st.session_state.role = "alumno"
+        st.session_state.rol = "alumno"
         st.session_state.user = {"email": email, "empresa_id": None}
 
 def do_logout():
@@ -771,7 +771,7 @@ def mostrar_dashboard_comercial(ajustes):
 # =========================
 # Ejecución principal
 # =========================
-if not st.session_state.get("role"):
+if not st.session_state.get("rol"):
     # Login
     st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     login_view()
@@ -804,7 +804,7 @@ else:
                 "tarjeta_comercial_oportunidades","tarjeta_comercial_tareas"
             ])
 
-            rol = st.session_state.role
+            rol = st.session_state.rol
             if rol == "admin":
                 metricas = get_metricas_admin()
                 mostrar_dashboard_admin(ajustes, metricas)
