@@ -121,7 +121,7 @@ def load_tailadmin_css():
         background: #f1f5f9 !important;
     }
 
-    /* === SIDEBAR SIEMPRE VISIBLE === */
+    /* === SIDEBAR SIEMPRE VISIBLE CON SCROLL === */
     section[data-testid="stSidebar"] {
         background: var(--tailadmin-sidebar) !important;
         border-right: 1px solid #334155 !important;
@@ -133,6 +133,8 @@ def load_tailadmin_css():
         transform: translateX(0) !important;
         width: auto !important;
         min-width: 244px !important;
+        overflow-y: auto !important;
+        height: 100vh !important;
     }
 
     section[data-testid="stSidebar"] * {
@@ -578,7 +580,6 @@ class TailAdminComponents:
             </div>
         </div>
         """, unsafe_allow_html=True)
-    
     @staticmethod
     def info_card(title: str, content: str, icon: str = "📊"):
         """Card informativa estilo TailAdmin"""
@@ -593,6 +594,27 @@ class TailAdminComponents:
             </div>
         </div>
         """, unsafe_allow_html=True)
+    @staticmethod
+    def status_badge(status: str, text: str = ""):
+        """Crea badges de estado estilo TailAdmin"""
+        status_config = {
+            "ACTIVO": {"bg": "#dcfce7", "color": "#166534", "icon": "✅"},
+            "INACTIVO": {"bg": "#fee2e2", "color": "#991b1b", "icon": "❌"},
+            "PENDIENTE": {"bg": "#fef3c7", "color": "#92400e", "icon": "⏳"},
+            "FINALIZADO": {"bg": "#dbeafe", "color": "#1e40af", "icon": "🏁"}
+        }
+        
+        config = status_config.get(status.upper(), {"bg": "#f3f4f6", "color": "#374151", "icon": "📝"})
+        display_text = text or status
+        
+        return f"""
+        <span class="tailadmin-badge" style="
+            background: {config['bg']}; 
+            color: {config['color']};
+        ">
+            {config['icon']} {display_text}
+        </span>
+        """
 # =============================================================================
 # CONFIGURACIÓN SUPABASE (RAILWAY COMPATIBLE)
 # =============================================================================
@@ -834,7 +856,7 @@ def login_view_tailadmin():
 # DASHBOARDS TAILADMIN POR ROL
 # =============================================================================
 def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
-    """Dashboard admin con diseño TailAdmin - SIN divs vacíos"""
+    """Dashboard admin con métricas visibles"""
     components = TailAdminComponents()
     
     # Header de bienvenida
@@ -847,7 +869,7 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     # Título principal
     st.markdown(f"## {ajustes.get('bienvenida_admin', 'Panel de Administración')}")
     
-    # Métricas principales
+    # Métricas principales - ESTAS SON LAS QUE FALTABAN
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -862,7 +884,7 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     with col4:
         components.metric_card("Grupos", str(metricas['grupos']), "👨‍🎓", "danger")
     
-    # Solo mostrar información útil - SIN gráficos vacíos
+    # Información adicional con info_card (ahora definida)
     st.markdown("### 📊 Información del Sistema")
     
     col1, col2 = st.columns(2)
@@ -989,35 +1011,60 @@ def render_sidebar_tailadmin():
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
     empresa_id = st.session_state.user.get("empresa_id")
 
-    # Logo DataFor más grande
+    # Logo DataFor fijo
     logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
 
-    # Header del sidebar con logo DataFor + info usuario (SIN avatar HTML)
+    # Header del sidebar con logo DataFor + avatar usuario
     st.sidebar.markdown(f"""
     <div style="
         padding: 1rem 1rem 1.5rem; 
         border-bottom: 1px solid #334155; 
-        margin-bottom: 1rem;
+        margin-bottom: 1.5rem;
         text-align: center;
     ">
-        <!-- Logo DataFor MÁS GRANDE -->
+        <!-- Logo DataFor -->
         <div style="
-            width: 140px; 
-            height: auto;
+            width: 50px; 
+            height: 50px;
             margin: 0 auto 1rem;
-            border-radius: 12px;
+            border-radius: 8px;
             overflow: hidden;
             background: white;
-            padding: 12px;
+            padding: 6px;
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
         ">
             <img src="{logo_datafor}" style="
                 width: 100%; 
-                height: auto; 
+                height: 100%; 
                 object-fit: contain;
             " alt="DataFor">
         </div>
         
+        <!-- Avatar del usuario -->
+        <div style="
+            width: 36px; height: 36px; 
+            background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 2px 4px rgba(60, 80, 224, 0.3);
+        ">
+            {nombre_usuario[0].upper()}
+        </div>
+        
+        <!-- Info del usuario -->
+        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.85rem;">{nombre_usuario}</p>
+        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">
+            {rol.title() if rol else 'Usuario'}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     # VERIFICAR MÓDULOS ACTIVOS PARA ROLES HABILITADOS
     modulos_empresa = {}
     modulos_crm = {}
@@ -1052,32 +1099,23 @@ def render_sidebar_tailadmin():
             return True  # Si no hay datos, permitir acceso (para admin)
         return modulos_dict.get(f"{modulo_key}_activo", False)
 
-    # Menú por roles CON SECCIONES VISUALES MEJORADAS
+    # Menú por roles CON verificación de módulos activos
     if rol == "admin":
         st.sidebar.markdown("#### ⚙️ Administración SaaS")
-        st.sidebar.markdown("---")  # Separador visual
-        
-        admin_menu = {
+        menu = {
             "📊 Panel Admin": "panel_admin",
             "👥 Usuarios": "usuarios_empresas", 
             "🏢 Empresas": "empresas",
             "⚙️ Ajustes": "ajustes_app"
         }
         
-        for label, page_key in admin_menu.items():
-            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                st.session_state.page = page_key
-                st.rerun()
-        
     elif rol == "gestor":
-        modulos_renderizados = False
+        st.sidebar.markdown("#### 🎓 Gestión de Formación")
+        menu = {}
         
-        # MÓDULO DE FORMACIÓN
+        # Módulo de formación
         if esta_modulo_activo("formacion", modulos_empresa):
-            st.sidebar.markdown("#### 🎓 Gestión de Formación")
-            st.sidebar.markdown("---")
-            
-            formacion_menu = {
+            menu.update({
                 "📊 Panel Gestor": "panel_gestor",
                 "🏢 Empresas": "empresas",
                 "📚 Acciones Formativas": "acciones_formativas",
@@ -1087,76 +1125,47 @@ def render_sidebar_tailadmin():
                 "🏫 Aulas": "aulas",
                 "📅 Gestión Clases": "gestion_clases",
                 "📂 Documentos": "documentos"
-            }
-            
-            for label, page_key in formacion_menu.items():
-                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                    st.session_state.page = page_key
-                    st.rerun()
-            
-            modulos_renderizados = True
+            })
         
-        # MÓDULO ISO (si está activo)
+        # Módulo ISO (si está activo)
         if esta_modulo_activo("iso", modulos_empresa):
             st.sidebar.markdown("#### 🏅 ISO 9001")
-            st.sidebar.markdown("---")
-            
-            iso_menu = {
+            menu.update({
                 "📊 Dashboard Calidad": "dashboard_calidad",
                 "❌ No Conformidades": "no_conformidades",
                 "🔧 Acciones Correctivas": "acciones_correctivas",
                 "🔍 Auditorías": "auditorias",
                 "📈 Indicadores": "indicadores",
                 "🎯 Objetivos Calidad": "objetivos_calidad"
-            }
-            
-            for label, page_key in iso_menu.items():
-                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                    st.session_state.page = page_key
-                    st.rerun()
-            
-            modulos_renderizados = True
+            })
         
-        # MÓDULO RGPD (si está activo)
+        # Módulo RGPD (si está activo)
         if esta_modulo_activo("rgpd", modulos_empresa):
             st.sidebar.markdown("#### 🔒 RGPD")
-            st.sidebar.markdown("---")
-            
-            rgpd_menu = {
+            menu.update({
                 "🛡️ Panel RGPD": "rgpd_panel",
                 "📋 Tratamientos": "rgpd_tratamientos",
                 "✅ Consentimientos": "rgpd_consentimientos"
-            }
-            
-            for label, page_key in rgpd_menu.items():
-                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                    st.session_state.page = page_key
-                    st.rerun()
-            
-            modulos_renderizados = True
+            })
         
-        # MÓDULO DOCUMENTACIÓN AVANZADA (si está activo)
+        # Módulo Documentación Avanzada (si está activo)
         if esta_modulo_activo("docu_avanzada", modulos_empresa):
             st.sidebar.markdown("#### 📚 Documentación Avanzada")
-            st.sidebar.markdown("---")
-            
-            if st.sidebar.button("📖 Gestión Documental", use_container_width=True, key="nav_documentacion_avanzada"):
-                st.session_state.page = "documentacion_avanzada"
-                st.rerun()
-            
-            modulos_renderizados = True
+            menu.update({
+                "📖 Gestión Documental": "documentacion_avanzada"
+            })
             
         # Si no hay módulos activos, mostrar mensaje
-        if not modulos_renderizados:
+        if not menu:
             st.sidebar.warning("⚠️ No tienes módulos activos")
         
     elif rol == "comercial":
+        st.sidebar.markdown("#### 💼 CRM Comercial")
+        menu = {}
+        
         # Verificar si CRM está activo
         if esta_modulo_activo("crm", modulos_crm):
-            st.sidebar.markdown("#### 💼 CRM Comercial")
-            st.sidebar.markdown("---")
-            
-            crm_menu = {
+            menu = {
                 "📊 Panel CRM": "crm_panel",
                 "👥 Clientes": "crm_clientes", 
                 "💡 Oportunidades": "crm_oportunidades",
@@ -1164,21 +1173,25 @@ def render_sidebar_tailadmin():
                 "📞 Comunicaciones": "crm_comunicaciones",
                 "📈 Estadísticas": "crm_estadisticas"
             }
-            
-            for label, page_key in crm_menu.items():
-                if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-                    st.session_state.page = page_key
-                    st.rerun()
         else:
             st.sidebar.warning("⚠️ Módulo CRM no activo")
+            menu = {}
         
     elif rol == "alumno":
         st.sidebar.markdown("#### 🎓 Área Estudiante")
-        st.sidebar.markdown("---")
-        
-        if st.sidebar.button("📘 Mis Grupos", use_container_width=True, key="nav_area_alumno"):
-            st.session_state.page = "area_alumno"
-            st.rerun()
+        # Los alumnos siempre tienen acceso a su área
+        menu = {
+            "📘 Mis Grupos": "area_alumno"
+        }
+    else:
+        menu = {}
+
+    # Renderizar menú solo si hay opciones disponibles
+    if menu:
+        for label, page_key in menu.items():
+            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                st.session_state.page = page_key
+                st.rerun()
     
     # Botón logout diferenciado
     st.sidebar.markdown("---")
@@ -1269,7 +1282,7 @@ def render_footer():
 # =============================================================================
 # ⚡ FUNCIÓN PRINCIPAL - ENTRY POINT PARA RAILWAY
 # =============================================================================
-def render():
+def main():
     """Función principal que ejecuta toda la aplicación"""
     
     # 1. Cargar estilos y ocultar elementos PRIMERO
@@ -1333,6 +1346,14 @@ def render():
         except Exception as e:
             st.error(f"❌ Error al cargar la aplicación: {e}")
             
+            # DEBUG - Mostrar información del estado
+            if st.session_state.get("rol") == "admin":
+                with st.expander("🔧 Información de Debug (Solo Admin)"):
+                    st.write("**Estado de sesión:**")
+                    st.write(f"- Authenticated: {st.session_state.get('authenticated')}")
+                    st.write(f"- Rol: {st.session_state.get('rol')}")
+                    st.write(f"- Usuario: {st.session_state.get('user', {}).get('nombre')}")
+            
             # Botón de recuperación
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
@@ -1340,3 +1361,8 @@ def render():
                     st.cache_data.clear()
                     st.rerun()
 
+# =============================================================================
+# 🎯 ENTRY POINT - EJECUTAR LA APLICACIÓN
+# =============================================================================
+if __name__ == "__main__":
+    main()
