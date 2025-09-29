@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🚨 Canal de Incidencias")
     st.caption("Registra cualquier brecha de seguridad, error humano o incidente relacionado con datos personales.")
     st.divider()
