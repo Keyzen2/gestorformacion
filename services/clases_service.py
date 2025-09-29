@@ -783,7 +783,7 @@ class ClasesService:
             
                 reserva_flat = {
                     "id": reserva["id"],
-                    "fecha_clase": pd.to_datetime(reserva["fecha_clase"]).strftime("%d/%m/%Y"),
+                    "fecha_clase": pd.to_datetime(reserva["fecha_clase"]).date(),
                     "estado": reserva["estado"],
                     "clase_nombre": clase.get("nombre", "Sin nombre"),
                     "categoria": clase.get("categoria", ""),
