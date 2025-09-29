@@ -337,7 +337,7 @@ supabase_admin = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) if SUPAB
 # =========================
 for key, default in {
     "page": "home",
-    "role": None,
+    "rol": None,
     "user": {},
     "auth_session": None,
     "login_loading": False
