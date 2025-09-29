@@ -442,36 +442,38 @@ def load_tailadmin_css():
         border: 1px solid var(--tailadmin-border);
     }
 
-    /* === OCULTAR EFECTOS RAROS AL LOGIN === */
-    /* Eliminar todos los spinners y progress bars */
-    .stSpinner, .stProgress, [data-testid="stSpinner"] {
+    /* === ELIMINAR COMPLETAMENTE EFECTOS DE LOGIN === */
+    /* Ocultar TODOS los elementos que causan overlay */
+    .stSpinner, .stProgress, [data-testid="stSpinner"], 
+    [data-testid="stProgressBar"], .stAlert > div[data-baseweb="notification"] {
         display: none !important;
         visibility: hidden !important;
+        opacity: 0 !important;
     }
     
-    /* Evitar overlay y flashes de color */
-    [data-testid="stAppViewContainer"] {
+    /* Evitar overlay transparente en login */
+    [data-testid="stAppViewContainer"]::before,
+    [data-testid="stAppViewContainer"]::after {
+        display: none !important;
+    }
+    
+    /* Evitar barras de progreso y hovers */
+    .stProgress > div, .element-container .stProgress {
+        display: none !important;
+    }
+    
+    /* Eliminar transiciones que causan efectos */
+    body, html, .main, .stApp, [data-testid="stAppViewContainer"] {
+        transition: none !important;
+        animation: none !important;
+        backdrop-filter: none !important;
+        background-attachment: fixed !important;
+    }
+    
+    /* Asegurar que el fondo se mantenga estable */
+    .main {
         background: #f1f5f9 !important;
-    }
-    
-    [data-testid="stAppViewContainer"] > div {
-        background: transparent !important;
-    }
-    
-    /* Eliminar transiciones que causan parpadeos */
-    body, html, .main, .stApp {
         transition: none !important;
-        animation: none !important;
-    }
-    
-    /* Suavizar solo elementos de login */
-    .login-container {
-        transition: opacity 0.3s ease !important;
-    }
-    
-    .login-container * {
-        transition: none !important;
-        animation: none !important;
     }
 
     /* === BOTÓN EXPANDIR SIDEBAR === */
@@ -761,24 +763,20 @@ def login_view_tailadmin():
             use_container_width=True
         )
 
-    # Lógica de autenticación - CORREGIDA
+    # Lógica de autenticación - SIN EFECTOS VISUALES
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
         else:
             try:
-                # Autenticación directa
+                # Autenticación directa sin indicadores
                 auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                 
                 if auth and auth.user:
-                    # CRÍTICO: Configurar sesión ANTES del rerun
+                    # CONFIGURAR SESIÓN Y RERUN INMEDIATO - SIN EFECTOS
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.success("✅ Acceso correcto")
-                    # Pequeño delay para mostrar el mensaje
-                    import time
-                    time.sleep(0.5)
-                    st.rerun()
+                    st.rerun()  # Inmediato, sin delays ni mensajes
                 else:
                     st.error("❌ Credenciales incorrectas")
                     
