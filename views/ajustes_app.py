@@ -3,7 +3,7 @@ from datetime import datetime
 from utils import get_ajustes_app, update_ajustes_app
 from services.data_service import get_data_service
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("⚙️ Configuración del Sistema")
     st.caption("Gestiona los textos, apariencia y configuración operativa de la plataforma")
 
