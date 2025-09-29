@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🔐 Medidas Técnicas y Organizativas")
     st.caption("Registra las acciones de seguridad que protegen los datos personales en tu empresa.")
     st.divider()
