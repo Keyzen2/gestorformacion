@@ -1208,7 +1208,7 @@ def guardar_crm_datos(supabase, empresa_id: str, crm_activo: bool, crm_inicio: d
 # ==================================================
 # MAIN
 # ==================================================
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Vista principal de Empresas con tabs jerárquicas."""
     empresas_service = get_empresas_service(supabase, session_state)
     
@@ -1275,5 +1275,3 @@ def main(supabase, session_state):
             - Cliente de Gestora → empresa asociada a una gestora.
         """)
 
-if __name__ == "__main__":
-    main()
