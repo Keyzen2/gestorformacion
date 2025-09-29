@@ -359,6 +359,23 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
                         with col1:
                             st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
                             st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
+                            
+                            # 🔥 Avatares de otros participantes
+                            avatares = clases_service.get_avatares_reserva(
+                                row["horario_id"], 
+                                date.fromisoformat(str(row["fecha_clase"]))
+                            )
+                            if avatares:
+                                cols = st.columns(len(avatares))
+                                for idx, avatar_url in enumerate(avatares):
+                                    with cols[idx]:
+                                        st.image(
+                                            avatar_url,
+                                            width=40,
+                                            output_format="PNG",
+                                            caption="",
+                                            use_column_width=False
+                                        )
                         
                         with col2:
                             st.write(f"📊 Estado: {row['estado']}")
