@@ -533,9 +533,13 @@ def route():
 # =========================
 # Ejecución principal
 # =========================
-if not st.session_state.role:
+if not st.session_state.get("role"):
+    # 👤 Usuario no logueado → mostrar login y ocultar sidebar
+    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     login_view()
 else:
+    # 👤 Usuario logueado → mostrar sidebar dinámico
+    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
     try:
         route()
         page = st.session_state.get("page", None)
@@ -552,64 +556,140 @@ else:
                     mod_import.main(supabase_admin, st.session_state)
 
         else:
-            # Dashboard principal según rol
+            # =========================
+            # Dashboards de bienvenida por rol
+            # =========================
             rol = st.session_state.role
 
+            # --- PANEL ADMIN ---
             if rol == "admin":
                 st.title("Panel de Administración")
-                
+
                 # Métricas en cards modernas
                 with st.spinner("Cargando métricas..."):
                     metricas = get_metricas_admin()
-                
+
                 col1, col2, col3, col4 = st.columns(4)
-                with col1: st.metric("Empresas", metricas['empresas'])
-                with col2: st.metric("Usuarios", metricas['usuarios'])
-                with col3: st.metric("Cursos", metricas['cursos'])
-                with col4: st.metric("Grupos", metricas['grupos'])
-                
-                # Accesos rápidos
+
+                with col1:
+                    st.markdown(f"""
+                    <div class="metric-card fade-in">
+                        <div class="metric-icon">🏢</div>
+                        <div class="metric-label">Empresas</div>
+                        <div class="metric-value">{metricas['empresas']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col2:
+                    st.markdown(f"""
+                    <div class="metric-card fade-in">
+                        <div class="metric-icon">👥</div>
+                        <div class="metric-label">Usuarios</div>
+                        <div class="metric-value">{metricas['usuarios']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col3:
+                    st.markdown(f"""
+                    <div class="metric-card fade-in">
+                        <div class="metric-icon">📚</div>
+                        <div class="metric-label">Cursos</div>
+                        <div class="metric-value">{metricas['cursos']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                with col4:
+                    st.markdown(f"""
+                    <div class="metric-card fade-in">
+                        <div class="metric-icon">👨‍🎓</div>
+                        <div class="metric-label">Grupos</div>
+                        <div class="metric-value">{metricas['grupos']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
                 st.markdown("---")
                 st.subheader("Accesos Rápidos")
+
                 col1, col2, col3 = st.columns(3)
-                
                 with col1:
-                    if st.button("Gestión de Empresas", use_container_width=True):
+                    if st.button("🏢 Gestión de Empresas", use_container_width=True):
                         st.session_state.page = "empresas"
                         st.rerun()
                 with col2:
-                    if st.button("Gestión de Usuarios", use_container_width=True):
+                    if st.button("👥 Gestión de Usuarios", use_container_width=True):
                         st.session_state.page = "usuarios_empresas"
                         st.rerun()
                 with col3:
-                    if st.button("Configuración", use_container_width=True):
+                    if st.button("⚙️ Configuración", use_container_width=True):
                         st.session_state.page = "ajustes_app"
                         st.rerun()
 
+            # --- PANEL GESTOR ---
             elif rol == "gestor":
                 st.title("Panel del Gestor")
                 empresa_id = st.session_state.user.get("empresa_id")
+
                 if empresa_id:
                     with st.spinner("Cargando métricas..."):
                         metricas = get_metricas_gestor(empresa_id)
-                    col1, col2, col3 = st.columns(3)
-                    with col1: st.metric("Grupos", metricas['grupos'])
-                    with col2: st.metric("Participantes", metricas['participantes'])
-                    with col3: st.metric("Documentos", metricas['documentos'])
 
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.markdown(f"""
+                        <div class="metric-card fade-in">
+                            <div class="metric-icon">👨‍🎓</div>
+                            <div class="metric-label">Grupos</div>
+                            <div class="metric-value">{metricas['grupos']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col2:
+                        st.markdown(f"""
+                        <div class="metric-card fade-in">
+                            <div class="metric-icon">🧑‍🎓</div>
+                            <div class="metric-label">Participantes</div>
+                            <div class="metric-value">{metricas['participantes']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    with col3:
+                        st.markdown(f"""
+                        <div class="metric-card fade-in">
+                            <div class="metric-icon">📂</div>
+                            <div class="metric-label">Documentos</div>
+                            <div class="metric-value">{metricas['documentos']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # --- PANEL ALUMNO ---
             elif rol == "alumno":
                 st.title("Área del Alumno")
-                ajustes = get_ajustes_app(supabase_admin, campos=["bienvenida_alumno"])
-                bienvenida = ajustes.get("bienvenida_alumno", "Accede a tus grupos y diplomas desde el menú lateral")
-                st.info(bienvenida)
 
+                st.markdown("""
+                <div class="metric-card fade-in" style="max-width: 400px; margin:auto; text-align:center;">
+                    <div class="metric-icon">🎓</div>
+                    <div class="metric-label">Bienvenido</div>
+                    <div class="metric-value" style="font-size:1.5rem;">Accede a tus grupos y diplomas</div>
+                    <p style="color:#64748b; font-size:0.9rem;">Usa el menú lateral para ver tus clases, reservas y diplomas.</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # --- PANEL COMERCIAL ---
             elif rol == "comercial":
                 st.title("Área Comercial")
-                st.info("Gestiona tu cartera de clientes desde el menú lateral")
 
-    except Exception as e:
+                st.markdown("""
+                <div class="metric-card fade-in" style="max-width: 400px; margin:auto; text-align:center;">
+                    <div class="metric-icon">💼</div>
+                    <div class="metric-label">Bienvenido</div>
+                    <div class="metric-value" style="font-size:1.5rem;">Gestiona tu cartera de clientes</div>
+                    <p style="color:#64748b; font-size:0.9rem;">Accede al panel CRM desde el menú lateral.</p>
+                </div>
+                """, unsafe_allow_html=True)
+
+except Exception as e:
         st.error(f"Error al cargar la página: {e}")
         st.exception(e)
 
-# Cerrar div de clase CSS dinámico
+# =========================
+# Cierre del div CSS dinámico
+# =========================
 st.markdown('</div>', unsafe_allow_html=True)
