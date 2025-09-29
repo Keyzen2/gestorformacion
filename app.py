@@ -531,12 +531,16 @@ def render_page():
 # EJECUCIÓN PRINCIPAL
 # =========================
 if not st.session_state.get("rol"):
-    # 👤 Usuario no logueado → mostrar login
+    # Mostrar login
     st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     login_view()
 else:
-    # 👤 Usuario logueado → mostrar sidebar fijo y páginas
+    # Mostrar app
     st.markdown('<div class="app-mode">', unsafe_allow_html=True)
+
+    # 👉 Aquí pintamos el header y footer
+    render_header()
+    render_footer()
 
     try:
         # Sidebar fijo estilo TailAdmin
