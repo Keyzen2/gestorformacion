@@ -3,7 +3,7 @@ import pandas as pd
 import re
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🧑‍💼 Comerciales")
     st.caption("Gestión de comerciales asociados a la empresa.")
     st.divider()
