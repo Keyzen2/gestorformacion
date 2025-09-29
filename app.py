@@ -128,10 +128,39 @@ def load_tailadmin_css():
         margin: 1rem 0 !important;
     }
 
-    /* === BOTONES SIDEBAR MEJORADOS === */
+    /* === BOTONES SIDEBAR LOGOUT ESPECÍFICO === */
     section[data-testid="stSidebar"] .stButton > button {
-        background: rgba(255,255,255,0.1) !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
+        background: rgba(239, 68, 68, 0.1) !important;  /* Fondo rojo suave */
+        border: 1px solid rgba(239, 68, 68, 0.3) !important;
+        color: #ef4444 !important;  /* Texto rojo claro */
+        border-radius: 8px !important;
+        padding: 0.75rem 1rem !important;
+        font-weight: 600 !important;
+        width: 100% !important;
+        text-align: left !important;
+        transition: all 0.3s ease !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(239, 68, 68, 0.2) !important;
+        border-color: #ef4444 !important;
+        color: white !important;
+        transform: translateX(4px);
+        box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.3);
+    }
+
+    section[data-testid="stSidebar"] .stButton > button:active,
+    section[data-testid="stSidebar"] .stButton > button:focus {
+        background: rgba(239, 68, 68, 0.3) !important;
+        color: white !important;
+        border-color: #ef4444 !important;
+    }
+
+    /* === BOTONES NAVEGACIÓN SIDEBAR (no logout) === */
+    section[data-testid="stSidebar"] .stButton:not([title*="logout"]) > button {
+        background: rgba(255,255,255,0.08) !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
         color: #f1f5f9 !important;
         border-radius: 8px !important;
         padding: 0.75rem 1rem !important;
@@ -142,19 +171,12 @@ def load_tailadmin_css():
         margin-bottom: 0.25rem !important;
     }
 
-    section[data-testid="stSidebar"] .stButton > button:hover {
-        background: rgba(60, 80, 224, 0.3) !important;
+    section[data-testid="stSidebar"] .stButton:not([title*="logout"]) > button:hover {
+        background: rgba(60, 80, 224, 0.25) !important;
         border-color: var(--tailadmin-primary) !important;
         color: white !important;
         transform: translateX(4px);
         box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
-    }
-
-    section[data-testid="stSidebar"] .stButton > button:active,
-    section[data-testid="stSidebar"] .stButton > button:focus {
-        background: rgba(60, 80, 224, 0.2) !important;
-        color: white !important;
-        border-color: var(--tailadmin-primary) !important;
     }
 
     /* === MAIN CONTENT === */
@@ -405,15 +427,41 @@ def load_tailadmin_css():
         border: 1px solid var(--tailadmin-border);
     }
 
-    /* === RESPONSIVE === */
-    @media (max-width: 768px) {
-        .main .block-container {
-            padding: 1rem !important;
-        }
-        
-        .tailadmin-card {
-            padding: 1rem !important;
-        }
+    /* === OCULTAR EFECTOS RAROS AL LOGIN === */
+    .stSpinner > div {
+        background: rgba(255,255,255,0.9) !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Evitar overlay morado */
+    [data-testid="stAppViewContainer"] > div {
+        background: transparent !important;
+    }
+    
+    /* Suavizar transiciones de login */
+    .login-container * {
+        transition: all 0.2s ease !important;
+    }
+
+    /* === BOTÓN EXPANDIR SIDEBAR === */
+    button[kind="header"] {
+        display: block !important;
+        visibility: visible !important;
+        background: var(--tailadmin-sidebar) !important;
+        color: white !important;
+        border: 1px solid #334155 !important;
+        border-radius: 0 8px 8px 0 !important;
+        padding: 0.5rem !important;
+        position: fixed !important;
+        top: 1rem !important;
+        left: 0 !important;
+        z-index: 999 !important;
+        box-shadow: 2px 2px 4px rgba(0,0,0,0.2) !important;
+    }
+
+    button[kind="header"]:hover {
+        background: var(--tailadmin-primary) !important;
+        border-color: var(--tailadmin-primary) !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -619,7 +667,7 @@ def do_logout():
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login simplificado y centrado - sin scroll"""
+    """Login simplificado sin efectos raros"""
     
     # Obtener ajustes
     ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
@@ -627,7 +675,7 @@ def login_view_tailadmin():
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
     logo_url = ajustes.get("logo_url", "")
 
-    # Fondo de pantalla
+    # Fondo de pantalla limpio
     st.markdown("""
     <div style="
         position: fixed;
@@ -655,7 +703,7 @@ def login_view_tailadmin():
     </div>
     """, unsafe_allow_html=True)
 
-    # Formulario de login simplificado
+    # Formulario de login sin efectos
     with st.form("form_login", clear_on_submit=False):
         st.markdown("#### 🔐 Iniciar Sesión")
         
@@ -670,36 +718,39 @@ def login_view_tailadmin():
             placeholder="••••••••"
         )
         
-        # Solo botón de login - funcionalidades pendientes removidas
+        # Botón de login
         submitted = st.form_submit_button(
             "🚀 Iniciar Sesión",
             disabled=st.session_state.get("login_loading", False),
             use_container_width=True
         )
 
-    # Lógica de autenticación (sin cambios)
+    # Lógica de autenticación SIN spinner que cause efectos raros
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
         else:
             st.session_state.login_loading = True
             
-            with st.spinner("🔄 Verificando credenciales..."):
-                try:
-                    auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                    if not auth or not auth.user:
-                        st.error("❌ Credenciales incorrectas")
-                        st.session_state.login_loading = False
-                    else:
-                        st.session_state.auth_session = auth
-                        set_user_role_from_db(auth.user.email)
-                        st.success("✅ Sesión iniciada correctamente")
-                        time.sleep(1)
-                        st.session_state.login_loading = False
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error al iniciar sesión: {e}")
+            # SIN st.spinner para evitar efectos morados
+            try:
+                with st.empty():
+                    st.info("🔄 Verificando credenciales...")
+                    
+                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                if not auth or not auth.user:
+                    st.error("❌ Credenciales incorrectas")
                     st.session_state.login_loading = False
+                else:
+                    st.session_state.auth_session = auth
+                    set_user_role_from_db(auth.user.email)
+                    st.success("✅ Sesión iniciada correctamente")
+                    st.session_state.login_loading = False
+                    # Sin delay artificial
+                    st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error al iniciar sesión: {e}")
+                st.session_state.login_loading = False
 
     # Pie simplificado
     st.markdown("""
@@ -895,11 +946,12 @@ def mostrar_dashboard_comercial_tailadmin(ajustes):
 # SIDEBAR TAILADMIN
 # =============================================================================
 def render_sidebar_tailadmin():
-    """Sidebar con navegación estilo TailAdmin"""
+    """Sidebar con navegación estilo TailAdmin + Control de módulos activos"""
     
     rol = st.session_state.get("rol")
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
-    
+    empresa_id = st.session_state.user.get("empresa_id")
+
     # Header del sidebar con avatar
     st.sidebar.markdown(f"""
     <div style="
@@ -930,13 +982,41 @@ def render_sidebar_tailadmin():
     </div>
     """, unsafe_allow_html=True)
 
-    # Botón logout
-    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, help="Cerrar sesión"):
-        do_logout()
+    # VERIFICAR MÓDULOS ACTIVOS PARA ROLES HABILITADOS
+    modulos_empresa = {}
+    modulos_crm = {}
+    
+    if rol in ["admin", "gestor", "comercial"] and empresa_id:
+        try:
+            # Obtener estado de módulos de empresa
+            empresa_res = supabase_admin.table("empresas").select(
+                "formacion_activo", "formacion_inicio", "formacion_fin",
+                "iso_activo", "iso_inicio", "iso_fin", 
+                "rgpd_activo", "rgpd_inicio", "rgpd_fin",
+                "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin"
+            ).eq("id", empresa_id).execute()
+            
+            if empresa_res.data:
+                modulos_empresa = empresa_res.data[0]
+                
+            # Obtener módulos CRM
+            crm_res = supabase_admin.table("crm_empresas").select(
+                "crm_activo", "crm_inicio", "crm_fin"
+            ).eq("empresa_id", empresa_id).execute()
+            
+            if crm_res.data:
+                modulos_crm = crm_res.data[0]
+                
+        except Exception as e:
+            print(f"Error obteniendo módulos activos: {e}")
 
-    st.sidebar.markdown("---")
+    # Función auxiliar para verificar si un módulo está activo
+    def esta_modulo_activo(modulo_key, modulos_dict):
+        if not modulos_dict:
+            return True  # Si no hay datos, permitir acceso (para admin)
+        return modulos_dict.get(f"{modulo_key}_activo", False)
 
-    # Menú por roles
+    # Menú por roles CON verificación de módulos activos
     if rol == "admin":
         st.sidebar.markdown("#### ⚙️ Administración SaaS")
         menu = {
@@ -948,42 +1028,94 @@ def render_sidebar_tailadmin():
         
     elif rol == "gestor":
         st.sidebar.markdown("#### 🎓 Gestión de Formación")
-        menu = {
-            "📊 Panel Gestor": "panel_gestor",
-            "🏢 Empresas": "empresas",
-            "📚 Acciones Formativas": "acciones_formativas",
-            "👨‍🎓 Grupos": "grupos",
-            "🧑‍🎓 Participantes": "participantes", 
-            "👩‍🏫 Tutores": "tutores",
-            "🏫 Aulas": "aulas",
-            "📅 Gestión Clases": "gestion_clases",
-            "📂 Documentos": "documentos"
-        }
+        menu = {}
         
-    elif rol == "alumno":
-        st.sidebar.markdown("#### 🎓 Área Estudiante")
-        menu = {
-            "📘 Mis Grupos": "area_alumno"
-        }
+        # Módulo de formación
+        if esta_modulo_activo("formacion", modulos_empresa):
+            menu.update({
+                "📊 Panel Gestor": "panel_gestor",
+                "🏢 Empresas": "empresas",
+                "📚 Acciones Formativas": "acciones_formativas",
+                "👨‍🎓 Grupos": "grupos",
+                "🧑‍🎓 Participantes": "participantes", 
+                "👩‍🏫 Tutores": "tutores",
+                "🏫 Aulas": "aulas",
+                "📅 Gestión Clases": "gestion_clases",
+                "📂 Documentos": "documentos"
+            })
+        
+        # Módulo ISO (si está activo)
+        if esta_modulo_activo("iso", modulos_empresa):
+            st.sidebar.markdown("#### 🏅 ISO 9001")
+            menu.update({
+                "📊 Dashboard Calidad": "dashboard_calidad",
+                "❌ No Conformidades": "no_conformidades",
+                "🔧 Acciones Correctivas": "acciones_correctivas",
+                "🔍 Auditorías": "auditorias",
+                "📈 Indicadores": "indicadores",
+                "🎯 Objetivos Calidad": "objetivos_calidad"
+            })
+        
+        # Módulo RGPD (si está activo)
+        if esta_modulo_activo("rgpd", modulos_empresa):
+            st.sidebar.markdown("#### 🔒 RGPD")
+            menu.update({
+                "🛡️ Panel RGPD": "rgpd_panel",
+                "📋 Tratamientos": "rgpd_tratamientos",
+                "✅ Consentimientos": "rgpd_consentimientos"
+            })
+        
+        # Módulo Documentación Avanzada (si está activo)
+        if esta_modulo_activo("docu_avanzada", modulos_empresa):
+            st.sidebar.markdown("#### 📚 Documentación Avanzada")
+            menu.update({
+                "📖 Gestión Documental": "documentacion_avanzada"
+            })
+            
+        # Si no hay módulos activos, mostrar mensaje
+        if not menu:
+            st.sidebar.warning("⚠️ No tienes módulos activos")
         
     elif rol == "comercial":
         st.sidebar.markdown("#### 💼 CRM Comercial")
+        menu = {}
+        
+        # Verificar si CRM está activo
+        if esta_modulo_activo("crm", modulos_crm):
+            menu = {
+                "📊 Panel CRM": "crm_panel",
+                "👥 Clientes": "crm_clientes", 
+                "💡 Oportunidades": "crm_oportunidades",
+                "📝 Tareas": "crm_tareas",
+                "📞 Comunicaciones": "crm_comunicaciones",
+                "📈 Estadísticas": "crm_estadisticas"
+            }
+        else:
+            st.sidebar.warning("⚠️ Módulo CRM no activo")
+            menu = {}
+        
+    elif rol == "alumno":
+        st.sidebar.markdown("#### 🎓 Área Estudiante")
+        # Los alumnos siempre tienen acceso a su área
         menu = {
-            "📊 Panel CRM": "crm_panel",
-            "👥 Clientes": "crm_clientes", 
-            "💡 Oportunidades": "crm_oportunidades",
-            "📝 Tareas": "crm_tareas"
+            "📘 Mis Grupos": "area_alumno"
         }
     else:
         menu = {}
 
-    # Renderizar menú
-    for label, page_key in menu.items():
-        if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
-            st.session_state.page = page_key
-            st.rerun()
+    # Renderizar menú solo si hay opciones disponibles
+    if menu:
+        for label, page_key in menu.items():
+            if st.sidebar.button(label, use_container_width=True, key=f"nav_{page_key}"):
+                st.session_state.page = page_key
+                st.rerun()
+    
+    # Botón logout diferenciado
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, key="logout_btn", help="Cerrar sesión"):
+        do_logout()
 
-    # Info adicional (sin CSS visible)
+    # Info adicional
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Sistema**: Gestor Formación SaaS")
     st.sidebar.markdown("**Versión**: v2.1.0 TailAdmin")
