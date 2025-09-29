@@ -5,7 +5,7 @@ from components.listado_crud import listado_crud
 import uuid
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.subheader("🛡️ Encargados del Tratamiento")
     st.caption("Gestión de encargados RGPD vinculados a empresas.")
     st.divider()
