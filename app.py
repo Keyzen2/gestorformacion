@@ -550,7 +550,7 @@ def route():
     if rol == "alumno":
         st.sidebar.markdown("### 🎓 Área del Alumno")
         
-        if st.sidebar.button("Mis Grupos", key="alumno_grupos", type="secondary", use_container_width=True):
+        if st.sidebar.button("Mis Grupos", key="alumno_mis_grupos"):
             st.session_state.page = "area_alumno"
 
     # --- Panel Gestor ---
