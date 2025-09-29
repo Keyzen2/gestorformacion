@@ -672,60 +672,6 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
                     porcentaje = resumen_clases["porcentaje_asistencia"]
                     st.metric("📈 % Asistencia", f"{porcentaje}%")
         
-            # NUEVA SECCIÓN DE DIPLOMAS - AÑADIR AQUÍ
-            st.markdown("### 📜 Mis Diplomas")
-            
-            try:
-                # Obtener diplomas del participante
-                diplomas_res = participantes_service.supabase.table("diplomas").select("""
-                    id, nombre_diploma, fecha_emision, url_archivo, tipo_archivo,
-                    grupo:grupos(codigo_grupo, 
-                                accion_formativa:acciones_formativas(nombre))
-                """).eq("participante_id", participante_id).order("fecha_emision", desc=True).execute()
-                
-                if diplomas_res.data:
-                    st.success(f"Tienes {len(diplomas_res.data)} diploma(s) disponible(s)")
-                    
-                    for diploma in diplomas_res.data:
-                        with st.container(border=True):
-                            col1, col2, col3 = st.columns([2, 2, 1])
-                            
-                            with col1:
-                                st.markdown(f"**📜 {diploma.get('nombre_diploma', 'Diploma')}**")
-                                if diploma.get('grupo'):
-                                    grupo_info = diploma['grupo']
-                                    codigo_grupo = grupo_info.get('codigo_grupo', 'Sin código')
-                                    accion_nombre = ""
-                                    if grupo_info.get('accion_formativa'):
-                                        accion_nombre = grupo_info['accion_formativa'].get('nombre', '')
-                                    st.caption(f"Grupo: {codigo_grupo}")
-                                    if accion_nombre:
-                                        st.caption(f"Curso: {accion_nombre}")
-                            
-                            with col2:
-                                if diploma.get('fecha_emision'):
-                                    fecha_emision = pd.to_datetime(diploma['fecha_emision']).strftime('%d/%m/%Y')
-                                    st.write(f"📅 **Fecha:** {fecha_emision}")
-                                
-                                tipo_archivo = diploma.get('tipo_archivo', 'PDF')
-                                st.write(f"📄 **Formato:** {tipo_archivo}")
-                            
-                            with col3:
-                                if diploma.get('url_archivo'):
-                                    st.link_button(
-                                        "📥 Descargar",
-                                        diploma['url_archivo'],
-                                        use_container_width=True
-                                    )
-                                else:
-                                    st.button("📄 Ver", disabled=True, use_container_width=True)
-                else:
-                    st.info("No tienes diplomas disponibles aún")
-                    st.caption("Los diplomas se generan al finalizar los grupos formativos")
-        
-            except Exception as e:
-                st.error(f"Error cargando diplomas: {e}")
-        
         except Exception as e:
             st.error(f"❌ Error cargando estadísticas: {e}")
 
@@ -733,7 +679,7 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
         st.error(f"❌ Error cargando información del perfil: {e}")
 
 def mostrar_mis_diplomas(participantes_service, session_state):
-    """Muestra los diplomas del participante desde el bucket"""
+    """Muestra los diplomas del participante desde el bucket con filtros"""
     st.header("📜 Mis Diplomas")
     
     participante_id = getattr(session_state, 'participante_id', None)
@@ -751,9 +697,35 @@ def mostrar_mis_diplomas(participantes_service, session_state):
             st.info("📭 No tienes diplomas disponibles aún")
             return
         
-        st.success(f"Tienes {len(diplomas_res.data)} diploma(s)")
-        
-        for diploma in diplomas_res.data:
+        diplomas = diplomas_res.data
+
+        # =========================
+        # FILTROS AVANZADOS
+        # =========================
+        st.markdown("### 🔍 Filtros de búsqueda")
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            filtro_nombre = st.text_input("Buscar por nombre de archivo")
+        with col2:
+            fecha_inicio = st.date_input("Desde", value=None, key="filtro_diplomas_inicio")
+        with col3:
+            fecha_fin = st.date_input("Hasta", value=None, key="filtro_diplomas_fin")
+
+        # Aplicar filtros
+        if filtro_nombre:
+            diplomas = [d for d in diplomas if filtro_nombre.lower() in d.get("archivo_nombre", "").lower()]
+        if fecha_inicio:
+            diplomas = [d for d in diplomas if pd.to_datetime(d["fecha_subida"]).date() >= fecha_inicio]
+        if fecha_fin:
+            diplomas = [d for d in diplomas if pd.to_datetime(d["fecha_subida"]).date() <= fecha_fin]
+
+        st.success(f"Se encontraron {len(diplomas)} diploma(s) tras aplicar filtros")
+
+        # =========================
+        # LISTADO DE DIPLOMAS
+        # =========================
+        for diploma in diplomas:
             with st.container(border=True):
                 col1, col2, col3 = st.columns([2, 2, 1])
                 
@@ -777,9 +749,10 @@ def mostrar_mis_diplomas(participantes_service, session_state):
                         st.link_button("📥 Descargar", diploma['url'], use_container_width=True)
                     else:
                         st.button("Sin archivo", disabled=True, use_container_width=True)
-    
+
     except Exception as e:
         st.error(f"❌ Error cargando diplomas: {e}")
+
 
 # =========================
 # MAIN FUNCTION
