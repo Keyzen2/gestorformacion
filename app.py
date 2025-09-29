@@ -693,38 +693,101 @@ def route():
 # Ejecución principal
 # =========================
 if not st.session_state.get("role"):
-    # Usuario no logueado → login centrado
+    # 👤 Usuario no logueado → mostrar login
+    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
     login_view()
 else:
+    render_header() 
+    render_footer()
+    # 👤 Usuario logueado → mostrar sidebar dinámico
+    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
     try:
-        # Sidebar dinámico
         route()
         page = st.session_state.get("page", None)
 
         if page and page != "home":
-            with st.spinner(f"Cargando {page}..."):
-                if page == "panel_gestor" and st.session_state.role == "gestor":
-                    from pages.panel_gestor import main as panel_gestor_main
-                    panel_gestor_main(supabase_admin, st.session_state)
-                else:
-                    mod = page.replace("-", "_")
-                    mod_path = f"pages.{mod}"
-                    mod_import = __import__(mod_path, fromlist=["main"])
-                    mod_import.main(supabase_admin, st.session_state)
+            with st.spinner("Cargando..."):
+                try:
+                    # =========================
+                    # MAPEO DE PÁGINAS → VIEWS
+                    # =========================
+                    page_map = {
+                        # --- Admin ---
+                        "panel_admin": "panel_admin",
+                        "usuarios_empresas": "usuarios_empresas",
+                        "empresas": "empresas",
+                        "ajustes_app": "ajustes_app",
+
+                        # --- Gestor ---
+                        "panel_gestor": "panel_gestor",
+                        "acciones_formativas": "acciones_formativas",
+                        "grupos": "grupos",
+                        "participantes": "participantes",
+                        "tutores": "tutores",
+                        "aulas": "aulas",
+                        "gestion_clases": "gestion_clases",
+                        "proyectos": "proyectos",
+                        "documentos": "documentos",
+
+                        # --- Alumno ---
+                        "area_alumno": "area_alumno",
+
+                        # --- ISO ---
+                        "no_conformidades": "no_conformidades",
+                        "acciones_correctivas": "acciones_correctivas",
+                        "auditorias": "auditorias",
+                        "indicadores": "indicadores",
+                        "dashboard_calidad": "dashboard_calidad",
+                        "objetivos_calidad": "objetivos_calidad",
+                        "informe_auditoria": "informe_auditoria",
+
+                        # --- RGPD ---
+                        "rgpd_panel": "rgpd_panel",
+                        "rgpd_planner": "rgpd_planner",
+                        "rgpd_inicio": "rgpd_inicio",
+                        "rgpd_tratamientos": "rgpd_tratamientos",
+                        "rgpd_consentimientos": "rgpd_consentimientos",
+                        "rgpd_encargados": "rgpd_encargados",
+                        "rgpd_derechos": "rgpd_derechos",
+                        "rgpd_evaluacion": "rgpd_evaluacion",
+                        "rgpd_medidas": "rgpd_medidas",
+                        "rgpd_incidencias": "rgpd_incidencias",
+
+                        # --- CRM ---
+                        "crm_panel": "crm_panel",
+                        "crm_clientes": "crm_clientes",
+                        "crm_oportunidades": "crm_oportunidades",
+                        "crm_tareas": "crm_tareas",
+                        "crm_comunicaciones": "crm_comunicaciones",
+                        "crm_estadisticas": "crm_estadisticas",
+
+                        # --- Documentación Avanzada ---
+                        "documentacion_avanzada": "documentacion_avanzada"
+                    }
+
+                    if page in page_map:
+                        view_module = __import__(f"views.{page_map[page]}", fromlist=["render"])
+                        view_module.render(supabase_admin, st.session_state)
+                    else:
+                        st.error(f"❌ Página '{page}' no encontrada")
+
+                except Exception as e:
+                    st.error(f"❌ Error al cargar página '{page}': {e}")
+                    st.exception(e)
 
         else:
             # =========================
             # Dashboards de bienvenida
             # =========================
-            ajustes = get_ajustes_app(supabase_admin, campos=[
-                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial",
-                "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
-                "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
-                "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
-                "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
-            ])
-
             rol = st.session_state.role
+            ajustes = get_ajustes_app(supabase_admin, campos=[
+                "bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno",
+                "bienvenida_comercial", "tarjeta_admin_usuarios", "tarjeta_admin_empresas",
+                "tarjeta_admin_ajustes", "tarjeta_gestor_grupos", "tarjeta_gestor_documentos",
+                "tarjeta_gestor_docu_avanzada", "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas",
+                "tarjeta_alumno_seguimiento", "tarjeta_comercial_clientes",
+                "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+            ])
 
             if rol == "admin":
                 with st.spinner("Cargando métricas..."):
@@ -743,6 +806,7 @@ else:
                 mostrar_dashboard_comercial(ajustes)
 
     except Exception as e:
-        st.error(f"Error al cargar la aplicación: {e}")
+        st.error(f"❌ Error al cargar la aplicación: {e}")
         st.exception(e)
+
 
