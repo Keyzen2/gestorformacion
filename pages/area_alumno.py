@@ -354,10 +354,12 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
                         avatares = clases_service.get_avatares_reserva(row["horario_id"], date.fromisoformat(str(row["fecha_clase"])))
                         if avatares:
                             st.caption("👥 Participantes:")
-                            cols = st.columns(len(avatares))
-                            for idx, avatar_url in enumerate(avatares):
-                                with cols[idx]:
-                                    st.image(avatar_url, width=32, caption="", output_format="PNG")
+                            if avatares:
+                                avatar_html = "".join([
+                                    f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px;" />'
+                                    for url in avatares
+                                ])
+                                st.markdown(f"👥 {avatar_html}", unsafe_allow_html=True)
                     
                     with col2:
                         st.write(f"📊 Estado: {row['estado']}")
@@ -447,10 +449,12 @@ def mostrar_reservar_clases(clases_service, session_state):
                     )
                     if avatares:
                         st.caption("👥 Ya reservados:")
-                        cols = st.columns(len(avatares))
-                        for idx, avatar_url in enumerate(avatares):
-                            with cols[idx]:
-                                st.image(avatar_url, width=32, caption="", output_format="PNG")
+                        if avatares:
+                            avatar_html = "".join([
+                                f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px;" />'
+                                for url in avatares
+                            ])
+                            st.markdown(f"👥 {avatar_html}", unsafe_allow_html=True)
                 
                 with col2:
                     fecha_clase = clase['extendedProps']['fecha_clase']
