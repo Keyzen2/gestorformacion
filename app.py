@@ -423,6 +423,9 @@ def is_module_active(empresa, empresa_crm, key, hoy, rol):
 # Login
 # =========================
 def login_view():
+
+    st.markdown('<div class="login-mode">', unsafe_allow_html=True)
+    
     ajustes = get_ajustes_app(supabase_public, campos=[
         "mensaje_login", "nombre_app", "logo_url"
     ])
@@ -454,7 +457,9 @@ def login_view():
                 disabled=st.session_state.get("login_loading", False),
                 use_container_width=True
             )
-
+    # Cerrar div login-mode
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     if submitted:
         if not email or not password:
             st.warning("Introduce email y contraseña")
