@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 st.set_page_config(
     page_title="Gestor de Formación",
     layout="wide",
-    initial_sidebar_state="auto",  # ← Cambiado de "collapsed" a "auto"
+    initial_sidebar_state="auto",
     page_icon="📚",
     menu_items=None
 )
@@ -27,48 +27,27 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-/* ========================================
-   OCULTAR ELEMENTOS STREAMLIT
-   ======================================== */
 #MainMenu, footer, .stDeployButton, header[data-testid="stHeader"] {
     display: none !important;
 }
-
 [data-testid="stToolbar"] {
     display: none !important;
 }
 
-/* ========================================
-   CONTROL DINÁMICO SIDEBAR
-   ======================================== */
-
-/* Login: Ocultar sidebar */
 .login-mode section[data-testid="stSidebar"],
 .login-mode button[data-testid="collapsedControl"] {
     display: none !important;
 }
-
-/* App: Mostrar sidebar con estilo moderno */
 .app-mode section[data-testid="stSidebar"] {
     display: flex !important;
     background: #f8fafc !important;
     border-right: 1px solid #e2e8f0 !important;
 }
 
-/* ========================================
-   DISEÑO MODERNO Y LIMPIO
-   ======================================== */
-
 html, body, [class*="css"] {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
-
-/* Fondo limpio */
-.stApp {
-    background: #ffffff;
-}
-
-/* Login con fondo sutil */
+.stApp { background: #ffffff; }
 .login-mode .stApp {
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     min-height: 100vh;
@@ -81,10 +60,6 @@ html, body, [class*="css"] {
     max-width: 1400px !important;
 }
 
-/* ========================================
-   LOGIN - DISEÑO MINIMALISTA
-   ======================================== */
-
 .login-container {
     background: white;
     border-radius: 16px;
@@ -93,209 +68,78 @@ html, body, [class*="css"] {
     max-width: 420px;
     margin: 4rem auto;
 }
-
-.login-header {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
+.login-header { text-align: center; margin-bottom: 2rem; }
 .login-logo {
-    width: 64px;
-    height: 64px;
+    width: 64px; height: 64px;
     background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
     border-radius: 12px;
     margin: 0 auto 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.75rem;
-    color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.75rem; color: white;
 }
-
 .login-title {
-    font-size: 1.75rem;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 0.5rem;
+    font-size: 1.75rem; font-weight: 700;
+    color: #1e293b; margin-bottom: 0.5rem;
 }
+.login-subtitle { color: #64748b; font-size: 0.95rem; }
 
-.login-subtitle {
-    color: #64748b;
-    font-size: 0.95rem;
-    font-weight: 400;
-}
-
-/* Inputs modernos */
 .stTextInput > div > div > input {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 0.75rem 1rem;
+    font-size: 0.95rem; transition: all 0.2s ease;
 }
-
 .stTextInput > div > div > input:focus {
-    border-color: #3b82f6;
-    background: white;
+    border-color: #3b82f6; background: white;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Botones modernos */
 .stButton > button {
     background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 0.75rem 1.5rem;
-    font-weight: 600;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
-    width: 100%;
-    margin-top: 0.5rem;
+    color: white; border: none; border-radius: 8px;
+    padding: 0.75rem 1.5rem; font-weight: 600;
+    font-size: 0.95rem; transition: all 0.2s ease;
+    width: 100%; margin-top: 0.5rem;
 }
-
 .stButton > button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
 }
 
-/* ========================================
-   DASHBOARD - CARDS MODERNAS
-   ======================================== */
-
 .metric-card {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 1.5rem;
+    background: white; border: 1px solid #e2e8f0;
+    border-radius: 12px; padding: 1.5rem;
     transition: all 0.2s ease;
 }
-
 .metric-card:hover {
     border-color: #cbd5e1;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
-
 .metric-icon {
-    width: 48px;
-    height: 48px;
-    background: #eff6ff;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    margin-bottom: 1rem;
+    width: 48px; height: 48px;
+    background: #eff6ff; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; margin-bottom: 1rem;
 }
+.metric-label { font-size: 0.875rem; color: #64748b; font-weight: 500; margin-bottom: 0.5rem; }
+.metric-value { font-size: 2rem; font-weight: 700; color: #1e293b; }
 
-.metric-label {
-    font-size: 0.875rem;
-    color: #64748b;
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-}
-
-.metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #1e293b;
-}
-
-/* ========================================
-   SIDEBAR MODERNA
-   ======================================== */
-
-.app-mode section[data-testid="stSidebar"] [data-testid="stSidebarNav"] {
-    padding-top: 1rem;
-}
-
-/* Botones sidebar */
-.stButton > button[kind="secondary"] {
-    background: transparent;
-    color: #475569;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 0.625rem 1rem;
-    font-weight: 500;
-    font-size: 0.9rem;
-    transition: all 0.2s ease;
-    width: 100%;
-    text-align: left;
-}
-
-.stButton > button[kind="secondary"]:hover {
-    background: #f1f5f9;
-    border-color: #cbd5e1;
-}
-
-/* ========================================
-   MENSAJES Y ALERTAS
-   ======================================== */
-
-.stAlert {
-    border-radius: 8px;
-    border-left: 4px solid;
-}
-
-.stSuccess {
-    border-left-color: #10b981;
-    background: #ecfdf5;
-}
-
-.stError {
-    border-left-color: #ef4444;
-    background: #fef2f2;
-}
-
-.stInfo {
-    border-left-color: #3b82f6;
-    background: #eff6ff;
-}
-
-.stWarning {
-    border-left-color: #f59e0b;
-    background: #fffbeb;
-}
-
-/* ========================================
-   RESPONSIVE
-   ======================================== */
+.stAlert { border-radius: 8px; border-left: 4px solid; }
+.stSuccess { border-left-color: #10b981; background: #ecfdf5; }
+.stError { border-left-color: #ef4444; background: #fef2f2; }
+.stInfo { border-left-color: #3b82f6; background: #eff6ff; }
+.stWarning { border-left-color: #f59e0b; background: #fffbeb; }
 
 @media (max-width: 768px) {
-    .login-container {
-        margin: 2rem 1rem;
-        padding: 2rem;
-    }
-    
-    .block-container {
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
+    .login-container { margin: 2rem 1rem; padding: 2rem; }
+    .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
 }
-
-/* ========================================
-   ANIMACIONES SUTILES
-   ======================================== */
-
 @keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
-
-.fade-in {
-    animation: fadeIn 0.4s ease-out;
-}
-
+.fade-in { animation: fadeIn 0.4s ease-out; }
 </style>
 """, unsafe_allow_html=True)
-
 # =========================
 # Claves Supabase
 # =========================
@@ -327,14 +171,12 @@ for key, default in {
 # CSS Dinámico según estado de login
 # =========================
 if st.session_state.get("auth_session"):
-    # Usuario logueado - MOSTRAR sidebar
     st.markdown('<div class="app-mode">', unsafe_allow_html=True)
 else:
-    # Usuario NO logueado - OCULTAR sidebar
     st.markdown('<div class="login-mode">', unsafe_allow_html=True)
 
 # =========================
-# Funciones auxiliares (mantener las tuyas)
+# Funciones auxiliares
 # =========================
 @st.cache_data(ttl=300)
 def get_metricas_admin():
@@ -377,7 +219,7 @@ def get_metricas_gestor(empresa_id):
             "participantes": participantes_res.count or 0,
             "documentos": documentos_res.count or 0
         }
-    except Exception as e:
+    except Exception:
         return {"grupos": 0, "participantes": 0, "documentos": 0}
 
 def set_user_role_from_db(email: str):
@@ -417,7 +259,6 @@ def do_logout():
     st.cache_data.clear()
     st.session_state.clear()
     st.rerun()
-
 # =========================
 # Vista de login LIMPIA Y MODERNA
 # =========================
@@ -474,7 +315,6 @@ def login_view():
             st.warning("Por favor, introduce email y contraseña")
         else:
             st.session_state.login_loading = True
-            
             try:
                 auth = supabase_public.auth.sign_in_with_password({
                     "email": email,
@@ -505,44 +345,19 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
         return False
 
     if key == "formacion":
-        if not empresa.get("formacion_activo"):
-            return False
-        inicio = empresa.get("formacion_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        return empresa.get("formacion_activo") and (not empresa.get("formacion_inicio") or pd.to_datetime(empresa.get("formacion_inicio")).date() <= hoy)
 
     if key == "iso":
-        if not empresa.get("iso_activo"):
-            return False
-        inicio = empresa.get("iso_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        return empresa.get("iso_activo") and (not empresa.get("iso_inicio") or pd.to_datetime(empresa.get("iso_inicio")).date() <= hoy)
 
     if key == "rgpd":
-        if not empresa.get("rgpd_activo"):
-            return False
-        inicio = empresa.get("rgpd_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        return empresa.get("rgpd_activo") and (not empresa.get("rgpd_inicio") or pd.to_datetime(empresa.get("rgpd_inicio")).date() <= hoy)
 
     if key == "crm":
-        if not empresa_crm.get("crm_activo"):
-            return False
-        inicio = empresa_crm.get("crm_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        return empresa_crm.get("crm_activo") and (not empresa_crm.get("crm_inicio") or pd.to_datetime(empresa_crm.get("crm_inicio")).date() <= hoy)
 
     if key == "docu_avanzada":
-        if not empresa.get("docu_avanzada_activo"):
-            return False
-        inicio = empresa.get("docu_avanzada_inicio")
-        if inicio and pd.to_datetime(inicio).date() > hoy:
-            return False
-        return True
+        return empresa.get("docu_avanzada_activo") and (not empresa.get("docu_avanzada_inicio") or pd.to_datetime(empresa.get("docu_avanzada_inicio")).date() <= hoy)
 
     return False
 
@@ -564,7 +379,7 @@ def route():
     if st.sidebar.button("Cerrar sesión", key="logout", type="secondary", use_container_width=True):
         do_logout()
 
-    # Resto de navegación (mantener tu lógica)
+    # Cargar configuración empresa
     empresa_id = st.session_state.user.get("empresa_id")
     empresa = {}
     empresa_crm = {}
@@ -573,25 +388,25 @@ def route():
     if empresa_id:
         try:
             empresa_res = supabase_admin.table("empresas").select(
-                "formacion_activo", "formacion_inicio", "formacion_fin",
-                "iso_activo", "iso_inicio", "iso_fin",
-                "rgpd_activo", "rgpd_inicio", "rgpd_fin",
-                "docu_avanzada_activo", "docu_avanzada_inicio", "docu_avanzada_fin"
+                "formacion_activo, formacion_inicio, formacion_fin, "
+                "iso_activo, iso_inicio, iso_fin, "
+                "rgpd_activo, rgpd_inicio, rgpd_fin, "
+                "docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin"
             ).eq("id", empresa_id).execute()
             empresa = empresa_res.data[0] if empresa_res.data else {}
             
             crm_res = supabase_admin.table("crm_empresas").select(
-                "crm_activo", "crm_inicio", "crm_fin"
+                "crm_activo, crm_inicio, crm_fin"
             ).eq("empresa_id", empresa_id).execute()
             empresa_crm = crm_res.data[0] if crm_res.data else {}
-        except Exception as e:
-            st.sidebar.error(f"Error al cargar configuración")
+        except Exception:
+            st.sidebar.error("Error al cargar configuración")
 
     st.session_state.empresa = empresa
     st.session_state.empresa_crm = empresa_crm
     rol = st.session_state.role
 
-    # Menús de navegación (mantener tu lógica completa)
+    # Menús dinámicos
     if rol == "admin":
         st.sidebar.markdown("**Administración**")
         base_menu = {
@@ -609,18 +424,16 @@ def route():
         if st.sidebar.button("Mis Grupos", key="alumno_grupos", type="secondary", use_container_width=True):
             st.session_state.page = "area_alumno"
 
-    # Panel del Gestor
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("**Panel de Formación**")
         if st.sidebar.button("Panel del Gestor", key="panel_gestor", type="secondary", use_container_width=True):
             st.session_state.page = "panel_gestor"
 
-    # Módulo Formación
+    # Módulos condicionales
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
         st.sidebar.markdown("**Gestión de Formación**")
-        
         formacion_menu = {
             "Acciones Formativas": "acciones_formativas",
             "Grupos": "grupos",
@@ -631,14 +444,12 @@ def route():
             "Proyectos": "proyectos",
             "Documentos": "documentos"
         }
-        
         if rol == "gestor":
             formacion_menu = {"Empresas": "empresas", **formacion_menu}
         
         for label, page_key in formacion_menu.items():
             if st.sidebar.button(label, key=f"form_{page_key}", type="secondary", use_container_width=True):
                 st.session_state.page = page_key
-
     # --- Módulo ISO ---
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
         st.sidebar.markdown("---")
@@ -709,7 +520,6 @@ def route():
     
     st.sidebar.markdown("---")
     st.sidebar.caption(mensaje_footer)
-    
 # =========================
 # Ejecución principal
 # =========================
@@ -732,7 +542,7 @@ else:
                     mod_import.main(supabase_admin, st.session_state)
 
         else:
-            # Dashboard principal PRÁCTICO para admin
+            # Dashboard principal según rol
             rol = st.session_state.role
 
             if rol == "admin":
@@ -743,35 +553,24 @@ else:
                     metricas = get_metricas_admin()
                 
                 col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Empresas", metricas['empresas'])
-                
-                with col2:
-                    st.metric("Usuarios", metricas['usuarios'])
-                
-                with col3:
-                    st.metric("Cursos", metricas['cursos'])
-                
-                with col4:
-                    st.metric("Grupos", metricas['grupos'])
+                with col1: st.metric("Empresas", metricas['empresas'])
+                with col2: st.metric("Usuarios", metricas['usuarios'])
+                with col3: st.metric("Cursos", metricas['cursos'])
+                with col4: st.metric("Grupos", metricas['grupos'])
                 
                 # Accesos rápidos
                 st.markdown("---")
                 st.subheader("Accesos Rápidos")
-                
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
                     if st.button("Gestión de Empresas", use_container_width=True):
                         st.session_state.page = "empresas"
                         st.rerun()
-                
                 with col2:
                     if st.button("Gestión de Usuarios", use_container_width=True):
                         st.session_state.page = "usuarios_empresas"
                         st.rerun()
-                
                 with col3:
                     if st.button("Configuración", use_container_width=True):
                         st.session_state.page = "ajustes_app"
@@ -779,26 +578,20 @@ else:
 
             elif rol == "gestor":
                 st.title("Panel del Gestor")
-                
                 empresa_id = st.session_state.user.get("empresa_id")
                 if empresa_id:
                     with st.spinner("Cargando métricas..."):
                         metricas = get_metricas_gestor(empresa_id)
-                    
                     col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Grupos", metricas['grupos'])
-                    
-                    with col2:
-                        st.metric("Participantes", metricas['participantes'])
-                    
-                    with col3:
-                        st.metric("Documentos", metricas['documentos'])
+                    with col1: st.metric("Grupos", metricas['grupos'])
+                    with col2: st.metric("Participantes", metricas['participantes'])
+                    with col3: st.metric("Documentos", metricas['documentos'])
 
             elif rol == "alumno":
                 st.title("Área del Alumno")
-                st.info("Accede a tus grupos y diplomas desde el menú lateral")
+                ajustes = get_ajustes_app(supabase_admin, campos=["bienvenida_alumno"])
+                bienvenida = ajustes.get("bienvenida_alumno", "Accede a tus grupos y diplomas desde el menú lateral")
+                st.info(bienvenida)
 
             elif rol == "comercial":
                 st.title("Área Comercial")
@@ -808,5 +601,5 @@ else:
         st.error(f"Error al cargar la página: {e}")
         st.exception(e)
 
-# Cerrar div de clase CSS
+# Cerrar div de clase CSS dinámico
 st.markdown('</div>', unsafe_allow_html=True)
