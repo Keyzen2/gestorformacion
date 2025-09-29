@@ -840,7 +840,7 @@ class ClasesService:
         """Obtiene reservas de un participante con filtros de fecha"""
         try:
             query = self.supabase.table("clases_reservas").select("""
-                id, fecha_clase, estado, fecha_reserva,
+                id, horario_id, fecha_clase, estado, fecha_reserva,
                 clases_horarios!inner(dia_semana, hora_inicio, hora_fin, capacidad_maxima,
                     clases!inner(nombre, categoria, color_cronograma))
             """).eq("participante_id", participante_id)
