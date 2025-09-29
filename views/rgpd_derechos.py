@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🧑‍⚖️ Derechos de los Interesados")
     st.caption("Registra y gestiona las solicitudes de acceso, rectificación, cancelación, oposición y otros derechos.")
     st.divider()
