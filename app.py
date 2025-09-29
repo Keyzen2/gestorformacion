@@ -430,7 +430,7 @@ def login_view():
     st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
-# Navegación
+# Navegación COMPLETA
 # =========================
 def route():
     nombre = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
@@ -451,9 +451,17 @@ def route():
     
     if empresa_id:
         try:
-            e = supabase_admin.table("empresas").select("*").eq("id", empresa_id).execute()
+            e = supabase_admin.table("empresas").select(
+                "formacion_activo, formacion_inicio, formacion_fin, "
+                "iso_activo, iso_inicio, iso_fin, "
+                "rgpd_activo, rgpd_inicio, rgpd_fin, "
+                "docu_avanzada_activo, docu_avanzada_inicio, docu_avanzada_fin"
+            ).eq("id", empresa_id).execute()
             empresa = e.data[0] if e.data else {}
-            c = supabase_admin.table("crm_empresas").select("*").eq("empresa_id", empresa_id).execute()
+            
+            c = supabase_admin.table("crm_empresas").select(
+                "crm_activo, crm_inicio, crm_fin"
+            ).eq("empresa_id", empresa_id).execute()
             empresa_crm = c.data[0] if c.data else {}
         except:
             pass
@@ -462,32 +470,138 @@ def route():
     st.session_state.empresa_crm = empresa_crm
     rol = st.session_state.role
     
+    # ============================================
+    # MENÚ ADMIN
+    # ============================================
     if rol == "admin":
-        st.sidebar.markdown("#### Administración")
-        for label, page in {"Panel": "panel_admin", "Usuarios": "usuarios_empresas", "Empresas": "empresas", "Ajustes": "ajustes_app"}.items():
-            if st.sidebar.button(label, key=f"a_{page}", use_container_width=True):
+        st.sidebar.markdown("#### Administración SaaS")
+        admin_menu = {
+            "Panel Admin": "panel_admin",
+            "Usuarios y Empresas": "usuarios_empresas",
+            "Empresas": "empresas",
+            "Ajustes de la App": "ajustes_app"
+        }
+        for label, page in admin_menu.items():
+            if st.sidebar.button(label, key=f"admin_{page}", use_container_width=True):
                 st.session_state.page = page
     
+    # ============================================
+    # MENÚ ALUMNO
+    # ============================================
     elif rol == "alumno":
         st.sidebar.markdown("#### Área del Alumno")
-        if st.sidebar.button("Mis Grupos", key="alumno", use_container_width=True):
+        if st.sidebar.button("Mis Grupos y Diplomas", key="alumno_grupos", use_container_width=True):
             st.session_state.page = "area_alumno"
     
+    # ============================================
+    # PANEL GESTOR
+    # ============================================
     if rol == "gestor" and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Panel Gestor")
-        if st.sidebar.button("Panel", key="gestor", use_container_width=True):
+        st.sidebar.markdown("#### Panel de Formación")
+        if st.sidebar.button("Panel del Gestor", key="panel_gestor", use_container_width=True):
             st.session_state.page = "panel_gestor"
     
+    # ============================================
+    # MÓDULO FORMACIÓN
+    # ============================================
     if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
         st.sidebar.markdown("---")
-        st.sidebar.markdown("#### Formación")
-        menu = {"Cursos": "acciones_formativas", "Grupos": "grupos", "Participantes": "participantes", "Tutores": "tutores", "Documentos": "documentos"}
+        st.sidebar.markdown("#### Gestión de Formación")
+        
+        formacion_menu = {
+            "Acciones Formativas": "acciones_formativas",
+            "Grupos": "grupos",
+            "Participantes": "participantes",
+            "Tutores": "tutores",
+            "Aulas": "aulas",
+            "Gestión Clases": "gestion_clases",
+            "Proyectos": "proyectos",
+            "Documentos": "documentos"
+        }
+        
         if rol == "gestor":
-            menu = {"Empresas": "empresas", **menu}
-        for label, page in menu.items():
-            if st.sidebar.button(label, key=f"f_{page}", use_container_width=True):
+            # Gestor ve Empresas primero
+            formacion_menu = {"Empresas": "empresas", **formacion_menu}
+        
+        for label, page in formacion_menu.items():
+            if st.sidebar.button(label, key=f"form_{page}", use_container_width=True):
                 st.session_state.page = page
+    
+    # ============================================
+    # MÓDULO ISO 9001
+    # ============================================
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "iso", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### Gestión ISO 9001")
+        iso_menu = {
+            "No Conformidades": "no_conformidades",
+            "Acciones Correctivas": "acciones_correctivas",
+            "Auditorías": "auditorias",
+            "Indicadores": "indicadores",
+            "Dashboard Calidad": "dashboard_calidad",
+            "Objetivos de Calidad": "objetivos_calidad",
+            "Informe Auditoría": "informe_auditoria"
+        }
+        for label, page in iso_menu.items():
+            if st.sidebar.button(label, key=f"iso_{page}", use_container_width=True):
+                st.session_state.page = page
+    
+    # ============================================
+    # MÓDULO RGPD
+    # ============================================
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### Gestión RGPD")
+        rgpd_menu = {
+            "Panel RGPD": "rgpd_panel",
+            "Tareas RGPD": "rgpd_planner",
+            "Diagnóstico Inicial": "rgpd_inicio",
+            "Tratamientos": "rgpd_tratamientos",
+            "Cláusulas y Consentimientos": "rgpd_consentimientos",
+            "Encargados del Tratamiento": "rgpd_encargados",
+            "Derechos de los Interesados": "rgpd_derechos",
+            "Evaluación de Impacto": "rgpd_evaluacion",
+            "Medidas de Seguridad": "rgpd_medidas",
+            "Incidencias": "rgpd_incidencias"
+        }
+        for label, page in rgpd_menu.items():
+            if st.sidebar.button(label, key=f"rgpd_{page}", use_container_width=True):
+                st.session_state.page = page
+    
+    # ============================================
+    # MÓDULO CRM
+    # ============================================
+    if (rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "crm", hoy, rol)) or rol == "comercial":
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### Gestión CRM")
+        crm_menu = {
+            "Panel CRM": "crm_panel",
+            "Clientes": "crm_clientes",
+            "Oportunidades": "crm_oportunidades",
+            "Tareas y Seguimiento": "crm_tareas",
+            "Comunicaciones": "crm_comunicaciones",
+            "Estadísticas": "crm_estadisticas"
+        }
+        for label, page in crm_menu.items():
+            if st.sidebar.button(label, key=f"crm_{page}", use_container_width=True):
+                st.session_state.page = page
+    
+    # ============================================
+    # MÓDULO DOCUMENTACIÓN AVANZADA
+    # ============================================
+    if rol in ["admin", "gestor"] and is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("#### Documentación Avanzada")
+        if st.sidebar.button("Gestión Documental", key="docu_avanzada", use_container_width=True):
+            st.session_state.page = "documentacion_avanzada"
+    
+    # ============================================
+    # FOOTER SIDEBAR
+    # ============================================
+    ajustes = get_ajustes_app(supabase_admin, campos=["mensaje_footer"])
+    st.sidebar.markdown("---")
+    st.sidebar.caption(ajustes.get("mensaje_footer", "© 2025 Gestor de Formación"))
 
 # =========================
 # Main
