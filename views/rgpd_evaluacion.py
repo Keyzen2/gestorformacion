@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🧠 Evaluación de Impacto en Protección de Datos (EIPD)")
     st.caption("Determina si tu empresa necesita una EIPD y documenta el análisis.")
     st.divider()
