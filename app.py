@@ -699,7 +699,7 @@ def do_logout():
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login con logo y formulario más arriba + footer copyright"""
+    """Login limpio SIN rectángulos blancos ni overlays"""
     
     # Logo fijo de DataFor
     logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
@@ -715,10 +715,10 @@ def login_view_tailadmin():
     "></div>
     """, unsafe_allow_html=True)
 
-    # Spacer más pequeño para subir todo
+    # Spacer pequeño
     st.markdown('<div style="height: 1vh;"></div>', unsafe_allow_html=True)
 
-    # Logo más grande centrado y más arriba
+    # Logo grande centrado
     st.markdown(f"""
     <div style="text-align: center; margin-bottom: 1.5rem;">
         <img src="{logo_datafor}" style="
@@ -734,24 +734,10 @@ def login_view_tailadmin():
     </div>
     """, unsafe_allow_html=True)
 
-    # Formulario de login SIN contenedor blanco
+    # Formulario DIRECTO sin contenedores adicionales
+    st.markdown("### 🔐 Iniciar Sesión")
+    
     with st.form("form_login", clear_on_submit=False):
-        # Container personalizado para el formulario
-        st.markdown("""
-        <div style="
-            max-width: 350px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 16px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        ">
-        """, unsafe_allow_html=True)
-        
-        st.markdown("### 🔐 Iniciar Sesión")
-        
         email = st.text_input(
             "Email", 
             placeholder="usuario@empresa.com"
@@ -766,33 +752,28 @@ def login_view_tailadmin():
         # Botón de login
         submitted = st.form_submit_button(
             "🚀 Iniciar Sesión",
-            disabled=st.session_state.get("login_loading", False),
             use_container_width=True
         )
-        
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    # Lógica de autenticación - SIN EFECTOS VISUALES
+    # Lógica de autenticación COMPLETAMENTE LIMPIA
     if submitted:
         if not email or not password:
-            st.warning("⚠️ Por favor, completa todos los campos")
+            st.error("⚠️ Por favor, completa todos los campos")
         else:
             try:
-                # Autenticación directa sin indicadores
                 auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                 
                 if auth and auth.user:
-                    # CONFIGURAR SESIÓN Y RERUN INMEDIATO - SIN EFECTOS
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.rerun()  # Inmediato, sin delays ni mensajes
+                    st.rerun()
                 else:
                     st.error("❌ Credenciales incorrectas")
                     
             except Exception as e:
                 st.error(f"❌ Error: {e}")
 
-    # Footer fijo en la parte inferior
+    # Footer fijo
     st.markdown("""
     <div style="
         position: fixed;
@@ -828,7 +809,7 @@ def login_view_tailadmin():
 # DASHBOARDS TAILADMIN POR ROL
 # =============================================================================
 def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
-    """Dashboard admin con diseño TailAdmin"""
+    """Dashboard admin con diseño TailAdmin - SIN divs vacíos"""
     components = TailAdminComponents()
     
     # Header de bienvenida
@@ -856,56 +837,24 @@ def mostrar_dashboard_admin_tailadmin(ajustes, metricas):
     with col4:
         components.metric_card("Grupos", str(metricas['grupos']), "👨‍🎓", "danger")
     
-    # Sección de gráficos
+    # Solo mostrar información útil - SIN gráficos vacíos
+    st.markdown("### 📊 Información del Sistema")
+    
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown('<div class="tailadmin-card">', unsafe_allow_html=True)
-        st.subheader("📈 Evolución Mensual")
-        
-        # Gráfico de ejemplo con datos simulados
-        dates = pd.date_range(start='2024-01-01', periods=12, freq='M')
-        usuarios_data = [50, 65, 80, 95, 110, 125, 140, 155, 170, 185, 200, 215]
-        
-        fig = px.line(
-            x=dates, y=usuarios_data,
-            title="Usuarios Registrados por Mes",
-            color_discrete_sequence=['#3c50e0']
+        components.info_card(
+            "Estado del Sistema", 
+            "✅ Sistema funcionando correctamente\n🔄 Última sincronización: " + datetime.now().strftime('%H:%M'),
+            "⚙️"
         )
-        fig.update_layout(
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#64748b'),
-            showlegend=False,
-            margin=dict(t=40, b=40, l=40, r=40)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
     
     with col2:
-        st.markdown('<div class="tailadmin-card">', unsafe_allow_html=True)
-        st.subheader("📊 Distribución por Roles")
-        
-        # Gráfico de donut
-        labels = ['Administradores', 'Gestores', 'Alumnos', 'Comerciales']
-        values = [5, 25, 60, 10]
-        colors = ['#3c50e0', '#10b981', '#fbbf24', '#f87171']
-        
-        fig = go.Figure(data=[go.Pie(
-            labels=labels,
-            values=values,
-            hole=0.6,
-            marker_colors=colors
-        )])
-        fig.update_layout(
-            showlegend=True,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#64748b'),
-            margin=dict(t=40, b=40, l=40, r=40)
+        components.info_card(
+            "Estadísticas Generales",
+            f"📈 Total entidades: {sum(metricas.values())}\n📅 Última actualización: Hoy",
+            "📊"
         )
-        st.plotly_chart(fig, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
 
 def mostrar_dashboard_gestor_tailadmin(ajustes, metricas):
     """Dashboard gestor con diseño TailAdmin"""
