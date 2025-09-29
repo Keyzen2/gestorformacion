@@ -61,6 +61,27 @@ def hide_streamlit_elements():
     /* Ocultar elemento que dice "Rerun" */
     [data-testid="stStatusWidget"] {visibility: hidden;}
     
+    /* === ARREGLAR PARPADEOS DE LOGIN === */
+    .stSpinner {display: none !important;}
+    .stProgress {display: none !important;}
+    
+    /* Evitar flash de colores al rerun */
+    [data-testid="stAppViewContainer"] {
+        background: #f1f5f9 !important;
+        transition: none !important;
+    }
+    
+    .main {
+        background: #f1f5f9 !important;
+        transition: none !important;
+    }
+    
+    /* Suavizar transiciones globales */
+    * {
+        transition: none !important;
+        animation: none !important;
+    }
+    
     /* Espaciado superior mejorado */
     .main > div {
         padding-top: 0rem;
@@ -428,19 +449,35 @@ def load_tailadmin_css():
     }
 
     /* === OCULTAR EFECTOS RAROS AL LOGIN === */
-    .stSpinner > div {
-        background: rgba(255,255,255,0.9) !important;
-        border-radius: 8px !important;
+    /* Eliminar todos los spinners y progress bars */
+    .stSpinner, .stProgress, [data-testid="stSpinner"] {
+        display: none !important;
+        visibility: hidden !important;
     }
     
-    /* Evitar overlay morado */
+    /* Evitar overlay y flashes de color */
+    [data-testid="stAppViewContainer"] {
+        background: #f1f5f9 !important;
+    }
+    
     [data-testid="stAppViewContainer"] > div {
         background: transparent !important;
     }
     
-    /* Suavizar transiciones de login */
+    /* Eliminar transiciones que causan parpadeos */
+    body, html, .main, .stApp {
+        transition: none !important;
+        animation: none !important;
+    }
+    
+    /* Suavizar solo elementos de login */
+    .login-container {
+        transition: opacity 0.3s ease !important;
+    }
+    
     .login-container * {
-        transition: all 0.2s ease !important;
+        transition: none !important;
+        animation: none !important;
     }
 
     /* === BOTÓN EXPANDIR SIDEBAR === */
@@ -667,13 +704,15 @@ def do_logout():
 # LOGIN TAILADMIN MEJORADO
 # =============================================================================
 def login_view_tailadmin():
-    """Login simplificado sin efectos raros"""
+    """Login simplificado con logo personalizado"""
     
     # Obtener ajustes
     ajustes = get_ajustes_app(supabase_public, campos=["mensaje_login", "nombre_app", "logo_url"])
     mensaje_login = ajustes.get("mensaje_login", "Sistema integral de gestión FUNDAE")
     nombre_app = ajustes.get("nombre_app", "Gestor de Formación")
-    logo_url = ajustes.get("logo_url", "")
+    
+    # Logo fijo de DataFor
+    logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
 
     # Fondo de pantalla limpio
     st.markdown("""
@@ -686,17 +725,26 @@ def login_view_tailadmin():
     "></div>
     """, unsafe_allow_html=True)
 
-    # Logo dinámico
-    logo_display = (
-        f'<img src="{logo_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;">'
-        if logo_url else "🎓"
-    )
-
-    # Container del login compacto
+    # Container del login con logo personalizado
     st.markdown(f"""
     <div class="login-container">
         <div style="text-align: center; margin-bottom: 1.5rem;">
-            <div class="login-logo">{logo_display}</div>
+            <div style="
+                width: 80px; height: 80px;
+                margin: 0 auto 1rem;
+                border-radius: 16px;
+                overflow: hidden;
+                box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
+                border: 2px solid rgba(255, 255, 255, 0.2);
+            ">
+                <img src="{logo_datafor}" style="
+                    width: 100%; 
+                    height: 100%; 
+                    object-fit: contain;
+                    background: white;
+                    padding: 8px;
+                " alt="DataFor Logo">
+            </div>
             <h1 style="margin: 0; color: #1c2434; font-size: 1.5rem; font-weight: 700;">Gestor Formación SaaS</h1>
             <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.9rem;">{mensaje_login}</p>
         </div>
@@ -725,38 +773,35 @@ def login_view_tailadmin():
             use_container_width=True
         )
 
-    # Lógica de autenticación SIN spinner que cause efectos raros
+    # Lógica de autenticación SIN efectos visuales
     if submitted:
         if not email or not password:
             st.warning("⚠️ Por favor, completa todos los campos")
         else:
+            # Marcar que estamos logueando sin mostrar efectos visuales
             st.session_state.login_loading = True
             
-            # SIN st.spinner para evitar efectos morados
             try:
-                with st.empty():
-                    st.info("🔄 Verificando credenciales...")
-                    
+                # Autenticación directa sin indicadores visuales
                 auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                 if not auth or not auth.user:
                     st.error("❌ Credenciales incorrectas")
                     st.session_state.login_loading = False
                 else:
+                    # Configurar sesión y rerun inmediatamente
                     st.session_state.auth_session = auth
                     set_user_role_from_db(auth.user.email)
-                    st.success("✅ Sesión iniciada correctamente")
                     st.session_state.login_loading = False
-                    # Sin delay artificial
                     st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al iniciar sesión: {e}")
                 st.session_state.login_loading = False
 
-    # Pie simplificado
+    # Pie simplificado con branding
     st.markdown("""
     <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e2e8f0;">
         <p style="color: #9ca3af; font-size: 0.75rem; margin: 0;">
-            © 2025 Gestor Formación SaaS
+            © 2025 DataFor - Gestor Formación SaaS
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -946,22 +991,44 @@ def mostrar_dashboard_comercial_tailadmin(ajustes):
 # SIDEBAR TAILADMIN
 # =============================================================================
 def render_sidebar_tailadmin():
-    """Sidebar con navegación estilo TailAdmin + Control de módulos activos"""
+    """Sidebar con logo DataFor personalizado + Control de módulos activos"""
     
     rol = st.session_state.get("rol")
     nombre_usuario = st.session_state.user.get("nombre") or st.session_state.user.get("email", "Usuario")
     empresa_id = st.session_state.user.get("empresa_id")
 
-    # Header del sidebar con avatar
+    # Logo DataFor fijo
+    logo_datafor = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
+
+    # Header del sidebar con logo DataFor + avatar usuario
     st.sidebar.markdown(f"""
     <div style="
-        padding: 1.5rem; 
+        padding: 1rem 1rem 1.5rem; 
         border-bottom: 1px solid #334155; 
         margin-bottom: 1.5rem;
         text-align: center;
     ">
+        <!-- Logo DataFor -->
         <div style="
-            width: 48px; height: 48px; 
+            width: 50px; 
+            height: 50px;
+            margin: 0 auto 1rem;
+            border-radius: 8px;
+            overflow: hidden;
+            background: white;
+            padding: 6px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        ">
+            <img src="{logo_datafor}" style="
+                width: 100%; 
+                height: 100%; 
+                object-fit: contain;
+            " alt="DataFor">
+        </div>
+        
+        <!-- Avatar del usuario -->
+        <div style="
+            width: 36px; height: 36px; 
             background: linear-gradient(135deg, #3c50e0 0%, #6366f1 100%);
             border-radius: 50%;
             display: inline-flex;
@@ -969,14 +1036,16 @@ def render_sidebar_tailadmin():
             justify-content: center;
             color: white;
             font-weight: bold;
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-            box-shadow: 0 4px 6px -1px rgba(60, 80, 224, 0.3);
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            box-shadow: 0 2px 4px rgba(60, 80, 224, 0.3);
         ">
             {nombre_usuario[0].upper()}
         </div>
-        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.9rem;">{nombre_usuario}</p>
-        <p style="margin: 0.25rem 0 0; font-size: 0.75rem; color: #94a3b8; text-transform: uppercase;">
+        
+        <!-- Info del usuario -->
+        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.85rem;">{nombre_usuario}</p>
+        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">
             {rol.title() if rol else 'Usuario'}
         </p>
     </div>
@@ -1115,9 +1184,9 @@ def render_sidebar_tailadmin():
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True, key="logout_btn", help="Cerrar sesión"):
         do_logout()
 
-    # Info adicional
+    # Info adicional con branding DataFor
     st.sidebar.markdown("---")
-    st.sidebar.markdown("**Sistema**: Gestor Formación SaaS")
+    st.sidebar.markdown("**DataFor**: Gestor Formación SaaS")
     st.sidebar.markdown("**Versión**: v2.1.0 TailAdmin")
 
 # =============================================================================
@@ -1202,7 +1271,7 @@ def render_footer():
 def main():
     """Función principal que ejecuta toda la aplicación"""
     
-    # 1. Cargar estilos y ocultar elementos
+    # 1. Cargar estilos y ocultar elementos PRIMERO
     hide_streamlit_elements()
     load_tailadmin_css()
     
@@ -1215,10 +1284,13 @@ def main():
         # ============= MODO APLICACIÓN =============
         
         try:
-            # Header y footer (opcional)
+            # Header y footer (opcional - están vacíos)
             render_header()
             render_footer()
 
+            # CRÍTICO: Asegurar que el sidebar se muestre
+            st.set_option('client.showSidebarNavigation', True)
+            
             # Sidebar TailAdmin
             render_sidebar_tailadmin()
 
@@ -1257,7 +1329,6 @@ def main():
 
         except Exception as e:
             st.error(f"❌ Error al cargar la aplicación: {e}")
-            st.exception(e)
             
             # Botón de recuperación
             col1, col2, col3 = st.columns([1, 1, 1])
