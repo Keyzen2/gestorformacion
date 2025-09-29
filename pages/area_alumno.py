@@ -587,75 +587,72 @@ def mostrar_mi_perfil(participantes_service, clases_service, session_state):
 
         # Estadísticas mejoradas
         st.markdown("### 📊 Mis Estadísticas")
-        try:
-            # Grupos FUNDAE
-            grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
-            num_grupos = len(grupos_participante) if not grupos_participante.empty else 0
-            
-            # Suscripción de clases
-            suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
-            
-            # Resumen mensual si tiene suscripción
-            resumen_clases = {}
-            if suscripcion_clases:
-                try:
-                    resumen_clases = clases_service.get_resumen_mensual_participante(participante_id)
-                except:
-                    pass
-            
-            col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
-            
-            with col_stats1:
-                st.metric("🎓 Grupos FUNDAE", num_grupos)
-            
-            with col_stats2:
-                if suscripcion_clases and suscripcion_clases.get("activa"):
-                    clases_disponibles = (
-                        suscripcion_clases.get("clases_mensuales", 0)
-                        - suscripcion_clases.get("clases_usadas_mes", 0)
-                    )
-                    st.metric("🏃‍♀️ Clases Disponibles", clases_disponibles)
-                else:
-                    st.metric("🏃‍♀️ Clases Disponibles", 0)
-            
-            with col_stats3:
-                if resumen_clases and resumen_clases.get("asistencias") is not None:
-                    st.metric("✅ Asistencias", resumen_clases.get("asistencias", 0))
-                else:
-                    st.metric("✅ Asistencias", "N/A")
-            
-            with col_stats4:
-                # Diplomas obtenidos
-                try:
-                    diplomas_res = (
-                        participantes_service.supabase.table("diplomas")
-                        .select("id")
-                        .eq("participante_id", participante_id)
-                        .execute()
-                    )
-                    num_diplomas = len(diplomas_res.data) if diplomas_res.data else 0
-                    st.metric("📜 Diplomas", num_diplomas)
-                except Exception:
-                    st.metric("📜 Diplomas", "N/A")
-            
-            # Información adicional de suscripción si existe
-            if suscripcion_clases and suscripcion_clases.get("activa"):
-                st.markdown("#### 🏃‍♀️ Estado de Suscripción")
-                
-                # Progreso mensual
-                clases_usadas = suscripcion_clases.get("clases_usadas_mes", 0)
-                clases_totales = suscripcion_clases.get("clases_mensuales", 1)
-                progreso = clases_usadas / max(1, clases_totales)
-                
-                st.progress(progreso, f"Clases este mes: {clases_usadas}/{clases_totales}")
-                
-                # Porcentaje de asistencia si hay datos
-                if resumen_clases and resumen_clases.get("porcentaje_asistencia") is not None:
-                    porcentaje = resumen_clases["porcentaje_asistencia"]
-                    st.metric("📈 % Asistencia", f"{porcentaje}%")
+
+        # Grupos FUNDAE
+        grupos_participante = participantes_service.get_grupos_de_participante(participante_id)
+        num_grupos = len(grupos_participante) if not grupos_participante.empty else 0
         
-        except Exception as e:
-            st.error(f"❌ Error cargando estadísticas: {e}")
+        # Suscripción de clases
+        suscripcion_clases = clases_service.get_suscripcion_participante(participante_id)
+        
+        # Resumen mensual si tiene suscripción
+        resumen_clases = {}
+        if suscripcion_clases:
+            try:
+                resumen_clases = clases_service.get_resumen_mensual_participante(participante_id)
+            except:
+                pass
+        
+        col_stats1, col_stats2, col_stats3, col_stats4 = st.columns(4)
+        
+        with col_stats1:
+            st.metric("🎓 Grupos FUNDAE", num_grupos)
+        
+        with col_stats2:
+            if suscripcion_clases and suscripcion_clases.get("activa"):
+                clases_disponibles = (
+                    suscripcion_clases.get("clases_mensuales", 0)
+                    - suscripcion_clases.get("clases_usadas_mes", 0)
+                )
+                st.metric("🏃‍♀️ Clases Disponibles", clases_disponibles)
+            else:
+                st.metric("🏃‍♀️ Clases Disponibles", 0)
+        
+        with col_stats3:
+            if resumen_clases and resumen_clases.get("asistencias") is not None:
+                st.metric("✅ Asistencias", resumen_clases.get("asistencias", 0))
+            else:
+                st.metric("✅ Asistencias", "N/A")
+        
+        with col_stats4:
+            # Diplomas obtenidos
+            try:
+                diplomas_res = (
+                    participantes_service.supabase.table("diplomas")
+                    .select("id")
+                    .eq("participante_id", participante_id)
+                    .execute()
+                )
+                num_diplomas = len(diplomas_res.data) if diplomas_res.data else 0
+                st.metric("📜 Diplomas", num_diplomas)
+            except Exception:
+                st.metric("📜 Diplomas", "N/A")
+        
+        # Información adicional de suscripción si existe
+        if suscripcion_clases and suscripcion_clases.get("activa"):
+            st.markdown("#### 🏃‍♀️ Estado de Suscripción")
+            
+            # Progreso mensual
+            clases_usadas = suscripcion_clases.get("clases_usadas_mes", 0)
+            clases_totales = suscripcion_clases.get("clases_mensuales", 1)
+            progreso = clases_usadas / max(1, clases_totales)
+            
+            st.progress(progreso, f"Clases este mes: {clases_usadas}/{clases_totales}")
+            
+            # Porcentaje de asistencia si hay datos
+            if resumen_clases and resumen_clases.get("porcentaje_asistencia") is not None:
+                porcentaje = resumen_clases["porcentaje_asistencia"]
+                st.metric("📈 % Asistencia", f"{porcentaje}%")
 
     except Exception as e:
         st.error(f"❌ Error cargando información del perfil: {e}")
