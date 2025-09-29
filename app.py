@@ -200,6 +200,50 @@ h2, h3 {
     color: #334155 !important;
     font-weight: 600 !important;
 }
+/* DISEÑO SAAS - Header y Footer fijos */
+.app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    padding: 0 2rem;
+    z-index: 999;
+}
+
+.app-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50px;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 998;
+}
+
+/* Sidebar oscuro */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
+    padding-top: 80px !important;
+}
+
+section[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+
+/* Contenido principal con espacio para header/footer */
+.main .block-container {
+    padding-top: 100px !important;
+    padding-bottom: 80px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -314,7 +358,38 @@ def get_metricas_admin():
         return {"empresas": empresas, "usuarios": usuarios, "cursos": cursos, "grupos": grupos}
     except:
         return {"empresas": 0, "usuarios": 0, "cursos": 0, "grupos": 0}
+        
+def render_header():
+    """Header fijo con logo"""
+    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
+                               campos=["nombre_app", "logo_url"])
+    
+    logo = ajustes.get("logo_url", "")
+    nombre = ajustes.get("nombre_app", "Gestor de Formación")
+    
+    logo_html = f'<img src="{logo}" style="height: 40px; border-radius: 8px;">' if logo else "🚀"
+    
+    st.markdown(f"""
+    <div class="app-header">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="font-size: 2rem;">{logo_html}</div>
+            <h2 style="margin: 0; font-size: 1.25rem; color: #1e293b;">{nombre}</h2>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
+def render_footer():
+    """Footer fijo"""
+    ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public, 
+                               campos=["mensaje_footer"])
+    mensaje = ajustes.get("mensaje_footer", "© 2025 Gestor de Formación")
+    
+    st.markdown(f"""
+    <div class="app-footer">
+        <p style="margin: 0; font-size: 0.875rem; color: #64748b;">{mensaje}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
 @st.cache_data(ttl=300)
 def get_metricas_gestor(empresa_id):
     try:
@@ -326,21 +401,32 @@ def get_metricas_gestor(empresa_id):
         return {"grupos": 0, "participantes": 0, "documentos": 0}
 
 def set_user_role_from_db(email: str):
+    """Obtiene el rol y datos básicos del usuario desde la base de datos."""
     try:
-        res = supabase_public.table("usuarios").select("*").eq("email", email.strip().lower()).limit(1).execute()
+        clean_email = email.strip().lower()
+        res = supabase_public.table("usuarios").select("*").eq("email", clean_email).limit(1).execute()
         if res.data:
             row = res.data[0]
-            st.session_state.role = row.get("rol") or "alumno"
+            rol = row.get("rol") or "alumno"
+            st.session_state.role = rol
             st.session_state.user = {
                 "id": row.get("id"),
+                "auth_id": row.get("auth_id"),
                 "email": row.get("email"),
                 "nombre": row.get("nombre"),
                 "empresa_id": row.get("empresa_id")
             }
+            if rol == "comercial":
+                com_res = supabase_public.table("comerciales").select("id").eq("usuario_id", row.get("id")).execute()
+                if com_res.data:
+                    st.session_state.user["comercial_id"] = com_res.data[0]["id"]
         else:
             st.session_state.role = "alumno"
-    except:
+            st.session_state.user = {"email": clean_email, "empresa_id": None}
+    except Exception as e:
+        st.error(f"No se pudo obtener el rol del usuario: {e}")
         st.session_state.role = "alumno"
+        st.session_state.user = {"email": email, "empresa_id": None}
 
 def do_logout():
     try:
