@@ -9,7 +9,7 @@ from services.grupos_service import get_grupos_service
 from services.empresas_service import get_empresas_service
 from services.participantes_service import get_participantes_service
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Panel del Gestor - Versión Modernizada Streamlit 1.49"""
     
     st.title("📊 Panel de Control - Formación FUNDAE")
