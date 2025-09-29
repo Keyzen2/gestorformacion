@@ -344,20 +344,6 @@ for key, default in {
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
-# =========================
-# Control de sidebar según login
-# =========================
-if not st.session_state.get("rol"):
-    st.markdown("""
-    <style>
-    section[data-testid="stSidebar"] {
-        display: none !important;
-    }
-    button[data-testid="collapsedControl"] {
-        display: none !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
 
 # =========================
 # Funciones (mantener las mismas de antes)
