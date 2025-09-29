@@ -459,7 +459,7 @@ def login_view():
     """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns([1,2,1])
-     with col2:
+    with col2:
         with st.form("form_login", clear_on_submit=False):
             st.markdown("### 🔐 Iniciar sesión")
             
