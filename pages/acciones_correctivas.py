@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.subheader("🛠️ Acciones Correctivas")
     st.caption("Gestión de acciones correctivas asociadas a no conformidades.")
     st.divider()
