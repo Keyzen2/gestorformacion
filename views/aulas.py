@@ -1057,7 +1057,7 @@ def mostrar_dashboard_admin(aulas_service, session_state):
 # FUNCIÓN PRINCIPAL
 # =========================
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     """Función principal del módulo de aulas - VERSIÓN COMPLETA"""
     
     # Verificar permisos
