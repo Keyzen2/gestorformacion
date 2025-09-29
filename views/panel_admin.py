@@ -8,7 +8,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 import io
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.title("🛡️ Panel de Administración")
     st.caption("Supervisión del sistema, métricas globales y detección de alertas.")
 
