@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 🗂️ Planner RGPD")
     st.caption("Tablero de tareas para auditorías, revisiones y formaciones.")
     st.divider()
