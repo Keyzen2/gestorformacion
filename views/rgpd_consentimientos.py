@@ -4,7 +4,7 @@ from datetime import datetime
 from components.listado_con_ficha import listado_con_ficha
 import uuid
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 📄 Cláusulas y Consentimientos")
     st.caption("Gestiona tus textos legales y asegúrate de que estén actualizados.")
     st.divider()
