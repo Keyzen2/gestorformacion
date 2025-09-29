@@ -473,6 +473,8 @@ def mostrar_reservar_clases(clases_service, session_state):
                         else:
                             st.error(f"Error en la reserva: {mensaje}")
 
+    except Exception as e:
+        st.error(f"Error cargando clases: {e}")
 
 # =========================
 # TAB 4: MI PERFIL
