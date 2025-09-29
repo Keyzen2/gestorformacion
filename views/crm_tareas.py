@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def main(supabase, session_state):
+def render(supabase, session_state):
     st.markdown("## 📝 Tareas CRM")
     st.caption("Gestión de tareas comerciales.")
     st.divider()
