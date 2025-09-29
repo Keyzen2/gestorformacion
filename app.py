@@ -145,12 +145,15 @@ html, body, [class*="css"] {
 # CSS Dinámico según estado de login
 # =========================
 def set_sidebar_visibility():
-    """Muestra u oculta el sidebar según login"""
-    if st.session_state.get("role"):
+    """Muestra u oculta el sidebar según login."""
+    if st.session_state.get("auth_session"):
         # Usuario logueado → mostrar sidebar
         st.markdown("""
         <style>
         section[data-testid="stSidebar"] {
+            display: flex !important;
+        }
+        button[data-testid="collapsedControl"] {
             display: flex !important;
         }
         </style>
@@ -707,14 +710,11 @@ def mostrar_dashboard_comercial(ajustes):
 # =========================
 # Ejecución principal
 # =========================
-set_sidebar_visibility()  # 👈 asegura sidebar correcto según login
+set_sidebar_visibility()
 
 if not st.session_state.get("role"):
-    # 🚪 Usuario no logueado → mostrar login
     login_view()
 else:
-    # 👤 Usuario logueado → mostrar sidebar dinámico
-    st.markdown('<div class="app-mode">', unsafe_allow_html=True)
     try:
         route()
         page = st.session_state.get("page", None)
