@@ -154,7 +154,132 @@ def load_tailadmin_light_css():
         padding: 1.5rem !important;
         max-width: 1600px !important;
     }
-
+    /* ============================= */
+    /* FORMULARIOS TAILADMIN LAYOUT  */
+    /* ============================= */
+    
+    /* Container principal de formulario */
+    .tailadmin-form-container {
+        background: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Header de sección con borde inferior */
+    .tailadmin-form-header {
+        border-bottom: 2px solid #E5E7EB;
+        padding-bottom: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .tailadmin-form-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1F2937;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .tailadmin-form-subtitle {
+        color: #6B7280;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0;
+    }
+    
+    /* Labels mejorados */
+    .tailadmin-label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.5rem;
+    }
+    
+    .tailadmin-label-required::after {
+        content: " *";
+        color: #EF4444;
+    }
+    
+    /* Input groups con spacing consistente */
+    .tailadmin-input-group {
+        margin-bottom: 1.25rem;
+    }
+    
+    /* Info boxes contextuales */
+    .tailadmin-info-box {
+        border-left: 4px solid #3B82F6;
+        background: #EFF6FF;
+        color: #1E40AF;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        margin: 1rem 0;
+    }
+    
+    .tailadmin-info-box.warning {
+        border-left-color: #F59E0B;
+        background: #FFFBEB;
+        color: #92400E;
+    }
+    
+    .tailadmin-info-box.success {
+        border-left-color: #10B981;
+        background: #ECFDF5;
+        color: #065F46;
+    }
+    
+    .tailadmin-info-box.danger {
+        border-left-color: #EF4444;
+        background: #FEF2F2;
+        color: #991B1B;
+    }
+    
+    /* Divisores de sección */
+    .tailadmin-section-divider {
+        height: 1px;
+        background: #E5E7EB;
+        margin: 2rem 0;
+    }
+    
+    /* Tabs personalizados (si usas expanders como tabs) */
+    .streamlit-expanderHeader {
+        background: #F9FAFB !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 8px !important;
+        font-weight: 500 !important;
+    }
+    
+    /* Mejorar color pickers */
+    .stColorPicker > div > div > div {
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+    }
+    
+    /* Multiselect mejorado */
+    .stMultiSelect [data-baseweb="tag"] {
+        background: #3B82F6 !important;
+        color: white !important;
+        border-radius: 6px !important;
+        font-size: 0.875rem !important;
+        padding: 0.25rem 0.5rem !important;
+    }
+    
+    /* Checkbox y Radio mejorados */
+    .stCheckbox, .stRadio {
+        padding: 0.5rem !important;
+        border-radius: 6px !important;
+        transition: background 0.2s ease !important;
+    }
+    
+    .stCheckbox:hover, .stRadio:hover {
+        background: #F9FAFB !important;
+    }
     /* ============================= */
     /* SIDEBAR                       */
     /* ============================= */
