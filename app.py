@@ -229,12 +229,12 @@ def load_tailadmin_light_css():
         transform: translateY(-2px);
     }
 
-    /* INPUTS */
+    /* INPUTS - TODOS LOS TIPOS */
     .stTextInput > div > div > input,
     .stTextArea > div > div > textarea,
-    .stSelectbox > div > div > select,
     .stNumberInput > div > div > input,
-    .stDateInput > div > div > input {
+    .stDateInput > div > div > input,
+    .stTimeInput > div > div > input {
         background: #F9FAFB !important;
         border: 2px solid #D1D5DB !important;
         border-radius: 8px !important;
@@ -246,13 +246,108 @@ def load_tailadmin_light_css():
     
     .stTextInput > div > div > input:focus,
     .stTextArea > div > div > textarea:focus,
-    .stSelectbox > div > div > select:focus,
     .stNumberInput > div > div > input:focus,
-    .stDateInput > div > div > input:focus {
+    .stDateInput > div > div > input:focus,
+    .stTimeInput > div > div > input:focus {
         border-color: var(--primary) !important;
         background: #FFFFFF !important;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
         outline: none !important;
+    }
+
+    /* SELECTBOX - Desplegables */
+    .stSelectbox > div > div {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"] {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"]:hover {
+        border-color: #9CA3AF !important;
+    }
+    
+    .stSelectbox [data-baseweb="select"]:focus-within {
+        border-color: var(--primary) !important;
+        background: #FFFFFF !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* MULTISELECT - Selección múltiple */
+    .stMultiSelect > div > div {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+    }
+    
+    .stMultiSelect [data-baseweb="select"] {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+    }
+    
+    .stMultiSelect [data-baseweb="select"]:focus-within {
+        border-color: var(--primary) !important;
+        background: #FFFFFF !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* Tags dentro de multiselect */
+    .stMultiSelect [data-baseweb="tag"] {
+        background: var(--primary) !important;
+        color: white !important;
+        border-radius: 6px !important;
+        padding: 0.25rem 0.5rem !important;
+    }
+    
+    /* RADIO BUTTONS */
+    .stRadio > div {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 0.75rem !important;
+    }
+    
+    .stRadio [role="radiogroup"] {
+        gap: 0.5rem;
+    }
+    
+    /* CHECKBOX */
+    .stCheckbox {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* FILE UPLOADER */
+    .stFileUploader > div {
+        background: #F9FAFB !important;
+        border: 2px dashed #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 1.5rem !important;
+    }
+    
+    .stFileUploader:hover > div {
+        border-color: var(--primary) !important;
+        background: #EFF6FF !important;
+    }
+    
+    /* SLIDER */
+    .stSlider > div > div {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 1rem !important;
+    }
+    
+    .stSlider [data-baseweb="slider"] [role="slider"] {
+        background: var(--primary) !important;
     }
 
     /* BOTONES PRINCIPALES */
