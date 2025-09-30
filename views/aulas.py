@@ -668,17 +668,17 @@ def mostrar_lista_reservas(aulas_service, session_state):
     except Exception as e:
         st.error(f"Error cargando reservas: {e}")
 
-def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_existente=None):
+def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Optional[Dict] = None):
     """
-    Formulario para crear o editar reservas manuales
-    - Si reserva_existente es None → crea nueva reserva
-    - Si reserva_existente tiene datos → edita la reserva
+    Formulario para crear o editar reservas manuales.
+    - Si `reserva` es None → crear nueva reserva.
+    - Si `reserva` contiene datos → editar esa reserva.
     """
     
-    modo_edicion = reserva_existente is not None
+    modo_edicion = reserva is not None
     titulo_form = "✏️ Editar Reserva" if modo_edicion else "➕ Nueva Reserva Manual"
     st.markdown(f"### {titulo_form}")
-    
+
     try:
         df_aulas = aulas_service.get_aulas_con_empresa()
         if df_aulas.empty:
@@ -692,28 +692,9 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_exis
             else:
                 nombre_display = row['nombre']
             aulas_opciones[nombre_display] = row['id']
-        
     except Exception as e:
         st.error(f"Error cargando aulas: {e}")
         return
-
-    # Valores iniciales si estamos editando
-    initial_aula = None
-    initial_tipo = "CURSO"
-    initial_titulo = ""
-    initial_fecha = datetime.now().date()
-    initial_hora_inicio = datetime.now().time()
-    initial_hora_fin = (datetime.now() + timedelta(hours=2)).time()
-    initial_desc = ""
-
-    if modo_edicion:
-        initial_aula = next((k for k, v in aulas_opciones.items() if v == reserva_existente["aula_id"]), None)
-        initial_tipo = reserva_existente.get("tipo_reserva", "CURSO")
-        initial_titulo = reserva_existente.get("titulo", "")
-        initial_fecha = reserva_existente["fecha_inicio"].date()
-        initial_hora_inicio = reserva_existente["fecha_inicio"].time()
-        initial_hora_fin = reserva_existente["fecha_fin"].time()
-        initial_desc = reserva_existente.get("observaciones", "")
 
     with st.form("form_reserva_manual"):
         col1, col2 = st.columns(2)
@@ -722,20 +703,20 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_exis
             aula_seleccionada = st.selectbox(
                 "Seleccionar Aula",
                 options=list(aulas_opciones.keys()),
-                index=list(aulas_opciones.keys()).index(initial_aula) if initial_aula else 0,
+                index=list(aulas_opciones.values()).index(reserva["aula_id"]) if modo_edicion else 0,
                 key="reserva_aula"
             )
             
             tipo_reserva = st.selectbox(
                 "Tipo de Reserva",
                 ["CURSO", "REUNION", "MANTENIMIENTO"],
-                index=["CURSO", "REUNION", "MANTENIMIENTO"].index(initial_tipo),
+                index=["CURSO", "REUNION", "MANTENIMIENTO"].index(reserva["tipo_reserva"]) if modo_edicion else 0,
                 key="reserva_tipo"
             )
             
-            titulo = st.text_input(
+            titulo_reserva = st.text_input(
                 "Título de la Reserva",
-                value=initial_titulo,
+                value=reserva.get("titulo") if modo_edicion else "",
                 key="reserva_titulo",
                 help="Descripción breve"
             )
@@ -743,7 +724,7 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_exis
         with col2:
             fecha_reserva = st.date_input(
                 "Fecha",
-                value=initial_fecha,
+                value=reserva.get("fecha_inicio", datetime.now()).date() if modo_edicion else datetime.now().date(),
                 key="reserva_fecha"
             )
             
@@ -751,26 +732,26 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_exis
             with col_hora1:
                 hora_inicio = st.time_input(
                     "Hora Inicio",
-                    value=initial_hora_inicio,
+                    value=pd.to_datetime(reserva["fecha_inicio"]).time() if modo_edicion else datetime.now().time(),
                     key="reserva_hora_inicio"
                 )
             with col_hora2:
                 hora_fin = st.time_input(
                     "Hora Fin",
-                    value=initial_hora_fin,
+                    value=pd.to_datetime(reserva["fecha_fin"]).time() if modo_edicion else (datetime.now() + timedelta(hours=2)).time(),
                     key="reserva_hora_fin"
                 )
         
         descripcion = st.text_area(
             "Descripción Adicional",
-            value=initial_desc,
+            value=reserva.get("observaciones") if modo_edicion else "",
             key="reserva_descripcion",
             help="Información adicional (opcional)"
         )
         
         errores = []
-        if not titulo:
-            titulo = "Reserva sin título"
+        if not titulo_reserva:
+            titulo_reserva = "Reserva sin título"
         if hora_inicio >= hora_fin:
             errores.append("La hora de fin debe ser posterior a la de inicio")
         
@@ -790,45 +771,44 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva_exis
             try:
                 fecha_inicio_completa = datetime.combine(fecha_reserva, hora_inicio)
                 fecha_fin_completa = datetime.combine(fecha_reserva, hora_fin)
-                
                 aula_id = aulas_opciones[aula_seleccionada]
-                
-                conflictos = aulas_service.verificar_conflictos_reserva(
-                    aula_id,
-                    fecha_inicio_completa.isoformat(),
-                    fecha_fin_completa.isoformat()
-                )
-                
-                if conflictos and not modo_edicion:  # en edición permitimos el mismo slot
-                    st.error("Ya existe una reserva en este horario")
-                    return
-                
+
+                # Detectar conflictos solo en modo crear
+                if not modo_edicion:
+                    conflictos = aulas_service.verificar_conflictos_reserva(
+                        aula_id,
+                        fecha_inicio_completa.isoformat(),
+                        fecha_fin_completa.isoformat()
+                    )
+                    if conflictos:
+                        st.error("Ya existe una reserva en este horario")
+                        return
+
                 datos_reserva = {
                     "aula_id": aula_id,
-                    "titulo": titulo,
+                    "titulo": titulo_reserva,
                     "observaciones": descripcion,
                     "tipo_reserva": tipo_reserva,
                     "fecha_inicio": fecha_inicio_completa.isoformat(),
                     "fecha_fin": fecha_fin_completa.isoformat(),
                     "estado": "CONFIRMADA",
                     "responsable": session_state.user.get("nombre_completo", "Sistema"),
-                    "updated_at": datetime.utcnow().isoformat()
                 }
-                
+
                 if modo_edicion:
-                    # Actualizar
-                    aulas_service.actualizar_reserva(reserva_existente["id"], datos_reserva)
-                    st.success("✅ Reserva actualizada correctamente")
+                    success, reserva_actualizada = aulas_service.actualizar_reserva(reserva["id"], datos_reserva)
+                    if success:
+                        st.success(f"✅ Reserva '{reserva_actualizada['titulo']}' actualizada correctamente")
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al actualizar la reserva")
                 else:
-                    # Crear nueva
-                    datos_reserva["created_at"] = datetime.utcnow().isoformat()
                     success, reserva_id = aulas_service.crear_reserva(datos_reserva)
                     if success:
                         st.success("✅ Reserva creada correctamente")
+                        st.rerun()
                     else:
                         st.error("❌ Error al crear la reserva")
-                
-                st.rerun()
                     
             except Exception as e:
                 st.error(f"Error procesando reserva: {e}")
