@@ -1,5 +1,5 @@
 # Streamlit actualizado con nuevas funcionalidades
-streamlit>=1.49.0
+streamlit==1.50.0
 
 # Supabase cliente - compatible
 supabase>=2.0.1
