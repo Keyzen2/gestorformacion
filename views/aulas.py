@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta
 from services.aulas_service import get_aulas_service
 from utils import export_excel
 from io import BytesIO
+from components.tailadmin_forms import TailAdminForms
 
 # Verificar disponibilidad de streamlit-calendar
 try:
@@ -385,107 +386,188 @@ def mostrar_tabla_aulas(df_aulas, session_state, aulas_service):
         return df_filtrado.iloc[evento.selection.rows[0]]
     return None
 
+# Al inicio de aulas.py, añade el import:
+from components.tailadmin_forms import TailAdminForms
+
+# Reemplaza la función mostrar_formulario_aula por esta versión mejorada:
 
 def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion=False):
-    """Formulario de aula"""
+    """Formulario de aula con diseño TailAdmin"""
+    forms = TailAdminForms()
+    
+    # Preparar datos
     if es_creacion:
-        st.subheader("Nueva Aula")
         datos = {}
+        titulo_principal = "Nueva Aula"
     else:
-        st.subheader(f"Editar {aula_data['nombre']}")
         datos = aula_data.copy()
-
+        titulo_principal = f"Editar: {aula_data['nombre']}"
+    
     form_id = f"aula_{datos.get('id', 'nueva')}_{'crear' if es_creacion else 'editar'}"
-
+    
+    # === INICIO CONTENEDOR ===
+    forms.form_container_start()
+    
     with st.form(form_id, clear_on_submit=es_creacion):
-        st.markdown("### Información Básica")
         
-        col1, col2 = st.columns(2)
+        # === SECCIÓN 1: INFORMACIÓN BÁSICA ===
+        forms.form_header(
+            titulo_principal,
+            "Configure los datos principales del aula",
+            icon="🏢"
+        )
+        
+        col1, col2 = st.columns(2, gap="medium")
         
         with col1:
+            forms.label("Nombre del Aula", required=True)
             nombre = st.text_input(
-                "Nombre del Aula *", 
-                value=datos.get("nombre", ""), 
+                "Nombre",
+                value=datos.get("nombre", ""),
+                placeholder="Ej: Aula 101",
+                label_visibility="collapsed",
                 key=f"{form_id}_nombre"
             )
+            
+            forms.label("Capacidad Máxima", required=True)
             capacidad_maxima = st.number_input(
-                "Capacidad Máxima *", 
-                min_value=1, 
-                max_value=200, 
+                "Capacidad",
+                min_value=1,
+                max_value=200,
                 value=int(datos.get("capacidad_maxima", 20)),
+                label_visibility="collapsed",
                 key=f"{form_id}_capacidad"
             )
         
         with col2:
+            forms.label("Ubicación")
             ubicacion = st.text_input(
-                "Ubicación", 
-                value=datos.get("ubicacion", ""), 
+                "Ubicación",
+                value=datos.get("ubicacion", ""),
+                placeholder="Ej: Edificio A, 1ª Planta",
+                label_visibility="collapsed",
                 key=f"{form_id}_ubicacion"
             )
+            
+            st.markdown("<br>", unsafe_allow_html=True)  # Espaciado
             activa = st.checkbox(
-                "Aula Activa", 
+                "✅ Aula activa y disponible",
                 value=datos.get("activa", True),
                 key=f"{form_id}_activa"
             )
-
-        st.markdown("### Equipamiento")
+        
+        # === SECCIÓN 2: EQUIPAMIENTO ===
+        forms.section_divider()
+        forms.form_header(
+            "Equipamiento Disponible",
+            "Seleccione los recursos con los que cuenta el aula",
+            icon="🔧"
+        )
+        
         opciones_equipamiento = [
-            "PROYECTOR", "PIZARRA_DIGITAL", "ORDENADORES", "AUDIO", 
+            "PROYECTOR", "PIZARRA_DIGITAL", "ORDENADORES", "AUDIO",
             "AIRE_ACONDICIONADO", "CALEFACCION", "WIFI", "TELEVISION",
             "FLIPCHART", "IMPRESORA", "ESCANER"
         ]
         
         equipamiento_actual = datos.get("equipamiento", [])
         equipamiento = st.multiselect(
-            "Seleccionar equipamiento",
+            "Equipamiento",
             options=opciones_equipamiento,
             default=equipamiento_actual,
-            key=f"{form_id}_equipamiento"
+            label_visibility="collapsed",
+            key=f"{form_id}_equipamiento",
+            help="Puede seleccionar múltiples opciones"
         )
-
-        st.markdown("### Configuración Visual")
-        col1, col2 = st.columns(2)
+        
+        # === SECCIÓN 3: CONFIGURACIÓN VISUAL ===
+        forms.section_divider()
+        forms.form_header(
+            "Configuración Visual",
+            "Personalice la apariencia del aula en el cronograma",
+            icon="🎨"
+        )
+        
+        col1, col2 = st.columns([1, 1])
         
         with col1:
+            forms.label("Color en Cronograma")
             color_cronograma = st.color_picker(
-                "Color en Cronograma",
-                value=datos.get("color_cronograma", "#3498db"),
+                "Color",
+                value=datos.get("color_cronograma", "#3B82F6"),
+                label_visibility="collapsed",
                 key=f"{form_id}_color"
             )
         
         with col2:
-            st.write("**Vista previa:**")
+            st.markdown('<label class="tailadmin-label">Vista Previa</label>', unsafe_allow_html=True)
             st.markdown(
-                f'<div style="background-color: {color_cronograma}; height: 30px; border-radius: 5px; border: 1px solid #ddd; margin-top: 8px;"></div>',
+                f'''<div style="
+                    background: {color_cronograma};
+                    height: 40px;
+                    border-radius: 8px;
+                    border: 1px solid #E5E7EB;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: 600;
+                    margin-top: 0.5rem;
+                ">{nombre or "Aula"}</div>''',
                 unsafe_allow_html=True
             )
-
+        
+        # === OBSERVACIONES ===
+        forms.section_divider()
+        forms.label("Observaciones")
         observaciones = st.text_area(
             "Observaciones",
             value=datos.get("observaciones", ""),
+            placeholder="Notas adicionales sobre el aula...",
+            height=100,
+            label_visibility="collapsed",
             key=f"{form_id}_observaciones"
         )
-
+        
+        # === VALIDACIONES ===
         errores = []
         if not nombre:
-            errores.append("Nombre obligatorio")
+            errores.append("El nombre del aula es obligatorio")
         if capacidad_maxima < 1:
-            errores.append("Capacidad debe ser mayor a 0")
+            errores.append("La capacidad debe ser mayor a 0")
         
         if errores:
-            st.error(f"Errores: {', '.join(errores)}")
-
-        st.markdown("---")
+            forms.info_box("<br>".join(errores), tipo="danger")
+        
+        # === BOTONES DE ACCIÓN ===
+        st.markdown("<br>", unsafe_allow_html=True)
+        
         if es_creacion:
-            submitted = st.form_submit_button("Crear Aula", type="primary", use_container_width=True)
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col3:
+                submitted = st.form_submit_button(
+                    "✅ Crear Aula",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=bool(errores)
+                )
             eliminar = False
         else:
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                submitted = st.form_submit_button("Guardar Cambios", type="primary", use_container_width=True)
-            with col_btn2:
-                eliminar = st.form_submit_button("Eliminar", type="secondary", use_container_width=True) if session_state.role == "admin" else False
-
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col2:
+                eliminar = st.form_submit_button(
+                    "🗑️ Eliminar",
+                    use_container_width=True
+                ) if session_state.role == "admin" else False
+            with col3:
+                submitted = st.form_submit_button(
+                    "💾 Guardar",
+                    type="primary",
+                    use_container_width=True,
+                    disabled=bool(errores)
+                )
+        
+        # === LÓGICA DE GUARDADO ===
         if submitted and not errores:
             try:
                 datos_aula = {
@@ -499,45 +581,50 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
                     "observaciones": observaciones,
                     "updated_at": datetime.utcnow().isoformat()
                 }
-
+                
                 if es_creacion:
                     datos_aula["empresa_id"] = session_state.user.get("empresa_id")
                     datos_aula["created_at"] = datetime.utcnow().isoformat()
                     
                     success, aula_id = aulas_service.crear_aula(datos_aula)
                     if success:
-                        st.success("Aula creada correctamente")
+                        st.success("✅ Aula creada correctamente")
                         if "crear_nueva_aula" in st.session_state:
                             del st.session_state["crear_nueva_aula"]
                         st.rerun()
                     else:
-                        st.error(f"Error al crear: {aula_id if isinstance(aula_id, str) else 'Error desconocido'}")
+                        st.error(f"❌ Error al crear: {aula_id if isinstance(aula_id, str) else 'Error desconocido'}")
                 else:
                     success = aulas_service.actualizar_aula(datos["id"], datos_aula)
                     if success:
-                        st.success("Aula actualizada")
+                        st.success("✅ Aula actualizada correctamente")
                         st.rerun()
                     else:
-                        st.error("Error al actualizar")
+                        st.error("❌ Error al actualizar el aula")
                         
             except Exception as e:
-                st.error(f"Error: {e}")
-
+                st.error(f"❌ Error: {e}")
+        
         if eliminar:
             if st.session_state.get("confirmar_eliminar_aula"):
                 try:
                     success = aulas_service.eliminar_aula(datos["id"])
                     if success:
-                        st.success("Aula eliminada")
+                        st.success("✅ Aula eliminada correctamente")
                         del st.session_state["confirmar_eliminar_aula"]
                         st.rerun()
                     else:
-                        st.error("No se puede eliminar (tiene reservas futuras)")
+                        st.error("❌ No se puede eliminar (tiene reservas futuras)")
                 except Exception as e:
-                    st.error(f"Error: {e}")
+                    st.error(f"❌ Error: {e}")
             else:
                 st.session_state["confirmar_eliminar_aula"] = True
-                st.warning("Presiona 'Eliminar' nuevamente para confirmar")
+                forms.info_box(
+                    "Presiona 'Eliminar' nuevamente para confirmar la eliminación permanente",
+                    tipo="warning"
+                )
+    
+    forms.form_container_end()
 
 # =========================
 # GESTIÓN DE RESERVAS
