@@ -28,6 +28,7 @@ st.set_page_config(
 def hide_streamlit_elements():
     st.markdown("""
     <style>
+    /* Ocultar elementos nativos Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
@@ -35,19 +36,25 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
 
-    /* SIDEBAR - Ancho solo cuando está expandido */
+    /* Sidebar expandido */
     section[data-testid="stSidebar"][aria-expanded="true"] {
-        width: 21rem !important;
-        min-width: 21rem !important;
+        background: #FFFFFF !important;
+        border-right: 1px solid #E5E7EB !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
     }
 
-    /* Cuando está colapsado, lo ocultamos por completo */
+    /* Sidebar colapsado: dejamos un ancho mínimo para que la flecha aparezca */
     section[data-testid="stSidebar"][aria-expanded="false"] {
-        width: 0 !important;
-        min-width: 0 !important;
+        width: 1.5rem !important;
+        min-width: 1.5rem !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        transition: all 0.3s ease !important;
     }
 
-    /* Botón colapso - VISIBLE y funcional */
+    /* Botón de colapso / expansión */
     button[kind="header"] {
         background: #3B82F6 !important;
         color: white !important;
@@ -66,7 +73,7 @@ def hide_streamlit_elements():
         fill: white !important;
     }
 
-    /* MAIN expandido cuando sidebar está colapsado */
+    /* MAIN - expansión fluida cuando cambia el sidebar */
     [data-testid="stAppViewContainer"] {
         transition: margin-left 0.3s ease !important;
     }
@@ -138,17 +145,23 @@ def load_tailadmin_light_css():
         max-width: 1600px !important;
     }
 
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] {
-        background: var(--bg-sidebar) !important;
-        border-right: 1px solid var(--border-color) !important;
-        box-shadow: var(--shadow-md) !important;
+    /* ============================= */
+    /* SIDEBAR                       */
+    /* ============================= */
+    section[data-testid="stSidebar"][aria-expanded="true"] {
+        background: #FFFFFF !important;
+        border-right: 1px solid #E5E7EB !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s ease !important;
     }
     
-    section[data-testid="stSidebar"] > div:first-child {
-        padding: 1.5rem 1rem !important;
-        border-bottom: 1px solid var(--border-color);
-        background: linear-gradient(180deg, var(--white) 0%, var(--gray-50) 100%);
+    section[data-testid="stSidebar"][aria-expanded="false"] {
+        width: 1.5rem !important;
+        min-width: 1.5rem !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        transition: all 0.3s ease !important;
     }
     
     section[data-testid="stSidebar"] * { color: var(--text-primary) !important; }
@@ -170,8 +183,10 @@ def load_tailadmin_light_css():
         border-top: 1px solid var(--border-color) !important;
         margin: 1rem 0 !important;
     }
-
-    /* BOTONES SIDEBAR */
+    
+    /* ============================= */
+    /* BOTONES EN EL SIDEBAR         */
+    /* ============================= */
     section[data-testid="stSidebar"] .stButton > button {
         background: #F3F4F6 !important;
         border: 1px solid #E5E7EB !important;
@@ -206,6 +221,30 @@ def load_tailadmin_light_css():
         color: #FFFFFF !important;
         border-color: #EF4444 !important;
     }
+    
+    /* ============================= */
+    /* BOTÓN DE COLAPSO/EXPANSIÓN    */
+    /* ============================= */
+    button[kind="header"] {
+        background: #3B82F6 !important;
+        color: white !important;
+        border-radius: 0 8px 8px 0 !important;
+        padding: 0.5rem 0.75rem !important;
+        border: none !important;
+        transition: all 0.3s ease !important;
+        position: relative;
+        z-index: 999; /* asegura que siempre quede visible */
+    }
+    
+    button[kind="header"]:hover {
+        background: #2563EB !important;
+    }
+    
+    button[kind="header"] svg {
+        color: white !important;
+        fill: white !important;
+    }
+
 
     /* TÍTULOS */
     h1 {
