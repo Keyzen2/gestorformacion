@@ -366,7 +366,21 @@ def load_tailadmin_light_css():
         opacity: 0.7 !important;
         box-shadow: none !important;
     }
-    
+    /* MEDIA QUERIES PARA RESPONSIVE */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding: 1rem !important;
+        }
+        
+        h1 { font-size: 1.5rem !important; }
+        h2 { font-size: 1.25rem !important; }
+        h3 { font-size: 1rem !important; }
+        
+        /* Stat cards más pequeños en móvil */
+        .stat-card {
+            padding: 1rem !important;
+        }
+    }
     /* Evitar cambios en hover cuando están deshabilitados */
     .stButton > button:disabled:hover,
     .stDownloadButton > button:disabled:hover,
@@ -674,20 +688,20 @@ class TailAdminComponents:
         
         st.markdown(f"""
         <div style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px;
-            padding: 2rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <div style="display: flex; align-items: center; gap: 1.5rem;">
-                <div style="width: 72px; height: 72px; border-radius: 12px;
+            padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; justify-content: center;">
+                <div style="width: 60px; height: 60px; min-width: 60px; border-radius: 12px;
                     background: linear-gradient(135deg, #3B82F6 0%, #80CAEE 100%);
                     display: flex; align-items: center; justify-content: center;
-                    color: white; font-size: 2rem; font-weight: 700;
+                    color: white; font-size: 1.75rem; font-weight: 700;
                     box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
                     {user_name[0].upper() if user_name else "U"}
                 </div>
-                <div>
-                    <h1 style="margin: 0 0 0.5rem 0 !important; font-size: 1.75rem !important;">
+                <div style="text-align: center; flex: 1; min-width: 200px;">
+                    <h1 style="margin: 0 0 0.5rem 0 !important; font-size: clamp(1.25rem, 4vw, 1.75rem) !important;">
                         ¡Bienvenido, {user_name}!
                     </h1>
-                    <p style="margin: 0; color: #6B7280; font-size: 0.875rem;">
+                    <p style="margin: 0; color: #6B7280; font-size: clamp(0.75rem, 2.5vw, 0.875rem);">
                         {company} • {subtitle}
                     </p>
                 </div>
