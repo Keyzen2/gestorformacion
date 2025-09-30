@@ -433,6 +433,19 @@ class TailAdminComponents:
         </div>
         """, unsafe_allow_html=True)
 
+    @staticmethod
+    def info_card(title: str, content: str, icon: str = "ℹ️"):
+        st.markdown(f"""
+        <div style="background: white; border: 1px solid #E5E7EB; border-radius: 12px;
+            padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
+            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 2rem;">{icon}</div>
+                <h3 style="margin: 0; color: #1F2937; font-size: 1.25rem;">{title}</h3>
+            </div>
+            <div style="color: #6B7280; line-height: 1.6;">{content}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
 # =============================================================================
 # CONFIGURACIÓN SUPABASE
 # =============================================================================
@@ -740,7 +753,7 @@ def mostrar_dashboard_comercial(ajustes):
         components.stat_card("Tareas", "8", "📋", color="warning")
 
 # =============================================================================
-# SIDEBAR COMPLETO CON TODOS LOS MÓDULOS
+# SIDEBAR COMPLETO
 # =============================================================================
 def render_sidebar_light():
     rol = st.session_state.get("rol")
@@ -762,7 +775,6 @@ def render_sidebar_light():
     </div>
     """, unsafe_allow_html=True)
 
-    # Obtener módulos activos
     empresa = {}
     empresa_crm = {}
     hoy = datetime.today().date()
@@ -784,7 +796,6 @@ def render_sidebar_light():
         except Exception as e:
             print(f"Error módulos: {e}")
 
-    # MENÚS POR ROL
     if rol == "admin":
         st.sidebar.markdown("#### ⚙️ Administración SaaS")
         for label, page in [("📊 Panel Admin", "panel_admin"), ("👥 Usuarios", "usuarios_empresas"),
@@ -793,7 +804,6 @@ def render_sidebar_light():
                 st.session_state.page = page
                 st.rerun()
         
-        # ADMIN VE TODOS LOS MÓDULOS
         st.sidebar.markdown("---")
         st.sidebar.markdown("#### 🎓 Módulo Formación")
         for label, page in [("📚 Acciones Formativas", "acciones_formativas"), ("👨‍🎓 Grupos", "grupos"),
@@ -841,7 +851,6 @@ def render_sidebar_light():
             st.rerun()
         
     elif rol == "gestor":
-        # Módulo Formación
         if is_module_active(empresa, empresa_crm, "formacion", hoy, rol):
             st.sidebar.markdown("#### 🎓 Gestión Formación")
             for label, page in [("📊 Dashboard", "panel_gestor"), ("🏢 Empresas", "empresas"),
@@ -853,7 +862,6 @@ def render_sidebar_light():
                     st.session_state.page = page
                     st.rerun()
         
-        # Módulo ISO
         if is_module_active(empresa, empresa_crm, "iso", hoy, rol):
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 🏅 ISO 9001")
@@ -864,7 +872,6 @@ def render_sidebar_light():
                     st.session_state.page = page
                     st.rerun()
         
-        # Módulo RGPD
         if is_module_active(empresa, empresa_crm, "rgpd", hoy, rol):
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 🔒 RGPD")
@@ -874,7 +881,6 @@ def render_sidebar_light():
                     st.session_state.page = page
                     st.rerun()
         
-        # Doc Avanzada
         if is_module_active(empresa, empresa_crm, "docu_avanzada", hoy, rol):
             st.sidebar.markdown("---")
             st.sidebar.markdown("#### 📚 Doc. Avanzada")
@@ -908,7 +914,7 @@ def render_sidebar_light():
     st.sidebar.markdown("*v2.2.0 Light Theme*")
 
 # =============================================================================
-# NAVEGACIÓN COMPLETA
+# NAVEGACIÓN
 # =============================================================================
 def render_page():
     page = st.session_state.get("page", "home")
@@ -939,47 +945,94 @@ def render_page():
                     view_module.render(supabase_admin, st.session_state)
                 else:
                     st.error(f"❌ Página '{page}' no encontrada")
-                    if st.button("🏠 Volver al Dashboard"):
+                    st.info("🏠 Volviendo al dashboard principal...")
+                    if st.button("Ir al Dashboard"):
                         st.session_state.page = "home"
                         st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al cargar página: {e}")
+                st.exception(e)
                 col1, col2, col3 = st.columns([1, 1, 1])
                 with col2:
                     if st.button("🔄 Reintentar", use_container_width=True):
                         st.rerun()
 
 # =============================================================================
+# FUNCIONES HEADER Y FOOTER
+# =============================================================================
+def render_header():
+    """Header removido - sin header fijo"""
+    pass
+
+def render_footer():
+    """Footer removido - sin footer fijo"""
+    pass
+
+# =============================================================================
 # MAIN
 # =============================================================================
 def main():
+    """Función principal - Entry point para Railway"""
+    
     hide_streamlit_elements()
     load_tailadmin_light_css()
     
-    if not st.session_state.get("authenticated", False):
+    usuario_autenticado = st.session_state.get("authenticated", False)
+    
+    if not usuario_autenticado:
         login_view_light()
     else:
-        render_sidebar_light()
-        page = st.session_state.get("page", "home")
-        
-        if page and page != "home":
-            render_page()
-        else:
-            rol = st.session_state.get("rol")
-            ajustes = get_ajustes_app(supabase_admin if supabase_admin else supabase_public,
-                campos=["bienvenida_admin", "bienvenida_gestor", "bienvenida_alumno", "bienvenida_comercial"])
+        try:
+            render_header()
+            render_footer()
             
-            if rol == "admin":
-                metricas = get_metricas_admin()
-                mostrar_dashboard_admin(ajustes, metricas)
-            elif rol == "gestor":
-                empresa_id = st.session_state.user.get("empresa_id")
-                metricas = get_metricas_gestor(empresa_id) if empresa_id else {}
-                mostrar_dashboard_gestor(ajustes, metricas)
-            elif rol == "alumno":
-                mostrar_dashboard_alumno(ajustes)
-            elif rol == "comercial":
-                mostrar_dashboard_comercial(ajustes)
+            st.set_option('client.showSidebarNavigation', True)
+            
+            render_sidebar_light()
+            
+            page = st.session_state.get("page", "home")
+            
+            if page and page != "home":
+                render_page()
+            else:
+                rol = st.session_state.get("rol")
+                ajustes = get_ajustes_app(
+                    supabase_admin if supabase_admin else supabase_public,
+                    campos=[
+                        "bienvenida_admin", "tarjeta_admin_usuarios", "tarjeta_admin_empresas", "tarjeta_admin_ajustes",
+                        "bienvenida_gestor", "tarjeta_gestor_grupos", "tarjeta_gestor_documentos", "tarjeta_gestor_docu_avanzada",
+                        "bienvenida_alumno", "tarjeta_alumno_grupos", "tarjeta_alumno_diplomas", "tarjeta_alumno_seguimiento",
+                        "bienvenida_comercial", "tarjeta_comercial_clientes", "tarjeta_comercial_oportunidades", "tarjeta_comercial_tareas"
+                    ]
+                )
+                
+                if rol == "admin":
+                    metricas = get_metricas_admin()
+                    mostrar_dashboard_admin(ajustes, metricas)
+                elif rol == "gestor":
+                    empresa_id = st.session_state.user.get("empresa_id")
+                    metricas = get_metricas_gestor(empresa_id) if empresa_id else {}
+                    mostrar_dashboard_gestor(ajustes, metricas)
+                elif rol == "alumno":
+                    mostrar_dashboard_alumno(ajustes)
+                elif rol == "comercial":
+                    mostrar_dashboard_comercial(ajustes)
+        
+        except Exception as e:
+            st.error(f"❌ Error al cargar la aplicación: {e}")
+            
+            if st.session_state.get("rol") == "admin":
+                with st.expander("🔧 Información de Debug (Solo Admin)"):
+                    st.write("**Estado de sesión:**")
+                    st.write(f"- Authenticated: {st.session_state.get('authenticated')}")
+                    st.write(f"- Rol: {st.session_state.get('rol')}")
+                    st.write(f"- Usuario: {st.session_state.get('user', {}).get('nombre')}")
+            
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                if st.button("🔄 Reiniciar Aplicación", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
 
 if __name__ == "__main__":
     main()
