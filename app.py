@@ -564,7 +564,42 @@ def load_tailadmin_light_css():
     [data-testid="stTable"] tr:nth-child(even) td {
         background: #F9FAFB !important;
     }
+    /* ============================= */
+    /* FORMULARIOS INLINE - TailAdmin */
+    /* ============================= */
+    .inline-form {
+        background: #ffffff;
+        border: 1px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-top: 1rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
     
+    /* Títulos dentro del formulario inline */
+    .inline-form h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1F2937;  /* gris oscuro Tailwind */
+        margin-bottom: 1rem;
+    }
+    
+    /* Inputs dentro de inline form */
+    .inline-form input,
+    .inline-form textarea,
+    .inline-form select {
+        border: 2px solid #D1D5DB;
+        border-radius: 6px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+        width: 100%;
+    }
+    
+    /* Botones del formulario inline */
+    .inline-form button {
+        margin-top: 1rem;
+    }
+
     /* ============================= */
     /* ALERTAS */
     /* ============================= */
