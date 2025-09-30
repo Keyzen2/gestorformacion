@@ -700,18 +700,10 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
 # LOGIN
 # =============================================================================
 def login_view_light():
-    if not st.session_state.get("authenticated", False):
-        # Fondo morado solo si NO está autenticado
-        st.markdown("""
-        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1;"></div>
-        """, unsafe_allow_html=True)
-
     logo = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
-    col1, col2, col3 = st.columns([1, 1, 1])
     
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
-        st.markdown('<div style="height: 2vh;"></div>', unsafe_allow_html=True)
         st.markdown(f"""
         <div style="text-align: center; margin-bottom: 2rem;">
             <img src="{logo}" style="width: 150px; background: white; padding: 15px;
@@ -719,7 +711,7 @@ def login_view_light():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<h3 style='text-align: center; color: white; margin-bottom: 1.5rem;'>🔐 Iniciar Sesión</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center; margin-bottom: 1.5rem;'>🔐 Iniciar Sesión</h3>", unsafe_allow_html=True)
         
         with st.form("form_login"):
             email = st.text_input("Email", placeholder="usuario@empresa.com")
@@ -733,27 +725,20 @@ def login_view_light():
                 try:
                     auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                     if auth and auth.user:
-                        # Mensaje de éxito visible
                         st.success(f"✅ Login correcto, bienvenido {auth.user.email}")
                         st.session_state.auth_session = auth
                         st.session_state.authenticated = True
                         set_user_role_from_db(auth.user.email)
-                        time.sleep(1)  # espera breve para ver el mensaje
+                        time.sleep(1)  # mostrar mensaje de éxito
                         st.rerun()
                     else:
                         st.error("❌ Credenciales incorrectas")
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
-        
+
         st.markdown("""
-        <div style="margin-top: 3rem; padding: 1.5rem; text-align: center;
-            background: rgba(255,255,255,0.1); border-radius: 12px; backdrop-filter: blur(10px);">
-            <p style="color: white; font-size: 0.875rem; margin: 0; font-weight: 500;">
-                © 2025 DataFor Solutions
-            </p>
-            <p style="color: rgba(255,255,255,0.8); font-size: 0.75rem; margin: 0.25rem 0 0;">
-                v2.3.0 - Streamlit 1.50
-            </p>
+        <div style="margin-top: 3rem; padding: 1.5rem; text-align: center; color: #6B7280; font-size: 0.8rem;">
+            © 2025 DataFor Solutions — v2.3.0
         </div>
         """, unsafe_allow_html=True)
 
