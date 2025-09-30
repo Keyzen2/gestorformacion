@@ -529,17 +529,7 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
             key=f"{form_id}_observaciones"
         )
         
-        # === VALIDACIONES ===
-        errores = []
-        if not nombre:
-            errores.append("El nombre del aula es obligatorio")
-        if capacidad_maxima < 1:
-            errores.append("La capacidad debe ser mayor a 0")
-        
-        if errores:
-            forms.info_box("<br>".join(errores), tipo="danger")
-        
-        # === BOTONES DE ACCIÓN ===
+        # === BOTONES DE ACCIÓN (SIN disabled) ===
         st.markdown("<br>", unsafe_allow_html=True)
         
         if es_creacion:
@@ -548,8 +538,8 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
                 submitted = st.form_submit_button(
                     "✅ Crear Aula",
                     type="primary",
-                    use_container_width=True,
-                    disabled=bool(errores)
+                    use_container_width=True
+                    # ← SIN disabled aquí
                 )
             eliminar = False
         else:
@@ -563,47 +553,58 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
                 submitted = st.form_submit_button(
                     "💾 Guardar",
                     type="primary",
-                    use_container_width=True,
-                    disabled=bool(errores)
+                    use_container_width=True
+                    # ← SIN disabled aquí
                 )
         
-        # === LÓGICA DE GUARDADO ===
-        if submitted and not errores:
-            try:
-                datos_aula = {
-                    "nombre": nombre,
-                    "descripcion": datos.get("descripcion", ""),
-                    "capacidad_maxima": capacidad_maxima,
-                    "equipamiento": equipamiento,
-                    "ubicacion": ubicacion,
-                    "activa": activa,
-                    "color_cronograma": color_cronograma,
-                    "observaciones": observaciones,
-                    "updated_at": datetime.utcnow().isoformat()
-                }
-                
-                if es_creacion:
-                    datos_aula["empresa_id"] = session_state.user.get("empresa_id")
-                    datos_aula["created_at"] = datetime.utcnow().isoformat()
+        # === VALIDACIONES DESPUÉS DEL SUBMIT ===
+        if submitted:
+            errores = []
+            if not nombre or nombre.strip() == "":
+                errores.append("El nombre del aula es obligatorio")
+            if capacidad_maxima < 1:
+                errores.append("La capacidad debe ser mayor a 0")
+            
+            if errores:
+                # Mostrar errores
+                forms.info_box("<br>".join(errores), tipo="danger")
+            else:
+                # Guardar solo si no hay errores
+                try:
+                    datos_aula = {
+                        "nombre": nombre.strip(),
+                        "descripcion": datos.get("descripcion", ""),
+                        "capacidad_maxima": capacidad_maxima,
+                        "equipamiento": equipamiento,
+                        "ubicacion": ubicacion.strip() if ubicacion else "",
+                        "activa": activa,
+                        "color_cronograma": color_cronograma,
+                        "observaciones": observaciones.strip() if observaciones else "",
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
                     
-                    success, aula_id = aulas_service.crear_aula(datos_aula)
-                    if success:
-                        st.success("✅ Aula creada correctamente")
-                        if "crear_nueva_aula" in st.session_state:
-                            del st.session_state["crear_nueva_aula"]
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Error al crear: {aula_id if isinstance(aula_id, str) else 'Error desconocido'}")
-                else:
-                    success = aulas_service.actualizar_aula(datos["id"], datos_aula)
-                    if success:
-                        st.success("✅ Aula actualizada correctamente")
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al actualizar el aula")
+                    if es_creacion:
+                        datos_aula["empresa_id"] = session_state.user.get("empresa_id")
+                        datos_aula["created_at"] = datetime.utcnow().isoformat()
                         
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+                        success, aula_id = aulas_service.crear_aula(datos_aula)
+                        if success:
+                            st.success("✅ Aula creada correctamente")
+                            if "crear_nueva_aula" in st.session_state:
+                                del st.session_state["crear_nueva_aula"]
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Error al crear: {aula_id if isinstance(aula_id, str) else 'Error desconocido'}")
+                    else:
+                        success = aulas_service.actualizar_aula(datos["id"], datos_aula)
+                        if success:
+                            st.success("✅ Aula actualizada correctamente")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al actualizar el aula")
+                            
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
         
         if eliminar:
             if st.session_state.get("confirmar_eliminar_aula"):
