@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from typing import Optional, Dict
 from datetime import datetime, date, timedelta
 from services.aulas_service import get_aulas_service
 from utils import export_excel
@@ -67,9 +68,8 @@ def exportar_cronograma_excel(eventos: list):
     except Exception as e:
         st.error(f"Error exportando Excel: {e}")
 
-
 def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin: date):
-    """Exporta cronograma a PDF con vista semanal"""
+    """Exporta cronograma a PDF con vista semanal (sin leyenda, intervalos de horas y celdas dinámicas)"""
     if not REPORTLAB_AVAILABLE:
         st.error("reportlab no está instalado. Ejecuta: pip install reportlab")
         return
@@ -80,9 +80,11 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             return
             
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), 
-                               leftMargin=1*cm, rightMargin=1*cm,
-                               topMargin=1.5*cm, bottomMargin=1.5*cm)
+        doc = SimpleDocTemplate(
+            buffer, pagesize=landscape(A4), 
+            leftMargin=1*cm, rightMargin=1*cm,
+            topMargin=1.5*cm, bottomMargin=1.5*cm
+        )
         
         elementos = []
         styles = getSampleStyleSheet()
@@ -96,14 +98,19 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             alignment=TA_CENTER
         )
         
+        cell_style = ParagraphStyle(
+            "cell",
+            fontSize=7,
+            leading=8,
+            alignment=1  # centrado
+        )
+        
         titulo = f"Cronograma de Aulas - {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}"
         elementos.append(Paragraph(titulo, title_style))
         elementos.append(Spacer(1, 12))
         
         # Obtener aulas únicas
-        aulas_set = set()
-        for ev in eventos:
-            aulas_set.add(ev.get("extendedProps", {}).get("aula_nombre", "Sin aula"))
+        aulas_set = set(ev.get("extendedProps", {}).get("aula_nombre", "Sin aula") for ev in eventos)
         aulas_list = sorted(list(aulas_set))
         
         if not aulas_list:
@@ -119,40 +126,45 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
         
         if len(dias) > 7:
             dias = dias[:7]
-            st.info(f"Se mostrarán solo los primeros 7 días")
+            st.info("Se mostrarán solo los primeros 7 días")
         
         # Crear matriz
         dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
         header = ["Aula"] + [f"{dias_es[d.weekday()]}\n{d.strftime('%d/%m')}" for d in dias]
         datos_tabla = [header]
         
+        max_eventos_por_fila = 1  # para calcular la altura mínima de filas dinámicas
+        
         for aula in aulas_list:
             fila = [aula]
-            
             for dia in dias:
                 eventos_dia = []
-                
                 for ev in eventos:
                     try:
-                        ev_inicio = pd.to_datetime(ev.get("start", "")).date()
+                        ev_inicio = pd.to_datetime(ev.get("start", ""))
+                        ev_fin = pd.to_datetime(ev.get("end", ""))
                         ev_aula = ev.get("extendedProps", {}).get("aula_nombre", "")
                         
-                        if ev_aula == aula and ev_inicio == dia:
-                            hora_inicio = pd.to_datetime(ev.get("start", "")).strftime('%H:%M')
-                            titulo = ev.get("title", "").split(": ", 1)[-1] if ": " in ev.get("title", "") else ev.get("title", "")
-                            eventos_dia.append(f"{hora_inicio}\n{titulo[:15]}..." if len(titulo) > 15 else f"{hora_inicio}\n{titulo}")
+                        if ev_aula == aula and ev_inicio.date() == dia:
+                            titulo = ev.get("title", "")
+                            intervalo = f"{ev_inicio.strftime('%H:%M')} - {ev_fin.strftime('%H:%M')}"
+                            eventos_dia.append(Paragraph(f"{intervalo}<br/>{titulo}", cell_style))
                     except:
                         continue
                 
-                if eventos_dia:
-                    fila.append("\n".join(eventos_dia[:3]))
-                else:
-                    fila.append("-")
-            
+                max_eventos_por_fila = max(max_eventos_por_fila, len(eventos_dia))
+                fila.append(eventos_dia if eventos_dia else "-")
             datos_tabla.append(fila)
         
+        # Configurar anchos y alturas dinámicas
         col_widths = [4*cm] + [3.5*cm] * len(dias)
-        tabla = Table(datos_tabla, colWidths=col_widths)
+        base_row_height = 1.2*cm
+        row_heights = [1*cm]  # altura cabecera
+        for fila in datos_tabla[1:]:
+            num_eventos = max(len(celda) if isinstance(celda, list) else 1 for celda in fila[1:])
+            row_heights.append(base_row_height * max(1, num_eventos))
+        
+        tabla = Table(datos_tabla, colWidths=col_widths, rowHeights=row_heights)
         
         estilo_tabla = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3498db")),
@@ -172,22 +184,12 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor("#2c3e50")),
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('RIGHTPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 6),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]
         
         tabla.setStyle(TableStyle(estilo_tabla))
         elementos.append(tabla)
-        
-        elementos.append(Spacer(1, 12))
-        leyenda_texto = """
-        <b>Leyenda:</b> 
-        <font color="#28a745">■</font> Formación | 
-        <font color="#ffc107">■</font> Mantenimiento | 
-        <font color="#17a2b8">■</font> Evento | 
-        <font color="#dc3545">■</font> Bloqueada
-        """
-        elementos.append(Paragraph(leyenda_texto, styles['Normal']))
         
         doc.build(elementos)
         buffer.seek(0)
@@ -205,7 +207,6 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
         
     except Exception as e:
         st.error(f"Error exportando PDF: {e}")
-
 
 def exportar_informe_estadisticas_pdf(eventos: list, aulas_info: list, fecha_inicio: date, fecha_fin: date):
     """Exporta informe ejecutivo con estadísticas"""
@@ -910,17 +911,10 @@ def mostrar_cronograma_simple(aulas_service, session_state):
         st.error(f"Error obteniendo eventos: {e}")
 
 
-def mostrar_cronograma_alternativo(aulas_service, session_state):
-    """Vista alternativa si falla el calendario"""
-    
+def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin):
+    """Vista alternativa del cronograma usando tabla simple"""
     st.markdown("### Vista de Cronograma")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        fecha_inicio = st.date_input("Desde", value=datetime.now().date(), key="alt_fecha_inicio")
-    with col2:
-        fecha_fin = st.date_input("Hasta", value=datetime.now().date() + timedelta(days=7), key="alt_fecha_fin")
-    
+
     try:
         df_reservas = aulas_service.get_reservas_periodo(
             fecha_inicio.isoformat() + "T00:00:00Z",
@@ -928,39 +922,37 @@ def mostrar_cronograma_alternativo(aulas_service, session_state):
         )
         
         if df_reservas.empty:
-            st.info("No hay reservas en el período")
+            st.info("No hay reservas en este período")
             return
-        
-        df_reservas['fecha'] = pd.to_datetime(df_reservas['fecha_inicio']).dt.date
-        fechas_unicas = sorted(df_reservas['fecha'].unique())
-        
-        for fecha in fechas_unicas:
-            eventos_dia = df_reservas[df_reservas['fecha'] == fecha].sort_values('fecha_inicio')
-            
-            st.markdown(f"#### {fecha.strftime('%A, %d de %B %Y')}")
-            
-            for _, evento in eventos_dia.iterrows():
-                inicio = pd.to_datetime(evento['fecha_inicio'])
-                fin = pd.to_datetime(evento['fecha_fin'])
-                
-                color_map = {'CURSO': '🟢', 'REUNION': '🔵', 'MANTENIMIENTO': '🟡'}
-                emoji = color_map.get(evento['tipo_reserva'], '⚪')
-                
-                col1, col2, col3 = st.columns([1, 2, 1])
-                
-                with col1:
-                    st.markdown(f"**{inicio.strftime('%H:%M')} - {fin.strftime('%H:%M')}**")
-                with col2:
-                    st.markdown(f"{emoji} **{evento['aula_nombre']}**: {evento['titulo']}")
-                with col3:
-                    estado_emoji = "✅" if evento['estado'] == 'CONFIRMADA' else "⏳"
-                    st.markdown(f"{estado_emoji}")
-            
-            st.divider()
-        
-    except Exception as e:
-        st.error(f"Error: {e}")
 
+        # Diccionarios de traducción
+        dias_es = {
+            "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
+            "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo"
+        }
+        meses_es = {
+            "January": "enero", "February": "febrero", "March": "marzo",
+            "April": "abril", "May": "mayo", "June": "junio",
+            "July": "julio", "August": "agosto", "September": "septiembre",
+            "October": "octubre", "November": "noviembre", "December": "diciembre"
+        }
+
+        for fecha in pd.date_range(fecha_inicio, fecha_fin):
+            reservas_dia = df_reservas[
+                (pd.to_datetime(df_reservas['fecha_inicio']).dt.date == fecha.date())
+            ]
+            if not reservas_dia.empty:
+                nombre_dia = dias_es[fecha.strftime("%A")]
+                nombre_mes = meses_es[fecha.strftime("%B")]
+                st.markdown(f"#### {nombre_dia}, {fecha.day} de {nombre_mes} {fecha.year}")
+
+                for _, r in reservas_dia.iterrows():
+                    hora_inicio = pd.to_datetime(r['fecha_inicio']).strftime('%H:%M')
+                    hora_fin = pd.to_datetime(r['fecha_fin']).strftime('%H:%M')
+                    st.write(f"- **{r['titulo']}** ({hora_inicio}-{hora_fin}) en {r['aula_nombre']}")
+
+    except Exception as e:
+        st.error(f"Error cargando cronograma: {e}")
 
 # =========================
 # WIDGETS SIDEBAR
@@ -1177,7 +1169,7 @@ def render(supabase, session_state):
             mostrar_cronograma_simple(aulas_service, session_state)
         except Exception as e:
             st.error(f"❌ Error en cronograma: {e}")
-            mostrar_cronograma_alternativo(aulas_service, session_state)
+            mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin)
     
     # TAB 3: Reservas (Solo admin/gestor)
     if len(tabs) > 2:
