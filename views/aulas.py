@@ -68,27 +68,30 @@ def exportar_cronograma_excel(eventos: list):
     except Exception as e:
         st.error(f"Error exportando Excel: {e}")
 
-def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin: date):
-    """Exporta cronograma a PDF con vista semanal (sin leyenda, intervalos de horas y celdas dinámicas)"""
+def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: date, fecha_fin: date):
+    """Exporta cronograma a PDF con vista semanal (todas las aulas incluidas, aunque no tengan reservas)."""
     if not REPORTLAB_AVAILABLE:
         st.error("reportlab no está instalado. Ejecuta: pip install reportlab")
         return
-        
+
     try:
-        if not eventos:
-            st.warning("No hay eventos para exportar")
+        # 🔹 obtener aulas desde la BD (respeta el orden)
+        df_aulas = aulas_service.get_aulas_con_empresa()
+        if df_aulas.empty:
+            st.warning("No se encontraron aulas")
             return
-            
+        aulas_list = df_aulas["nombre"].tolist()  # orden original
+
         buffer = BytesIO()
         doc = SimpleDocTemplate(
-            buffer, pagesize=landscape(A4), 
+            buffer, pagesize=landscape(A4),
             leftMargin=1*cm, rightMargin=1*cm,
             topMargin=1.5*cm, bottomMargin=1.5*cm
         )
-        
+
         elementos = []
         styles = getSampleStyleSheet()
-        
+
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
@@ -97,46 +100,33 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             spaceAfter=12,
             alignment=TA_CENTER
         )
-        
-        cell_style = ParagraphStyle(
-            "cell",
-            fontSize=7,
-            leading=8,
-            alignment=1  # centrado
-        )
-        
+        cell_style = ParagraphStyle("cell", fontSize=7, leading=8, alignment=1)
+
         titulo = f"Cronograma de Aulas - {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}"
         elementos.append(Paragraph(titulo, title_style))
         elementos.append(Spacer(1, 12))
-        
-        # Obtener aulas únicas
-        aulas_set = set(ev.get("extendedProps", {}).get("aula_nombre", "Sin aula") for ev in eventos)
-        aulas_list = sorted(list(aulas_set))
-        
-        if not aulas_list:
-            st.warning("No se encontraron aulas en los eventos")
-            return
-        
-        # Generar días
+
+        # 🔹 generar días (máximo 7)
         dias = []
         fecha_actual = fecha_inicio
         while fecha_actual <= fecha_fin:
             dias.append(fecha_actual)
             fecha_actual += timedelta(days=1)
-        
         if len(dias) > 7:
             dias = dias[:7]
             st.info("Se mostrarán solo los primeros 7 días")
-        
-        # Crear matriz
+
         dias_es = {0: 'Lun', 1: 'Mar', 2: 'Mié', 3: 'Jue', 4: 'Vie', 5: 'Sáb', 6: 'Dom'}
         header = ["Aula"] + [f"{dias_es[d.weekday()]}\n{d.strftime('%d/%m')}" for d in dias]
         datos_tabla = [header]
-        
-        max_eventos_por_fila = 1  # para calcular la altura mínima de filas dinámicas
-        
+
+        base_row_height = 1.2*cm
+        row_heights = [1*cm]  # cabecera
+
         for aula in aulas_list:
             fila = [aula]
+            max_eventos_por_fila = 1
+
             for dia in dias:
                 eventos_dia = []
                 for ev in eventos:
@@ -144,28 +134,24 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
                         ev_inicio = pd.to_datetime(ev.get("start", ""))
                         ev_fin = pd.to_datetime(ev.get("end", ""))
                         ev_aula = ev.get("extendedProps", {}).get("aula_nombre", "")
-                        
+
                         if ev_aula == aula and ev_inicio.date() == dia:
-                            titulo = ev.get("title", "")
                             intervalo = f"{ev_inicio.strftime('%H:%M')} - {ev_fin.strftime('%H:%M')}"
+                            titulo = ev.get("title", "")
                             eventos_dia.append(Paragraph(f"{intervalo}<br/>{titulo}", cell_style))
                     except:
                         continue
-                
+
                 max_eventos_por_fila = max(max_eventos_por_fila, len(eventos_dia))
                 fila.append(eventos_dia if eventos_dia else "-")
+
             datos_tabla.append(fila)
-        
-        # Configurar anchos y alturas dinámicas
+            row_heights.append(base_row_height * max(1, max_eventos_por_fila))
+
+        # ancho columnas
         col_widths = [4*cm] + [3.5*cm] * len(dias)
-        base_row_height = 1.2*cm
-        row_heights = [1*cm]  # altura cabecera
-        for fila in datos_tabla[1:]:
-            num_eventos = max(len(celda) if isinstance(celda, list) else 1 for celda in fila[1:])
-            row_heights.append(base_row_height * max(1, num_eventos))
-        
+
         tabla = Table(datos_tabla, colWidths=col_widths, rowHeights=row_heights)
-        
         estilo_tabla = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3498db")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -187,16 +173,15 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ]
-        
         tabla.setStyle(TableStyle(estilo_tabla))
         elementos.append(tabla)
-        
+
         doc.build(elementos)
         buffer.seek(0)
-        
+
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"cronograma_semanal_{fecha_str}.pdf"
-        
+
         st.download_button(
             label="📥 Descargar PDF Semanal",
             data=buffer,
@@ -204,7 +189,7 @@ def exportar_cronograma_pdf_semanal(eventos: list, fecha_inicio: date, fecha_fin
             mime="application/pdf",
             use_container_width=True
         )
-        
+
     except Exception as e:
         st.error(f"Error exportando PDF: {e}")
 
