@@ -35,15 +35,49 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
     
+    /* FORZAR SIDEBAR SIEMPRE VISIBLE */
+    section[data-testid="stSidebar"] {
+        display: block !important;
+        visibility: visible !important;
+        transform: translateX(0) !important;
+        position: relative !important;
+    }
+    
+    section[data-testid="stSidebar"][aria-hidden="true"] {
+        display: block !important;
+        visibility: visible !important;
+    }
+    
+    /* OCULTAR BOTÓN HAMBURGUESA COMPLETAMENTE */
+    button[kind="header"],
+    button[data-testid="baseButton-header"],
+    button[aria-label*="navigation"],
+    button[aria-label*="sidebar"],
+    [data-testid="collapsedControl"],
+    [data-testid="stToolbar"] button:first-child {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
     /* ELIMINAR EFECTOS DE LOGIN */
-    .stSpinner, .stProgress {
+    .stSpinner > div {
+        display: none !important;
+    }
+    
+    .stProgress {
         display: none !important;
     }
     
     /* Evitar overlay durante autenticación */
     [data-testid="stAppViewContainer"]::before,
     [data-testid="stAppViewContainer"]::after {
+        content: none !important;
         display: none !important;
+    }
+    
+    /* Eliminar backdrop */
+    .stApp > div:first-child {
+        backdrop-filter: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -738,29 +772,17 @@ def login_view_light():
         if not email or not password:
             st.error("⚠️ Completa todos los campos")
         else:
-            # Progress bar limpio
-            progress_placeholder = st.empty()
-            with progress_placeholder:
-                with st.spinner(""):  # Spinner vacío
-                    progress_bar = st.progress(0, text="Autenticando...")
-                    try:
-                        progress_bar.progress(30, text="Verificando credenciales...")
-                        auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                        
-                        if auth and auth.user:
-                            progress_bar.progress(70, text="Cargando perfil...")
-                            st.session_state.auth_session = auth
-                            st.session_state.authenticated = True
-                            set_user_role_from_db(auth.user.email)
-                            progress_bar.progress(100, text="¡Acceso concedido!")
-                            progress_placeholder.empty()  # Limpiar antes de rerun
-                            st.rerun()
-                        else:
-                            progress_bar.empty()
-                            st.error("❌ Credenciales incorrectas")
-                    except Exception as e:
-                        progress_bar.empty()
-                        st.error(f"❌ Error: {e}")
+            try:
+                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                if auth and auth.user:
+                    st.session_state.auth_session = auth
+                    st.session_state.authenticated = True
+                    set_user_role_from_db(auth.user.email)
+                    st.rerun()
+                else:
+                    st.error("❌ Credenciales incorrectas")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
     
     st.markdown("""
     <div style="margin-top: 3rem; padding: 1.5rem; text-align: center;
