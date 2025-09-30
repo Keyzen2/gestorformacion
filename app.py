@@ -6,20 +6,10 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import locale
 
 from utils import get_ajustes_app
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-# Configurar locale en español
-try:
-    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
-except:
-    try:
-        locale.setlocale(locale.LC_TIME, 'es_ES')
-    except:
-        pass  # Si no se puede configurar, usar por defecto
 
 # =============================================================================
 # CONFIGURACIÓN PÁGINA
@@ -45,30 +35,21 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
     
-    /* SIDEBAR FORZADO ANCHO COMPLETO */
+    /* SIDEBAR - Ancho óptimo */
     section[data-testid="stSidebar"] {
         width: 21rem !important;
         min-width: 21rem !important;
     }
     
-    section[data-testid="stSidebar"] > div {
-        width: 21rem !important;
-    }
-    
-    /* OCULTAR BOTÓN COLAPSO */
+    /* Ocultar botón colapso sidebar */
     button[kind="header"] {
-        display: none !important;
-    }
-    
-    /* ELIMINAR SPINNER DE RERUN */
-    .stSpinner {
         display: none !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
 # =============================================================================
-# CSS TAILADMIN LIGHT THEME COMPLETO
+# CSS TAILADMIN LIGHT THEME
 # =============================================================================
 def load_tailadmin_light_css():
     st.markdown("""
@@ -132,7 +113,6 @@ def load_tailadmin_light_css():
         background: var(--bg-sidebar) !important;
         border-right: 1px solid var(--border-color) !important;
         box-shadow: var(--shadow-md) !important;
-        padding: 0 !important;
     }
     
     section[data-testid="stSidebar"] > div:first-child {
@@ -195,48 +175,6 @@ def load_tailadmin_light_css():
         background: #EF4444 !important;
         color: #FFFFFF !important;
         border-color: #EF4444 !important;
-    }
-
-    /* BOTÓN COLAPSO SIDEBAR - SIEMPRE VISIBLE */
-    button[kind="header"],
-    button[kind="header"][aria-label],
-    [data-testid="collapsedControl"] {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: #3B82F6 !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 0 8px 8px 0 !important;
-        padding: 0.5rem 0.75rem !important;
-        position: fixed !important;
-        top: 1rem !important;
-        left: 0 !important;
-        z-index: 999999 !important;
-        box-shadow: 2px 2px 8px rgba(0,0,0,0.2) !important;
-        transition: all 0.3s ease !important;
-        pointer-events: auto !important;
-    }
-    
-    button[kind="header"]:hover,
-    [data-testid="collapsedControl"]:hover {
-        background: #2563EB !important;
-        transform: translateX(2px) !important;
-    }
-    
-    /* Asegurar visibilidad cuando sidebar está colapsado */
-    body:not(:has(section[data-testid="stSidebar"])) button[kind="header"],
-    section[data-testid="stSidebar"][data-collapsed="true"] ~ * button[kind="header"] {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-    }
-    
-    /* SVG del icono hamburguesa */
-    button[kind="header"] svg,
-    [data-testid="collapsedControl"] svg {
-        color: white !important;
-        fill: white !important;
     }
 
     /* TÍTULOS */
@@ -304,21 +242,12 @@ def load_tailadmin_light_css():
         outline: none !important;
     }
 
-    /* SELECTBOX - Desplegables */
-    .stSelectbox > div > div {
-        background: #F9FAFB !important;
-        border: 2px solid #D1D5DB !important;
-        border-radius: 8px !important;
-    }
-    
+    /* SELECTBOX */
+    .stSelectbox > div > div,
     .stSelectbox [data-baseweb="select"] {
         background: #F9FAFB !important;
         border: 2px solid #D1D5DB !important;
         border-radius: 8px !important;
-    }
-    
-    .stSelectbox [data-baseweb="select"]:hover {
-        border-color: #9CA3AF !important;
     }
     
     .stSelectbox [data-baseweb="select"]:focus-within {
@@ -327,13 +256,8 @@ def load_tailadmin_light_css():
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
     }
     
-    /* MULTISELECT - Selección múltiple */
-    .stMultiSelect > div > div {
-        background: #F9FAFB !important;
-        border: 2px solid #D1D5DB !important;
-        border-radius: 8px !important;
-    }
-    
+    /* MULTISELECT */
+    .stMultiSelect > div > div,
     .stMultiSelect [data-baseweb="select"] {
         background: #F9FAFB !important;
         border: 2px solid #D1D5DB !important;
@@ -346,12 +270,10 @@ def load_tailadmin_light_css():
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
     }
     
-    /* Tags dentro de multiselect */
     .stMultiSelect [data-baseweb="tag"] {
         background: var(--primary) !important;
         color: white !important;
         border-radius: 6px !important;
-        padding: 0.25rem 0.5rem !important;
     }
     
     /* RADIO BUTTONS */
@@ -360,10 +282,6 @@ def load_tailadmin_light_css():
         border: 2px solid #D1D5DB !important;
         border-radius: 8px !important;
         padding: 0.75rem !important;
-    }
-    
-    .stRadio [role="radiogroup"] {
-        gap: 0.5rem;
     }
     
     /* CHECKBOX */
@@ -394,10 +312,6 @@ def load_tailadmin_light_css():
         border-radius: 8px !important;
         padding: 1rem !important;
     }
-    
-    .stSlider [data-baseweb="slider"] [role="slider"] {
-        background: var(--primary) !important;
-    }
 
     /* BOTONES PRINCIPALES */
     .stButton > button {
@@ -427,22 +341,14 @@ def load_tailadmin_light_css():
 
     /* TABLAS */
     [data-testid="stDataFrame"] { border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
-    [data-testid="stDataFrame"] table { border: 1px solid var(--border-color) !important; }
     [data-testid="stDataFrame"] thead th {
         background: var(--gray-50) !important;
         color: var(--text-primary) !important;
         font-weight: 600 !important;
         font-size: 0.875rem !important;
         padding: 1rem !important;
-        border-bottom: 2px solid var(--border-color) !important;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-    }
-    [data-testid="stDataFrame"] tbody td {
-        padding: 0.875rem 1rem !important;
-        color: var(--text-secondary) !important;
-        font-size: 0.875rem !important;
-        border-bottom: 1px solid var(--border-color) !important;
     }
     [data-testid="stDataFrame"] tbody tr:hover { background: var(--gray-50) !important; }
 
@@ -455,16 +361,12 @@ def load_tailadmin_light_css():
     }
     [data-testid="stTabs"] button {
         background: transparent !important;
-        color: var(--text-secondary) !important;
-        border: none !important;
         border-radius: 6px !important;
         padding: 0.75rem 1.5rem !important;
-        font-weight: 500 !important;
         transition: var(--transition) !important;
     }
     [data-testid="stTabs"] button:hover {
         background: var(--gray-50) !important;
-        color: var(--text-primary) !important;
     }
     [data-testid="stTabs"] button[aria-selected="true"] {
         background: var(--primary) !important;
@@ -544,7 +446,6 @@ class TailAdminComponents:
         <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem;
             background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 8px;
             font-size: 0.875rem; margin-bottom: 1.5rem;">
-            <span style="font-size: 1.125rem;">🏠</span>
             {''.join(breadcrumb_html)}
         </div>
         """, unsafe_allow_html=True)
@@ -552,7 +453,6 @@ class TailAdminComponents:
     @staticmethod
     def welcome_header(user_name: str, company: str = "FUNDAE", subtitle: str = None):
         if subtitle is None:
-            # Fechas en español
             meses = {
                 1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
                 5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
@@ -587,19 +487,6 @@ class TailAdminComponents:
                     </p>
                 </div>
             </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    @staticmethod
-    def info_card(title: str, content: str, icon: str = "ℹ️"):
-        st.markdown(f"""
-        <div style="background: white; border: 1px solid #E5E7EB; border-radius: 12px;
-            padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem;">
-            <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                <div style="font-size: 2rem;">{icon}</div>
-                <h3 style="margin: 0; color: #1F2937; font-size: 1.25rem;">{title}</h3>
-            </div>
-            <div style="color: #6B7280; line-height: 1.6;">{content}</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -751,7 +638,6 @@ def login_view_light():
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1;"></div>
     """, unsafe_allow_html=True)
     
-    # Contenedor centrado más estrecho
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col2:
@@ -793,7 +679,7 @@ def login_view_light():
                 © 2025 DataFor Solutions
             </p>
             <p style="color: rgba(255,255,255,0.8); font-size: 0.75rem; margin: 0.25rem 0 0;">
-                v2.2.0 Light
+                v2.3.0 - Streamlit 1.50
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -1072,7 +958,7 @@ def render_sidebar_light():
         do_logout()
     st.sidebar.markdown("---")
     st.sidebar.markdown("**DataFor** Gestor Formación")
-    st.sidebar.markdown("*v2.2.0 Light Theme*")
+    st.sidebar.markdown("*v2.3.0 - Streamlit 1.50*")
 
 # =============================================================================
 # NAVEGACIÓN
@@ -1080,7 +966,7 @@ def render_sidebar_light():
 def render_page():
     page = st.session_state.get("page", "home")
     if page and page != "home":
-        with st.spinner(f"⏳ Cargando {page.replace('_', ' ').title()}..."):
+        with st.spinner(f"Cargando {page.replace('_', ' ').title()}..."):
             try:
                 page_map = {
                     "panel_admin": "panel_admin", "usuarios_empresas": "usuarios_empresas",
@@ -1106,35 +992,28 @@ def render_page():
                     view_module.render(supabase_admin, st.session_state)
                 else:
                     st.error(f"❌ Página '{page}' no encontrada")
-                    st.info("🏠 Volviendo al dashboard principal...")
-                    if st.button("Ir al Dashboard"):
+                    if st.button("🏠 Ir al Dashboard"):
                         st.session_state.page = "home"
                         st.rerun()
             except Exception as e:
                 st.error(f"❌ Error al cargar página: {e}")
                 st.exception(e)
-                col1, col2, col3 = st.columns([1, 1, 1])
-                with col2:
-                    if st.button("🔄 Reintentar", use_container_width=True):
-                        st.rerun()
+                if st.button("🔄 Reintentar"):
+                    st.rerun()
 
 # =============================================================================
 # FUNCIONES HEADER Y FOOTER
 # =============================================================================
 def render_header():
-    """Header removido - sin header fijo"""
     pass
 
 def render_footer():
-    """Footer removido - sin footer fijo"""
     pass
 
 # =============================================================================
 # MAIN
 # =============================================================================
 def main():
-    """Función principal - Entry point para Railway"""
-    
     hide_streamlit_elements()
     load_tailadmin_light_css()
     
@@ -1146,9 +1025,7 @@ def main():
         try:
             render_header()
             render_footer()
-            
             st.set_option('client.showSidebarNavigation', True)
-            
             render_sidebar_light()
             
             page = st.session_state.get("page", "home")
@@ -1183,17 +1060,14 @@ def main():
             st.error(f"❌ Error al cargar la aplicación: {e}")
             
             if st.session_state.get("rol") == "admin":
-                with st.expander("🔧 Información de Debug (Solo Admin)"):
-                    st.write("**Estado de sesión:**")
-                    st.write(f"- Authenticated: {st.session_state.get('authenticated')}")
-                    st.write(f"- Rol: {st.session_state.get('rol')}")
-                    st.write(f"- Usuario: {st.session_state.get('user', {}).get('nombre')}")
+                with st.expander("🔧 Debug (Solo Admin)"):
+                    st.write(f"Authenticated: {st.session_state.get('authenticated')}")
+                    st.write(f"Rol: {st.session_state.get('rol')}")
+                    st.write(f"Usuario: {st.session_state.get('user', {}).get('nombre')}")
             
-            col1, col2, col3 = st.columns([1, 1, 1])
-            with col2:
-                if st.button("🔄 Reiniciar Aplicación", use_container_width=True):
-                    st.cache_data.clear()
-                    st.rerun()
+            if st.button("🔄 Reiniciar Aplicación"):
+                st.cache_data.clear()
+                st.rerun()
 
 if __name__ == "__main__":
     main()
