@@ -660,6 +660,11 @@ def mostrar_lista_reservas(aulas_service, session_state):
                     if st.button("❌ Cancelar edición", key="cancelar_edicion_reserva"):
                         del st.session_state["reserva_en_edicion"]
                         st.rerun()
+        else:
+            st.info("No hay reservas en el período seleccionado")
+                        
+    except Exception as e:
+        st.error(f"Error cargando reservas: {e}")
 
 def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Optional[Dict] = None):
     """
