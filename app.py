@@ -194,6 +194,33 @@ def load_tailadmin_light_css():
         margin: 1rem 0 !important;
     }
     
+    /* BOTONES DENTRO DE FORMULARIOS */
+    form[data-testid="form"] .stButton > button,
+    form[data-testid="form"] .stFormSubmitButton > button {
+        background: #3B82F6 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        font-size: 0.875rem !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    }
+    
+    form[data-testid="form"] .stButton > button:hover,
+    form[data-testid="form"] .stFormSubmitButton > button:hover {
+        background: #2563EB !important;
+        border-color: #2563EB !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3) !important;
+    }
+    
+    /* Botones secundarios en formularios */
+    form[data-testid="form"] .stButton > button[kind="secondary"] {
+        background: #F3F4F6 !important;
+        color: #374151 !important;
+        border: 1px solid #D1D5DB !important;
+    }
     /* ============================= */
     /* BOTONES EN EL SIDEBAR         */
     /* ============================= */
