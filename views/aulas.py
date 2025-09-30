@@ -896,7 +896,8 @@ def mostrar_cronograma_simple(aulas_service, session_state):
             st.info("No hay eventos en el período seleccionado")
             return
         
-        mostrar_cronograma_alternativo(aulas_service, session_state)
+        # ✅ Pasamos también las fechas
+        mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin)
         
         st.markdown("---")
         st.markdown("### Exportar")
