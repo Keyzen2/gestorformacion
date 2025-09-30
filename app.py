@@ -932,7 +932,8 @@ def mostrar_dashboard_admin(ajustes, metricas):
                 fig_roles.update_layout(height=350)
                 st.plotly_chart(fig_roles, use_container_width=True)
         except Exception:
-            st.info("📊 Gráfico de roles en desarrollo")
+            st.error(f"Error generando gráfico: {e}")
+            print(f"Error gráficos admin: {e}")
     
     with col2:
         try:
