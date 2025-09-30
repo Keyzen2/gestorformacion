@@ -371,7 +371,64 @@ def load_tailadmin_light_css():
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
         outline: none !important;
     }
-
+    /* INPUTS - TODOS LOS TIPOS */
+    .stTextInput > div > div > input,
+    .stTextArea > div > div > textarea,
+    .stNumberInput > div > div > input,
+    .stDateInput > div > div > input,
+    .stTimeInput > div > div > input {
+        background: #F9FAFB !important;
+        border: 2px solid #D1D5DB !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1rem !important;
+        font-size: 0.875rem !important;
+        color: var(--text-primary) !important;
+        transition: var(--transition) !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stTextArea > div > div > textarea:focus,
+    .stNumberInput > div > div > input:focus,
+    .stDateInput > div > div > input:focus,
+    .stTimeInput > div > div > input:focus {
+        border-color: var(--primary) !important;
+        background: #FFFFFF !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+        outline: none !important;
+    }
+    
+    /* INPUTS - FECHA Y HORA (ajustes extra) */
+    .stDateInput > div > div > input::placeholder,
+    .stTimeInput > div > div > input::placeholder {
+        color: #9CA3AF !important; /* Gris claro */
+    }
+    /* ============================= */
+    /* BOTONES DESHABILITADOS */
+    /* ============================= */
+    
+    /* Botones deshabilitados por defecto */
+    .stButton > button:disabled,
+    .stDownloadButton > button:disabled,
+    .stFormSubmitButton > button:disabled {
+        background: #93C5FD !important;    /* Azul claro (desaturado) */
+        color: #FFFFFF !important;
+        border: 1px solid #93C5FD !important;
+        border-radius: 8px !important;
+        cursor: not-allowed !important;
+        opacity: 0.7 !important;
+        box-shadow: none !important;
+    }
+    
+    /* Evitar cambios en hover cuando están deshabilitados */
+    .stButton > button:disabled:hover,
+    .stDownloadButton > button:disabled:hover,
+    .stFormSubmitButton > button:disabled:hover {
+        background: #93C5FD !important;
+        border-color: #93C5FD !important;
+        color: #FFFFFF !important;
+        transform: none !important;
+        box-shadow: none !important;
+    }
     /* SELECTBOX */
     .stSelectbox > div > div,
     .stSelectbox [data-baseweb="select"] {
