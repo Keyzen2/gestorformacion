@@ -1162,14 +1162,16 @@ def render(supabase, session_state):
     # TAB 3: Cronograma
     with tabs[2] if session_state.role in ["admin", "gestor"] else tabs[1]:
         try:
+            # ✅ Usamos la función completa con filtros y exportaciones
+            mostrar_cronograma_simple(aulas_service, session_state)
+        except Exception as e:
+            st.error(f"❌ Error en cronograma: {e}")
+            # Fallback a la vista alternativa mínima
             mostrar_cronograma_alternativo(
                 aulas_service, session_state,
                 datetime.now().date() - timedelta(days=7),
                 datetime.now().date() + timedelta(days=14)
             )
-        except Exception as e:
-            st.error(f"❌ Error en cronograma mejorado: {e}")
-            mostrar_cronograma_simple(aulas_service, session_state)
     
 # TAB 4: Reservas (Solo admin/gestor)
     with tabs[3]:
