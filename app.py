@@ -371,31 +371,6 @@ def load_tailadmin_light_css():
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
         outline: none !important;
     }
-    /* INPUTS - TODOS LOS TIPOS */
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea,
-    .stNumberInput > div > div > input,
-    .stDateInput > div > div > input,
-    .stTimeInput > div > div > input {
-        background: #F9FAFB !important;
-        border: 2px solid #D1D5DB !important;
-        border-radius: 8px !important;
-        padding: 0.75rem 1rem !important;
-        font-size: 0.875rem !important;
-        color: var(--text-primary) !important;
-        transition: var(--transition) !important;
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus,
-    .stNumberInput > div > div > input:focus,
-    .stDateInput > div > div > input:focus,
-    .stTimeInput > div > div > input:focus {
-        border-color: var(--primary) !important;
-        background: #FFFFFF !important;
-        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-        outline: none !important;
-    }
     
     /* INPUTS - FECHA Y HORA (ajustes extra) */
     .stDateInput > div > div > input::placeholder,
