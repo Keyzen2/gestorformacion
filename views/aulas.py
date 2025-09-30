@@ -623,31 +623,27 @@ def mostrar_lista_reservas(aulas_service, session_state):
             
             if evento.selection.rows and session_state.role in ["admin", "gestor"]:
                 reserva_seleccionada = df_reservas.iloc[evento.selection.rows[0]]
-                
+            
                 st.markdown("---")
                 st.markdown("### Acciones para Reserva Seleccionada")
-                
+            
                 col1, col2, col3 = st.columns(3)
-                
+            
                 with col1:
                     if st.button("✏️ Editar Reserva", key="editar_reserva_btn"):
-                        st.session_state["editar_reserva_id"] = reserva_seleccionada['id']
-                        st.rerun()
-                
+                        st.session_state["reserva_en_edicion"] = reserva_seleccionada.to_dict()
+            
                 with col2:
                     if reserva_seleccionada['estado'] == 'PENDIENTE':
                         if st.button("Confirmar", key="confirmar_reserva_btn"):
                             try:
-                                success = aulas_service.actualizar_estado_reserva(
-                                    reserva_seleccionada['id'], 
-                                    'CONFIRMADA'
-                                )
+                                success = aulas_service.actualizar_estado_reserva(reserva_seleccionada['id'], 'CONFIRMADA')
                                 if success:
                                     st.success("Reserva confirmada")
                                     st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {e}")
-                
+            
                 with col3:
                     if st.button("Eliminar", key="eliminar_reserva_btn"):
                         if st.session_state.get("confirmar_eliminar_reserva"):
@@ -662,16 +658,23 @@ def mostrar_lista_reservas(aulas_service, session_state):
                         else:
                             st.session_state["confirmar_eliminar_reserva"] = True
                             st.warning("Presiona nuevamente para confirmar")
-        
-        else:
-            st.info("No hay reservas en el período")
             
-    except Exception as e:
-        st.error(f"Error cargando reservas: {e}")
-
-from typing import Optional, Dict
-import pandas as pd
-from datetime import datetime, timedelta
+                # === Edición inline debajo de la tabla ===
+                if st.session_state.get("reserva_en_edicion"):
+                    st.markdown("---")
+                    st.markdown("### ✏️ Editar Reserva (inline)")
+            
+                    # Mostrar formulario precargado
+                    mostrar_formulario_reserva_manual(
+                        aulas_service,
+                        session_state,
+                        reserva=st.session_state["reserva_en_edicion"]
+                    )
+            
+                    # Botón cancelar edición (inline)
+                    if st.button("❌ Cancelar edición", key="cancelar_edicion_reserva"):
+                        del st.session_state["reserva_en_edicion"]
+                        st.rerun()
 
 def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Optional[Dict] = None):
     """
@@ -838,26 +841,10 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
 
 
 def mostrar_gestion_reservas(aulas_service, session_state):
-    """Gestión completa de reservas con subtabs"""
-    
     st.markdown("### Gestión de Reservas")
-    
-    # Si hay reserva seleccionada para editar
-    if "editar_reserva_id" in st.session_state:
-        reserva = aulas_service.get_reserva_by_id(st.session_state["editar_reserva_id"])
-        if reserva:
-            mostrar_formulario_reserva_manual(aulas_service, session_state, reserva)
-            return
-        else:
-            st.error("No se encontró la reserva seleccionada")
-            del st.session_state["editar_reserva_id"]
-    
-    # Tabs normales si no estamos editando
     sub_tabs = st.tabs(["Lista de Reservas", "Nueva Reserva"])
-    
     with sub_tabs[0]:
         mostrar_lista_reservas(aulas_service, session_state)
-    
     with sub_tabs[1]:
         mostrar_formulario_reserva_manual(aulas_service, session_state)
 
@@ -941,7 +928,7 @@ def mostrar_cronograma_simple(aulas_service, session_state):
 
 
 def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin):
-    """Vista alternativa del cronograma usando tabla simple"""
+    """Vista de cronograma tipo tarjetas (TailAdmin-like)"""
     st.markdown("### Vista de Cronograma")
 
     try:
@@ -954,7 +941,6 @@ def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, f
             st.info("No hay reservas en este período")
             return
 
-        # Diccionarios de traducción
         dias_es = {
             "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
             "Thursday": "Jueves", "Friday": "Viernes", "Saturday": "Sábado", "Sunday": "Domingo"
@@ -967,21 +953,46 @@ def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, f
         }
 
         for fecha in pd.date_range(fecha_inicio, fecha_fin):
-            reservas_dia = df_reservas[
-                (pd.to_datetime(df_reservas['fecha_inicio']).dt.date == fecha.date())
-            ]
-            if not reservas_dia.empty:
-                nombre_dia = dias_es[fecha.strftime("%A")]
-                nombre_mes = meses_es[fecha.strftime("%B")]
-                st.markdown(f"#### {nombre_dia}, {fecha.day} de {nombre_mes} {fecha.year}")
+            reservas_dia = df_reservas[pd.to_datetime(df_reservas['fecha_inicio']).dt.date == fecha.date()]
+            if reservas_dia.empty:
+                continue
 
-                for _, r in reservas_dia.iterrows():
+            nombre_dia = dias_es[fecha.strftime("%A")]
+            nombre_mes = meses_es[fecha.strftime("%B")]
+
+            # Encabezado de día (banda gris + borde azul)
+            st.markdown(f"""
+            <div style="margin-top:1rem; padding:0.6rem 1rem; background:#F3F4F6;
+                        border-left:4px solid #3B82F6; border-radius:6px;">
+                <h4 style="margin:0; color:#1E3A8A;">{nombre_dia}, {fecha.day} de {nombre_mes} {fecha.year}</h4>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Tarjetas por reserva (3 por fila aprox.)
+            # Creamos un grid simple con columnas de Streamlit
+            filas = list(reservas_dia.iterrows())
+            for i in range(0, len(filas), 3):
+                cols = st.columns(3)
+                for j, (_, r) in enumerate(filas[i:i+3]):
                     hora_inicio = pd.to_datetime(r['fecha_inicio']).strftime('%H:%M')
                     hora_fin = pd.to_datetime(r['fecha_fin']).strftime('%H:%M')
-                    st.write(f"- **{r['titulo']}** ({hora_inicio}-{hora_fin}) en {r['aula_nombre']}")
+                    titulo = r.get('titulo', '') or 'Reserva'
+                    aula = r.get('aula_nombre', '—')
+                    tipo = r.get('tipo_reserva', '—')
+
+                    with cols[j]:
+                        st.markdown(f"""
+                        <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px;
+                                    padding:0.8rem; margin:0.5rem 0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
+                            <div style="font-weight:600; color:#111827; margin-bottom:0.25rem;">{titulo}</div>
+                            <div style="color:#374151; font-size:0.9rem;">🕒 {hora_inicio} - {hora_fin}</div>
+                            <div style="color:#6B7280; font-size:0.85rem;">🏫 {aula} • {tipo}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Error cargando cronograma: {e}")
+
 
 # =========================
 # WIDGETS SIDEBAR
@@ -1125,14 +1136,6 @@ def render(supabase, session_state):
     # Dashboard admin (solo para admin)
     if session_state.role == "admin":
         mostrar_dashboard_admin(aulas_service, session_state)
-    
-    # Verificar si hay edición de reserva pendiente
-    if st.session_state.get("editar_reserva_id"):
-        st.warning("Funcionalidad de edición de reserva en desarrollo")
-        if st.button("❌ Cancelar edición"):
-            del st.session_state["editar_reserva_id"]
-            st.rerun()
-        return
     
     # Tabs principales
     if session_state.role in ["admin", "gestor"]:
