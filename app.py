@@ -34,13 +34,19 @@ def hide_streamlit_elements():
     .stDeployButton {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
-    
-    /* SIDEBAR - Ancho óptimo cuando está expandido */
-    section[data-testid="stSidebar"] {
+
+    /* SIDEBAR - Ancho solo cuando está expandido */
+    section[data-testid="stSidebar"][aria-expanded="true"] {
         width: 21rem !important;
         min-width: 21rem !important;
     }
-    
+
+    /* Cuando está colapsado, lo ocultamos por completo */
+    section[data-testid="stSidebar"][aria-expanded="false"] {
+        width: 0 !important;
+        min-width: 0 !important;
+    }
+
     /* Botón colapso - VISIBLE y funcional */
     button[kind="header"] {
         background: #3B82F6 !important;
@@ -59,18 +65,18 @@ def hide_streamlit_elements():
         color: white !important;
         fill: white !important;
     }
-    
+
     /* MAIN expandido cuando sidebar está colapsado */
     [data-testid="stAppViewContainer"] {
         transition: margin-left 0.3s ease !important;
     }
-    
-    /* Asegurar que el contenido principal se expande */
+
     .main .block-container {
         transition: max-width 0.3s ease !important;
     }
     </style>
     """, unsafe_allow_html=True)
+
 
 # =============================================================================
 # CSS TAILADMIN LIGHT THEME
