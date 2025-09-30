@@ -724,7 +724,7 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
         with col2:
             fecha_reserva = st.date_input(
                 "Fecha",
-                value=reserva.get("fecha_inicio", datetime.now()).date() if modo_edicion else datetime.now().date(),
+                value=pd.to_datetime(reserva["fecha_inicio"]).date() if modo_edicion else datetime.now().date(),
                 key="reserva_fecha"
             )
             
@@ -799,6 +799,9 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
                     success, reserva_actualizada = aulas_service.actualizar_reserva(reserva["id"], datos_reserva)
                     if success:
                         st.success(f"✅ Reserva '{reserva_actualizada['titulo']}' actualizada correctamente")
+                        # Limpiar sesión de edición para no quedar atascado
+                        if "editar_reserva_id" in st.session_state:
+                            del st.session_state["editar_reserva_id"]
                         st.rerun()
                     else:
                         st.error("❌ Error al actualizar la reserva")
