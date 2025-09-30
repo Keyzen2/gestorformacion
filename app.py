@@ -34,6 +34,17 @@ def hide_streamlit_elements():
     .stDeployButton {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
+    
+    /* ELIMINAR EFECTOS DE LOGIN */
+    .stSpinner, .stProgress {
+        display: none !important;
+    }
+    
+    /* Evitar overlay durante autenticación */
+    [data-testid="stAppViewContainer"]::before,
+    [data-testid="stAppViewContainer"]::after {
+        display: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -167,8 +178,10 @@ def load_tailadmin_light_css():
         border-color: #EF4444 !important;
     }
 
-    /* BOTÓN COLAPSO SIDEBAR */
-    button[kind="header"] {
+    /* BOTÓN COLAPSO SIDEBAR - SIEMPRE VISIBLE */
+    button[kind="header"],
+    button[kind="header"][aria-label],
+    [data-testid="collapsedControl"] {
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -183,11 +196,28 @@ def load_tailadmin_light_css():
         z-index: 999999 !important;
         box-shadow: 2px 2px 8px rgba(0,0,0,0.2) !important;
         transition: all 0.3s ease !important;
+        pointer-events: auto !important;
     }
     
-    button[kind="header"]:hover {
+    button[kind="header"]:hover,
+    [data-testid="collapsedControl"]:hover {
         background: #2563EB !important;
         transform: translateX(2px) !important;
+    }
+    
+    /* Asegurar visibilidad cuando sidebar está colapsado */
+    body:not(:has(section[data-testid="stSidebar"])) button[kind="header"],
+    section[data-testid="stSidebar"][data-collapsed="true"] ~ * button[kind="header"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+    
+    /* SVG del icono hamburguesa */
+    button[kind="header"] svg,
+    [data-testid="collapsedControl"] svg {
+        color: white !important;
+        fill: white !important;
     }
 
     /* TÍTULOS */
@@ -708,17 +738,29 @@ def login_view_light():
         if not email or not password:
             st.error("⚠️ Completa todos los campos")
         else:
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if auth and auth.user:
-                    st.session_state.auth_session = auth
-                    st.session_state.authenticated = True
-                    set_user_role_from_db(auth.user.email)
-                    st.rerun()
-                else:
-                    st.error("❌ Credenciales incorrectas")
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+            # Progress bar limpio
+            progress_placeholder = st.empty()
+            with progress_placeholder:
+                with st.spinner(""):  # Spinner vacío
+                    progress_bar = st.progress(0, text="Autenticando...")
+                    try:
+                        progress_bar.progress(30, text="Verificando credenciales...")
+                        auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                        
+                        if auth and auth.user:
+                            progress_bar.progress(70, text="Cargando perfil...")
+                            st.session_state.auth_session = auth
+                            st.session_state.authenticated = True
+                            set_user_role_from_db(auth.user.email)
+                            progress_bar.progress(100, text="¡Acceso concedido!")
+                            progress_placeholder.empty()  # Limpiar antes de rerun
+                            st.rerun()
+                        else:
+                            progress_bar.empty()
+                            st.error("❌ Credenciales incorrectas")
+                    except Exception as e:
+                        progress_bar.empty()
+                        st.error(f"❌ Error: {e}")
     
     st.markdown("""
     <div style="margin-top: 3rem; padding: 1.5rem; text-align: center;
