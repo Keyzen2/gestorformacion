@@ -92,9 +92,9 @@ def verificar_esquemas_fundae():
     try:
         # 1. Primero intentar leer desde variables de entorno (Railway)
         xsd_urls = {
-            "accion_formativa": os.environ.get("FUNDAE_XSD_ACCION_FORMATIVA") or st.secrets.get("FUNDAE", {}).get("xsd_accion_formativa"),
-            "inicio_grupo": os.environ.get("FUNDAE_XSD_INICIO_GRUPO") or st.secrets.get("FUNDAE", {}).get("xsd_inicio_grupo"),
-            "finalizacion_grupo": os.environ.get("FUNDAE_XSD_FINALIZACION_GRUPO") or st.secrets.get("FUNDAE", {}).get("xsd_finalizacion_grupo"),
+            "accion_formativa": os.environ.get("xsd_accion_formativa") or st.secrets.get("FUNDAE", {}).get("xsd_accion_formativa"),
+            "inicio_grupo": os.environ.get("xsd_inicio_grupo") or st.secrets.get("FUNDAE", {}).get("xsd_inicio_grupo"),
+            "finalizacion_grupo": os.environ.get("xsd_finalizacion_grupo") or st.secrets.get("FUNDAE", {}).get("xsd_finalizacion_grupo"),
         }
 
         urls_faltantes = [k for k, v in xsd_urls.items() if not v]
@@ -105,6 +105,7 @@ def verificar_esquemas_fundae():
             with st.expander("🔧 Cómo corregir la configuración", expanded=True):
                 st.markdown("""
                 Agrega estos valores como variables de entorno en Railway o en `secrets.toml`:
+
                 ```toml
                 [FUNDAE]
                 xsd_accion_formativa = "https://empresas.fundae.es/Lanzadera/Content/schemas/2025/AAFF_Inicio.xsd"
