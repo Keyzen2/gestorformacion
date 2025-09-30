@@ -818,14 +818,17 @@ def mostrar_gestion_reservas(aulas_service, session_state):
     
     st.markdown("### Gestión de Reservas")
     
-    sub_tabs = st.tabs(["Lista de Reservas", "Nueva Reserva"])
+    sub_tabs = st.tabs(["Lista de Reservas", "Nueva / Editar Reserva"])
     
     with sub_tabs[0]:
         mostrar_lista_reservas(aulas_service, session_state)
     
     with sub_tabs[1]:
-        mostrar_formulario_reserva_manual(aulas_service, session_state)
-
+        reserva = None
+        if "editar_reserva_id" in st.session_state:
+            reserva = aulas_service.get_reserva_por_id(st.session_state["editar_reserva_id"])
+        
+        mostrar_formulario_reserva_manual(aulas_service, session_state, reserva=reserva)
 
 # =========================
 # CRONOGRAMA
