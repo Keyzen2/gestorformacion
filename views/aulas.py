@@ -1137,20 +1137,48 @@ def render(supabase, session_state):
     except Exception as e:
         st.error(f"❌ Error inicializando servicio: {e}")
         return
-    
-    # Widgets sidebar
-    with st.sidebar:
-        mostrar_metricas_sidebar(aulas_service, session_state)
-        mostrar_alertas_aulas(aulas_service, session_state)
-    
+      
     # Título
     st.title("🏢 Gestión de Aulas")
     st.caption("Sistema completo de gestión de aulas y reservas para formación")
     
-    # Dashboard admin (solo para admin)
-    if session_state.role == "admin":
-        mostrar_dashboard_admin(aulas_service, session_state)
-    
+    # ==========================
+    # Dashboard inicial: métricas y próximas reservas
+    # ==========================
+    try:
+        if session_state.role == "admin":
+            stats = aulas_service.get_estadisticas_rapidas()
+            proximas = aulas_service.get_proximas_reservas(limite=3)
+        else:
+            empresa_id = session_state.user.get("empresa_id")
+            stats = aulas_service.get_estadisticas_empresa(empresa_id)
+            proximas = aulas_service.get_proximas_reservas_empresa(empresa_id, limite=3)
+
+        # ---- métricas ----
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Aulas", stats.get("total_aulas", 0))
+        with col2:
+            st.metric("Activas", stats.get("aulas_activas", 0))
+        with col3:
+            st.metric("Hoy", stats.get("reservas_hoy", 0))
+        with col4:
+            ocupacion = stats.get("ocupacion_actual", 0)
+            st.metric("Ocupación", f"{ocupacion:.0f}%")
+
+        # ---- próximas reservas ----
+        if proximas:
+            st.markdown("#### 📌 Próximas Reservas")
+            for reserva in proximas:
+                fecha_hora = pd.to_datetime(reserva["fecha_inicio"]).strftime("%d/%m %H:%M")
+                aula = reserva.get("aula_nombre", "Sin aula")
+                titulo = reserva.get("titulo", "Sin título")
+                st.info(f"**{fecha_hora}** — {aula}: {titulo[:60]}")
+    except Exception as e:
+        st.error(f"Error cargando métricas iniciales: {e}")
+
+    st.markdown("---")
+
     # Tabs principales
     if session_state.role in ["admin", "gestor"]:
         tabs = st.tabs(["🏢 Listado Aulas", "➕ Nueva Aula", "📅 Cronograma", "📋 Reservas"])
