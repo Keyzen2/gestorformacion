@@ -1139,73 +1139,50 @@ def render(supabase, session_state):
     
     # Tabs principales
     if session_state.role in ["admin", "gestor"]:
-        tabs = st.tabs(["🏢 Aulas", "📅 Cronograma", "📋 Reservas"])
+        tabs = st.tabs(["🏢 Listado Aulas", "➕ Nueva Aula", "📅 Cronograma", "📋 Reservas"])
     else:
-        tabs = st.tabs(["🏢 Aulas", "📅 Cronograma"])
+        tabs = st.tabs(["🏢 Listado Aulas", "📅 Cronograma"])
     
-    # TAB 1: Gestión de Aulas
+    # TAB 1: Listado de Aulas
     with tabs[0]:
         try:
             df_aulas = aulas_service.get_aulas_con_empresa()
-            
-            # Layout: Tabla | Formulario
-            col_tabla, col_form = st.columns([2, 1])
-            
-            with col_tabla:
-                aula_seleccionada = mostrar_tabla_aulas(df_aulas, session_state, aulas_service)
-            
-            with col_form:
-                # Botón crear nueva
+            aula_seleccionada = mostrar_tabla_aulas(df_aulas, session_state, aulas_service)
+    
+            if aula_seleccionada is not None:
                 if session_state.role in ["admin", "gestor"]:
-                    if st.button("➕ Nueva Aula", use_container_width=True, type="primary"):
-                        st.session_state["crear_nueva_aula"] = True
-                        st.rerun()
-                
-                # Mostrar formulario según estado
-                if st.session_state.get("crear_nueva_aula"):
-                    mostrar_formulario_aula(None, aulas_service, session_state, es_creacion=True)
-                    
-                    if st.button("❌ Cancelar", key="cancelar_nueva_aula"):
-                        del st.session_state["crear_nueva_aula"]
-                        st.rerun()
-                
-                elif aula_seleccionada is not None:
-                    if session_state.role in ["admin", "gestor"]:
-                        mostrar_formulario_aula(aula_seleccionada, aulas_service, session_state)
-                    else:
-                        st.info("👁️ Modo solo lectura")
-                        with st.expander("📋 Detalles del Aula"):
-                            st.write(f"**Nombre:** {aula_seleccionada['nombre']}")
-                            st.write(f"**Capacidad:** {aula_seleccionada['capacidad_maxima']}")
-                            st.write(f"**Ubicación:** {aula_seleccionada.get('ubicacion', 'N/A')}")
-                            st.write(f"**Estado:** {'✅ Activa' if aula_seleccionada.get('activa') else '❌ Inactiva'}")
-                
+                    mostrar_formulario_aula(aula_seleccionada, aulas_service, session_state)
                 else:
-                    st.info("👆 Selecciona un aula de la tabla para ver sus detalles")
-                    
-                    # Widget aulas disponibles
-                    disponibles_ahora = aulas_service.get_aulas_disponibles_ahora()
-                    if disponibles_ahora:
-                        st.success(f"🟢 {len(disponibles_ahora)} aulas disponibles ahora")
-                        with st.expander("Ver aulas disponibles"):
-                            for aula in disponibles_ahora:
-                                st.write(f"• {aula['nombre']} (Cap: {aula['capacidad_maxima']})")
-                    
+                    st.info("👁️ Modo solo lectura")
+                    with st.expander("📋 Detalles del Aula"):
+                        st.write(f"**Nombre:** {aula_seleccionada['nombre']}")
+                        st.write(f"**Capacidad:** {aula_seleccionada['capacidad_maxima']}")
+                        st.write(f"**Ubicación:** {aula_seleccionada.get('ubicacion', 'N/A')}")
+                        st.write(f"**Estado:** {'✅ Activa' if aula_seleccionada.get('activa') else '❌ Inactiva'}")
         except Exception as e:
             st.error(f"❌ Error en gestión de aulas: {e}")
             st.exception(e)
     
-    # TAB 2: Cronograma
-    with tabs[1]:
-        try:
-            mostrar_cronograma_simple(aulas_service, session_state)
-        except Exception as e:
-            st.error(f"❌ Error en cronograma: {e}")
-            mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin)
+    # TAB 2: Nueva Aula (solo admin/gestor)
+    if session_state.role in ["admin", "gestor"]:
+        with tabs[1]:
+            mostrar_formulario_aula(None, aulas_service, session_state, es_creacion=True)
+
     
-    # TAB 3: Reservas (Solo admin/gestor)
-    if len(tabs) > 2:
-        with tabs[2]:
+    # TAB 3: Cronograma
+    with tabs[2] if session_state.role in ["admin", "gestor"] else tabs[1]:
+        try:
+            mostrar_cronograma_alternativo(
+                aulas_service, session_state,
+                datetime.now().date() - timedelta(days=7),
+                datetime.now().date() + timedelta(days=14)
+            )
+        except Exception as e:
+            st.error(f"❌ Error en cronograma mejorado: {e}")
+            mostrar_cronograma_simple(aulas_service, session_state)
+    
+    # TAB 4: Reservas (Solo admin/gestor)
+        with tabs[3]:
             try:
                 mostrar_gestion_reservas(aulas_service, session_state)
             except Exception as e:
