@@ -31,7 +31,6 @@ def hide_streamlit_elements():
     /* Ocultar elementos nativos Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    header {visibility: hidden;}
     .stDeployButton {visibility: hidden;}
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
