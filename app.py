@@ -45,25 +45,6 @@ def hide_streamlit_elements():
         transition: all 0.3s ease !important;
     }
 
-    /* Botón de colapso / expansión */
-    button[kind="header"] {
-        background: #3B82F6 !important;
-        color: white !important;
-        border-radius: 0 8px 8px 0 !important;
-        padding: 0.5rem 0.75rem !important;
-        border: none !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    button[kind="header"]:hover {
-        background: #2563EB !important;
-    }
-    
-    button[kind="header"] svg {
-        color: white !important;
-        fill: white !important;
-    }
-
     /* MAIN - expansión fluida cuando cambia el sidebar */
     [data-testid="stAppViewContainer"] {
         transition: margin-left 0.3s ease !important;
