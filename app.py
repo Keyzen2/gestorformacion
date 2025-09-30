@@ -6,10 +6,20 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import locale
 
 from utils import get_ajustes_app
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+# Configurar locale en español
+try:
+    locale.setlocale(locale.LC_TIME, 'es_ES.UTF-8')
+except:
+    try:
+        locale.setlocale(locale.LC_TIME, 'es_ES')
+    except:
+        pass  # Si no se puede configurar, usar por defecto
 
 # =============================================================================
 # CONFIGURACIÓN PÁGINA
@@ -35,68 +45,24 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
     
-    /* FORZAR SIDEBAR SIEMPRE VISIBLE */
+    /* SIDEBAR FORZADO ANCHO COMPLETO */
     section[data-testid="stSidebar"] {
-        display: block !important;
-        visibility: visible !important;
-        transform: translateX(0) !important;
-        position: relative !important;
+        width: 21rem !important;
+        min-width: 21rem !important;
     }
     
-    section[data-testid="stSidebar"][aria-hidden="true"] {
-        display: block !important;
-        visibility: visible !important;
+    section[data-testid="stSidebar"] > div {
+        width: 21rem !important;
     }
     
-    /* OCULTAR BOTÓN HAMBURGUESA COMPLETAMENTE */
-    button[kind="header"],
-    button[data-testid="baseButton-header"],
-    button[aria-label*="navigation"],
-    button[aria-label*="sidebar"],
-    [data-testid="collapsedControl"],
-    [data-testid="stToolbar"] button:first-child {
+    /* OCULTAR BOTÓN COLAPSO */
+    button[kind="header"] {
         display: none !important;
-        visibility: hidden !important;
     }
     
-    /* ELIMINAR TODOS LOS EFECTOS DE LOGIN Y RERUN */
-    .stSpinner,
-    .stSpinner > div,
-    [data-testid="stSpinner"],
-    .stProgress,
-    [data-testid="stProgress"],
-    div[data-baseweb="spinner"],
-    [role="progressbar"] {
+    /* ELIMINAR SPINNER DE RERUN */
+    .stSpinner {
         display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-    }
-    
-    /* Evitar overlay y backdrop durante autenticación */
-    [data-testid="stAppViewContainer"]::before,
-    [data-testid="stAppViewContainer"]::after,
-    .stApp::before,
-    .stApp::after {
-        content: none !important;
-        display: none !important;
-        visibility: hidden !important;
-    }
-    
-    /* Eliminar backdrop y overlays globales */
-    .stApp > div:first-child,
-    [data-testid="stAppViewContainer"] > div:first-child {
-        backdrop-filter: none !important;
-        background: transparent !important;
-    }
-    
-    /* Evitar transiciones durante rerun */
-    * {
-        transition-duration: 0s !important;
-    }
-    
-    /* Solo permitir transiciones en hover de botones */
-    button:hover {
-        transition-duration: 0.3s !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -586,7 +552,20 @@ class TailAdminComponents:
     @staticmethod
     def welcome_header(user_name: str, company: str = "FUNDAE", subtitle: str = None):
         if subtitle is None:
-            subtitle = datetime.now().strftime('%A, %d de %B %Y')
+            # Fechas en español
+            meses = {
+                1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+                5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+                9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+            }
+            dias = {
+                0: 'lunes', 1: 'martes', 2: 'miércoles', 3: 'jueves',
+                4: 'viernes', 5: 'sábado', 6: 'domingo'
+            }
+            now = datetime.now()
+            dia_semana = dias[now.weekday()]
+            mes = meses[now.month]
+            subtitle = f"{dia_semana.capitalize()}, {now.day} de {mes} {now.year}"
         
         st.markdown(f"""
         <div style="background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 12px;
@@ -772,48 +751,52 @@ def login_view_light():
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1;"></div>
     """, unsafe_allow_html=True)
     
-    st.markdown('<div style="height: 2vh;"></div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <img src="{logo}" style="width: 180px; background: white; padding: 20px;
-            border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);" alt="DataFor">
-    </div>
-    """, unsafe_allow_html=True)
+    # Contenedor centrado más estrecho
+    col1, col2, col3 = st.columns([1, 1, 1])
     
-    st.markdown("<h3 style='text-align: center; color: white; margin-bottom: 1.5rem;'>🔐 Iniciar Sesión</h3>", unsafe_allow_html=True)
-    
-    with st.form("form_login"):
-        email = st.text_input("Email", placeholder="usuario@empresa.com")
-        password = st.text_input("Contraseña", type="password", placeholder="••••••••")
-        submitted = st.form_submit_button("🚀 Iniciar Sesión", use_container_width=True)
-    
-    if submitted:
-        if not email or not password:
-            st.error("⚠️ Completa todos los campos")
-        else:
-            try:
-                auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
-                if auth and auth.user:
-                    st.session_state.auth_session = auth
-                    st.session_state.authenticated = True
-                    set_user_role_from_db(auth.user.email)
-                    st.rerun()
-                else:
-                    st.error("❌ Credenciales incorrectas")
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-    
-    st.markdown("""
-    <div style="margin-top: 3rem; padding: 1.5rem; text-align: center;
-        background: rgba(255,255,255,0.1); border-radius: 12px; backdrop-filter: blur(10px);">
-        <p style="color: white; font-size: 0.875rem; margin: 0; font-weight: 500;">
-            © 2025 DataFor Solutions - Gestor Formación SaaS
-        </p>
-        <p style="color: rgba(255,255,255,0.8); font-size: 0.75rem; margin: 0.25rem 0 0;">
-            Versión 2.2.0 Light Theme
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    with col2:
+        st.markdown('<div style="height: 2vh;"></div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="text-align: center; margin-bottom: 2rem;">
+            <img src="{logo}" style="width: 150px; background: white; padding: 15px;
+                border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);" alt="DataFor">
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("<h3 style='text-align: center; color: white; margin-bottom: 1.5rem;'>🔐 Iniciar Sesión</h3>", unsafe_allow_html=True)
+        
+        with st.form("form_login"):
+            email = st.text_input("Email", placeholder="usuario@empresa.com")
+            password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+            submitted = st.form_submit_button("🚀 Iniciar Sesión", use_container_width=True)
+        
+        if submitted:
+            if not email or not password:
+                st.error("⚠️ Completa todos los campos")
+            else:
+                try:
+                    auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
+                    if auth and auth.user:
+                        st.session_state.auth_session = auth
+                        st.session_state.authenticated = True
+                        set_user_role_from_db(auth.user.email)
+                        st.rerun()
+                    else:
+                        st.error("❌ Credenciales incorrectas")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+        
+        st.markdown("""
+        <div style="margin-top: 3rem; padding: 1.5rem; text-align: center;
+            background: rgba(255,255,255,0.1); border-radius: 12px; backdrop-filter: blur(10px);">
+            <p style="color: white; font-size: 0.875rem; margin: 0; font-weight: 500;">
+                © 2025 DataFor Solutions
+            </p>
+            <p style="color: rgba(255,255,255,0.8); font-size: 0.75rem; margin: 0.25rem 0 0;">
+                v2.2.0 Light
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # =============================================================================
 # DASHBOARDS
