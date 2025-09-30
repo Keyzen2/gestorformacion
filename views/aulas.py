@@ -1138,7 +1138,7 @@ def render(supabase, session_state):
         try:
             df_aulas = aulas_service.get_aulas_con_empresa()
             aula_seleccionada = mostrar_tabla_aulas(df_aulas, session_state, aulas_service)
-    
+
             if aula_seleccionada is not None:
                 if session_state.role in ["admin", "gestor"]:
                     mostrar_formulario_aula(aula_seleccionada, aulas_service, session_state)
@@ -1158,7 +1158,6 @@ def render(supabase, session_state):
         with tabs[1]:
             mostrar_formulario_aula(None, aulas_service, session_state, es_creacion=True)
 
-    
     # TAB 3: Cronograma
     with tabs[2] if session_state.role in ["admin", "gestor"] else tabs[1]:
         try:
