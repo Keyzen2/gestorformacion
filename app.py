@@ -561,7 +561,37 @@ def load_tailadmin_light_css():
     .inline-form button {
         margin-top: 1rem;
     }
-
+    /* ============================= */
+    /* BOTONES INLINE (dentro de forms) */
+    /* ============================= */
+    
+    /* Botones en formularios inline */
+    .inline-form .stButton > button,
+    .inline-form .stDownloadButton > button,
+    .inline-form .stFormSubmitButton > button {
+        background: #3B82F6 !important;   /* Azul corporativo */
+        color: #FFFFFF !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px !important;
+        padding: 0.6rem 1.2rem !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        text-align: center !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease !important;
+        width: 100% !important; /* ocupa ancho contenedor */
+    }
+    
+    /* Hover */
+    .inline-form .stButton > button:hover,
+    .inline-form .stDownloadButton > button:hover,
+    .inline-form .stFormSubmitButton > button:hover {
+        background: #2563EB !important;
+        border-color: #2563EB !important;
+        color: #FFFFFF !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25) !important;
+    }
     /* ============================= */
     /* ALERTAS */
     /* ============================= */
