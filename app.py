@@ -35,15 +35,39 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
     
-    /* SIDEBAR - Ancho óptimo */
+    /* SIDEBAR - Ancho óptimo cuando está expandido */
     section[data-testid="stSidebar"] {
         width: 21rem !important;
         min-width: 21rem !important;
     }
     
-    /* Ocultar botón colapso sidebar */
+    /* Botón colapso - VISIBLE y funcional */
     button[kind="header"] {
-        display: none !important;
+        background: #3B82F6 !important;
+        color: white !important;
+        border-radius: 0 8px 8px 0 !important;
+        padding: 0.5rem 0.75rem !important;
+        border: none !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    button[kind="header"]:hover {
+        background: #2563EB !important;
+    }
+    
+    button[kind="header"] svg {
+        color: white !important;
+        fill: white !important;
+    }
+    
+    /* MAIN expandido cuando sidebar está colapsado */
+    [data-testid="stAppViewContainer"] {
+        transition: margin-left 0.3s ease !important;
+    }
+    
+    /* Asegurar que el contenido principal se expande */
+    .main .block-container {
+        transition: max-width 0.3s ease !important;
     }
     </style>
     """, unsafe_allow_html=True)
