@@ -341,18 +341,22 @@ class AulasService:
         
         return True
 
-    def actualizar_reserva(self, reserva_id: str, datos_actualizacion: Dict) -> bool:
-        """Actualiza una reserva existente"""
+    def actualizar_reserva(self, reserva_id: str, datos_actualizacion: Dict) -> Tuple[bool, Optional[Dict]]:
+        """Actualiza una reserva existente y devuelve los datos actualizados"""
         try:
             datos_actualizacion["updated_at"] = datetime.utcnow().isoformat()
+            
             result = self.supabase.table("aula_reservas").update(
                 datos_actualizacion
             ).eq("id", reserva_id).execute()
             
-            return bool(result.data)
+            if result.data:
+                return True, result.data[0]  # devolvemos la reserva actualizada
+            return False, None
             
         except Exception as e:
-            return False
+            print(f"Error al actualizar reserva {reserva_id}: {e}")
+            return False, None
 
     def eliminar_reserva(self, reserva_id: str) -> bool:
         """Elimina una reserva"""
