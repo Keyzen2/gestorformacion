@@ -222,6 +222,30 @@ def load_tailadmin_light_css():
     }
     
     /* ============================= */
+    /* BOTONES PRIMARY (fuera y dentro del sidebar) */
+    /* ============================= */
+    .stButton > button[kind="primary"] {
+        background: #3B82F6 !important;   /* azul Tailwind */
+        color: #FFFFFF !important;        /* texto blanco */
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px !important;
+        padding: 0.6rem 1.2rem !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        width: 100% !important;
+        text-align: center !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .stButton > button[kind="primary"]:hover {
+        background: #2563EB !important;   /* azul más oscuro */
+        border-color: #2563EB !important;
+        color: #FFFFFF !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25) !important;
+    }
+    /* ============================= */
     /* BOTÓN DE COLAPSO/EXPANSIÓN    */
     /* ============================= */
     button[kind="header"] {
