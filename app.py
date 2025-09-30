@@ -823,30 +823,17 @@ def login_view_tailadmin():
     # Footer fijo
     st.markdown("""
     <div style="
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(10px);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 1rem;
+        margin-top: 3rem;
+        padding: 1.5rem 1rem;
         text-align: center;
-        z-index: 1000;
+        background: rgba(0, 0, 0, 0.05);
+        border-top: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
     ">
-        <p style="
-            color: rgba(255, 255, 255, 0.9); 
-            font-size: 0.85rem; 
-            margin: 0;
-            font-weight: 500;
-        ">
+        <p style="color: #374151; font-size: 0.85rem; margin: 0; font-weight: 500;">
             © 2025 DataFor Solutions - Gestor Formación SaaS
         </p>
-        <p style="
-            color: rgba(255, 255, 255, 0.7); 
-            font-size: 0.75rem; 
-            margin: 0.25rem 0 0;
-        ">
+        <p style="color: #6b7280; font-size: 0.75rem; margin: 0.25rem 0 0;">
             Todos los derechos reservados • Versión 2.1.0
         </p>
     </div>
