@@ -778,13 +778,14 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state):
                 datos_reserva = {
                     "aula_id": aula_id,
                     "titulo": titulo,
-                    "descripcion": descripcion,
+                    "observaciones": descripcion,  # mapear correctamente
                     "tipo_reserva": tipo_reserva,
                     "fecha_inicio": fecha_inicio_completa.isoformat(),
                     "fecha_fin": fecha_fin_completa.isoformat(),
                     "estado": "CONFIRMADA",
-                    "created_by": session_state.user.get("id"),
-                    "created_at": datetime.utcnow().isoformat()
+                    "responsable": session_state.user.get("nombre_completo", "Sistema"),  # opcional
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat()
                 }
                 
                 success, reserva_id = aulas_service.crear_reserva(datos_reserva)
