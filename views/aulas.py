@@ -580,7 +580,7 @@ def mostrar_lista_reservas(aulas_service, session_state):
     with col3:
         filtro_tipo = st.selectbox(
             "Tipo",
-            ["Todos", "GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"],
+            ["Todos", "CURSO", "REUNION", "MANTENIMIENTO"],
             key="lista_filtro_tipo"
         )
     
@@ -704,7 +704,7 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state):
             
             tipo_reserva = st.selectbox(
                 "Tipo de Reserva",
-                ["GRUPO", "EVENTO", "MANTENIMIENTO", "BLOQUEADA"],
+                ["CURSO", "REUNION", "MANTENIMIENTO"],
                 key="reserva_tipo"
             )
             
@@ -923,7 +923,7 @@ def mostrar_cronograma_alternativo(aulas_service, session_state):
                 inicio = pd.to_datetime(evento['fecha_inicio'])
                 fin = pd.to_datetime(evento['fecha_fin'])
                 
-                color_map = {'GRUPO': '🟢', 'EVENTO': '🔵', 'MANTENIMIENTO': '🟡', 'BLOQUEADA': '🔴'}
+                color_map = {'CURSO': '🟢', 'REUNION': '🔵', 'MANTENIMIENTO': '🟡'}
                 emoji = color_map.get(evento['tipo_reserva'], '⚪')
                 
                 col1, col2, col3 = st.columns([1, 2, 1])
