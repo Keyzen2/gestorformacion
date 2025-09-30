@@ -1166,12 +1166,12 @@ def render(supabase, session_state):
             st.error(f"❌ Error en cronograma mejorado: {e}")
             mostrar_cronograma_simple(aulas_service, session_state)
     
-    # TAB 4: Reservas (Solo admin/gestor)
-        with tabs[3]:
-            try:
-                mostrar_gestion_reservas(aulas_service, session_state)
-            except Exception as e:
-                st.error(f"❌ Error en gestión de reservas: {e}")
+# TAB 4: Reservas (Solo admin/gestor)
+    with tabs[3]:
+        try:
+            mostrar_gestion_reservas(aulas_service, session_state)
+        except Exception as e:
+            st.error(f"❌ Error en gestión de reservas: {e}")
 
 
 # =========================
