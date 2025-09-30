@@ -370,7 +370,7 @@ class AulasService:
         """Obtiene una reserva específica por ID"""
         try:
             result = self.supabase.table("aula_reservas").select("""
-                id, titulo, descripcion, fecha_inicio, fecha_fin, tipo_reserva, estado,
+                id, titulo, observaciones, fecha_inicio, fecha_fin, tipo_reserva, estado,
                 responsable, aula_id, grupo_id, created_at, updated_at
             """).eq("id", reserva_id).execute()
             
