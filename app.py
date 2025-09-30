@@ -1026,14 +1026,6 @@ def render_sidebar_tailadmin():
                 object-fit: contain;
             " alt="DataFor">
         </div>
-        
-        <!-- Info del usuario -->
-        <p style="margin: 0; font-weight: 600; color: #f1f5f9; font-size: 0.85rem;">{nombre_usuario}</p>
-        <p style="margin: 0.25rem 0 0; font-size: 0.7rem; color: #94a3b8; text-transform: uppercase;">
-            {rol.title() if rol else 'Usuario'}
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
 
     # VERIFICAR MÓDULOS ACTIVOS PARA ROLES HABILITADOS
     modulos_empresa = {}
