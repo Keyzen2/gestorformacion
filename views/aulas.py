@@ -743,7 +743,7 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state):
         
         errores = []
         if not titulo:
-            errores.append("El título es obligatorio")
+            titulo = "Reserva sin título"
         if hora_inicio >= hora_fin:
             errores.append("La hora de fin debe ser posterior a la de inicio")
         
