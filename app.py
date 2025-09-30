@@ -59,25 +59,44 @@ def hide_streamlit_elements():
         visibility: hidden !important;
     }
     
-    /* ELIMINAR EFECTOS DE LOGIN */
-    .stSpinner > div {
+    /* ELIMINAR TODOS LOS EFECTOS DE LOGIN Y RERUN */
+    .stSpinner,
+    .stSpinner > div,
+    [data-testid="stSpinner"],
+    .stProgress,
+    [data-testid="stProgress"],
+    div[data-baseweb="spinner"],
+    [role="progressbar"] {
         display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
     }
     
-    .stProgress {
-        display: none !important;
-    }
-    
-    /* Evitar overlay durante autenticación */
+    /* Evitar overlay y backdrop durante autenticación */
     [data-testid="stAppViewContainer"]::before,
-    [data-testid="stAppViewContainer"]::after {
+    [data-testid="stAppViewContainer"]::after,
+    .stApp::before,
+    .stApp::after {
         content: none !important;
         display: none !important;
+        visibility: hidden !important;
     }
     
-    /* Eliminar backdrop */
-    .stApp > div:first-child {
+    /* Eliminar backdrop y overlays globales */
+    .stApp > div:first-child,
+    [data-testid="stAppViewContainer"] > div:first-child {
         backdrop-filter: none !important;
+        background: transparent !important;
+    }
+    
+    /* Evitar transiciones durante rerun */
+    * {
+        transition-duration: 0s !important;
+    }
+    
+    /* Solo permitir transiciones en hover de botones */
+    button:hover {
+        transition-duration: 0.3s !important;
     }
     </style>
     """, unsafe_allow_html=True)
