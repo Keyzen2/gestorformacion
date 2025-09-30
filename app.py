@@ -80,6 +80,44 @@ def hide_streamlit_elements():
     .main .block-container {
         transition: max-width 0.3s ease !important;
     }
+    /* ============================= */
+    /* BOTONES GLOBALES CORPORATIVOS */
+    /* ============================= */
+    
+    /* Todos los botones por defecto */
+    .stButton > button,
+    .stDownloadButton > button,
+    .stFormSubmitButton > button {
+        background: #3B82F6 !important;   /* Azul corporativo */
+        color: #FFFFFF !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px !important;
+        padding: 0.6rem 1.2rem !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        text-align: center !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    /* Hover */
+    .stButton > button:hover,
+    .stDownloadButton > button:hover,
+    .stFormSubmitButton > button:hover {
+        background: #2563EB !important;   /* Azul más oscuro */
+        border-color: #2563EB !important;
+        color: #FFFFFF !important;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25) !important;
+    }
+    
+    /* Botones secundarios (ej. cancelar, neutros) */
+    .stButton > button[kind="secondary"],
+    .stFormSubmitButton > button[kind="secondary"] {
+        background: #F3F4F6 !important;
+        color: #374151 !important;
+        border: 1px solid #D1D5DB !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
