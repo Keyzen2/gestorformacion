@@ -538,7 +538,42 @@ def load_tailadmin_light_css():
         letter-spacing: 0.05em;
     }
     [data-testid="stDataFrame"] tbody tr:hover { background: var(--gray-50) !important; }
-
+    /* ============================= */
+    /* TABLAS (DataFrames) */
+    /* ============================= */
+    [data-testid="stTable"] table {
+        border-collapse: collapse !important;
+        width: 100% !important;
+        font-size: 0.875rem !important;
+        color: #374151 !important;
+    }
+    
+    [data-testid="stTable"] th {
+        background: #F3F4F6 !important;
+        font-weight: 600 !important;
+        padding: 0.75rem 1rem !important;
+        border-bottom: 1px solid #E5E7EB !important;
+        text-align: left !important;
+    }
+    
+    [data-testid="stTable"] td {
+        padding: 0.75rem 1rem !important;
+        border-bottom: 1px solid #E5E7EB !important;
+    }
+    
+    [data-testid="stTable"] tr:nth-child(even) td {
+        background: #F9FAFB !important;
+    }
+    
+    /* ============================= */
+    /* ALERTAS */
+    /* ============================= */
+    div[role="alert"] {
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
+        font-size: 0.875rem !important;
+        font-weight: 500 !important;
+    }
     /* TABS */
     [data-testid="stTabs"] {
         background: var(--bg-card);
