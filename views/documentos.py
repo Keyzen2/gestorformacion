@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import os
 from io import BytesIO
 from datetime import datetime, date
 from utils import (
@@ -86,30 +87,24 @@ def apply_modern_styles():
 # =========================
 # FUNCIONES AUXILIARES
 # =========================
-
 def verificar_esquemas_fundae():
     """Verifica que los esquemas XSD FUNDAE estén configurados correctamente."""
-    
     try:
-        # Acceso a secrets
-        fundae_config = st.secrets.get("FUNDAE", {})
-        
+        # 1. Primero intentar leer desde variables de entorno (Railway)
         xsd_urls = {
-            'accion_formativa': fundae_config.get("xsd_accion_formativa"),
-            'inicio_grupo': fundae_config.get("xsd_inicio_grupo"), 
-            'finalizacion_grupo': fundae_config.get("xsd_finalizacion_grupo")
+            "accion_formativa": os.environ.get("FUNDAE_XSD_ACCION_FORMATIVA") or st.secrets.get("FUNDAE", {}).get("xsd_accion_formativa"),
+            "inicio_grupo": os.environ.get("FUNDAE_XSD_INICIO_GRUPO") or st.secrets.get("FUNDAE", {}).get("xsd_inicio_grupo"),
+            "finalizacion_grupo": os.environ.get("FUNDAE_XSD_FINALIZACION_GRUPO") or st.secrets.get("FUNDAE", {}).get("xsd_finalizacion_grupo"),
         }
-        
+
         urls_faltantes = [k for k, v in xsd_urls.items() if not v]
-        
         if urls_faltantes:
             st.error("❌ **Configuración FUNDAE incompleta**")
             st.error(f"Faltan esquemas XSD: {', '.join(urls_faltantes)}")
-            
+
             with st.expander("🔧 Cómo corregir la configuración", expanded=True):
                 st.markdown("""
-                **Agrega estos valores a tu `secrets.toml`:**
-                
+                Agrega estos valores como variables de entorno en Railway o en `secrets.toml`:
                 ```toml
                 [FUNDAE]
                 xsd_accion_formativa = "https://empresas.fundae.es/Lanzadera/Content/schemas/2025/AAFF_Inicio.xsd"
@@ -117,12 +112,11 @@ def verificar_esquemas_fundae():
                 xsd_finalizacion_grupo = "https://empresas.fundae.es/Lanzadera/Content/schemas/2025/FinalizacionGrupo_Organizadora.xsd"
                 ```
                 """)
-            
             return None
-        
-        st.success("✅ Esquemas FUNDAE 2025 configurados correctamente")
+
+        st.success("✅ Esquemas FUNDAE configurados correctamente")
         return xsd_urls
-        
+
     except Exception as e:
         st.error(f"❌ Error al verificar configuración FUNDAE: {e}")
         return None
