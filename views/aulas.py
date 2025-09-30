@@ -911,7 +911,7 @@ def mostrar_cronograma_simple(aulas_service, session_state):
         with col1:
             exportar_cronograma_excel(eventos)
         with col2:
-            exportar_cronograma_pdf_semanal(eventos, fecha_inicio, fecha_fin)
+            exportar_cronograma_pdf_semanal(aulas_service, eventos, fecha_inicio, fecha_fin)
             
     except Exception as e:
         st.error(f"Error obteniendo eventos: {e}")
