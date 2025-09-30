@@ -544,55 +544,57 @@ def mostrar_formulario_aula(aula_data, aulas_service, session_state, es_creacion
 # =========================
 
 def mostrar_lista_reservas(aulas_service, session_state):
-    """Lista de reservas con filtros"""
+    """Lista de reservas con filtros y edición inline estilo TailAdmin"""
     st.markdown("### Reservas Existentes")
-    
+
+    # === Filtros ===
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         fecha_desde = st.date_input(
             "Desde",
             value=datetime.now().date() - timedelta(days=7),
             key="lista_fecha_desde"
         )
-    
+
     with col2:
         fecha_hasta = st.date_input(
             "Hasta",
             value=datetime.now().date() + timedelta(days=14),
             key="lista_fecha_hasta"
         )
-    
+
     with col3:
         filtro_tipo = st.selectbox(
             "Tipo",
             ["Todos", "CURSO", "REUNION", "MANTENIMIENTO"],
             key="lista_filtro_tipo"
         )
-    
+
+    # === Consultar reservas ===
     try:
         df_reservas = aulas_service.get_reservas_periodo(
             fecha_desde.isoformat() + "T00:00:00Z",
             fecha_hasta.isoformat() + "T23:59:59Z"
         )
-        
+
         if not df_reservas.empty:
             if filtro_tipo != "Todos":
                 df_reservas = df_reservas[df_reservas['tipo_reserva'] == filtro_tipo]
-            
+
             df_display = df_reservas.copy()
             df_display['Fecha'] = pd.to_datetime(df_display['fecha_inicio']).dt.strftime('%d/%m/%Y')
             df_display['Horario'] = (
-                pd.to_datetime(df_display['fecha_inicio']).dt.strftime('%H:%M') + 
-                " - " + 
+                pd.to_datetime(df_display['fecha_inicio']).dt.strftime('%H:%M') +
+                " - " +
                 pd.to_datetime(df_display['fecha_fin']).dt.strftime('%H:%M')
             )
             df_display['Estado'] = df_display['estado'].apply(
                 lambda x: "Confirmada" if x == "CONFIRMADA" else "Pendiente"
             )
-            
+
             columnas_mostrar = ['Fecha', 'Horario', 'aula_nombre', 'titulo', 'tipo_reserva', 'Estado']
-            
+
             evento = st.dataframe(
                 df_display[columnas_mostrar],
                 use_container_width=True,
@@ -605,32 +607,35 @@ def mostrar_lista_reservas(aulas_service, session_state):
                     'tipo_reserva': 'Tipo'
                 }
             )
-            
+
+            # === Acciones sobre la fila seleccionada ===
             if evento.selection.rows and session_state.role in ["admin", "gestor"]:
                 reserva_seleccionada = df_reservas.iloc[evento.selection.rows[0]]
-            
+
                 st.markdown("---")
-                st.markdown("### Acciones para Reserva Seleccionada")
-            
+                st.markdown("### Acciones para la reserva seleccionada")
+
                 col1, col2, col3 = st.columns(3)
-            
+
                 with col1:
                     if st.button("✏️ Editar Reserva", key="editar_reserva_btn"):
                         st.session_state["reserva_en_edicion"] = reserva_seleccionada.to_dict()
-            
+
                 with col2:
                     if reserva_seleccionada['estado'] == 'PENDIENTE':
-                        if st.button("Confirmar", key="confirmar_reserva_btn"):
+                        if st.button("✅ Confirmar", key="confirmar_reserva_btn"):
                             try:
-                                success = aulas_service.actualizar_estado_reserva(reserva_seleccionada['id'], 'CONFIRMADA')
+                                success = aulas_service.actualizar_estado_reserva(
+                                    reserva_seleccionada['id'], 'CONFIRMADA'
+                                )
                                 if success:
                                     st.success("Reserva confirmada")
                                     st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {e}")
-            
+
                 with col3:
-                    if st.button("Eliminar", key="eliminar_reserva_btn"):
+                    if st.button("🗑️ Eliminar", key="eliminar_reserva_btn"):
                         if st.session_state.get("confirmar_eliminar_reserva"):
                             try:
                                 success = aulas_service.eliminar_reserva(reserva_seleccionada['id'])
@@ -643,36 +648,40 @@ def mostrar_lista_reservas(aulas_service, session_state):
                         else:
                             st.session_state["confirmar_eliminar_reserva"] = True
                             st.warning("Presiona nuevamente para confirmar")
-            
-                # === Edición inline debajo de la tabla ===
+
+                # === Edición inline con estilo tarjeta ===
                 if st.session_state.get("reserva_en_edicion"):
                     st.markdown("---")
-                    st.markdown("### ✏️ Editar Reserva (inline)")
-            
-                    # Mostrar formulario precargado
-                    mostrar_formulario_reserva_manual(
-                        aulas_service,
-                        session_state,
-                        reserva=st.session_state["reserva_en_edicion"]
-                    )
-            
-                    # Botón cancelar edición (inline)
-                    if st.button("❌ Cancelar edición", key="cancelar_edicion_reserva"):
-                        del st.session_state["reserva_en_edicion"]
-                        st.rerun()
+                    st.markdown("### ✏️ Editar Reserva")
+
+                    with st.container():
+                        st.markdown('<div class="inline-form">', unsafe_allow_html=True)
+
+                        mostrar_formulario_reserva_manual(
+                            aulas_service,
+                            session_state,
+                            reserva=st.session_state["reserva_en_edicion"]
+                        )
+
+                        if st.button("❌ Cancelar edición", key="cancelar_edicion_reserva"):
+                            del st.session_state["reserva_en_edicion"]
+                            st.rerun()
+
+                        st.markdown('</div>', unsafe_allow_html=True)
+
         else:
             st.info("No hay reservas en el período seleccionado")
-                        
+
     except Exception as e:
-        st.error(f"Error cargando reservas: {e}")
+        st.error(f"Error en gestión de reservas: {e}")
 
 def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Optional[Dict] = None):
     """
     Formulario para crear o editar reservas manuales.
     - Si `reserva` es None → crear nueva reserva.
-    - Si `reserva` contiene datos → editar esa reserva.
+    - Si `reserva` contiene datos → editar esa reserva (inline).
     """
-    
+
     modo_edicion = reserva is not None
     titulo_form = "✏️ Editar Reserva" if modo_edicion else "➕ Nueva Reserva Manual"
     st.markdown(f"### {titulo_form}")
@@ -685,76 +694,94 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
         if df_aulas.empty:
             st.warning("No hay aulas disponibles")
             return
-        
+
         aulas_opciones = {
-            f"{row['nombre']} ({row['ubicacion']})" if row.get('ubicacion') else row['nombre']: row['id']
+            f"{row['nombre']} ({row['ubicacion']})" if row.get("ubicacion") else row["nombre"]: row["id"]
             for _, row in df_aulas.iterrows()
         }
     except Exception as e:
         st.error(f"Error cargando aulas: {e}")
         return
 
+    # Clave única para cada formulario
+    form_key = f"form_reserva_manual_{reserva['id']}" if modo_edicion else "form_reserva_manual_nueva"
+
     # ==========================
     # Formulario
     # ==========================
-    with st.form("form_reserva_manual"):
+    with st.form(form_key):
         col1, col2 = st.columns(2)
-        
+
         with col1:
             aula_seleccionada = st.selectbox(
                 "Seleccionar Aula",
                 options=list(aulas_opciones.keys()),
-                index=(list(aulas_opciones.values()).index(reserva["aula_id"]) 
-                       if modo_edicion and reserva.get("aula_id") in aulas_opciones.values() else 0),
-                key="reserva_aula"
+                index=(
+                    list(aulas_opciones.values()).index(reserva["aula_id"])
+                    if modo_edicion and reserva.get("aula_id") in aulas_opciones.values()
+                    else 0
+                ),
+                key=f"{form_key}_aula"
             )
-            
+
             tipo_reserva = st.selectbox(
                 "Tipo de Reserva",
                 ["CURSO", "REUNION", "MANTENIMIENTO"],
-                index=(["CURSO", "REUNION", "MANTENIMIENTO"].index(reserva["tipo_reserva"]) 
-                       if modo_edicion and reserva.get("tipo_reserva") else 0),
-                key="reserva_tipo"
+                index=(
+                    ["CURSO", "REUNION", "MANTENIMIENTO"].index(reserva["tipo_reserva"])
+                    if modo_edicion and reserva.get("tipo_reserva")
+                    else 0
+                ),
+                key=f"{form_key}_tipo"
             )
-            
+
             titulo_reserva = st.text_input(
                 "Título de la Reserva",
                 value=reserva.get("titulo", "") if modo_edicion else "",
-                key="reserva_titulo",
+                key=f"{form_key}_titulo",
                 help="Descripción breve"
             )
-        
+
         with col2:
             fecha_reserva = st.date_input(
                 "Fecha",
-                value=(pd.to_datetime(reserva["fecha_inicio"]).date() 
-                       if modo_edicion and reserva.get("fecha_inicio") else datetime.now().date()),
-                key="reserva_fecha"
+                value=(
+                    pd.to_datetime(reserva["fecha_inicio"]).date()
+                    if modo_edicion and reserva.get("fecha_inicio")
+                    else datetime.now().date()
+                ),
+                key=f"{form_key}_fecha"
             )
-            
+
             col_hora1, col_hora2 = st.columns(2)
             with col_hora1:
                 hora_inicio = st.time_input(
                     "Hora Inicio",
-                    value=(pd.to_datetime(reserva["fecha_inicio"]).time() 
-                           if modo_edicion and reserva.get("fecha_inicio") else datetime.now().time()),
-                    key="reserva_hora_inicio"
+                    value=(
+                        pd.to_datetime(reserva["fecha_inicio"]).time()
+                        if modo_edicion and reserva.get("fecha_inicio")
+                        else datetime.now().time()
+                    ),
+                    key=f"{form_key}_hora_inicio"
                 )
             with col_hora2:
                 hora_fin = st.time_input(
                     "Hora Fin",
-                    value=(pd.to_datetime(reserva["fecha_fin"]).time() 
-                           if modo_edicion and reserva.get("fecha_fin") else (datetime.now() + timedelta(hours=2)).time()),
-                    key="reserva_hora_fin"
+                    value=(
+                        pd.to_datetime(reserva["fecha_fin"]).time()
+                        if modo_edicion and reserva.get("fecha_fin")
+                        else (datetime.now() + timedelta(hours=2)).time()
+                    ),
+                    key=f"{form_key}_hora_fin"
                 )
-        
+
         descripcion = st.text_area(
             "Descripción Adicional",
             value=reserva.get("observaciones", "") if modo_edicion else "",
-            key="reserva_descripcion",
+            key=f"{form_key}_descripcion",
             help="Información adicional (opcional)"
         )
-        
+
         # ==========================
         # Validaciones
         # ==========================
@@ -763,19 +790,19 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
             titulo_reserva = "Reserva sin título"
         if hora_inicio >= hora_fin:
             errores.append("La hora de fin debe ser posterior a la de inicio")
-        
+
         if errores:
             for error in errores:
                 st.error(f"⚠️ {error}")
-        
+
         boton_texto = "Actualizar Reserva" if modo_edicion else "Crear Reserva"
         submitted = st.form_submit_button(
-            boton_texto, 
-            type="primary", 
+            boton_texto,
+            type="primary",
             use_container_width=True,
             disabled=bool(errores)
         )
-        
+
         # ==========================
         # Guardar o actualizar
         # ==========================
@@ -785,7 +812,6 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
                 fecha_fin_completa = datetime.combine(fecha_reserva, hora_fin)
                 aula_id = aulas_opciones[aula_seleccionada]
 
-                # Detectar conflictos solo en creación
                 if not modo_edicion:
                     conflictos = aulas_service.verificar_conflictos_reserva(
                         aula_id,
@@ -812,9 +838,8 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
                     success = aulas_service.actualizar_reserva(reserva["id"], datos_reserva)
                     if success:
                         st.success(f"✅ Reserva '{titulo_reserva}' actualizada correctamente")
-                        # Limpiar sesión de edición
-                        if "editar_reserva_id" in st.session_state:
-                            del st.session_state["editar_reserva_id"]
+                        if "reserva_en_edicion" in st.session_state:
+                            del st.session_state["reserva_en_edicion"]
                         st.rerun()
                     else:
                         st.error("❌ Error al actualizar la reserva")
@@ -825,10 +850,9 @@ def mostrar_formulario_reserva_manual(aulas_service, session_state, reserva: Opt
                         st.rerun()
                     else:
                         st.error("❌ Error al crear la reserva")
-                    
+
             except Exception as e:
                 st.error(f"Error procesando reserva: {e}")
-
 
 def mostrar_gestion_reservas(aulas_service, session_state):
     st.markdown("### Gestión de Reservas")
