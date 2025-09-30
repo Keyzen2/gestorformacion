@@ -35,14 +35,6 @@ def hide_streamlit_elements():
     div[data-testid="stDecoration"] {visibility: hidden;}
     [data-testid="stStatusWidget"] {visibility: hidden;}
 
-    /* Sidebar expandido */
-    section[data-testid="stSidebar"][aria-expanded="true"] {
-        background: #FFFFFF !important;
-        border-right: 1px solid #E5E7EB !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
-        transition: all 0.3s ease !important;
-    }
-
     /* Sidebar colapsado: dejamos un ancho mínimo para que la flecha aparezca */
     section[data-testid="stSidebar"][aria-expanded="false"] {
         width: 1.5rem !important;
