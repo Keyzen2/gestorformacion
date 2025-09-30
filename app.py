@@ -6,7 +6,7 @@ from datetime import datetime
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-
+import time
 from utils import get_ajustes_app
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -700,12 +700,14 @@ def is_module_active(empresa, empresa_crm, key, hoy, role):
 # LOGIN
 # =============================================================================
 def login_view_light():
+    if not st.session_state.get("authenticated", False):
+        # Fondo morado solo si NO está autenticado
+        st.markdown("""
+        <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1;"></div>
+        """, unsafe_allow_html=True)
+
     logo = "https://jjeiyuixhxtgsujgsiky.supabase.co/storage/v1/object/public/documentos/datafor-logo.png"
-    st.markdown("""
-    <div style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); z-index: -1;"></div>
-    """, unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col2:
@@ -716,7 +718,7 @@ def login_view_light():
                 border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);" alt="DataFor">
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("<h3 style='text-align: center; color: white; margin-bottom: 1.5rem;'>🔐 Iniciar Sesión</h3>", unsafe_allow_html=True)
         
         with st.form("form_login"):
@@ -731,9 +733,12 @@ def login_view_light():
                 try:
                     auth = supabase_public.auth.sign_in_with_password({"email": email, "password": password})
                     if auth and auth.user:
+                        # Mensaje de éxito visible
+                        st.success(f"✅ Login correcto, bienvenido {auth.user.email}")
                         st.session_state.auth_session = auth
                         st.session_state.authenticated = True
                         set_user_role_from_db(auth.user.email)
+                        time.sleep(1)  # espera breve para ver el mensaje
                         st.rerun()
                     else:
                         st.error("❌ Credenciales incorrectas")
