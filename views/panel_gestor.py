@@ -419,7 +419,6 @@ def mostrar_evolucion_participantes(df_participantes):
     except Exception as e:
         st.error(f"Error: {e}")
 
-
 def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
     """Estadísticas de ocupación de aulas"""
     
@@ -453,21 +452,35 @@ def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
     with col2:
         st.metric("Reservas Hoy", reservas_hoy)
     
-    # Gráfico de reservas por aula (si hay datos)
+    # Gráfico de reservas por aula (CORREGIDO)
     if not df_reservas.empty and 'aula_id' in df_reservas.columns:
         try:
             reservas_por_aula = df_reservas['aula_id'].value_counts().head(5)
             
             if not reservas_por_aula.empty:
-                # Obtener nombres de aulas
-                aulas_dict = {a['id']: a.get('nombre', 'Sin nombre') for _, a in df_aulas.iterrows()}
-                nombres_aulas = [aulas_dict.get(aula_id, f'Aula {aula_id}') for aula_id in reservas_por_aula.index]
+                # Crear diccionario de nombres de aulas (CORREGIDO)
+                aulas_dict = {}
+                for _, aula in df_aulas.iterrows():
+                    aula_id = aula.get('id')
+                    aula_nombre = aula.get('nombre', 'Sin nombre')
+                    if aula_id:
+                        aulas_dict[aula_id] = aula_nombre
                 
+                # Obtener nombres (CORREGIDO)
+                nombres_aulas = []
+                valores = []
+                
+                for aula_id, count in reservas_por_aula.items():
+                    nombre = aulas_dict.get(aula_id, f'Aula desconocida')
+                    nombres_aulas.append(nombre)
+                    valores.append(count)
+                
+                # Crear gráfico
                 fig = px.bar(
-                    x=reservas_por_aula.values,
+                    x=valores,
                     y=nombres_aulas,
                     orientation='h',
-                    color=reservas_por_aula.values,
+                    color=valores,
                     color_continuous_scale='Oranges'
                 )
                 
@@ -480,9 +493,8 @@ def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
                 )
                 
                 st.plotly_chart(fig, use_container_width=True)
-        except:
-            pass
-
+        except Exception as e:
+            st.error(f"Error en gráfico: {e}")
 
 def mostrar_top_acciones_formativas(df_grupos):
     """Top 5 acciones formativas más utilizadas"""
