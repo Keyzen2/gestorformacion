@@ -1,16 +1,6 @@
 import os
 import sys
 import streamlit as st
-from supabase import create_client
-from datetime import datetime
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-import time
-from utils import get_ajustes_app
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
 # =============================================================================
 # CONFIGURACIÓN PÁGINA
 # =============================================================================
@@ -21,6 +11,15 @@ st.set_page_config(
     page_icon="🎓",
     menu_items={'Get Help': None, 'Report a bug': None, 'About': None}
 )
+from supabase import create_client
+from datetime import datetime
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import time
+from utils import get_ajustes_app
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # =============================================================================
 # OCULTAR MENÚS STREAMLIT
