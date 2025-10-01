@@ -1613,7 +1613,8 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
             grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
             tiene_diploma = participante["id"] in participantes_con_diploma
             
-            accion_nombre = grupo_info.get("accion_formativa", {}).get("nombre", "Sin acción") if grupo_info.get("accion_formativa") else "Sin acción"
+            accion_info = grupo_info.get("accion_formativa") or {}
+            accion_nombre = accion_info.get("nombre", "Sin acción")
             nombre_completo = f"{participante['nombre']} {participante.get('apellidos', '')}".strip()
             
             status_emoji = "✅" if tiene_diploma else "⏳"
