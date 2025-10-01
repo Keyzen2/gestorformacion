@@ -308,32 +308,26 @@ class ClasesService:
     # =========================
     @st.cache_data(ttl=300)
     def get_horarios_con_clase(_self, clase_id: Optional[str] = None):
-        """Obtiene horarios con información de clase"""
+        """Obtiene horarios con información de clase Y aula"""
         try:
-            # Query base
+            # LEFT JOIN con aulas para obtener nombre del aula
             query = _self.supabase.table("clases_horarios").select("""
                 id, dia_semana, hora_inicio, hora_fin, capacidad_maxima, activo,
                 created_at, clase_id, aula_id,
-                clases!inner(nombre, categoria, empresa_id, activa)
+                clases!inner(nombre, categoria, empresa_id, activa),
+                aulas(nombre, capacidad_maxima)
             """)
             
-            # Filtrar por clase específica si se proporciona
             if clase_id:
                 query = query.eq("clase_id", clase_id)
             
-            # IMPORTANTE: Filtrar por empresa según rol
             if _self.role == "gestor" and _self.empresa_id:
-                # Obtener empresas gestionadas
                 empresas_gestionadas = _self._get_empresas_gestionadas()
-                
                 if empresas_gestionadas:
-                    # Filtrar por empresa usando join a clases
                     query = query.in_("clases.empresa_id", empresas_gestionadas)
                 else:
-                    # Si no tiene empresas, devolver vacío
                     return pd.DataFrame()
             
-            # Ejecutar query
             result = query.order("dia_semana").order("hora_inicio").execute()
             
             if result.data:
@@ -341,14 +335,26 @@ class ClasesService:
                 dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
                 
                 for horario in result.data:
+                    # Extraer info del aula
+                    aula_info = horario.get("aulas")
+                    aula_nombre = aula_info.get("nombre") if aula_info else None
+                    
                     horario_flat = {
-                        **horario,
+                        "id": horario["id"],
+                        "dia_semana": int(horario["dia_semana"]),  # Convertir a int nativo
+                        "hora_inicio": horario["hora_inicio"],
+                        "hora_fin": horario["hora_fin"],
+                        "capacidad_maxima": horario["capacidad_maxima"],
+                        "activo": horario["activo"],
+                        "created_at": horario["created_at"],
+                        "clase_id": horario["clase_id"],
+                        "aula_id": horario.get("aula_id"),
                         "clase_nombre": horario["clases"]["nombre"],
                         "clase_categoria": horario["clases"]["categoria"],
                         "dia_nombre": dias_semana[horario["dia_semana"]],
-                        "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}"
+                        "horario_display": f"{horario['hora_inicio']} - {horario['hora_fin']}",
+                        "aula_nombre": aula_nombre
                     }
-                    horario_flat.pop("clases", None)
                     horarios.append(horario_flat)
                 
                 return pd.DataFrame(horarios)
@@ -358,7 +364,7 @@ class ClasesService:
         except Exception as e:
             print(f"Error cargando horarios: {e}")
             import traceback
-            traceback.print_exc()  # Ver error completo
+            traceback.print_exc()
             return pd.DataFrame()
 
     def crear_horario(self, datos_horario: Dict) -> Tuple[bool, Optional[str]]:
