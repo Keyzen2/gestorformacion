@@ -713,6 +713,33 @@ def load_tailadmin_light_css():
     .inline-form button {
         margin-top: 1rem;
     }
+    /* ================================= */
+    /* FIX: Forzar color corporativo en todos los submit buttons */
+    /* ================================= */
+    div.stFormSubmitButton > button,
+    form[data-testid="stForm"] .stFormSubmitButton > button,
+    .inline-form .stFormSubmitButton > button {
+        background: #3B82F6 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #3B82F6 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        font-size: 0.9rem !important;
+        text-align: center !important;
+        transition: all 0.2s ease !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    }
+    
+    div.stFormSubmitButton > button:hover,
+    form[data-testid="stForm"] .stFormSubmitButton > button:hover,
+    .inline-form .stFormSubmitButton > button:hover {
+        background: #2563EB !important;
+        border-color: #2563EB !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(59,130,246,0.3) !important;
+    }
+
     /* ============================= */
     /* BOTONES INLINE (dentro de forms) */
     /* ============================= */
