@@ -648,6 +648,7 @@ class ParticipantesService:
         Incluye info básica del grupo y de la acción formativa.
         """
         res = self.supabase.table("participantes_grupos").select("""
+            id,
             fecha_asignacion,
             grupo:grupos(
                 id, codigo_grupo, fecha_inicio, fecha_fin_prevista, fecha_fin,
@@ -667,6 +668,7 @@ class ParticipantesService:
     
             accion = grupo.get("accion_formativa", {})
             grupos_data.append({
+                "relacion_id": relacion.get("id"),
                 "grupo_id": grupo.get("id"),
                 "fecha_asignacion": relacion.get("fecha_asignacion"),
                 "codigo_grupo": grupo.get("codigo_grupo", ""),
