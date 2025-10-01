@@ -6,47 +6,26 @@ class TailAdminDashboard:
     @staticmethod
     def metric_card_primary(titulo: str, valor: str, icono: str = "📊", 
                            cambio: str = None, cambio_positivo: bool = True):
-        """Tarjeta de métrica principal con gradiente"""
+        """Tarjeta de métrica principal con gradiente - SIN HTML VISIBLE"""
         
-        cambio_color = "#10B981" if cambio_positivo else "#EF4444"
-        cambio_icon = "↑" if cambio_positivo else "↓"
-        
-        # Construir HTML de cambio DENTRO del mismo markdown
+        # Preparar sección de cambio
         if cambio:
-            cambio_section = f"""
-            <div style="
-                display: inline-flex;
-                align-items: center;
-                gap: 0.25rem;
-                font-size: 0.875rem;
-                color: {cambio_color};
-                font-weight: 600;
-                margin-top: 0.5rem;
-            ">
-                <span>{cambio_icon}</span>
-                <span>{cambio}</span>
-            </div>
-            """
+            cambio_color = "#10B981" if cambio_positivo else "#EF4444"
+            cambio_icon = "↑" if cambio_positivo else "↓"
+            cambio_html = f'<div style="display:inline-flex;align-items:center;gap:0.25rem;font-size:0.875rem;color:{cambio_color};font-weight:600;margin-top:0.5rem;"><span>{cambio_icon}</span><span>{cambio}</span></div>'
         else:
-            cambio_section = ""
+            cambio_html = ''
         
-        # TODO EL HTML EN UN SOLO BLOQUE
+        # Renderizar todo en UN SOLO markdown
         st.markdown(f"""
-        <div style="
-            background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
-            color: white;
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
-            transition: transform 0.2s ease;
-        ">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div style="background:linear-gradient(135deg,#3B82F6 0%,#60A5FA 100%);color:white;border-radius:12px;padding:1.5rem;box-shadow:0 4px 6px rgba(59,130,246,0.3);">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
                 <div>
-                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem; color: white;">{titulo}</div>
-                    <div style="font-size: 2rem; font-weight: 700; color: white;">{valor}</div>
-                    {cambio_section}
+                    <div style="font-size:0.875rem;opacity:0.9;margin-bottom:0.5rem;color:white;">{titulo}</div>
+                    <div style="font-size:2rem;font-weight:700;color:white;">{valor}</div>
+                    {cambio_html}
                 </div>
-                <div style="font-size: 2.5rem; opacity: 0.8;">{icono}</div>
+                <div style="font-size:2.5rem;opacity:0.8;">{icono}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
