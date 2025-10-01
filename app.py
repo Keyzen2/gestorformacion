@@ -1169,38 +1169,42 @@ def mostrar_dashboard_gestor(ajustes, metricas):
     with col3:
         components.stat_card("Documentos", str(metricas.get('documentos', 0)), "📂", color="warning")
 
-def mostrar_dashboard_alumno(ajustes):
-    components = TailAdminComponents()
-    user_name = st.session_state.user.get("nombre", "Alumno")
-    components.welcome_header(user_name, "Área del Estudiante")
-    components.breadcrumb(["Dashboard", "Área del Alumno"])
-    st.markdown("## 📘 Mi Área de Formación")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("""
-        <div style="background: white; border: 1px solid #E5E7EB; border-radius: 12px;
-            padding: 2.5rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <div style="font-size: 3.5rem; margin-bottom: 1rem;">📘</div>
-            <h3 style="color: #1F2937; margin: 0 0 0.5rem 0;">Mis Grupos</h3>
-            <p style="color: #6B7280; margin: 0 0 1.5rem 0;">Consulta tus grupos formativos activos</p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Ver Mis Grupos", key="btn_grupos", use_container_width=True):
-            st.session_state.page = "area_alumno"
-            st.rerun()
-    
-    with col2:
-        st.markdown("""
-        <div style="background: white; border: 1px solid #E5E7EB; border-radius: 12px;
-            padding: 2.5rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <div style="font-size: 3.5rem; margin-bottom: 1rem;">🎓</div>
-            <h3 style="color: #1F2937; margin: 0 0 0.5rem 0;">Mis Certificados</h3>
-            <p style="color: #6B7280; margin: 0 0 1.5rem 0;">Descarga tus diplomas acreditativos</p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Ver Certificados", key="btn_cert", use_container_width=True):
-            st.info("Funcionalidad en desarrollo")
+def mostrar_dashboard_alumno(ajustes, aulas_service):
+    user = st.session_state.user
+    participante_id = user.get("participante_id")  # deberías mapear esto al login
+    nombre = user.get("nombre", "Alumno")
+
+    st.markdown(f"### 👋 Bienvenido, {nombre}")
+    st.caption("Este es tu espacio personal para gestionar tus cursos y reservas.")
+
+    # Cursos
+    cursos = aulas_service.get_cursos_alumno(participante_id)
+    if cursos:
+        st.subheader("📚 Tus cursos")
+        for c in cursos:
+            g = c.get("grupos", {})
+            af = g.get("acciones_formativas", {})
+            progreso = aulas_service.get_progreso_curso(g)
+            st.write(f"**{af.get('nombre')}** ({progreso}% completado)")
+            st.progress(progreso)
+
+            # Próximas sesiones
+            sesiones = aulas_service.get_proximas_sesiones_alumno(g["id"])
+            if sesiones:
+                for s in sesiones:
+                    fi = pd.to_datetime(s["fecha_inicio"]).strftime("%d/%m %H:%M")
+                    ff = pd.to_datetime(s["fecha_fin"]).strftime("%H:%M")
+                    st.info(f"📅 {fi}-{ff} en {s['aulas']['nombre']} — {s['titulo']}")
+            st.markdown("---")
+    else:
+        st.write("No tienes cursos asignados todavía.")
+
+    # Diplomas
+    st.subheader("🎓 Diplomas disponibles")
+    diplomas = aulas_service.get_diplomas_alumno(participante_id)
+    if diplomas:
+        for d in diplomas:
+            st.success(f"Diploma disponible: [📄 {d['archivo_nombre']}]({d['url']})")
 
 def mostrar_dashboard_comercial(ajustes):
     components = TailAdminComponents()
