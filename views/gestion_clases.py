@@ -521,13 +521,14 @@ def mostrar_gestion_horarios(clases_service, session_state):
             df_horarios = clases_service.get_horarios_con_clase(clase_id_filtro)
             
             if not df_horarios.empty:
+                # Aplicar filtro de estado
                 if filtro_activo == "Activos":
                     df_horarios = df_horarios[df_horarios["activo"] == True]
                 elif filtro_activo == "Inactivos":
                     df_horarios = df_horarios[df_horarios["activo"] == False]
             
             if not df_horarios.empty:
-                # Usar aula_nombre en lugar de aula_id
+                # Crear columna display para aula
                 if 'aula_nombre' in df_horarios.columns:
                     df_horarios['aula_display'] = df_horarios['aula_nombre'].apply(
                         lambda x: f'✅ {x}' if pd.notna(x) and x else '⚠️ Sin aula'
@@ -562,10 +563,14 @@ def mostrar_gestion_horarios(clases_service, session_state):
                     horario_seleccionado = df_horarios.iloc[evento_horario.selection.rows[0]]
                     st.markdown("---")
                     st.markdown("### ✏️ Editar Horario")
+                    
+                    # Convertir a dict para pasar al formulario
+                    horario_dict = horario_seleccionado.to_dict()
+                    
                     mostrar_formulario_horario(
                         clases_service, 
-                        horario_seleccionado["clase_id"], 
-                        horario_seleccionado, 
+                        horario_dict["clase_id"], 
+                        horario_dict, 
                         es_creacion=False
                     )
             else:
@@ -573,6 +578,8 @@ def mostrar_gestion_horarios(clases_service, session_state):
         
         except Exception as e:
             st.error(f"Error cargando horarios: {e}")
+            import traceback
+            traceback.print_exc()
     
     # TAB 2: Crear
     with tab_crear:
@@ -594,7 +601,7 @@ def mostrar_gestion_horarios(clases_service, session_state):
         
         st.markdown("---")
         
-        # LLAMADA A LA FUNCIÓN QUE ESTÁ DEFINIDA ARRIBA
+        # Formulario de creación (con datos vacíos)
         mostrar_formulario_horario(clases_service, clase_id_crear, {}, es_creacion=True)
         
 # =========================
