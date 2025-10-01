@@ -526,11 +526,12 @@ def mostrar_gestion_horarios(clases_service, session_state):
                 elif filtro_activo == "Inactivos":
                     df_horarios = df_horarios[df_horarios["activo"] == False]
             
-            df_horarios['aula_info'] = df_horarios.apply(
-                df_horarios['aula_info'] = df_horarios['aula_id'].apply(
-                    lambda x: '✅ Asignada' if pd.notna(x) and x is not None and x != '' else '⚠️ Sin aula'
-                )
-            )
+            if not df_horarios.empty:
+                # Crear columna aula_info si existe aula_id
+                if 'aula_id' in df_horarios.columns:
+                    df_horarios['aula_info'] = df_horarios['aula_id'].apply(
+                        lambda x: '✅ Asignada' if pd.notna(x) and x is not None and x != '' else '⚠️ Sin aula'
+                    )
                     columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
                                        "capacidad_maxima", "aula_info", "activo"]
                 else:
@@ -547,6 +548,7 @@ def mostrar_gestion_horarios(clases_service, session_state):
                     selection_mode="single-row"
                 )
                 
+                # Editar horario seleccionado
                 if evento_horario.selection.rows:
                     horario_seleccionado = df_horarios.iloc[evento_horario.selection.rows[0]]
                     st.markdown("---")
