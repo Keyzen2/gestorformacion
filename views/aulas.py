@@ -158,24 +158,26 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
             spaceAfter=12,
             alignment=TA_CENTER
         )
-        cell_style_reserva = ParagraphStyle("cellReserva", fontSize=7, leading=8, alignment=1)
+        
+        cell_style_reserva = ParagraphStyle(
+            "cellReserva", 
+            fontSize=7, 
+            leading=8, 
+            alignment=1
+        )
+        
         cell_style_clase = ParagraphStyle(
             "cellClase", 
             fontSize=7, 
             leading=8, 
             alignment=1,
-            textColor=colors.HexColor("#7C3AED")  # Morado para clases
+            textColor=colors.HexColor("#7C3AED")
         )
 
+        # Título
         titulo = f"Cronograma de Aulas - {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}"
         elementos.append(Paragraph(titulo, title_style))
         elementos.append(Spacer(1, 12))
-        
-        # NUEVO: Leyenda
-        leyenda_style = ParagraphStyle("leyenda", fontSize=9, leading=10)
-        leyenda_text = "🔵 <b>Reserva de aula</b> | 🟣 <b>Clase programada</b>"
-        elementos.append(Paragraph(leyenda_text, leyenda_style))
-        elementos.append(Spacer(1, 8))
 
         # Generar días (máximo 7)
         dias = []
@@ -205,18 +207,14 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
                         ev_inicio = pd.to_datetime(ev.get("start", ""))
                         ev_fin = pd.to_datetime(ev.get("end", ""))
                         ev_aula = ev.get("extendedProps", {}).get("aula_nombre", "")
-                        
-                        # NUEVO: Detectar tipo de evento
                         tipo_evento = ev.get("extendedProps", {}).get("tipo", "RESERVA")
                         
                         if ev_aula == aula and ev_inicio.date() == dia:
                             intervalo = f"{ev_inicio.strftime('%H:%M')} - {ev_fin.strftime('%H:%M')}"
                             titulo = ev.get("title", "").replace("📚 ", "")
                             
-                            # NUEVO: Prefijo según tipo
-                            prefijo = "🟣" if tipo_evento == "CLASE" else "🔵"
-                            
-                            # NUEVO: Estilo según tipo
+                            # Usar símbolo visual
+                            prefijo = "●" if tipo_evento == "CLASE" else "■"
                             estilo = cell_style_clase if tipo_evento == "CLASE" else cell_style_reserva
                             
                             eventos_dia.append(
@@ -257,6 +255,43 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
         ]
         tabla.setStyle(TableStyle(estilo_tabla))
         elementos.append(tabla)
+        
+        # === LEYENDA DEBAJO DE LA TABLA ===
+        elementos.append(Spacer(1, 15))
+        
+        # Crear tabla para la leyenda con colores reales
+        leyenda_style = ParagraphStyle(
+            "leyenda", 
+            fontSize=9, 
+            leading=12,
+            alignment=TA_CENTER
+        )
+        
+        leyenda_reserva = ParagraphStyle(
+            "leyendaReserva",
+            parent=leyenda_style,
+            textColor=colors.black
+        )
+        
+        leyenda_clase_style = ParagraphStyle(
+            "leyendaClase",
+            parent=leyenda_style,
+            textColor=colors.HexColor("#7C3AED")
+        )
+        
+        # Crear tabla de leyenda
+        datos_leyenda = [[
+            Paragraph("■ Reserva de aula", leyenda_reserva),
+            Paragraph("● Clase programada", leyenda_clase_style)
+        ]]
+        
+        tabla_leyenda = Table(datos_leyenda, colWidths=[8*cm, 8*cm])
+        tabla_leyenda.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elementos.append(tabla_leyenda)
 
         doc.build(elementos)
         buffer.seek(0)
@@ -264,17 +299,14 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"cronograma_semanal_{fecha_str}.pdf"
 
-        with st.container():
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.download_button(
-                    label="📥 Descargar PDF Semanal",
-                    data=buffer,
-                    file_name=filename,
-                    mime="application/pdf",
-                    type="primary",
-                    use_container_width=True
-                )
+        st.download_button(
+            label="📥 Descargar PDF Semanal",
+            data=buffer,
+            file_name=filename,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True
+        )
 
     except Exception as e:
         st.error(f"Error exportando PDF: {e}")
