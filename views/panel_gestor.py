@@ -11,7 +11,7 @@ from services.empresas_service import get_empresas_service
 from services.participantes_service import get_participantes_service
 
 def render(supabase, session_state):
-    """Panel del Gestor - Versión simplificada en una página"""
+    """Panel del Gestor - Versión simplificada con aulas y proyectos"""
     
     # Verificación de permisos
     if session_state.role not in ["admin", "gestor"]:
@@ -49,7 +49,7 @@ def render(supabase, session_state):
     # === CARGAR DATOS ===
     with st.spinner("Cargando datos..."):
         datos = cargar_datos_dashboard(
-            data_service, grupos_service, empresas_service,
+            supabase, data_service, grupos_service, empresas_service,
             participantes_service, session_state
         )
     
@@ -73,7 +73,12 @@ def render(supabase, session_state):
     with col2:
         mostrar_evolucion_participantes(datos['participantes'])
         st.markdown("<br>", unsafe_allow_html=True)
-        mostrar_distribucion_modalidades(datos['grupos'])
+        mostrar_ocupacion_aulas(datos['aulas'], datos['reservas'], dashboard)
+    
+    # === PROYECTOS FUNDAE ===
+    if not datos['proyectos'].empty:
+        st.markdown("<br>", unsafe_allow_html=True)
+        mostrar_resumen_proyectos(datos['proyectos'], dashboard)
     
     # === ALERTAS Y TAREAS PENDIENTES ===
     st.markdown("<br>", unsafe_allow_html=True)
@@ -137,11 +142,13 @@ def cargar_info_empresa(supabase, session_state):
         return None
 
 
-def cargar_datos_dashboard(data_service, grupos_service, empresas_service,
+def cargar_datos_dashboard(supabase, data_service, grupos_service, empresas_service,
                            participantes_service, session_state):
-    """Carga todos los datos necesarios"""
+    """Carga todos los datos necesarios incluyendo aulas y proyectos"""
     
     try:
+        empresa_id = session_state.user.get('empresa_id')
+        
         datos = {
             'grupos': grupos_service.get_grupos_completos(),
             'participantes': participantes_service.get_participantes_completos(),
@@ -149,13 +156,33 @@ def cargar_datos_dashboard(data_service, grupos_service, empresas_service,
             'acciones': data_service.get_acciones_formativas()
         }
         
-        # Aulas (si existen)
+        # Aulas
         try:
-            empresa_id = session_state.user.get('empresa_id')
             aulas_res = supabase.table("aulas").select("*").eq("empresa_id", empresa_id).execute()
             datos['aulas'] = pd.DataFrame(aulas_res.data or [])
         except:
             datos['aulas'] = pd.DataFrame()
+        
+        # Reservas de aulas (últimos 30 días + próximas)
+        try:
+            fecha_inicio = (datetime.now() - timedelta(days=30)).date().isoformat()
+            reservas_res = supabase.table("aula_reservas")\
+                .select("*, aulas(nombre)")\
+                .gte("fecha_inicio", fecha_inicio)\
+                .execute()
+            datos['reservas'] = pd.DataFrame(reservas_res.data or [])
+        except:
+            datos['reservas'] = pd.DataFrame()
+        
+        # Proyectos FUNDAE
+        try:
+            proyectos_res = supabase.table("proyectos")\
+                .select("*")\
+                .eq("empresa_id", empresa_id)\
+                .execute()
+            datos['proyectos'] = pd.DataFrame(proyectos_res.data or [])
+        except:
+            datos['proyectos'] = pd.DataFrame()
         
         return datos
         
@@ -170,7 +197,6 @@ def mostrar_header_gestor(empresa_info, session_state):
     empresa_nombre = empresa_info.get('nombre', 'Tu Empresa')
     usuario_nombre = session_state.user.get('nombre', 'Gestor')
     
-    # Contar módulos activos
     modulos_activos = sum([
         empresa_info.get('formacion_activo', False),
         empresa_info.get('iso_activo', False),
@@ -194,7 +220,7 @@ def mostrar_header_gestor(empresa_info, session_state):
             <strong>{empresa_nombre}</strong> · {usuario_nombre}
         </p>
         <p style="margin: 0.5rem 0 0; opacity: 0.9; font-size: 0.875rem; color: white;">
-            {modulos_activos} módulos activos · {datetime.now().strftime('%d/%m/%Y %H:%M')}
+            {modulos_activos} módulos activos · """ + datetime.now().strftime('%d/%m/%Y %H:%M') + """
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -205,7 +231,6 @@ def mostrar_sin_acceso_formacion(empresa_info):
     
     st.warning("⚠️ El módulo de Formación no está activo")
     
-    # Fechas de vigencia
     if empresa_info.get('formacion_inicio'):
         try:
             fecha_inicio = pd.to_datetime(empresa_info['formacion_inicio']).strftime('%d/%m/%Y')
@@ -213,7 +238,6 @@ def mostrar_sin_acceso_formacion(empresa_info):
         except:
             pass
     
-    # Otros módulos disponibles
     modulos_disponibles = []
     if empresa_info.get('iso_activo'):
         modulos_disponibles.append("🏅 ISO 9001")
@@ -224,8 +248,6 @@ def mostrar_sin_acceso_formacion(empresa_info):
     
     if modulos_disponibles:
         st.success(f"Módulos disponibles: {', '.join(modulos_disponibles)}")
-    else:
-        st.info("📞 Contacta con el administrador para activar módulos")
 
 
 def mostrar_metricas_principales(datos, dashboard):
@@ -236,7 +258,6 @@ def mostrar_metricas_principales(datos, dashboard):
     df_tutores = datos.get('tutores', pd.DataFrame())
     df_aulas = datos.get('aulas', pd.DataFrame())
     
-    # Cálculos
     total_grupos = len(df_grupos) if not df_grupos.empty else 0
     grupos_activos = 0
     
@@ -260,7 +281,6 @@ def mostrar_metricas_principales(datos, dashboard):
     total_tutores = len(df_tutores) if not df_tutores.empty else 0
     total_aulas = len(df_aulas) if not df_aulas.empty else 0
     
-    # Mostrar métricas
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -303,7 +323,6 @@ def mostrar_estado_grupos(df_grupos, dashboard):
         st.info("No hay grupos registrados")
         return
     
-    # Calcular estados
     hoy = datetime.now().date()
     estados = {
         'Activos': 0,
@@ -333,7 +352,6 @@ def mostrar_estado_grupos(df_grupos, dashboard):
             except:
                 estados['Activos'] += 1
     
-    # Gráfico de dona
     colores = {
         'Activos': '#10B981',
         'Próximos': '#F59E0B',
@@ -372,13 +390,11 @@ def mostrar_evolucion_participantes(df_participantes):
             st.info("Sin fechas válidas")
             return
         
-        # Agrupar por mes
         df_temp['mes'] = df_temp['fecha'].dt.to_period('M')
         evolucion = df_temp.groupby('mes').size().reset_index(name='nuevos')
         evolucion['mes_str'] = evolucion['mes'].astype(str)
         evolucion['acumulado'] = evolucion['nuevos'].cumsum()
         
-        # Gráfico de área
         fig = go.Figure()
         
         fig.add_trace(go.Scatter(
@@ -404,54 +420,68 @@ def mostrar_evolucion_participantes(df_participantes):
         st.error(f"Error: {e}")
 
 
-def mostrar_distribucion_modalidades(df_grupos):
-    """Distribución por modalidades"""
+def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
+    """Estadísticas de ocupación de aulas"""
     
-    st.markdown("#### 📚 Modalidades de Formación")
+    st.markdown("#### 🏫 Ocupación de Aulas")
     
-    if df_grupos.empty:
-        st.info("Sin datos")
+    if df_aulas.empty:
+        st.info("No hay aulas registradas")
         return
     
-    try:
-        modalidad_col = 'accion_modalidad' if 'accion_modalidad' in df_grupos.columns else 'modalidad'
-        
-        if modalidad_col not in df_grupos.columns:
-            st.info("Sin información de modalidad")
-            return
-        
-        modalidades = df_grupos[modalidad_col].value_counts()
-        
-        if modalidades.empty:
-            st.info("Sin modalidades")
-            return
-        
-        colores = {
-            'PRESENCIAL': '#10B981',
-            'TELEFORMACION': '#3B82F6',
-            'MIXTA': '#F59E0B'
-        }
-        
-        colors = [colores.get(m, '#6B7280') for m in modalidades.index]
-        
-        fig = px.bar(
-            x=modalidades.index,
-            y=modalidades.values,
-            color=modalidades.index,
-            color_discrete_map=colores
-        )
-        
-        fig.update_layout(
-            height=300,
-            showlegend=False,
-            xaxis_title="Modalidad",
-            yaxis_title="Cantidad"
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"Error: {e}")
+    # Calcular métricas
+    total_aulas = len(df_aulas)
+    aulas_activas = len(df_aulas[df_aulas['activa'] == True]) if 'activa' in df_aulas.columns else total_aulas
+    
+    # Reservas hoy
+    reservas_hoy = 0
+    if not df_reservas.empty and 'fecha_inicio' in df_reservas.columns:
+        try:
+            hoy = datetime.now().date()
+            df_temp = df_reservas.copy()
+            df_temp['fecha'] = pd.to_datetime(df_temp['fecha_inicio'], errors='coerce').dt.date
+            reservas_hoy = len(df_temp[df_temp['fecha'] == hoy])
+        except:
+            pass
+    
+    # Mostrar métricas
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("Aulas Activas", f"{aulas_activas}/{total_aulas}")
+    
+    with col2:
+        st.metric("Reservas Hoy", reservas_hoy)
+    
+    # Gráfico de reservas por aula (si hay datos)
+    if not df_reservas.empty and 'aula_id' in df_reservas.columns:
+        try:
+            reservas_por_aula = df_reservas['aula_id'].value_counts().head(5)
+            
+            if not reservas_por_aula.empty:
+                # Obtener nombres de aulas
+                aulas_dict = {a['id']: a.get('nombre', 'Sin nombre') for _, a in df_aulas.iterrows()}
+                nombres_aulas = [aulas_dict.get(aula_id, f'Aula {aula_id}') for aula_id in reservas_por_aula.index]
+                
+                fig = px.bar(
+                    x=reservas_por_aula.values,
+                    y=nombres_aulas,
+                    orientation='h',
+                    color=reservas_por_aula.values,
+                    color_continuous_scale='Oranges'
+                )
+                
+                fig.update_layout(
+                    height=200,
+                    showlegend=False,
+                    xaxis_title="Reservas",
+                    yaxis_title="",
+                    margin=dict(l=0, r=0, t=20, b=0)
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+        except:
+            pass
 
 
 def mostrar_top_acciones_formativas(df_grupos):
@@ -491,6 +521,69 @@ def mostrar_top_acciones_formativas(df_grupos):
         st.error(f"Error: {e}")
 
 
+def mostrar_resumen_proyectos(df_proyectos, dashboard):
+    """Resumen de proyectos FUNDAE"""
+    
+    dashboard.section_header("Proyectos FUNDAE", icono="📊")
+    
+    if df_proyectos.empty:
+        return
+    
+    # Calcular métricas
+    total_proyectos = len(df_proyectos)
+    proyectos_activos = 0
+    
+    if 'estado_proyecto' in df_proyectos.columns:
+        proyectos_activos = len(df_proyectos[
+            df_proyectos['estado_proyecto'].isin(['CONVOCADO', 'EN_EJECUCION'])
+        ])
+    
+    # Importes
+    presupuesto_total = 0
+    importe_concedido = 0
+    
+    if 'presupuesto_total' in df_proyectos.columns:
+        presupuesto_total = df_proyectos['presupuesto_total'].fillna(0).sum()
+    
+    if 'importe_concedido' in df_proyectos.columns:
+        importe_concedido = df_proyectos['importe_concedido'].fillna(0).sum()
+    
+    # Mostrar métricas
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        dashboard.metric_card_secondary(
+            "Proyectos Totales",
+            str(total_proyectos),
+            "📁",
+            "#3B82F6"
+        )
+    
+    with col2:
+        dashboard.metric_card_secondary(
+            "Activos",
+            str(proyectos_activos),
+            "⚙️",
+            "#10B981"
+        )
+    
+    with col3:
+        dashboard.metric_card_secondary(
+            "Presupuesto",
+            f"{presupuesto_total:,.0f}€",
+            "💰",
+            "#F59E0B"
+        )
+    
+    with col4:
+        dashboard.metric_card_secondary(
+            "Concedido",
+            f"{importe_concedido:,.0f}€",
+            "✅",
+            "#8B5CF6"
+        )
+
+
 def mostrar_alertas_gestor(datos, empresa_info, dashboard):
     """Alertas importantes para el gestor"""
     
@@ -498,6 +591,8 @@ def mostrar_alertas_gestor(datos, empresa_info, dashboard):
     
     df_grupos = datos.get('grupos', pd.DataFrame())
     df_participantes = datos.get('participantes', pd.DataFrame())
+    df_aulas = datos.get('aulas', pd.DataFrame())
+    df_reservas = datos.get('reservas', pd.DataFrame())
     
     alertas = []
     
@@ -551,6 +646,28 @@ def mostrar_alertas_gestor(datos, empresa_info, dashboard):
         except:
             pass
     
+    # Aulas sin reservas este mes
+    if not df_aulas.empty and not df_reservas.empty:
+        try:
+            inicio_mes = datetime.now().replace(day=1)
+            df_temp = df_reservas.copy()
+            df_temp['fecha_inicio'] = pd.to_datetime(df_temp['fecha_inicio'], errors='coerce')
+            reservas_mes = df_temp[df_temp['fecha_inicio'] >= pd.Timestamp(inicio_mes)]
+            
+            if not reservas_mes.empty and 'aula_id' in reservas_mes.columns:
+                aulas_con_reservas = reservas_mes['aula_id'].unique()
+                aulas_sin_uso = df_aulas[~df_aulas['id'].isin(aulas_con_reservas)]
+                
+                if len(aulas_sin_uso) > 2:
+                    alertas.append({
+                        'tipo': 'info',
+                        'titulo': 'Aulas infrautilizadas',
+                        'mensaje': f'{len(aulas_sin_uso)} aulas sin reservas este mes',
+                        'count': len(aulas_sin_uso)
+                    })
+        except:
+            pass
+    
     # Mostrar alertas
     if alertas:
         col1, col2 = st.columns(2)
@@ -592,7 +709,7 @@ def mostrar_actividad_reciente(datos, dashboard):
             for _, p in recientes.iterrows():
                 actividad.append({
                     'Fecha': p['created_at'].strftime('%d/%m/%Y'),
-                    'Tipo': '🎓 Participante',
+                    'Tipo': 'Participante',
                     'Descripción': p.get('nombre', 'Sin nombre')
                 })
         except:
@@ -608,7 +725,7 @@ def mostrar_actividad_reciente(datos, dashboard):
             for _, g in recientes.iterrows():
                 actividad.append({
                     'Fecha': g['created_at'].strftime('%d/%m/%Y'),
-                    'Tipo': '📚 Grupo',
+                    'Tipo': 'Grupo',
                     'Descripción': g.get('codigo_grupo', 'Sin código')
                 })
         except:
@@ -629,11 +746,11 @@ def mostrar_footer_gestor(empresa_info):
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.caption(f"🔄 Actualizado: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+        st.caption("🔄 Actualizado: " + datetime.now().strftime('%d/%m/%Y %H:%M'))
     
     with col2:
         empresa_nombre = empresa_info.get('nombre', 'Tu empresa')
         st.caption(f"🏢 Empresa: {empresa_nombre}")
     
     with col3:
-        st.caption("📊 Panel FUNDAE v2.0")
+        st.caption("📊 Panel Datafor v2.5")
