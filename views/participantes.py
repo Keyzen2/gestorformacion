@@ -1719,8 +1719,8 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                         st.success("✅ Diploma subido y registrado correctamente")
                                         st.rerun()
                         
-                        else:
-                            st.info("📂 Selecciona un archivo PDF para continuar")
+                                else:
+                                    st.info("📂 Selecciona un archivo PDF para continuar")
 
     except Exception as e:
         st.error(f"❌ Error en gestión de diplomas: {e}")
