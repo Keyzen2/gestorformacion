@@ -1558,13 +1558,13 @@ def mostrar_seccion_costes_por_empresa_schema_real(grupos_service, grupo_id):
         
         # Crear tabs dinámicas
         if len(empresa_nombres) == 1:
-            procesar_empresa_individual_schema_real(grupos_service, empresa_data_map[empresa_nombres[0]], tarifa_max, horas, participantes)
+            procesar_empresa_individual_schema_real(grupos_service, empresa_data_map[empresa_nombres[0]], tarifa_max, horas, participantes, modalidad)
         else:
             tabs_empresas = st.tabs(empresa_nombres)
             for i, tab in enumerate(tabs_empresas):
                 with tab:
                     empresa_data = empresa_data_map[empresa_nombres[i]]
-                    procesar_empresa_individual_schema_real(grupos_service, empresa_data, tarifa_max, horas, participantes)
+                    procesar_empresa_individual_schema_real(grupos_service, empresa_data, tarifa_max, horas, participantes, modalidad)
         
     except Exception as e:
         st.error(f"❌ Error en sección de costes por empresa: {e}")
