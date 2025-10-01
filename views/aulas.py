@@ -264,13 +264,17 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
         fecha_str = datetime.now().strftime("%Y%m%d_%H%M")
         filename = f"cronograma_semanal_{fecha_str}.pdf"
 
-        st.download_button(
-            label="📥 Descargar PDF Semanal",
-            data=buffer,
-            file_name=filename,
-            mime="application/pdf",
-            use_container_width=True
-        )
+        with st.container():
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.download_button(
+                    label="📥 Descargar PDF Semanal",
+                    data=buffer,
+                    file_name=filename,
+                    mime="application/pdf",
+                    type="primary",
+                    use_container_width=True
+                )
 
     except Exception as e:
         st.error(f"Error exportando PDF: {e}")
