@@ -595,7 +595,6 @@ def mostrar_resumen_proyectos(df_proyectos, dashboard):
             "#8B5CF6"
         )
 
-
 def mostrar_alertas_gestor(datos, empresa_info, dashboard):
     """Alertas importantes para el gestor"""
     
@@ -607,6 +606,41 @@ def mostrar_alertas_gestor(datos, empresa_info, dashboard):
     df_reservas = datos.get('reservas', pd.DataFrame())
     
     alertas = []
+    
+    # NUEVA: Reservas de aulas hoy
+    if not df_reservas.empty and 'fecha_inicio' in df_reservas.columns:
+        try:
+            hoy = datetime.now().date()
+            df_temp = df_reservas.copy()
+            df_temp['fecha'] = pd.to_datetime(df_temp['fecha_inicio'], errors='coerce').dt.date
+            reservas_hoy = df_temp[df_temp['fecha'] == hoy]
+            
+            if not reservas_hoy.empty and len(reservas_hoy) > 0:
+                # Crear mensaje con nombres de aulas
+                aulas_hoy = []
+                aulas_dict = {a['id']: a.get('nombre', 'Sin nombre') for _, a in df_aulas.iterrows()}
+                
+                for _, res in reservas_hoy.iterrows():
+                    aula_id = res.get('aula_id')
+                    aula_nombre = aulas_dict.get(aula_id, 'Aula desconocida')
+                    try:
+                        hora_inicio = pd.to_datetime(res['fecha_inicio']).strftime('%H:%M')
+                        aulas_hoy.append(f"{aula_nombre} ({hora_inicio})")
+                    except:
+                        aulas_hoy.append(aula_nombre)
+                
+                mensaje = f"Reservas activas: {', '.join(aulas_hoy[:3])}"
+                if len(aulas_hoy) > 3:
+                    mensaje += f" y {len(aulas_hoy) - 3} más"
+                
+                alertas.append({
+                    'tipo': 'info',
+                    'titulo': 'Reservas de aulas hoy',
+                    'mensaje': mensaje,
+                    'count': len(reservas_hoy)
+                })
+        except:
+            pass
     
     # Grupos sin participantes
     if not df_grupos.empty and not df_participantes.empty and 'grupo_id' in df_participantes.columns:
