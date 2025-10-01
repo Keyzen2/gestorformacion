@@ -27,6 +27,66 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
+# Después de los imports, antes de las funciones de exportación
+
+def obtener_eventos_unificados(aulas_service, clases_service, fecha_inicio, fecha_fin):
+    """Obtiene TODOS los eventos: reservas de aulas + clases programadas"""
+    
+    eventos = []
+    
+    # 1. Eventos de aulas (reservas manuales)
+    try:
+        aulas_ids = None  # Todas las aulas
+        eventos_aulas = aulas_service.get_eventos_cronograma(
+            fecha_inicio.isoformat() + "T00:00:00Z",
+            fecha_fin.isoformat() + "T23:59:59Z",
+            aulas_ids
+        )
+        eventos.extend(eventos_aulas)
+    except Exception as e:
+        st.error(f"Error cargando reservas de aulas: {e}")
+    
+    # 2. NUEVO: Eventos de clases programadas
+    try:
+        df_horarios = clases_service.get_horarios_con_clase()
+        
+        if not df_horarios.empty:
+            # Generar eventos para cada día del período
+            fecha_actual = fecha_inicio
+            
+            while fecha_actual <= fecha_fin:
+                dia_semana = fecha_actual.weekday()
+                
+                # Filtrar horarios de este día
+                horarios_dia = df_horarios[df_horarios['dia_semana'] == dia_semana]
+                
+                for _, horario in horarios_dia.iterrows():
+                    # Solo si tiene aula asignada
+                    if horario.get('aula_id'):
+                        evento = {
+                            "id": f"clase_{horario['id']}_{fecha_actual.isoformat()}",
+                            "title": f"📚 {horario['clase_nombre']}",
+                            "start": f"{fecha_actual.isoformat()}T{horario['hora_inicio']}",
+                            "end": f"{fecha_actual.isoformat()}T{horario['hora_fin']}",
+                            "backgroundColor": "#8B5CF6",  # Morado para clases
+                            "borderColor": "#8B5CF6",
+                            "textColor": "#ffffff",
+                            "extendedProps": {
+                                "tipo": "CLASE",
+                                "clase_id": horario['clase_id'],
+                                "aula_id": horario.get('aula_id'),
+                                "aula_nombre": "Aula no especificada",  # Placeholder
+                                "capacidad": horario['capacidad_maxima']
+                            }
+                        }
+                        eventos.append(evento)
+                
+                fecha_actual += timedelta(days=1)
+    
+    except Exception as e:
+        st.error(f"Error cargando clases: {e}")
+    
+    return eventos
 # =========================
 # EXPORTACIONES
 # =========================
@@ -890,6 +950,7 @@ def mostrar_cronograma_simple(aulas_service, session_state):
         if st.button("Actualizar", key="crono_refresh"):
             st.rerun()
 
+    # Filtro de aulas (mantener igual)
     try:
         df_aulas = aulas_service.get_aulas_con_empresa()
         if not df_aulas.empty:
@@ -912,18 +973,41 @@ def mostrar_cronograma_simple(aulas_service, session_state):
         st.error(f"Error cargando aulas: {e}")
         return
 
+    # ===== CAMBIO PRINCIPAL AQUÍ =====
     try:
-        eventos = aulas_service.get_eventos_cronograma(
-            fecha_inicio.isoformat() + "T00:00:00Z",
-            fecha_fin.isoformat() + "T23:59:59Z",
-            aulas_ids
+        # Cargar servicio de clases
+        from services.clases_service import get_clases_service
+        clases_service = get_clases_service(aulas_service.supabase, session_state)
+        
+        # Obtener eventos unificados (aulas + clases)
+        eventos = obtener_eventos_unificados(
+            aulas_service, 
+            clases_service, 
+            fecha_inicio, 
+            fecha_fin
         )
+        
+        # Filtrar por aulas seleccionadas
+        if aulas_ids:
+            eventos = [
+                ev for ev in eventos 
+                if ev.get("extendedProps", {}).get("aula_id") in aulas_ids
+            ]
         
         if not eventos:
             st.info("No hay eventos en el período seleccionado")
             return
         
-        # ✅ Pasamos también las fechas
+        # Leyenda de colores
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("🟦 **Reservas de aula** - Reservas manuales creadas")
+        with col2:
+            st.markdown("🟪 **Clases programadas** - Horarios recurrentes con aula asignada")
+        
+        st.markdown("---")
+        
+        # Mostrar cronograma
         mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin)
         
         st.markdown("---")
@@ -937,21 +1021,36 @@ def mostrar_cronograma_simple(aulas_service, session_state):
             
     except Exception as e:
         st.error(f"Error obteniendo eventos: {e}")
-
+        st.exception(e)  # Debug
 
 def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, fecha_fin):
-    """Vista de cronograma tipo tarjetas (TailAdmin-like)"""
+    """Vista de cronograma tipo tarjetas (TailAdmin-like) - MEJORADA"""
     st.markdown("### Vista de Cronograma")
 
     try:
-        df_reservas = aulas_service.get_reservas_periodo(
-            fecha_inicio.isoformat() + "T00:00:00Z",
-            fecha_fin.isoformat() + "T23:59:59Z"
+        # Cargar clases_service
+        from services.clases_service import get_clases_service
+        clases_service = get_clases_service(aulas_service.supabase, session_state)
+        
+        # Obtener eventos unificados
+        eventos_unificados = obtener_eventos_unificados(
+            aulas_service, clases_service, fecha_inicio, fecha_fin
         )
         
-        if df_reservas.empty:
-            st.info("No hay reservas en este período")
+        if not eventos_unificados:
+            st.info("No hay eventos en este período")
             return
+
+        # Organizar por fecha
+        eventos_por_fecha = {}
+        for evento in eventos_unificados:
+            try:
+                fecha_evento = pd.to_datetime(evento['start']).date()
+                if fecha_evento not in eventos_por_fecha:
+                    eventos_por_fecha[fecha_evento] = []
+                eventos_por_fecha[fecha_evento].append(evento)
+            except:
+                continue
 
         dias_es = {
             "Monday": "Lunes", "Tuesday": "Martes", "Wednesday": "Miércoles",
@@ -964,15 +1063,13 @@ def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, f
             "October": "octubre", "November": "noviembre", "December": "diciembre"
         }
 
-        for fecha in pd.date_range(fecha_inicio, fecha_fin):
-            reservas_dia = df_reservas[pd.to_datetime(df_reservas['fecha_inicio']).dt.date == fecha.date()]
-            if reservas_dia.empty:
-                continue
-
+        # Mostrar por días
+        for fecha in sorted(eventos_por_fecha.keys()):
+            eventos_dia = eventos_por_fecha[fecha]
+            
             nombre_dia = dias_es[fecha.strftime("%A")]
             nombre_mes = meses_es[fecha.strftime("%B")]
 
-            # Encabezado de día (banda gris + borde azul)
             st.markdown(f"""
             <div style="margin-top:1rem; padding:0.6rem 1rem; background:#F3F4F6;
                         border-left:4px solid #3B82F6; border-radius:6px;">
@@ -980,25 +1077,31 @@ def mostrar_cronograma_alternativo(aulas_service, session_state, fecha_inicio, f
             </div>
             """, unsafe_allow_html=True)
 
-            # Tarjetas por reserva (3 por fila aprox.)
-            # Creamos un grid simple con columnas de Streamlit
-            filas = list(reservas_dia.iterrows())
-            for i in range(0, len(filas), 3):
+            # Tarjetas por evento
+            for i in range(0, len(eventos_dia), 3):
                 cols = st.columns(3)
-                for j, (_, r) in enumerate(filas[i:i+3]):
-                    hora_inicio = pd.to_datetime(r['fecha_inicio']).strftime('%H:%M')
-                    hora_fin = pd.to_datetime(r['fecha_fin']).strftime('%H:%M')
-                    titulo = r.get('titulo', '') or 'Reserva'
-                    aula = r.get('aula_nombre', '—')
-                    tipo = r.get('tipo_reserva', '—')
+                for j, evento in enumerate(eventos_dia[i:i+3]):
+                    hora_inicio = pd.to_datetime(evento['start']).strftime('%H:%M')
+                    hora_fin = pd.to_datetime(evento['end']).strftime('%H:%M')
+                    titulo = evento.get('title', '').replace('📚 ', '')
+                    tipo = evento.get('extendedProps', {}).get('tipo', 'RESERVA')
+                    
+                    # Color según tipo
+                    color_borde = "#8B5CF6" if tipo == "CLASE" else "#3B82F6"
+                    icono = "📚" if tipo == "CLASE" else "🏫"
 
                     with cols[j]:
                         st.markdown(f"""
-                        <div style="background:#FFFFFF; border:1px solid #E5E7EB; border-radius:8px;
+                        <div style="background:#FFFFFF; border-left:4px solid {color_borde}; 
+                                    border:1px solid #E5E7EB; border-radius:8px;
                                     padding:0.8rem; margin:0.5rem 0; box-shadow:0 1px 2px rgba(0,0,0,0.05);">
-                            <div style="font-weight:600; color:#111827; margin-bottom:0.25rem;">{titulo}</div>
+                            <div style="font-weight:600; color:#111827; margin-bottom:0.25rem;">
+                                {icono} {titulo}
+                            </div>
                             <div style="color:#374151; font-size:0.9rem;">🕒 {hora_inicio} - {hora_fin}</div>
-                            <div style="color:#6B7280; font-size:0.85rem;">🏫 {aula} • {tipo}</div>
+                            <div style="color:#6B7280; font-size:0.85rem;">
+                                {'Clase programada' if tipo == 'CLASE' else 'Reserva de aula'}
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
 
