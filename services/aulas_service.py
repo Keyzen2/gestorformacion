@@ -187,6 +187,154 @@ class AulasService:
         except:
             return False
 
+    def _safe_count(resp) -> int:
+        try:
+            # Supabase v2 puede devolver count si se pide en select
+            if hasattr(resp, "count") and resp.count is not None:
+                return resp.count
+            return len(resp.data or [])
+        except Exception:
+            return 0
+    
+    def get_estadisticas_rapidas(self) -> Dict:
+        """Estadísticas globales (toda la BD)."""
+        try:
+            hoy = date.today()
+            ini = datetime.combine(hoy, datetime.min.time()).isoformat()
+            fin = datetime.combine(hoy, datetime.max.time()).isoformat()
+    
+            q_aulas = self.supabase.table("aulas").select("id", count="exact")
+            total_aulas = q_aulas.execute()
+    
+            q_activas = self.supabase.table("aulas").select("id", count="exact").eq("activa", True)
+            aulas_activas = q_activas.execute()
+    
+            q_res_hoy = (
+                self.supabase.table("aula_reservas")
+                .select("id", count="exact")
+                .gte("fecha_inicio", ini).lte("fecha_inicio", fin)
+            )
+            reservas_hoy = q_res_hoy.execute()
+    
+            total = _safe_count(total_aulas)
+            hoy_ct = _safe_count(reservas_hoy)
+    
+            return {
+                "total_aulas": total,
+                "aulas_activas": _safe_count(aulas_activas),
+                "reservas_hoy": hoy_ct,
+                "ocupacion_actual": (hoy_ct / max(1, total)) * 100.0,
+            }
+        except Exception as e:
+            print(f"[AulasService] get_estadisticas_rapidas error: {e}")
+            return {"total_aulas": 0, "aulas_activas": 0, "reservas_hoy": 0, "ocupacion_actual": 0.0}
+    
+    def get_proximas_reservas(self, limite: int = 3) -> List[Dict]:
+        """Próximas reservas globales (con nombre de aula)."""
+        try:
+            ahora = datetime.utcnow().isoformat()
+            resp = (
+                self.supabase.table("aula_reservas")
+                .select("id,titulo,fecha_inicio,fecha_fin,aula_id,aulas(nombre)")
+                .gte("fecha_inicio", ahora)
+                .order("fecha_inicio", asc=True)
+                .limit(limite)
+                .execute()
+            )
+            out = []
+            for r in resp.data or []:
+                aula_nombre = None
+                # Supabase puede devolver 'aulas' como dict o None
+                if isinstance(r.get("aulas"), dict):
+                    aula_nombre = r["aulas"].get("nombre")
+                out.append({
+                    "id": r.get("id"),
+                    "titulo": r.get("titulo", ""),
+                    "fecha_inicio": r.get("fecha_inicio"),
+                    "fecha_fin": r.get("fecha_fin"),
+                    "aula_id": r.get("aula_id"),
+                    "aula_nombre": aula_nombre or "Sin aula",
+                })
+            return out
+        except Exception as e:
+            print(f"[AulasService] get_proximas_reservas error: {e}")
+            return []
+    
+    def get_estadisticas_empresa(self, empresa_id: str) -> Dict:
+        """Estadísticas filtradas por empresa (join a aulas)."""
+        try:
+            hoy = date.today()
+            ini = datetime.combine(hoy, datetime.min.time()).isoformat()
+            fin = datetime.combine(hoy, datetime.max.time()).isoformat()
+    
+            total_aulas = (
+                self.supabase.table("aulas")
+                .select("id", count="exact")
+                .eq("empresa_id", empresa_id)
+                .execute()
+            )
+    
+            aulas_activas = (
+                self.supabase.table("aulas")
+                .select("id", count="exact")
+                .eq("empresa_id", empresa_id)
+                .eq("activa", True)
+                .execute()
+            )
+    
+            # Contar reservas de hoy para las aulas de esa empresa (join)
+            reservas_hoy = (
+                self.supabase.table("aula_reservas")
+                .select("id,aulas!inner(id,empresa_id)", count="exact")
+                .gte("fecha_inicio", ini).lte("fecha_inicio", fin)
+                .eq("aulas.empresa_id", empresa_id)
+                .execute()
+            )
+    
+            total = _safe_count(total_aulas)
+            hoy_ct = _safe_count(reservas_hoy)
+    
+            return {
+                "total_aulas": total,
+                "aulas_activas": _safe_count(aulas_activas),
+                "reservas_hoy": hoy_ct,
+                "ocupacion_actual": (hoy_ct / max(1, total)) * 100.0,
+            }
+        except Exception as e:
+            print(f"[AulasService] get_estadisticas_empresa error: {e}")
+            return {"total_aulas": 0, "aulas_activas": 0, "reservas_hoy": 0, "ocupacion_actual": 0.0}
+    
+    def get_proximas_reservas_empresa(self, empresa_id: str, limite: int = 3) -> List[Dict]:
+        """Próximas reservas de una empresa (join a aulas para filtrar por empresa y traer nombre)."""
+        try:
+            ahora = datetime.utcnow().isoformat()
+            resp = (
+                self.supabase.table("aula_reservas")
+                .select("id,titulo,fecha_inicio,fecha_fin,aula_id,aulas!inner(id,nombre,empresa_id)")
+                .gte("fecha_inicio", ahora)
+                .eq("aulas.empresa_id", empresa_id)
+                .order("fecha_inicio", asc=True)
+                .limit(limite)
+                .execute()
+            )
+            out = []
+            for r in resp.data or []:
+                aula_nombre = None
+                if isinstance(r.get("aulas"), dict):
+                    aula_nombre = r["aulas"].get("nombre")
+                out.append({
+                    "id": r.get("id"),
+                    "titulo": r.get("titulo", ""),
+                    "fecha_inicio": r.get("fecha_inicio"),
+                    "fecha_fin": r.get("fecha_fin"),
+                    "aula_id": r.get("aula_id"),
+                    "aula_nombre": aula_nombre or "Sin aula",
+                })
+            return out
+        except Exception as e:
+            print(f"[AulasService] get_proximas_reservas_empresa error: {e}")
+            return []
+
     # =========================
     # GESTIÓN DE RESERVAS
     # =========================
