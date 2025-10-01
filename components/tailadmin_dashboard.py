@@ -1,5 +1,3 @@
-# components/tailadmin_dashboard.py
-
 import streamlit as st
 
 class TailAdminDashboard:
