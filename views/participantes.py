@@ -1612,44 +1612,44 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         for participante in participantes_pagina:
             grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
             tiene_diploma = participante["id"] in participantes_con_diploma
-            
+        
             accion_info = grupo_info.get("accion_formativa") or {}
             accion_nombre = accion_info.get("nombre", "Sin acción")
             p_info = participante.get("participante", {})
             nombre_completo = f"{p_info.get('nombre', '')} {p_info.get('apellidos', '')}".strip()
-            
+        
             status_emoji = "✅" if tiene_diploma else "⏳"
             status_text = "Con diploma" if tiene_diploma else "Pendiente"
-            
+        
             with st.expander(
                 f"{status_emoji} {nombre_completo} - {grupo_info.get('codigo_grupo', 'Sin código')} ({status_text})",
                 expanded=False
             ):
                 col_info, col_actions = st.columns([2, 1])
-                
+        
                 with col_info:
                     st.markdown(f"**📧 Email:** {p_info.get('email', '-')}")
                     st.markdown(f"**🆔 NIF:** {p_info.get('nif', 'No disponible')}")
                     st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
                     st.markdown(f"**📖 Acción:** {accion_nombre}")
-                    
+        
                     fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
                     if fecha_fin:
                         fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
                         st.markdown(f"**📅 Finalizado:** {fecha_str}")
-                
+        
                 with col_actions:
                     if tiene_diploma:
                         diplomas_part = supabase.table("diplomas").select("*").eq(
                             "participante_id", participante["id"]
                         ).execute()
-                        
+        
                         if diplomas_part.data:
                             diploma = diplomas_part.data[0]
                             st.markdown("**🏅 Diploma:**")
                             if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}"):
                                 st.markdown(f"[🔗 Abrir diploma]({diploma['url']})")
-                            
+        
                             if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}"):
                                 confirmar_key = f"confirm_delete_{participante['id']}"
                                 if st.session_state.get(confirmar_key, False):
@@ -1661,30 +1661,30 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                     st.warning("⚠️ Confirmar eliminación")
                     else:
                         st.markdown("**📤 Subir Diploma**")
-                        
+        
                         diploma_file = st.file_uploader(
                             "Seleccionar diploma (PDF)",
                             type=["pdf"],
                             key=f"upload_diploma_{participante['id']}",
                             help="Solo archivos PDF, máximo 10MB"
                         )
-                        
+        
                         if diploma_file is not None:
                             file_size_mb = diploma_file.size / (1024 * 1024)
-                            
+        
                             col_info_file, col_size_file = st.columns(2)
                             with col_info_file:
                                 st.success(f"✅ **Archivo:** {diploma_file.name}")
                             with col_size_file:
                                 color = "🔴" if file_size_mb > 10 else "🟢"
                                 st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
-                            
+        
                             if file_size_mb > 10:
                                 st.error("❌ Archivo muy grande. Máximo 10MB.")
                             else:
                                 if st.button(
-                                    f"📤 Subir diploma de {participante['nombre']}", 
-                                    key=f"btn_upload_{participante['id']}", 
+                                    f"📤 Subir diploma de {nombre_completo}",   # 🔧 aquí usamos nombre_completo
+                                    key=f"btn_upload_{participante['id']}",
                                     type="primary",
                                     use_container_width=True
                                 ):
