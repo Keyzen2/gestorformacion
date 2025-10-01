@@ -118,11 +118,6 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
     """Muestra los grupos FUNDAE del participante - VERSIÓN CORREGIDA"""
     st.header("📚 Mis Grupos FUNDAE")
     
-    # Debug del session_state (opcional)
-    if st.checkbox("Mostrar información de debug", value=False):
-        debug_session_state(session_state)
-    
-    # CORREGIDO: Obtener participante_id de forma más robusta
     participante_id = None
     
     if hasattr(session_state, 'participante_id'):
@@ -255,34 +250,46 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
         st.write(f"Detalles del error: {str(e)}")
 
 def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
-    """Muestra detalles adicionales de un grupo FUNDAE."""
+    """Muestra detalles adicionales de un grupo FUNDAE - MEJORADO."""
     try:
-        # CORREGIDO: Verificar si el método existe antes de llamarlo
         if hasattr(grupos_service, 'get_grupo_completo'):
             grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
         else:
-            # Método alternativo: obtener grupo básico
             grupo_detalle = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
             grupo_detalle = grupo_detalle.data[0] if grupo_detalle.data else None
         
         if grupo_detalle:
-            st.markdown("#### 📋 Información Detallada del Grupo")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.write(f"**Código:** {grupo_detalle.get('codigo_grupo', 'N/A')}")
-                st.write(f"**Estado:** {grupo_detalle.get('estado', 'N/A')}")
-                st.write(f"**Modalidad:** {grupo_detalle.get('modalidad', 'N/A')}")
+            with st.container(border=True):
+                st.markdown("#### 📋 Información Detallada del Grupo")
                 
-            with col2:
-                st.write(f"**Lugar:** {grupo_detalle.get('lugar_imparticion', 'N/A')}")
-                st.write(f"**Observaciones:** {grupo_detalle.get('observaciones', 'Ninguna')}")
-            
-            # Horarios si están disponibles
-            if grupo_detalle.get('horarios'):
-                st.markdown("**⏰ Horarios:**")
-                st.text(grupo_detalle['horarios'])
+                # Información principal en columnas
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**📚 Datos del Grupo**")
+                    st.write(f"• Código: {grupo_detalle.get('codigo_grupo', 'N/A')}")
+                    st.write(f"• Estado: {grupo_detalle.get('estado', 'N/A')}")
+                    st.write(f"• Modalidad: {grupo_detalle.get('modalidad', 'N/A')}")
+                    
+                with col2:
+                    st.markdown("**📍 Ubicación y Contacto**")
+                    st.write(f"• Lugar: {grupo_detalle.get('lugar_imparticion', 'N/A')}")
+                    
+                    telefono = grupo_detalle.get('telefono_contacto')
+                    if telefono:
+                        st.write(f"• Teléfono: {telefono}")
+                
+                # Horarios si están disponibles
+                if grupo_detalle.get('horarios'):
+                    st.markdown("**⏰ Horarios de Formación**")
+                    with st.expander("Ver horarios completos", expanded=False):
+                        st.text(grupo_detalle['horarios'])
+                
+                # Observaciones si existen
+                observaciones = grupo_detalle.get('observaciones')
+                if observaciones and observaciones.strip():
+                    st.markdown("**📝 Observaciones**")
+                    st.info(observaciones)
         else:
             st.warning("No se pudieron cargar los detalles del grupo")
     
@@ -442,19 +449,30 @@ def mostrar_reservar_clases(clases_service, session_state):
                     st.write(f"**{clase['title']}**")
                     st.caption(f"Categoría: {clase['extendedProps'].get('categoria', 'N/A')}")
                     
-                    # Avatares de quienes ya reservaron
-                    avatares = clases_service.get_avatares_reserva(
-                        clase["horario_id"], 
-                        pd.to_datetime(clase['extendedProps']['fecha_clase']).date()
-                    )
-                    if avatares:
-                        st.caption("👥 Ya reservados:")
-                        if avatares:
-                            avatar_html = "".join([
-                                f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px;" />'
-                                for url in avatares
+                    # Avatares de quienes ya reservaron - CORREGIDO
+                    try:
+                        fecha_clase_dt = pd.to_datetime(clase['extendedProps']['fecha_clase']).date()
+                        avatares = clases_service.get_avatares_reserva(
+                            clase["horario_id"], 
+                            fecha_clase_dt
+                        )
+                        
+                        if avatares and len(avatares) > 0:
+                            st.caption(f"👥 {len(avatares)} participantes ya inscritos:")
+                            # Mostrar avatares en línea
+                            avatar_html = " ".join([
+                                f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px; object-fit:cover; border: 2px solid #ddd;" title="Participante" />'
+                                for url in avatares[:5]  # Máximo 5 avatares
                             ])
-                            st.markdown(f"👥 {avatar_html}", unsafe_allow_html=True)
+                            if len(avatares) > 5:
+                                avatar_html += f'<span style="margin-left:8px; color:#666;">+{len(avatares)-5} más</span>'
+                            
+                            st.markdown(avatar_html, unsafe_allow_html=True)
+                        else:
+                            st.caption("👥 Sé el primero en reservar")
+                    
+                    except Exception as e:
+                        st.caption("👥 Información de participantes no disponible")
                 
                 with col2:
                     fecha_clase = clase['extendedProps']['fecha_clase']
