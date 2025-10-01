@@ -1615,7 +1615,8 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
             
             accion_info = grupo_info.get("accion_formativa") or {}
             accion_nombre = accion_info.get("nombre", "Sin acción")
-            nombre_completo = f"{participante['nombre']} {participante.get('apellidos', '')}".strip()
+            p_info = participante.get("participante", {})
+            nombre_completo = f"{p_info.get('nombre', '')} {p_info.get('apellidos', '')}".strip()
             
             status_emoji = "✅" if tiene_diploma else "⏳"
             status_text = "Con diploma" if tiene_diploma else "Pendiente"
@@ -1627,8 +1628,8 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                 col_info, col_actions = st.columns([2, 1])
                 
                 with col_info:
-                    st.markdown(f"**📧 Email:** {participante['email']}")
-                    st.markdown(f"**🆔 NIF:** {participante.get('nif', 'No disponible')}")
+                    st.markdown(f"**📧 Email:** {p_info.get('email', '-')}")
+                    st.markdown(f"**🆔 NIF:** {p_info.get('nif', 'No disponible')}")
                     st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
                     st.markdown(f"**📖 Acción:** {accion_nombre}")
                     
