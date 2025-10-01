@@ -391,7 +391,18 @@ class ClasesService:
             # 6. Verificar conflictos de horario
             if self._verificar_conflicto_horario(datos_horario):
                 return False, f"Ya existe un horario activo en {datos_horario.get('dia_semana')} para esta clase"
+                
+            # NUEVO: Verificar disponibilidad de aula
+            if datos_horario.get("aula_id"):
+                aula_disponible = self._verificar_disponibilidad_aula_recurrente(
+                    datos_horario["aula_id"],
+                    datos_horario["dia_semana"],
+                    datos_horario["hora_inicio"],
+                    datos_horario["hora_fin"]
+                )
             
+            if not aula_disponible:
+                return False, "El aula no está disponible en ese horario"
             # 7. Insertar en base de datos
             result = self.supabase.table("clases_horarios").insert(datos_horario).execute()
             
@@ -868,7 +879,27 @@ class ClasesService:
             
         except Exception as e:
             return {"disponible": False, "error": str(e)}
-
+            
+    def _verificar_disponibilidad_aula_recurrente(self, aula_id: str, dia_semana: int, 
+                                              hora_inicio: str, hora_fin: str) -> bool:
+        """Verifica si un aula está disponible para un horario recurrente"""
+        try:
+            # Verificar otros horarios de clases
+            conflictos_clases = self.supabase.table("clases_horarios").select("id").eq(
+                "aula_id", aula_id
+            ).eq("dia_semana", dia_semana).eq("activo", True).execute()
+            
+            for horario in conflictos_clases.data or []:
+                # Verificar solapamiento de horas (implementar lógica)
+                pass
+            
+            # TODO: Verificar también reservas puntuales de aulas
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error verificando disponibilidad: {e}")
+            return False
     # =========================
     # MÉTODOS PARA PARTICIPANTES/ALUMNOS
     # =========================
