@@ -561,10 +561,9 @@ def mostrar_seccion_avatar(participantes_service, participante_id, session_state
         with col1:
             if avatar_actual and avatar_actual.get("archivo_url"):
                 st.image(
-                    avatar_actual["archivo_url"],
-                    caption="Avatar actual",
-                    width=150,
-                    use_container_width=True
+                    avatar_url,
+                    use_container_width=False,
+                    width=50
                 )
                 
                 # Información del archivo
