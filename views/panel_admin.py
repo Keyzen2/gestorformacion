@@ -41,53 +41,6 @@ def render(supabase, session_state):
         st.error(f"❌ Error al cargar datos del sistema: {e}")
         return
     
-    # === MÉTRICAS PRINCIPALES (4 tarjetas destacadas) ===
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        cambio_empresas = calcular_cambio_mensual(
-            datos_globales['empresas'], 
-            'created_at'
-        )
-        dashboard.metric_card_primary(
-            "Empresas Totales",
-            str(datos_globales['total_empresas']),
-            "🏢",
-            cambio=f"+{cambio_empresas} este mes" if cambio_empresas > 0 else None,
-            cambio_positivo=True
-        )
-    
-    with col2:
-        cambio_usuarios = calcular_cambio_mensual(
-            datos_globales['usuarios'],
-            'created_at'
-        )
-        dashboard.metric_card_primary(
-            "Usuarios Activos",
-            str(datos_globales['total_usuarios']),
-            "👥",
-            cambio=f"+{cambio_usuarios} este mes" if cambio_usuarios > 0 else None,
-            cambio_positivo=True
-        )
-    
-    with col3:
-        dashboard.metric_card_primary(
-            "Grupos Activos",
-            str(datos_globales['grupos_activos']),
-            "📚",
-            cambio=f"{datos_globales['total_grupos']} totales"
-        )
-    
-    with col4:
-        dashboard.metric_card_primary(
-            "Aulas Disponibles",
-            str(datos_globales['aulas_activas']),
-            "🏫",
-            cambio=f"{datos_globales['total_aulas']} totales"
-        )
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
     # === MÉTRICAS SECUNDARIAS (Grid 3x2) ===
     col1, col2, col3 = st.columns(3)
     
