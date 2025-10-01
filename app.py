@@ -1169,8 +1169,6 @@ def mostrar_dashboard_gestor(ajustes, metricas):
     with col3:
         components.stat_card("Documentos", str(metricas.get('documentos', 0)), "📂", color="warning")
 
-# En app.py, reemplaza la función mostrar_dashboard_alumno:
-
 def mostrar_dashboard_alumno(ajustes):
     """Dashboard alumno mejorado estilo TailAdmin"""
     
@@ -1178,6 +1176,7 @@ def mostrar_dashboard_alumno(ajustes):
     user_name = st.session_state.user.get("nombre", "Alumno")
     user_email = st.session_state.user.get("email")
     empresa_id = st.session_state.user.get("empresa_id")
+    user_id = st.session_state.user.get("id")  # ID del usuario
     
     components.welcome_header(user_name, "Área del Estudiante")
     components.breadcrumb(["Dashboard", "Mi Formación"])
@@ -1186,19 +1185,24 @@ def mostrar_dashboard_alumno(ajustes):
     try:
         # Buscar participante por email
         participante_res = supabase_admin.table("participantes")\
-            .select("*, grupos(codigo_grupo, fecha_inicio, fecha_fin_prevista, estado)")\
+            .select("id, email, grupos(codigo_grupo, fecha_inicio, fecha_fin_prevista, estado)")\
             .eq("email", user_email)\
             .execute()
         
         participaciones = participante_res.data or []
         
-        # Diplomas del alumno
-        diplomas_res = supabase_admin.table("diplomas")\
-            .select("id, fecha_emision")\
-            .eq("participante_email", user_email)\
-            .execute()
+        # Obtener IDs de participantes para buscar diplomas
+        participante_ids = [p.get('id') for p in participaciones if p.get('id')]
         
-        diplomas = diplomas_res.data or []
+        # Diplomas del alumno (usando participante_id)
+        diplomas = []
+        if participante_ids:
+            diplomas_res = supabase_admin.table("diplomas")\
+                .select("id, fecha_subida, archivo_nombre")\
+                .in_("participante_id", participante_ids)\
+                .execute()
+            
+            diplomas = diplomas_res.data or []
         
         # Verificar si tiene servicio de clases activo
         servicio_clases = False
@@ -1300,22 +1304,11 @@ def mostrar_dashboard_alumno(ajustes):
             st.info("ℹ️ Servicio de Clases no disponible")
     
     with col2:
-        # Próximas clases (simulado - integrar con tabla clases_horarios)
-        try:
-            if servicio_clases:
-                # Buscar próximas clases del alumno
-                hoy = datetime.now().date()
-                proximas_clases = 0
-                
-                # Aquí integrarías con clases_horarios si existe
-                # proximas_clases_res = supabase_admin.table("clases_horarios")...
-                
-                if proximas_clases > 0:
-                    st.warning(f"⏰ {proximas_clases} clases próximas esta semana")
-                else:
-                    st.info("📅 No hay clases programadas próximamente")
-        except:
-            pass
+        # Próximas clases (placeholder - integrar con clases_horarios cuando esté disponible)
+        if servicio_clases and grupos_activos > 0:
+            st.info("📅 Consulta el calendario de clases en tu grupo")
+        else:
+            st.info("📅 No hay clases programadas")
     
     # === MIS GRUPOS ACTIVOS ===
     if grupos_activos > 0:
@@ -1329,8 +1322,12 @@ def mostrar_dashboard_alumno(ajustes):
                 fecha_inicio = grupo.get('fecha_inicio')
                 fecha_fin = grupo.get('fecha_fin_prevista')
                 
-                fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else 'N/A'
-                fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else 'N/A'
+                try:
+                    fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else 'N/A'
+                    fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else 'N/A'
+                except:
+                    fecha_inicio_str = 'N/A'
+                    fecha_fin_str = 'N/A'
                 
                 st.markdown(f"""
                 <div style="
@@ -1366,7 +1363,6 @@ def mostrar_dashboard_alumno(ajustes):
             padding: 2rem;
             text-align: center;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s ease;
         ">
             <div style="font-size: 3rem; margin-bottom: 1rem;">📘</div>
             <h3 style="color: #1F2937; margin: 0 0 0.5rem 0; font-size: 1.125rem;">Ver Todos Mis Grupos</h3>
@@ -1389,7 +1385,6 @@ def mostrar_dashboard_alumno(ajustes):
             padding: 2rem;
             text-align: center;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            transition: transform 0.2s ease;
         ">
             <div style="font-size: 3rem; margin-bottom: 1rem;">🎓</div>
             <h3 style="color: #1F2937; margin: 0 0 0.5rem 0; font-size: 1.125rem;">Descargar Diplomas</h3>
@@ -1401,7 +1396,6 @@ def mostrar_dashboard_alumno(ajustes):
         
         if total_diplomas > 0:
             if st.button("🏆 Ver Diplomas", key="btn_cert", use_container_width=True):
-                # Aquí navegarías a una vista de diplomas
                 st.info("Funcionalidad de diplomas en desarrollo")
         else:
             st.button("🏆 Sin Diplomas", key="btn_cert_disabled", use_container_width=True, disabled=True)
@@ -1448,7 +1442,7 @@ def mostrar_dashboard_alumno(ajustes):
             </div>
         </div>
         """, unsafe_allow_html=True)
-
+        
 def mostrar_dashboard_comercial(ajustes):
     components = TailAdminComponents()
     user_name = st.session_state.user.get("nombre", "Comercial")
