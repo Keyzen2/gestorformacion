@@ -518,7 +518,7 @@ def mostrar_estadisticas_globales(supabase, datos_globales, dashboard):
     
     # === ESTADO DE GRUPOS ===
     st.markdown("<br>", unsafe_allow_html=True)
-    dashboard.section_header("Estado de Grupos Formativos", icon="📚")
+    dashboard.section_header("Estado de Grupos Formativos", icono="📚")
     
     col1, col2, col3 = st.columns(3)
     
@@ -558,7 +558,7 @@ def mostrar_estadisticas_globales(supabase, datos_globales, dashboard):
     
     # === MÓDULOS CONTRATADOS POR EMPRESA ===
     st.markdown("<br>", unsafe_allow_html=True)
-    dashboard.section_header("Módulos Contratados", icon="📦")
+    dashboard.section_header("Módulos Contratados", icono="📦")
     
     modulos_stats = {
         'Formación': len([e for e in datos_globales['empresas'] if e.get('formacion_activo')]),
@@ -631,7 +631,7 @@ def mostrar_analisis_tendencias(supabase, datos_globales, dashboard):
     
     # === ACTIVIDAD MENSUAL ===
     st.markdown("<br>", unsafe_allow_html=True)
-    dashboard.section_header("Actividad Mensual", icon="📅")
+    dashboard.section_header("Actividad Mensual", icono="📅")
     
     col1, col2 = st.columns(2)
     
@@ -1401,7 +1401,7 @@ def mostrar_proyectos_fundae(supabase, datos_globales, dashboard):
     
     # === ALERTAS DE VENCIMIENTO ===
     st.markdown("<br>", unsafe_allow_html=True)
-    dashboard.section_header("Alertas de Vencimiento", icon="⚠️")
+    dashboard.section_header("Alertas de Vencimiento", icono="⚠️")
     
     hoy = datetime.now().date()
     fecha_limite = hoy + timedelta(days=60)
