@@ -1145,37 +1145,47 @@ def render(supabase, session_state):
     # ==========================
     try:
         if session_state.role == "admin":
+            # 🔹 Estadísticas globales
             stats = aulas_service.get_estadisticas_rapidas()
             proximas = aulas_service.get_proximas_reservas(limite=3)
-        else:
+        elif session_state.role == "gestor":
+            # 🔹 Estadísticas filtradas por empresa
             empresa_id = session_state.user.get("empresa_id")
             stats = aulas_service.get_estadisticas_empresa(empresa_id)
             proximas = aulas_service.get_proximas_reservas_empresa(empresa_id, limite=3)
-
-        # ---- métricas ----
+        else:
+            stats, proximas = {}, []
+    
+        # =============================
+        # MÉTRICAS RÁPIDAS (Cards)
+        # =============================
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Aulas", stats.get("total_aulas", 0))
+            st.metric("Total de Aulas", stats.get("total_aulas", 0))
         with col2:
-            st.metric("Activas", stats.get("aulas_activas", 0))
+            st.metric("Aulas Activas", stats.get("aulas_activas", 0))
         with col3:
-            st.metric("Hoy", stats.get("reservas_hoy", 0))
+            st.metric("Reservas Hoy", stats.get("reservas_hoy", 0))
         with col4:
-            ocupacion = stats.get("ocupacion_actual", 0)
-            st.metric("Ocupación", f"{ocupacion:.0f}%")
-
-        # ---- próximas reservas ----
-        if proximas:
-            st.markdown("#### 📌 Próximas Reservas")
-            for reserva in proximas:
-                fecha_hora = pd.to_datetime(reserva["fecha_inicio"]).strftime("%d/%m %H:%M")
-                aula = reserva.get("aula_nombre", "Sin aula")
-                titulo = reserva.get("titulo", "Sin título")
-                st.info(f"**{fecha_hora}** — {aula}: {titulo[:60]}")
+            st.metric("Ocupación", f"{stats.get('ocupacion_actual', 0):.1f}%")
+    
+        # =============================
+        # EXPANDER CON PRÓXIMAS RESERVAS
+        # =============================
+        with st.expander("📅 Próximas reservas", expanded=True):
+            if proximas:
+                for r in proximas:
+                    inicio = pd.to_datetime(r["fecha_inicio"]).strftime("%d/%m %H:%M")
+                    fin = pd.to_datetime(r["fecha_fin"]).strftime("%H:%M")
+                    st.markdown(
+                        f"- **{r['titulo']}** en *{r['aula_nombre']}* "
+                        f"({inicio} → {fin})"
+                    )
+            else:
+                st.info("No hay próximas reservas registradas")
+    
     except Exception as e:
-        st.error(f"Error cargando métricas iniciales: {e}")
-
-    st.markdown("---")
+        st.error(f"❌ Error cargando métricas iniciales: {e}")
 
     # Tabs principales
     if session_state.role in ["admin", "gestor"]:
