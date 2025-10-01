@@ -310,28 +310,31 @@ class ClasesService:
     def get_horarios_con_clase(_self, clase_id: Optional[str] = None):
         """Obtiene horarios con información de clase"""
         try:
+            # Query base
             query = _self.supabase.table("clases_horarios").select("""
                 id, dia_semana, hora_inicio, hora_fin, capacidad_maxima, activo,
-                created_at, clase_id,
+                created_at, clase_id, aula_id,
                 clases!inner(nombre, categoria, empresa_id, activa)
             """)
             
+            # Filtrar por clase específica si se proporciona
             if clase_id:
                 query = query.eq("clase_id", clase_id)
             
-            # CORREGIDO: Filtrar según rol de forma más específica
+            # IMPORTANTE: Filtrar por empresa según rol
             if _self.role == "gestor" and _self.empresa_id:
-                # Primero obtener clases del gestor
-                clases_gestor = _self.supabase.table("clases").select("id").eq("empresa_id", _self.empresa_id).execute()
-                clases_ids = [c["id"] for c in clases_gestor.data or []]
+                # Obtener empresas gestionadas
+                empresas_gestionadas = _self._get_empresas_gestionadas()
                 
-                if clases_ids:
-                    query = query.in_("clase_id", clases_ids)
+                if empresas_gestionadas:
+                    # Filtrar por empresa usando join a clases
+                    query = query.in_("clases.empresa_id", empresas_gestionadas)
                 else:
-                    # Si no tiene clases, devolver DataFrame vacío
+                    # Si no tiene empresas, devolver vacío
                     return pd.DataFrame()
             
-            result = query.order("dia_semana", "hora_inicio").execute()
+            # Ejecutar query
+            result = query.order("dia_semana").order("hora_inicio").execute()
             
             if result.data:
                 horarios = []
@@ -354,6 +357,8 @@ class ClasesService:
             
         except Exception as e:
             print(f"Error cargando horarios: {e}")
+            import traceback
+            traceback.print_exc()  # Ver error completo
             return pd.DataFrame()
 
     def crear_horario(self, datos_horario: Dict) -> Tuple[bool, Optional[str]]:
@@ -384,7 +389,7 @@ class ClasesService:
             if not self._validar_datos_horario(datos_horario):
                 return False, "Datos de horario inválidos - verifica día, horas y capacidad"
             
-            # 5. NUEVO: Verificar que no exista otro horario con mismo día/hora para esta clase
+            # 5. Verificar conflictos con ESTA CLASE (mismo día)
             conflicto_clase = self.supabase.table("clases_horarios").select("id, hora_inicio, hora_fin").eq(
                 "clase_id", datos_horario["clase_id"]
             ).eq("dia_semana", datos_horario["dia_semana"]).eq("activo", True).execute()
@@ -393,20 +398,19 @@ class ClasesService:
                 dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
                 dia_nombre = dias_semana[datos_horario["dia_semana"]]
                 
+                hora_inicio_nueva = datetime.strptime(datos_horario["hora_inicio"], "%H:%M:%S").time()
+                hora_fin_nueva = datetime.strptime(datos_horario["hora_fin"], "%H:%M:%S").time()
+                
                 for horario_existente in conflicto_clase.data:
-                    # Verificar solapamiento de horas
-                    hora_inicio_nueva = datetime.strptime(datos_horario["hora_inicio"], "%H:%M:%S").time()
-                    hora_fin_nueva = datetime.strptime(datos_horario["hora_fin"], "%H:%M:%S").time()
                     hora_inicio_exist = datetime.strptime(horario_existente["hora_inicio"], "%H:%M:%S").time()
                     hora_fin_exist = datetime.strptime(horario_existente["hora_fin"], "%H:%M:%S").time()
                     
                     # Verificar solapamiento
                     if not (hora_fin_nueva <= hora_inicio_exist or hora_inicio_nueva >= hora_fin_exist):
-                        return False, f"Ya existe un horario para esta clase el {dia_nombre} entre {hora_inicio_exist.strftime('%H:%M')} y {hora_fin_exist.strftime('%H:%M')}"
+                        return False, f"Esta clase ya tiene un horario el {dia_nombre} de {hora_inicio_exist.strftime('%H:%M')} a {hora_fin_exist.strftime('%H:%M')}"
             
-            # 6. Verificar disponibilidad de aula SI está asignada
+            # 6. SOLO SI HAY AULA: Verificar disponibilidad del aula
             if datos_horario.get("aula_id"):
-                # Verificar conflictos con otros horarios de clases en la misma aula
                 conflicto_aula = self.supabase.table("clases_horarios").select(
                     "id, hora_inicio, hora_fin, clases(nombre)"
                 ).eq("aula_id", datos_horario["aula_id"]).eq(
@@ -421,23 +425,23 @@ class ClasesService:
                         hora_inicio_exist = datetime.strptime(horario_aula["hora_inicio"], "%H:%M:%S").time()
                         hora_fin_exist = datetime.strptime(horario_aula["hora_fin"], "%H:%M:%S").time()
                         
-                        # Verificar solapamiento
                         if not (hora_fin_nueva <= hora_inicio_exist or hora_inicio_nueva >= hora_fin_exist):
                             clase_conflicto = horario_aula.get("clases", {}).get("nombre", "otra clase")
-                            return False, f"El aula ya está ocupada por '{clase_conflicto}' en ese horario"
+                            dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                            return False, f"El aula ya está ocupada por '{clase_conflicto}' el {dias_semana[datos_horario['dia_semana']]} de {hora_inicio_exist.strftime('%H:%M')} a {hora_fin_exist.strftime('%H:%M')}"
             
-            # 7. Insertar en base de datos
+            # 7. Insertar
             result = self.supabase.table("clases_horarios").insert(datos_horario).execute()
             
             if result.data:
                 self.limpiar_cache_clases()
                 return True, horario_id
-            else:
-                return False, "Error al guardar en base de datos"
+            
+            return False, "Error al guardar en base de datos"
             
         except Exception as e:
             print(f"Error completo en crear_horario: {e}")
-            return False, f"Error creando horario: {str(e)}"
+            return False, f"Error: {str(e)}"
 
     def actualizar_horario(self, horario_id: str, datos_horario: Dict) -> bool:
         """Actualiza un horario existente"""
