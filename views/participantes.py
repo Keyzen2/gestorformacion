@@ -1671,14 +1671,14 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         
                         if diploma_file is not None:
                             file_size_mb = diploma_file.size / (1024 * 1024)
-        
+                        
                             col_info_file, col_size_file = st.columns(2)
                             with col_info_file:
                                 st.success(f"✅ **Archivo:** {diploma_file.name}")
                             with col_size_file:
                                 color = "🔴" if file_size_mb > 10 else "🟢"
                                 st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
-        
+                        
                             if file_size_mb > 10:
                                 st.error("❌ Archivo muy grande. Máximo 10MB.")
                             else:
@@ -1698,16 +1698,16 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                             f"{grupo_info.get('id')}/"
                                             f"{file_name}"
                                         )
-                            
+                        
                                         # 2. Subir archivo al bucket
                                         supabase.storage.from_("diplomas").upload(
                                             file_path,
                                             diploma_file.getvalue()
                                         )
-                            
+                        
                                         # 3. Obtener URL pública
                                         url = supabase.storage.from_("diplomas").get_public_url(file_path)
-                            
+                        
                                         # 4. Insertar registro en tabla diplomas
                                         supabase.table("diplomas").insert({
                                             "participante_id": p_info.get("id"),
@@ -1715,12 +1715,14 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                             "url": url,
                                             "archivo_nombre": diploma_file.name
                                         }).execute()
-                            
+                        
                                         st.success("✅ Diploma subido y registrado correctamente")
                                         st.rerun()
-                            
-                                    except Exception as e:   # 🔧 alineado con el try
+                        
+                                    except Exception as e:
                                         st.error(f"❌ Error al subir diploma: {e}")
+                        else:
+                            st.info("📂 Selecciona un archivo PDF para continuar")
 
 
 # =========================
