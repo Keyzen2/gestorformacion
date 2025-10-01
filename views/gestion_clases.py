@@ -86,7 +86,6 @@ def mostrar_gestion_clases(clases_service, empresas_service, session_state):
     
     # Formulario de creación
     st.divider()
-    st.markdown("### ➕ Crear Nueva Clase")
     mostrar_formulario_clase(clases_service, empresas_service, session_state, {}, es_creacion=True)
 
 def mostrar_formulario_clase(clases_service, empresas_service, session_state, clase_data, es_creacion=False):
@@ -165,12 +164,6 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
                         empresa_id = None
                     
                     st.info(f"Empresa: {empresa_nombre}")
-                
-                color_cronograma = st.color_picker(
-                    "Color en cronograma",
-                    value=clase_data.get("color_cronograma", "#3498db"),
-                    help="Color que aparecerá en el calendario"
-                )
                 
                 activa = st.checkbox(
                     "Clase activa",
