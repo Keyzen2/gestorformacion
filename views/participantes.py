@@ -1722,49 +1722,21 @@ def render(supabase, session_state):
     with tabs[0]:
         try:
             df_participantes = participantes_service.get_participantes_completos()
-
+    
             # Filtrado por rol gestor
             if session_state.role == "gestor":
                 empresas_df = cargar_empresas_disponibles(empresas_service, session_state)
                 empresas_ids = empresas_df["id"].tolist()
                 df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
-
+    
             # Mostrar tabla
             resultado = mostrar_tabla_participantes(df_participantes, session_state)
             if resultado is not None and len(resultado) == 2:
                 seleccionado, df_paged = resultado
             else:
                 seleccionado, df_paged = None, pd.DataFrame()
-
-            # Exportación e importación en expanders organizados
-            st.divider()
-            
-            with st.expander("📥 Exportar Participantes"):
-                exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
-            
-            with st.expander("📤 Importar Participantes"):
-                importar_participantes(auth_service, empresas_service, session_state)
-
-            with st.expander("ℹ️ Ayuda sobre Participantes"):
-                st.markdown("""
-                **Funcionalidades principales:**
-                - 🔍 **Filtros**: Usa los campos de búsqueda para encontrar participantes rápidamente
-                - ✏️ **Edición**: Haz clic en una fila para editar un participante
-                - 📊 **Exportar/Importar**: Gestión masiva de datos en los expanders superiores
-                - 🏢 **Empresas y grupos**: Los selectores están conectados - primero empresa, luego grupo
-                - 🎓 **Diplomas**: Nueva pestaña para gestionar certificados
-                - 🏃‍♀️ **Clases**: Sistema nuevo de suscripciones para clases con horarios
-                
-                **Permisos por rol:**
-                - 👑 **Admin**: Ve todos los participantes de todas las empresas
-                - 👨‍💼 **Gestor**: Solo ve participantes de su empresa y empresas clientes
-                
-                **Nuevo Sistema de Clases:**
-                - Los participantes pueden tener suscripciones de clases independientes de FUNDAE
-                - Sistema de cupos limitados y horarios específicos
-                - Gestión de avatars para personalización del perfil
-                """)
-
+    
+            # 👉 FORMULARIO: aparece justo después de la tabla
             if seleccionado is not None:
                 with st.container(border=True):
                     mostrar_formulario_participante_nn(
@@ -1777,6 +1749,24 @@ def render(supabase, session_state):
                         session_state, 
                         es_creacion=False
                     )
+    
+            st.divider()
+    
+            # Exportación e importación en expanders organizados
+            with st.expander("📥 Exportar Participantes"):
+                exportar_participantes(participantes_service, session_state, df_filtrado=df_paged, solo_visibles=True)
+            
+            with st.expander("📤 Importar Participantes"):
+                importar_participantes(auth_service, empresas_service, session_state)
+    
+            with st.expander("ℹ️ Información sobre participantes"):
+                st.markdown("""
+                - Aquí puedes consultar, filtrar y gestionar los participantes registrados.
+                - Desde esta tabla puedes editar sus datos, asignarlos a grupos y gestionar diplomas.
+                - Usa los filtros superiores para localizar rápidamente un participante.
+                - Mantén actualizados los datos de contacto y el NIF para asegurar la validez de la formación.
+                """)
+    
         except Exception as e:
             st.error(f"❌ Error cargando participantes: {e}")
 
