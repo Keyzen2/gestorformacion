@@ -357,16 +357,24 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
                         st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
                         st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
                         
-                        # Avatares de otros alumnos
-                        avatares = clases_service.get_avatares_reserva(row["horario_id"], date.fromisoformat(str(row["fecha_clase"])))
-                        if avatares:
-                            st.caption("👥 Participantes:")
-                            if avatares:
-                                avatar_html = "".join([
-                                    f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px;" />'
-                                    for url in avatares
+                        # Avatares de otros alumnos - CORREGIDO
+                        try:
+                            fecha_clase_dt = date.fromisoformat(str(row["fecha_clase"]))
+                            avatares = clases_service.get_avatares_reserva(
+                                row["horario_id"], 
+                                fecha_clase_dt
+                            )
+                            
+                            if avatares and len(avatares) > 0:
+                                st.caption(f"👥 {len(avatares)} participantes:")
+                                avatar_html = " ".join([
+                                    f'<img src="{url}" style="width:32px; height:32px; border-radius:50%; margin-right:4px; object-fit:cover; border: 2px solid #ddd;" />'
+                                    for url in avatares[:8]
                                 ])
-                                st.markdown(f"👥 {avatar_html}", unsafe_allow_html=True)
+                                st.markdown(avatar_html, unsafe_allow_html=True)
+                        
+                        except Exception as e:
+                            pass
                     
                     with col2:
                         st.write(f"📊 Estado: {row['estado']}")
