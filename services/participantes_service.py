@@ -642,61 +642,44 @@ class ParticipantesService:
             return self._handle_query_error("participantes con grupos N:N", e)
             
     def get_grupos_de_participante(self, participante_id: str) -> pd.DataFrame:
-        """Obtiene todos los grupos de un participante específico."""
-        try:
-            # Verificar que el participante existe
-            participante_check = self.supabase.table("participantes").select(
-                "empresa_id, grupo_id"  # ← CORREGIDO: añadir grupo_id
-            ).eq("id", participante_id).execute()
-        
-            if not participante_check.data:
-                return pd.DataFrame()
-        
-            participante_data = participante_check.data[0]
-            empresa_id = participante_data["empresa_id"]
-            grupo_id = participante_data["grupo_id"]
-            
-            # Si no tiene grupo asignado
-            if not grupo_id:
-                return pd.DataFrame()
-        
-            # Solo verificar permisos para admin y gestor, NO para alumno
-            if self.rol in ["admin", "gestor"]:
-                empresas_permitidas = self._get_empresas_gestionables()
-                if empresa_id not in empresas_permitidas:
-                    return pd.DataFrame()
-        
-            # Obtener información del grupo usando el grupo_id directo
-            res = self.supabase.table("grupos").select("""
+        """
+        Devuelve todos los grupos en los que participa un alumno,
+        usando la relación N:N de participantes_grupos.
+        Incluye info básica del grupo y de la acción formativa.
+        """
+        res = self.supabase.table("participantes_grupos").select("""
+            fecha_asignacion,
+            grupo:grupos(
                 id, codigo_grupo, fecha_inicio, fecha_fin_prevista, fecha_fin,
                 modalidad, lugar_imparticion,
                 accion_formativa:acciones_formativas(nombre, horas)
-            """).eq("id", grupo_id).execute()
-        
-            if not res.data:
-                return pd.DataFrame()
-                
-            grupo = res.data[0]
-            accion = grupo.get("accion_formativa", {}) if isinstance(grupo, dict) else {}
-        
-            grupo_data = [{
+            )
+        """).eq("participante_id", participante_id).execute()
+    
+        if not res.data:
+            return pd.DataFrame()
+    
+        grupos_data = []
+        for relacion in res.data:
+            grupo = relacion.get("grupo", {})
+            if not grupo:
+                continue
+    
+            accion = grupo.get("accion_formativa", {})
+            grupos_data.append({
                 "grupo_id": grupo.get("id"),
-                "fecha_asignacion": None,  # No disponible con estructura actual
+                "fecha_asignacion": relacion.get("fecha_asignacion"),
                 "codigo_grupo": grupo.get("codigo_grupo", ""),
                 "fecha_inicio": grupo.get("fecha_inicio"),
                 "fecha_fin_prevista": grupo.get("fecha_fin_prevista"),
                 "fecha_fin": grupo.get("fecha_fin"),
                 "modalidad": grupo.get("modalidad", ""),
                 "lugar_imparticion": grupo.get("lugar_imparticion", ""),
-                "accion_nombre": accion.get("nombre", "") if isinstance(accion, dict) else "",
-                "accion_horas": int(accion.get("horas") or 0) if isinstance(accion, dict) else 0
-            }]
-        
-            return pd.DataFrame(grupo_data)
-        
-        except Exception as e:
-            print(f"Error obteniendo grupos del participante: {e}")
-            return pd.DataFrame()
+                "accion_nombre": accion.get("nombre", ""),
+                "accion_horas": int(accion.get("horas") or 0),
+            })
+    
+        return pd.DataFrame(grupos_data)
     
     def asignar_participante_a_grupo(self, participante_id: str, grupo_id: str) -> bool:
         """NUEVO: Asigna participante a grupo usando tabla N:N."""
