@@ -529,8 +529,8 @@ def mostrar_gestion_horarios(clases_service, session_state):
             if not df_horarios.empty:
                 if 'aula_id' in df_horarios.columns:
                     df_horarios['aula_info'] = df_horarios.apply(
-                        lambda row: '✅ Asignada' if row.get('aula_id') else '⚠️ Sin aula',
-                        axis=1
+                        df_horarios['aula_info'] = df_horarios['aula_id'].apply(
+                            lambda x: '✅ Asignada' if pd.notna(x) and x is not None and x != '' else '⚠️ Sin aula'
                     )
                     columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
                                        "capacidad_maxima", "aula_info", "activo"]
