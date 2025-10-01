@@ -115,9 +115,10 @@ def debug_session_state(session_state):
 # TAB 1: MIS GRUPOS FUNDAE
 # =========================
 def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_state):
-    """Muestra los grupos FUNDAE del participante - VERSIÓN CORREGIDA"""
+    """Muestra los grupos FUNDAE del participante - VERSIÓN MEJORADA."""
     st.header("📚 Mis Grupos FUNDAE")
     
+    # Obtener participante_id de forma robusta
     participante_id = None
     
     if hasattr(session_state, 'participante_id'):
@@ -133,168 +134,202 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
         return
 
     try:
-        # Obtener grupos del participante usando el método correcto
+        # Obtener grupos del participante
         df_grupos = participantes_service.get_grupos_de_participante(participante_id)
         
         if df_grupos.empty:
             st.info("🔭 No estás inscrito en ningún grupo FUNDAE")
-            st.markdown("""
-            **¿Qué son los grupos FUNDAE?**
-            - Formación bonificada para trabajadores
-            - Cursos oficiales con certificación
-            - Financiados por FUNDAE (Fundación Estatal para la Formación en el Empleo)
             
-            Contacta con tu empresa para inscribirte en grupos formativos.
-            """)
+            with st.expander("ℹ️ ¿Qué son los grupos FUNDAE?", expanded=True):
+                st.markdown("""
+                **🎓 Formación Bonificada FUNDAE**
+                
+                Los grupos FUNDAE son cursos de formación gratuita financiados por la 
+                Fundación Estatal para la Formación en el Empleo.
+                
+                **Características:**
+                - ✅ Formación 100% gratuita
+                - ✅ Certificación oficial
+                - ✅ Horarios establecidos
+                - ✅ Seguimiento personalizado
+                
+                **Para inscribirte:** Contacta con tu empresa o el departamento de formación.
+                """)
             return
         
-        st.markdown(f"### 🎯 Tienes {len(df_grupos)} grupo(s) asignado(s)")
+        st.success(f"🎯 Estás inscrito en {len(df_grupos)} grupo(s)")
         
-        # Mostrar grupos en cards
+        # Mostrar cada grupo como una tarjeta expandible
         for idx, grupo in df_grupos.iterrows():
-            with st.container(border=True):
-                col1, col2, col3 = st.columns([2, 2, 1])
+            codigo_grupo = grupo.get('codigo_grupo', 'Sin código')
+            accion_nombre = grupo.get('accion_nombre', 'Sin acción formativa')
+            
+            # Determinar estado del grupo
+            fecha_inicio = grupo.get("fecha_inicio")
+            fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
+            estado_emoji = "📅"
+            estado_texto = "Programado"
+            
+            if fecha_fin:
+                try:
+                    hoy = pd.Timestamp.now().date()
+                    fecha_fin_dt = pd.to_datetime(fecha_fin).date()
+                    
+                    if fecha_fin_dt < hoy:
+                        estado_emoji = "✅"
+                        estado_texto = "Finalizado"
+                    elif fecha_inicio:
+                        fecha_inicio_dt = pd.to_datetime(fecha_inicio).date()
+                        if fecha_inicio_dt <= hoy <= fecha_fin_dt:
+                            estado_emoji = "🟡"
+                            estado_texto = "En curso"
+                        else:
+                            estado_emoji = "⏳"
+                            estado_texto = "Próximamente"
+                except:
+                    pass
+            
+            # Título del expander con información clave
+            titulo_expander = f"{estado_emoji} {codigo_grupo} - {accion_nombre} ({estado_texto})"
+            
+            with st.expander(titulo_expander, expanded=(idx == 0 and estado_texto == "En curso")):
+                # Información organizada en tabs
+                tab_info, tab_horarios = st.tabs(["📋 Información General", "⏰ Horarios"])
                 
-                with col1:
-                    codigo_grupo = grupo.get('codigo_grupo', 'Sin código')
-                    accion_nombre = grupo.get('accion_nombre', 'Sin acción formativa')
+                with tab_info:
+                    col1, col2 = st.columns(2)
                     
-                    st.markdown(f"**📖 {codigo_grupo}**")
-                    st.markdown(f"*{accion_nombre}*")
+                    with col1:
+                        st.markdown("**📖 Datos del Curso**")
+                        st.write(f"**Código:** {codigo_grupo}")
+                        st.write(f"**Acción Formativa:** {accion_nombre}")
+                        
+                        accion_horas = grupo.get('accion_horas', 0)
+                        if accion_horas and accion_horas > 0:
+                            st.write(f"**Duración:** {accion_horas} horas")
+                        
+                        modalidad = grupo.get('modalidad')
+                        if modalidad:
+                            st.write(f"**Modalidad:** {modalidad}")
+                        
+                        lugar_imparticion = grupo.get('lugar_imparticion')
+                        if lugar_imparticion:
+                            st.write(f"**Lugar:** {lugar_imparticion}")
                     
-                    # Mostrar horas si están disponibles
-                    accion_horas = grupo.get('accion_horas', 0)
-                    if accion_horas and accion_horas > 0:
-                        st.caption(f"⏱️ Duración: {accion_horas} horas")
-                
-                with col2:
-                    # Fechas del grupo
-                    fecha_inicio = grupo.get("fecha_inicio")
-                    fecha_fin = grupo.get("fecha_fin") or grupo.get("fecha_fin_prevista")
-                    
-                    if fecha_inicio:
-                        try:
-                            inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y')
-                            st.write(f"📅 **Inicio:** {inicio_str}")
-                        except:
-                            st.write(f"📅 **Inicio:** {fecha_inicio}")
-                    
-                    if fecha_fin:
-                        try:
-                            fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
-                            st.write(f"🏁 **Fin:** {fin_str}")
-                            
-                            # Calcular estado
+                    with col2:
+                        st.markdown("**📅 Fechas**")
+                        
+                        if fecha_inicio:
                             try:
-                                hoy = pd.Timestamp.now().date()
-                                fecha_fin_dt = pd.to_datetime(fecha_fin).date()
-                                
-                                if fecha_fin_dt < hoy:
-                                    st.success("✅ **Finalizado**")
-                                elif fecha_inicio:
-                                    fecha_inicio_dt = pd.to_datetime(fecha_inicio).date()
-                                    if fecha_inicio_dt <= hoy <= fecha_fin_dt:
-                                        st.info("🟡 **En curso**")
-                                    else:
-                                        st.warning("⏳ **Próximamente**")
-                                else:
-                                    st.info("📅 **Programado**")
+                                inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y')
+                                st.write(f"**Inicio:** {inicio_str}")
                             except:
-                                st.caption("📅 Estado no disponible")
-                        except:
-                            st.write(f"🏁 **Fin:** {fecha_fin}")
-                    
-                    # Modalidad e información adicional
-                    modalidad = grupo.get('modalidad')
-                    if modalidad:
-                        st.caption(f"🎯 Modalidad: {modalidad}")
-                    
-                    lugar_imparticion = grupo.get('lugar_imparticion')
-                    if lugar_imparticion:
-                        st.caption(f"🏢 Lugar: {lugar_imparticion}")
+                                st.write(f"**Inicio:** {fecha_inicio}")
+                        
+                        if fecha_fin:
+                            try:
+                                fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                                st.write(f"**Fin:** {fin_str}")
+                            except:
+                                st.write(f"**Fin:** {fecha_fin}")
+                        
+                        # Fecha de inscripción
+                        fecha_asignacion = grupo.get('fecha_asignacion')
+                        if fecha_asignacion:
+                            try:
+                                asignacion_str = pd.to_datetime(fecha_asignacion).strftime('%d/%m/%Y')
+                                st.write(f"**Inscrito el:** {asignacion_str}")
+                            except:
+                                pass
+                        
+                        # Estado visual
+                        if estado_texto == "Finalizado":
+                            st.success(f"{estado_emoji} {estado_texto}")
+                        elif estado_texto == "En curso":
+                            st.info(f"{estado_emoji} {estado_texto}")
+                        elif estado_texto == "Próximamente":
+                            st.warning(f"{estado_emoji} {estado_texto}")
+                        else:
+                            st.write(f"{estado_emoji} {estado_texto}")
                 
-                with col3:
-                    # Fecha de asignación
-                    fecha_asignacion = grupo.get('fecha_asignacion')
-                    if fecha_asignacion:
-                        try:
-                            fecha_asignacion_str = pd.to_datetime(fecha_asignacion).strftime('%d/%m/%Y')
-                            st.caption(f"📋 Inscrito: {fecha_asignacion_str}")
-                        except:
-                            st.caption(f"📋 Inscrito: {fecha_asignacion}")
+                with tab_horarios:
+                    # Obtener detalles del grupo para horarios
+                    grupo_id = grupo.get('grupo_id', grupo.get('id'))
                     
-                    # Botón de información adicional
-                    grupo_id = grupo.get('grupo_id', grupo.get('id', 'sin_id'))
-                    if st.button("ℹ️ Detalles", key=f"detalles_{grupo_id}_{participante_id}_{idx}", use_container_width=True):
-                        mostrar_detalles_grupo_fundae(grupos_service, grupo_id)
+                    try:
+                        if hasattr(grupos_service, 'get_grupo_completo'):
+                            grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
+                        else:
+                            grupo_res = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                            grupo_detalle = grupo_res.data[0] if grupo_res.data else None
+                        
+                        if grupo_detalle and grupo_detalle.get('horarios'):
+                            st.markdown("**📅 Horarios de Formación**")
+                            
+                            # Mostrar horarios formateados
+                            horarios_texto = grupo_detalle['horarios']
+                            
+                            # Intentar formatear si es texto plano
+                            if isinstance(horarios_texto, str):
+                                lineas = horarios_texto.strip().split('\n')
+                                for linea in lineas:
+                                    if linea.strip():
+                                        st.write(f"• {linea.strip()}")
+                            else:
+                                st.text(horarios_texto)
+                        else:
+                            st.info("📅 No hay horarios detallados disponibles")
+                            st.caption("Los horarios específicos se comunicarán por email o por tu empresa")
+                        
+                        # Observaciones si existen
+                        if grupo_detalle and grupo_detalle.get('observaciones'):
+                            observaciones = grupo_detalle['observaciones']
+                            if observaciones.strip():
+                                st.markdown("---")
+                                st.markdown("**📝 Observaciones**")
+                                st.info(observaciones)
+                    
+                    except Exception as e:
+                        st.warning("⚠️ No se pudieron cargar los horarios detallados")
         
-        # Información adicional sobre FUNDAE
+        # Información adicional al final
+        st.divider()
+        
         with st.expander("ℹ️ Información sobre Formación FUNDAE"):
-            st.markdown("""
-            **🎓 Sistema de Formación FUNDAE:**
-            - **Gratuita**: Financiada por la Fundación Estatal para la Formación en el Empleo
-            - **Certificada**: Al completar obtienes un diploma oficial
-            - **Horarios establecidos**: Fechas y horarios fijos por grupo
-            - **Seguimiento**: Tu empresa gestiona tu progreso y asistencia
+            col1, col2 = st.columns(2)
             
-            **📋 Tus responsabilidades:**
-            - Asistir puntualmente a las sesiones
-            - Participar activamente en la formación
-            - Completar las evaluaciones requeridas
+            with col1:
+                st.markdown("""
+                **🎓 ¿Qué es FUNDAE?**
+                
+                FUNDAE (Fundación Estatal para la Formación en el Empleo) es la entidad 
+                que gestiona la formación bonificada para trabajadores en España.
+                
+                **Características:**
+                - Formación 100% gratuita
+                - Certificación oficial
+                - Compatible con tu trabajo
+                - Mejora tu empleabilidad
+                """)
             
-            **📜 Diplomas:** Una vez finalizado el grupo, recibirás tu diploma oficial.
-            """)
+            with col2:
+                st.markdown("""
+                **📋 Tus Responsabilidades**
+                
+                Para aprovechar al máximo la formación:
+                
+                - ✅ Asistir puntualmente a las sesiones
+                - ✅ Participar activamente
+                - ✅ Completar las evaluaciones
+                - ✅ Informar si no puedes asistir
+                
+                **📜 Al finalizar:** Recibirás tu diploma oficial
+                """)
     
     except Exception as e:
         st.error(f"❌ Error cargando tus grupos FUNDAE: {e}")
-        st.write(f"Detalles del error: {str(e)}")
-
-def mostrar_detalles_grupo_fundae(grupos_service, grupo_id):
-    """Muestra detalles adicionales de un grupo FUNDAE - MEJORADO."""
-    try:
-        if hasattr(grupos_service, 'get_grupo_completo'):
-            grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
-        else:
-            grupo_detalle = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-            grupo_detalle = grupo_detalle.data[0] if grupo_detalle.data else None
-        
-        if grupo_detalle:
-            with st.container(border=True):
-                st.markdown("#### 📋 Información Detallada del Grupo")
-                
-                # Información principal en columnas
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown("**📚 Datos del Grupo**")
-                    st.write(f"• Código: {grupo_detalle.get('codigo_grupo', 'N/A')}")
-                    st.write(f"• Estado: {grupo_detalle.get('estado', 'N/A')}")
-                    st.write(f"• Modalidad: {grupo_detalle.get('modalidad', 'N/A')}")
-                    
-                with col2:
-                    st.markdown("**📍 Ubicación y Contacto**")
-                    st.write(f"• Lugar: {grupo_detalle.get('lugar_imparticion', 'N/A')}")
-                    
-                    telefono = grupo_detalle.get('telefono_contacto')
-                    if telefono:
-                        st.write(f"• Teléfono: {telefono}")
-                
-                # Horarios si están disponibles
-                if grupo_detalle.get('horarios'):
-                    st.markdown("**⏰ Horarios de Formación**")
-                    with st.expander("Ver horarios completos", expanded=False):
-                        st.text(grupo_detalle['horarios'])
-                
-                # Observaciones si existen
-                observaciones = grupo_detalle.get('observaciones')
-                if observaciones and observaciones.strip():
-                    st.markdown("**📝 Observaciones**")
-                    st.info(observaciones)
-        else:
-            st.warning("No se pudieron cargar los detalles del grupo")
-    
-    except Exception as e:
-        st.error(f"Error cargando detalles: {e}")
+        if st.checkbox("Mostrar detalles técnicos del error"):
+            st.code(str(e))
 
 # =========================
 # TAB 2: MIS CLASES RESERVADAS
