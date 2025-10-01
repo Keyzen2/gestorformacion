@@ -357,7 +357,7 @@ class ClasesService:
             return pd.DataFrame()
 
     def crear_horario(self, datos_horario: Dict) -> Tuple[bool, Optional[str]]:
-        """Crea un nuevo horario"""
+        """Crea un nuevo horario CON verificación de disponibilidad de aula"""
         try:
             # 1. Verificar que la clase existe y tenemos permisos
             clase_check = self.supabase.table("clases").select("empresa_id, nombre").eq(
@@ -376,23 +376,15 @@ class ClasesService:
                 if clase_empresa_id not in empresas_permitidas:
                     return False, f"No tienes permisos para modificar la clase '{clase_nombre}'"
             
-            # 3. Generar ID y añadir a datos
+            # 3. Generar ID
             horario_id = str(uuid.uuid4())
             datos_horario["id"] = horario_id
             
-            # 4. Debug: mostrar datos que se van a validar
-            print(f"Validando horario para clase: {clase_nombre}")
-            print(f"Datos: {datos_horario}")
-            
-            # 5. Validaciones de datos
+            # 4. Validaciones de datos
             if not self._validar_datos_horario(datos_horario):
                 return False, "Datos de horario inválidos - verifica día, horas y capacidad"
             
-            # 6. Verificar conflictos de horario
-            if self._verificar_conflicto_horario(datos_horario):
-                return False, f"Ya existe un horario activo en {datos_horario.get('dia_semana')} para esta clase"
-                
-            # NUEVO: Verificar disponibilidad de aula
+            # 5. CORREGIDO: Verificar disponibilidad de aula SI está asignada
             if datos_horario.get("aula_id"):
                 aula_disponible = self._verificar_disponibilidad_aula_recurrente(
                     datos_horario["aula_id"],
@@ -400,15 +392,15 @@ class ClasesService:
                     datos_horario["hora_inicio"],
                     datos_horario["hora_fin"]
                 )
+                
+                if not aula_disponible:
+                    return False, "El aula no está disponible en ese horario (conflicto con otro horario de clase)"
             
-            if not aula_disponible:
-                return False, "El aula no está disponible en ese horario"
-            # 7. Insertar en base de datos
+            # 6. Insertar en base de datos
             result = self.supabase.table("clases_horarios").insert(datos_horario).execute()
             
             if result.data:
                 self.limpiar_cache_clases()
-                print(f"Horario creado exitosamente: {horario_id}")
                 return True, horario_id
             else:
                 return False, "Error al guardar en base de datos"
