@@ -249,15 +249,17 @@ def mostrar_sin_acceso_formacion(empresa_info):
     if modulos_disponibles:
         st.success(f"Módulos disponibles: {', '.join(modulos_disponibles)}")
 
-
 def mostrar_metricas_principales(datos, dashboard):
-    """Métricas principales del dashboard"""
+    """Métricas principales con tarjetas secondary (estilo panel_admin)"""
     
     df_grupos = datos.get('grupos', pd.DataFrame())
     df_participantes = datos.get('participantes', pd.DataFrame())
     df_tutores = datos.get('tutores', pd.DataFrame())
     df_aulas = datos.get('aulas', pd.DataFrame())
+    df_acciones = datos.get('acciones', pd.DataFrame())
+    df_proyectos = datos.get('proyectos', pd.DataFrame())
     
+    # Cálculos
     total_grupos = len(df_grupos) if not df_grupos.empty else 0
     grupos_activos = 0
     
@@ -265,54 +267,71 @@ def mostrar_metricas_principales(datos, dashboard):
         grupos_activos = len(df_grupos[df_grupos['estado'].isin(['abierto', 'finalizar'])])
     
     total_participantes = len(df_participantes) if not df_participantes.empty else 0
-    participantes_nuevos_mes = 0
-    
-    if not df_participantes.empty and 'created_at' in df_participantes.columns:
-        try:
-            fecha_limite = datetime.now() - timedelta(days=30)
-            df_temp = df_participantes.copy()
-            df_temp['created_at'] = pd.to_datetime(df_temp['created_at'], errors='coerce')
-            participantes_nuevos_mes = len(df_temp[
-                df_temp['created_at'] > pd.Timestamp(fecha_limite, tz='UTC')
-            ])
-        except:
-            pass
-    
     total_tutores = len(df_tutores) if not df_tutores.empty else 0
     total_aulas = len(df_aulas) if not df_aulas.empty else 0
+    total_acciones = len(df_acciones) if not df_acciones.empty else 0
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Proyectos activos
+    proyectos_activos = 0
+    if not df_proyectos.empty and 'estado_proyecto' in df_proyectos.columns:
+        proyectos_activos = len(df_proyectos[
+            df_proyectos['estado_proyecto'].isin(['CONVOCADO', 'EN_EJECUCION'])
+        ])
+    
+    # === GRID DE MÉTRICAS SECONDARY (3x2) ===
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        dashboard.metric_card_primary(
-            "Grupos Totales",
-            str(total_grupos),
+        dashboard.metric_card_secondary(
+            "Grupos Activos",
+            f"{grupos_activos}/{total_grupos}",
             "📚",
-            cambio=f"{grupos_activos} activos" if grupos_activos > 0 else None
+            "#3B82F6"
         )
     
     with col2:
-        dashboard.metric_card_primary(
+        dashboard.metric_card_secondary(
             "Participantes",
             str(total_participantes),
             "🎓",
-            cambio=f"+{participantes_nuevos_mes} este mes" if participantes_nuevos_mes > 0 else None
+            "#10B981"
         )
     
     with col3:
-        dashboard.metric_card_primary(
+        dashboard.metric_card_secondary(
             "Tutores",
             str(total_tutores),
-            "👨‍🏫"
+            "👨‍🏫",
+            "#F59E0B"
         )
     
-    with col4:
-        dashboard.metric_card_primary(
-            "Aulas",
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        dashboard.metric_card_secondary(
+            "Aulas Disponibles",
             str(total_aulas),
-            "🏫"
+            "🏫",
+            "#8B5CF6"
         )
-
+    
+    with col2:
+        dashboard.metric_card_secondary(
+            "Acciones Formativas",
+            str(total_acciones),
+            "📖",
+            "#EC4899"
+        )
+    
+    with col3:
+        dashboard.metric_card_secondary(
+            "Proyectos Activos",
+            str(proyectos_activos),
+            "📊",
+            "#06B6D4"
+        )
 
 def mostrar_estado_grupos(df_grupos, dashboard):
     """Estado actual de grupos"""
@@ -420,12 +439,13 @@ def mostrar_evolucion_participantes(df_participantes):
         st.error(f"Error: {e}")
 
 def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
-    """Estadísticas de ocupación de aulas"""
+    """Estadísticas de ocupación de aulas - MEJORADO"""
     
     st.markdown("#### 🏫 Ocupación de Aulas")
     
+    # Sin aulas creadas
     if df_aulas.empty:
-        st.info("No hay aulas registradas")
+        st.info("📌 No tienes aulas creadas. Crea tu primera aula para gestionar reservas.")
         return
     
     # Calcular métricas
@@ -458,20 +478,33 @@ def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
             reservas_por_aula = df_reservas['aula_id'].value_counts().head(5)
             
             if not reservas_por_aula.empty:
-                # Crear diccionario de nombres de aulas (CORREGIDO)
+                # Crear diccionario aulas: id -> nombre (MEJORADO)
                 aulas_dict = {}
-                for _, aula in df_aulas.iterrows():
+                for idx, aula in df_aulas.iterrows():
                     aula_id = aula.get('id')
-                    aula_nombre = aula.get('nombre', 'Sin nombre')
+                    aula_nombre = aula.get('nombre', '').strip()
+                    
                     if aula_id:
+                        # Si no tiene nombre, usar "Aula sin nombre"
+                        if not aula_nombre:
+                            aula_nombre = f"Aula {idx + 1}"
                         aulas_dict[aula_id] = aula_nombre
                 
-                # Obtener nombres (CORREGIDO)
+                # Preparar datos para gráfico
                 nombres_aulas = []
                 valores = []
                 
                 for aula_id, count in reservas_por_aula.items():
-                    nombre = aulas_dict.get(aula_id, f'Aula desconocida')
+                    nombre = aulas_dict.get(aula_id)
+                    
+                    # Si no encontramos el nombre, buscar en df_aulas directamente
+                    if not nombre:
+                        aula_match = df_aulas[df_aulas['id'] == aula_id]
+                        if not aula_match.empty:
+                            nombre = aula_match.iloc[0].get('nombre', f'Aula {aula_id[:8]}')
+                        else:
+                            nombre = f'Aula {aula_id[:8]}'
+                    
                     nombres_aulas.append(nombre)
                     valores.append(count)
                 
@@ -494,7 +527,9 @@ def mostrar_ocupacion_aulas(df_aulas, df_reservas, dashboard):
                 
                 st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
-            st.error(f"Error en gráfico: {e}")
+            st.warning(f"No se pudo generar el gráfico de ocupación")
+    else:
+        st.info("📅 No hay reservas registradas para mostrar ocupación")
 
 def mostrar_top_acciones_formativas(df_grupos):
     """Top 5 acciones formativas más utilizadas"""
@@ -596,7 +631,7 @@ def mostrar_resumen_proyectos(df_proyectos, dashboard):
         )
 
 def mostrar_alertas_gestor(datos, empresa_info, dashboard):
-    """Alertas importantes para el gestor"""
+    """Alertas importantes para el gestor - MEJORADO"""
     
     dashboard.section_header("Alertas y Tareas Pendientes", icono="⚠️")
     
@@ -607,31 +642,61 @@ def mostrar_alertas_gestor(datos, empresa_info, dashboard):
     
     alertas = []
     
-    # NUEVA: Reservas de aulas hoy
-    if not df_reservas.empty and 'fecha_inicio' in df_reservas.columns:
+    # === ALERTAS DE AULAS Y RESERVAS (MEJORADO) ===
+    
+    # Caso 1: No tiene aulas creadas
+    if df_aulas.empty:
+        alertas.append({
+            'tipo': 'info',
+            'titulo': 'Sin aulas registradas',
+            'mensaje': 'Crea tu primera aula para gestionar reservas y espacios de formación',
+            'count': None
+        })
+    
+    # Caso 2: Tiene aulas pero sin reservas hoy
+    elif df_reservas.empty or 'fecha_inicio' not in df_reservas.columns:
+        alertas.append({
+            'tipo': 'info',
+            'titulo': 'Sin reservas registradas',
+            'mensaje': f'Tienes {len(df_aulas)} aulas disponibles sin reservas programadas',
+            'count': None
+        })
+    
+    # Caso 3: Tiene aulas y hay reservas
+    else:
         try:
             hoy = datetime.now().date()
             df_temp = df_reservas.copy()
             df_temp['fecha'] = pd.to_datetime(df_temp['fecha_inicio'], errors='coerce').dt.date
             reservas_hoy = df_temp[df_temp['fecha'] == hoy]
             
+            # Crear diccionario de aulas mejorado
+            aulas_dict = {}
+            for _, aula in df_aulas.iterrows():
+                aula_id = aula.get('id')
+                aula_nombre = aula.get('nombre', '').strip()
+                if aula_id:
+                    aulas_dict[aula_id] = aula_nombre if aula_nombre else 'Aula sin nombre'
+            
+            # Si hay reservas hoy
             if not reservas_hoy.empty and len(reservas_hoy) > 0:
-                # Crear mensaje con nombres de aulas
                 aulas_hoy = []
-                aulas_dict = {a['id']: a.get('nombre', 'Sin nombre') for _, a in df_aulas.iterrows()}
                 
                 for _, res in reservas_hoy.iterrows():
                     aula_id = res.get('aula_id')
-                    aula_nombre = aulas_dict.get(aula_id, 'Aula desconocida')
+                    aula_nombre = aulas_dict.get(aula_id, 'Aula sin identificar')
+                    
                     try:
                         hora_inicio = pd.to_datetime(res['fecha_inicio']).strftime('%H:%M')
                         aulas_hoy.append(f"{aula_nombre} ({hora_inicio})")
                     except:
                         aulas_hoy.append(aula_nombre)
                 
-                mensaje = f"Reservas activas: {', '.join(aulas_hoy[:3])}"
-                if len(aulas_hoy) > 3:
-                    mensaje += f" y {len(aulas_hoy) - 3} más"
+                # Construir mensaje
+                if len(aulas_hoy) <= 3:
+                    mensaje = f"Reservas activas: {', '.join(aulas_hoy)}"
+                else:
+                    mensaje = f"Reservas activas: {', '.join(aulas_hoy[:3])} y {len(aulas_hoy) - 3} más"
                 
                 alertas.append({
                     'tipo': 'info',
@@ -639,8 +704,23 @@ def mostrar_alertas_gestor(datos, empresa_info, dashboard):
                     'mensaje': mensaje,
                     'count': len(reservas_hoy)
                 })
-        except:
-            pass
+            
+            # Si NO hay reservas hoy
+            else:
+                alertas.append({
+                    'tipo': 'info',
+                    'titulo': 'Sin reservas hoy',
+                    'mensaje': f'{len(df_aulas)} aulas disponibles para reservar',
+                    'count': None
+                })
+        except Exception as e:
+            # Error al procesar reservas
+            alertas.append({
+                'tipo': 'info',
+                'titulo': 'Sin reservas hoy',
+                'mensaje': 'No hay reservas programadas para hoy',
+                'count': None
+            })
     
     # Grupos sin participantes
     if not df_grupos.empty and not df_participantes.empty and 'grupo_id' in df_participantes.columns:
