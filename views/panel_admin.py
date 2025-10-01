@@ -27,9 +27,9 @@ def render(supabase, session_state):
         margin-bottom: 2rem;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     ">
-        <h1 style="margin: 0; font-size: 2rem; font-weight: 700;">🛡️ Panel de Administración</h1>
-        <p style="margin: 0.5rem 0 0; opacity: 0.9; font-size: 1rem;">
-            Supervisión integral del sistema - {datetime.now().strftime('%d/%m/%Y %H:%M')}
+        <h1 style="margin: 0; font-size: 2rem; font-weight: 700; color: white;">🛡️ Panel de Administración</h1>
+        <p style="margin: 0.5rem 0 0; opacity: 0.9; font-size: 1rem; color: white;">
+            Supervisión integral del sistema - """ + datetime.now().strftime('%d/%m/%Y %H:%M') + """
         </p>
     </div>
     """, unsafe_allow_html=True)
