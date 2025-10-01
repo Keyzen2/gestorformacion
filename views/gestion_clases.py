@@ -649,19 +649,26 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
             st.markdown(f"#### 📊 {len(df_reservas)} reservas encontradas")
             
             # Mostrar reservas con avatar usando st.data_editor
-            evento_reserva = st.data_editor(
+            evento_reserva = st.dataframe(
                 df_reservas,
                 use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
                 column_config={
-                    "avatar_url": st.column_config.ImageColumn("🖼️ Avatar", width="small"),
-                    "fecha_clase": st.column_config.DateColumn("📅 Fecha"),
-                    "participante_nombre": "👤 Participante",
-                    "clase_nombre": "🏃‍♀️ Clase",
-                    "horario": "⏰ Horario",
-                    "estado": "📊 Estado"
+                    "avatar_url": st.column_config.ImageColumn(
+                        "Avatar",
+                        width="small",
+                        help="Foto del participante"
+                    ),
+                    "fecha_clase": st.column_config.DateColumn(
+                        "Fecha",
+                        format="DD/MM/YYYY"
+                    ),
+                    "participante_nombre": "Participante",
+                    "clase_nombre": "Clase",
+                    "horario": "Horario",
+                    "estado": "Estado"
                 }
             )
             
@@ -672,6 +679,8 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     
     except Exception as e:
         st.error(f"Error cargando reservas: {e}")
+        import traceback
+        traceback.print_exc()
 
 def mostrar_gestion_asistencia(clases_service, reserva_data):
     """Formulario para gestionar asistencia."""
