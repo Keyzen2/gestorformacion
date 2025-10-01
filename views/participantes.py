@@ -1659,71 +1659,91 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                 else:
                                     st.session_state[confirmar_key] = True
                                     st.warning("⚠️ Confirmar eliminación")
-                    else:
-                        st.markdown("**📤 Subir Diploma**")
-        
-                        diploma_file = st.file_uploader(
-                            "Seleccionar diploma (PDF)",
-                            type=["pdf"],
-                            key=f"upload_diploma_{participante['id']}",
-                            help="Solo archivos PDF, máximo 10MB"
-                        )
-        
-                        if diploma_file is not None:
-                            file_size_mb = diploma_file.size / (1024 * 1024)
-                        
-                            col_info_file, col_size_file = st.columns(2)
-                            with col_info_file:
-                                st.success(f"✅ **Archivo:** {diploma_file.name}")
-                            with col_size_file:
-                                color = "🔴" if file_size_mb > 10 else "🟢"
-                                st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
-                        
-                            if file_size_mb > 10:
-                                st.error("❌ Archivo muy grande. Máximo 10MB.")
-                            else:
-                                if st.button(
-                                    f"📤 Subir diploma de {nombre_completo}", 
-                                    key=f"btn_upload_{participante['id']}", 
-                                    type="primary",
-                                    use_container_width=True
-                                ):
-                                    try:
-                                        # 1. Preparar nombres de archivo
-                                        file_name = f"{participante['id']}_{diploma_file.name}"
-                                        file_path = (
-                                            f"diplomas/"
-                                            f"{grupo_info.get('ano_inicio', datetime.now().year)}/"
-                                            f"{grupo_info.get('empresa_id')}/"
-                                            f"{grupo_info.get('id')}/"
-                                            f"{file_name}"
-                                        )
-                        
-                                        # 2. Subir archivo al bucket
-                                        supabase.storage.from_("diplomas").upload(
-                                            file_path,
-                                            diploma_file.getvalue()
-                                        )
-                        
-                                        # 3. Obtener URL pública
-                                        url = supabase.storage.from_("diplomas").get_public_url(file_path)
-                        
-                                        # 4. Insertar registro en tabla diplomas
-                                        supabase.table("diplomas").insert({
-                                            "participante_id": p_info.get("id"),
-                                            "grupo_id": grupo_info.get("id"),
-                                            "url": url,
-                                            "archivo_nombre": diploma_file.name
-                                        }).execute()
-                        
-                                        st.success("✅ Diploma subido y registrado correctamente")
-                                        st.rerun()
-                                    
-                                    except Exception as e:  # ← AÑADIR ESTE BLOQUE
-                                        st.error(f"❌ Error subiendo diploma: {e}")
-                                
+                        else:
+                            # Sin el título redundante
+                            diploma_file = st.file_uploader(
+                                "Seleccionar diploma (PDF)",
+                                type=["pdf"],
+                                key=f"upload_diploma_{participante['id']}",
+                                help="Solo archivos PDF, máximo 10MB"
+                            )
+            
+                            if diploma_file is not None:
+                                file_size_mb = diploma_file.size / (1024 * 1024)
+                            
+                                col_info_file, col_size_file = st.columns(2)
+                                with col_info_file:
+                                    st.success(f"✅ **Archivo:** {diploma_file.name}")
+                                with col_size_file:
+                                    color = "🔴" if file_size_mb > 10 else "🟢"
+                                    st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
+                            
+                                if file_size_mb > 10:
+                                    st.error("❌ Archivo muy grande. Máximo 10MB.")
                                 else:
-                                    st.info("📂 Selecciona un archivo PDF para continuar")
+                                    if st.button(
+                                        f"📤 Subir", 
+                                        key=f"btn_upload_{participante['id']}", 
+                                        type="primary",
+                                        use_container_width=True
+                                    ):
+                                        try:
+                                            # Obtener datos necesarios
+                                            accion_info = grupo_info.get("accion_formativa") or {}
+                                            codigo_accion = accion_info.get("codigo_accion", "sin_codigo")
+                                            accion_id = accion_info.get("id", "sin_id")
+                                            empresa_id = grupo_info.get("empresa_id", "sin_empresa")
+                                            ano_inicio = grupo_info.get("ano_inicio", datetime.now().year)
+                                            grupo_id_completo = grupo_info.get("id", "sin_grupo")
+                                            
+                                            # Extraer ID corto del grupo (últimos 8 caracteres)
+                                            grupo_id_corto = str(grupo_id_completo)[-8:] if grupo_id_completo else "sin_id"
+                                            grupo_numero = grupo_info.get("codigo_grupo", "0").split("_")[-1] if grupo_info.get("codigo_grupo") else "0"
+                                            
+                                            # NIF y timestamp
+                                            nif = p_info.get("nif", "sin_nif").replace(" ", "_")
+                                            timestamp = int(datetime.now().timestamp())
+                                            
+                                            # Construir nombre y ruta siguiendo estructura real
+                                            file_name = f"diploma_{nif}_{timestamp}.pdf"
+                                            file_path = (
+                                                f"diplomas/"
+                                                f"gestora_{empresa_id}/"
+                                                f"ano_{ano_inicio}/"
+                                                f"accion_{codigo_accion}_{accion_id}/"
+                                                f"grupo_{grupo_numero}_{grupo_id_corto}/"
+                                                f"{file_name}"
+                                            )
+                            
+                                            # Subir archivo
+                                            upload_result = supabase.storage.from_("diplomas").upload(
+                                                file_path,
+                                                diploma_file.getvalue(),
+                                                {"content-type": "application/pdf"}
+                                            )
+                            
+                                            # Obtener URL pública
+                                            url = supabase.storage.from_("diplomas").get_public_url(file_path)
+                            
+                                            # Insertar registro en BD
+                                            insert_result = supabase.table("diplomas").insert({
+                                                "participante_id": p_info.get("id"),
+                                                "grupo_id": grupo_id_completo,
+                                                "url": url,
+                                                "archivo_nombre": file_name,
+                                                "fecha_subida": datetime.now().isoformat()
+                                            }).execute()
+                            
+                                            st.success("✅ Diploma subido y registrado correctamente")
+                                            st.rerun()
+                                        
+                                        except Exception as e:
+                                            st.error(f"❌ Error subiendo diploma: {str(e)}")
+                                            st.write("**Detalles del error:**")
+                                            st.code(str(e))
+                            
+                            else:
+                                st.info("📂 Selecciona un archivo PDF para continuar")
 
     except Exception as e:
         st.error(f"❌ Error en gestión de diplomas: {e}")
