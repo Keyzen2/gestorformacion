@@ -1492,9 +1492,9 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         # Obtener participantes de grupos finalizados
         grupos_finalizados_ids = [g["id"] for g in grupos_finalizados]
         
-        participantes_res = supabase.table("participantes").select("""
-            id, nombre, apellidos, email, grupo_id, nif, empresa_id
-        """).in_("grupo_id", grupos_finalizados_ids).in_("empresa_id", empresas_permitidas).execute()
+        participantes_res = supabase.table("participantes_grupos").select(
+            "id, grupo_id, fecha_asignacion, participante:participantes(id, nombre, apellidos, email, nif, empresa_id)"
+        ).in_("grupo_id", grupos_finalizados_ids).execute()
         
         participantes_finalizados = participantes_res.data or []
         
