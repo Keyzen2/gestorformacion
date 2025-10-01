@@ -321,7 +321,7 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
         
         with col1:
             dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-            dia_actual = horario_data.get("dia_semana", 0)
+            dia_actual = int(horario_data.get("dia_semana", 0))
             
             dia_semana = st.selectbox(
                 "Día de la semana",
@@ -527,13 +527,13 @@ def mostrar_gestion_horarios(clases_service, session_state):
                     df_horarios = df_horarios[df_horarios["activo"] == False]
             
             if not df_horarios.empty:
-                # Crear columna aula_info si existe aula_id
-                if 'aula_id' in df_horarios.columns:
-                    df_horarios['aula_info'] = df_horarios['aula_id'].apply(
-                        lambda x: '✅ Asignada' if pd.notna(x) and x is not None and x != '' else '⚠️ Sin aula'
+                # Usar aula_nombre en lugar de aula_id
+                if 'aula_nombre' in df_horarios.columns:
+                    df_horarios['aula_display'] = df_horarios['aula_nombre'].apply(
+                        lambda x: f'✅ {x}' if pd.notna(x) and x else '⚠️ Sin aula'
                     )
                     columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
-                                       "capacidad_maxima", "aula_info", "activo"]
+                                       "capacidad_maxima", "aula_display", "activo"]
                 else:
                     columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
                                        "capacidad_maxima", "activo"]
@@ -545,7 +545,16 @@ def mostrar_gestion_horarios(clases_service, session_state):
                     use_container_width=True,
                     hide_index=True,
                     on_select="rerun",
-                    selection_mode="single-row"
+                    selection_mode="single-row",
+                    column_config={
+                        "clase_nombre": "Clase",
+                        "dia_nombre": "Día",
+                        "hora_inicio": "Inicio",
+                        "hora_fin": "Fin",
+                        "capacidad_maxima": "Capacidad",
+                        "aula_display": "Aula",
+                        "activo": st.column_config.CheckboxColumn("Activo")
+                    }
                 )
                 
                 # Editar horario seleccionado
