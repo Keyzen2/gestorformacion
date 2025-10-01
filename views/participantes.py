@@ -564,7 +564,7 @@ def mostrar_seccion_avatar(participantes_service, participante_id, session_state
                     avatar_actual["archivo_url"],
                     caption="Avatar actual",
                     width=150,
-                    use_column_width=False
+                    use_container_width=True
                 )
                 
                 # Información del archivo
