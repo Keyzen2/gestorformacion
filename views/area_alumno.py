@@ -804,15 +804,6 @@ def render(supabase, session_state):
         st.info("Intenta recargar la página")
         return
     
-    # Debug opcional
-    if st.sidebar.checkbox("🔧 Mostrar debug", value=False):
-        with st.sidebar.expander("Debug Info"):
-            st.write("**Servicios cargados:**")
-            st.write(f"- Participantes: {type(participantes_service).__name__}")
-            st.write(f"- Grupos: {type(grupos_service).__name__}")
-            st.write(f"- Clases: {type(clases_service).__name__}")
-            st.write(f"- Método grupos disponible: {hasattr(participantes_service, 'get_grupos_de_participante')}")
-    
     # Mostrar información del usuario
     st.caption(
         f"👤 Bienvenido/a: {session_state.user.get('nombre', 'Usuario')} "
