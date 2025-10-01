@@ -341,7 +341,7 @@ def mostrar_gestion_horarios(clases_service, session_state):
             st.info("Selecciona una clase específica para crear horarios")
 
 def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creacion=False):
-    """Formulario para crear/editar horarios."""
+    """Formulario para crear/editar horarios CON selector de aula"""
     
     form_key = f"horario_{'nuevo' if es_creacion else horario_data['id']}"
     
@@ -349,84 +349,177 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
         if not es_creacion:
             st.markdown(f"**Editando horario: {horario_data['dia_nombre']} {horario_data['hora_inicio']}-{horario_data['hora_fin']}**")
         
-        # Día de la semana
-        dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
-        dia_actual = horario_data.get("dia_semana", 0)
+        # === SELECTOR DE AULA (NUEVO) ===
+        st.markdown("#### 🏫 Asignación de Aula")
         
-        dia_semana = st.selectbox(
-            "Día de la semana",
-            range(7),
-            format_func=lambda x: dias_semana[x],
-            index=dia_actual
-        )
+        aula_id = None
+        aulas_opciones = {}
         
-        # Horarios
-        col_hora1, col_hora2 = st.columns(2)
+        try:
+            from services.aulas_service import get_aulas_service
+            aulas_service = get_aulas_service(
+                clases_service.supabase, 
+                clases_service.session_state
+            )
+            df_aulas = aulas_service.get_aulas_con_empresa()
+            
+            if not df_aulas.empty:
+                # Filtrar solo aulas activas
+                df_aulas_activas = df_aulas[df_aulas['activa'] == True]
+                
+                aulas_opciones = {
+                    f"{row['nombre']} - Cap: {row['capacidad_maxima']} (📍 {row.get('ubicacion', 'N/A')})": row['id']
+                    for _, row in df_aulas_activas.iterrows()
+                }
+                
+                # Determinar aula actual si estamos editando
+                aula_actual = ""
+                if not es_creacion and horario_data.get("aula_id"):
+                    aula_match = df_aulas[df_aulas['id'] == horario_data['aula_id']]
+                    if not aula_match.empty:
+                        aula_row = aula_match.iloc[0]
+                        aula_actual = f"{aula_row['nombre']} - Cap: {aula_row['capacidad_maxima']} (📍 {aula_row.get('ubicacion', 'N/A')})"
+                
+                aula_seleccionada = st.selectbox(
+                    "Aula asignada",
+                    ["🚫 Sin aula asignada"] + list(aulas_opciones.keys()),
+                    index=(
+                        list(aulas_opciones.keys()).index(aula_actual) + 1 
+                        if aula_actual and aula_actual in aulas_opciones.keys() else 0
+                    ),
+                    help="Selecciona el aula donde se impartirá la clase. Si no asignas aula, no aparecerá en el cronograma de aulas.",
+                    key=f"{form_key}_aula"
+                )
+                
+                aula_id = aulas_opciones.get(aula_seleccionada) if aula_seleccionada != "🚫 Sin aula asignada" else None
+                
+                # Info visual si hay aula seleccionada
+                if aula_id:
+                    aula_info = df_aulas[df_aulas['id'] == aula_id].iloc[0]
+                    st.info(f"✅ Aula seleccionada: **{aula_info['nombre']}** | Capacidad: {aula_info['capacidad_maxima']} personas")
+            else:
+                st.warning("⚠️ No hay aulas disponibles. Crea aulas primero en el módulo de Aulas.")
         
-        with col_hora1:
-            hora_inicio = st.time_input(
-                "Hora inicio",
-                value=time.fromisoformat(horario_data["hora_inicio"]) if not es_creacion and horario_data.get("hora_inicio") else time(9, 0)
+        except Exception as e:
+            st.error(f"Error cargando aulas: {e}")
+            st.info("💡 Puedes continuar sin asignar aula, pero el horario no aparecerá en el cronograma de aulas.")
+        
+        st.markdown("---")
+        st.markdown("#### 📅 Configuración del Horario")
+        
+        # === DÍA Y HORAS ===
+        col1, col2 = st.columns([1, 2])
+        
+        with col1:
+            # Día de la semana
+            dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            dia_actual = horario_data.get("dia_semana", 0)
+            
+            dia_semana = st.selectbox(
+                "Día de la semana",
+                range(7),
+                format_func=lambda x: dias_semana[x],
+                index=dia_actual,
+                key=f"{form_key}_dia"
             )
         
-        with col_hora2:
-            hora_fin = st.time_input(
-                "Hora fin",
-                value=time.fromisoformat(horario_data["hora_fin"]) if not es_creacion and horario_data.get("hora_fin") else time(10, 0)
+        with col2:
+            # Horarios
+            col_hora1, col_hora2 = st.columns(2)
+            
+            with col_hora1:
+                hora_inicio = st.time_input(
+                    "Hora inicio",
+                    value=time.fromisoformat(horario_data["hora_inicio"]) if not es_creacion and horario_data.get("hora_inicio") else time(9, 0),
+                    key=f"{form_key}_hora_inicio"
+                )
+            
+            with col_hora2:
+                hora_fin = st.time_input(
+                    "Hora fin",
+                    value=time.fromisoformat(horario_data["hora_fin"]) if not es_creacion and horario_data.get("hora_fin") else time(10, 0),
+                    key=f"{form_key}_hora_fin"
+                )
+        
+        # === CAPACIDAD Y ESTADO ===
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            capacidad_maxima = st.number_input(
+                "Capacidad máxima de participantes",
+                min_value=1,
+                max_value=100,
+                value=horario_data.get("capacidad_maxima", 20),
+                help="Número máximo de participantes que pueden reservar esta clase",
+                key=f"{form_key}_capacidad"
             )
         
-        # Capacidad
-        capacidad_maxima = st.number_input(
-            "Capacidad máxima",
-            min_value=1,
-            max_value=100,
-            value=horario_data.get("capacidad_maxima", 20),
-            help="Número máximo de participantes por clase"
-        )
+        with col2:
+            activo = st.checkbox(
+                "Horario activo",
+                value=horario_data.get("activo", True),
+                help="Solo los horarios activos aparecen para reserva",
+                key=f"{form_key}_activo"
+            )
         
-        # Estado activo
-        activo = st.checkbox(
-            "Horario activo",
-            value=horario_data.get("activo", True),
-            help="Solo los horarios activos aparecen para reserva"
-        )
-        
-        # Validaciones
+        # === VALIDACIONES ===
         errores = []
+        advertencias = []
+        
         if hora_inicio >= hora_fin:
             errores.append("La hora de fin debe ser posterior a la de inicio")
         
-        # Verificar conflictos de horario
-        if es_creacion or (hora_inicio != time.fromisoformat(horario_data["hora_inicio"]) or 
-                          hora_fin != time.fromisoformat(horario_data["hora_fin"]) or 
-                          dia_semana != horario_data["dia_semana"]):
-            
-            # Aquí podrías verificar conflictos con otros horarios de la misma clase
-            pass
+        # Advertencia si no hay aula asignada
+        if not aula_id:
+            advertencias.append("⚠️ Sin aula asignada: Este horario NO aparecerá en el cronograma de aulas")
         
+        # Verificar si capacidad del horario excede capacidad del aula
+        if aula_id and aulas_opciones:
+            try:
+                aula_info = df_aulas[df_aulas['id'] == aula_id].iloc[0]
+                if capacidad_maxima > aula_info['capacidad_maxima']:
+                    advertencias.append(
+                        f"⚠️ Capacidad del horario ({capacidad_maxima}) supera la del aula ({aula_info['capacidad_maxima']})"
+                    )
+            except:
+                pass
+        
+        # Mostrar errores y advertencias
         if errores:
-            st.warning(f"⚠️ Errores: {', '.join(errores)}")
-            
-        # Botones
+            for error in errores:
+                st.error(f"❌ {error}")
+        
+        if advertencias:
+            for advertencia in advertencias:
+                st.warning(advertencia)
+        
+        st.markdown("---")
+        
+        # === BOTONES ===
         col_btn1, col_btn2 = st.columns(2)
         
         with col_btn1:
             submitted = st.form_submit_button(
-                "➕ Crear Horario" if es_creacion else "💾 Guardar",
+                "➕ Crear Horario" if es_creacion else "💾 Guardar Cambios",
                 type="primary",
-                disabled=bool(errores)
+                disabled=bool(errores),
+                use_container_width=True
             )
         
         with col_btn2:
             if not es_creacion:
-                eliminar = st.form_submit_button("🗑️ Eliminar", type="secondary")
+                eliminar = st.form_submit_button(
+                    "🗑️ Eliminar", 
+                    type="secondary",
+                    use_container_width=True
+                )
             else:
                 eliminar = False
         
-        # Procesamiento
+        # === PROCESAMIENTO ===
         if submitted:
             if errores:
-                st.error(f"❌ Corrige estos errores: {', '.join(errores)}")
+                st.error(f"❌ Corrige estos errores antes de continuar")
             else:
                 datos_horario = {
                     "clase_id": clase_id,
@@ -434,6 +527,7 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
                     "hora_inicio": hora_inicio.strftime("%H:%M:%S"),
                     "hora_fin": hora_fin.strftime("%H:%M:%S"),
                     "capacidad_maxima": capacidad_maxima,
+                    "aula_id": aula_id,  # ← NUEVO CAMPO
                     "activo": activo
                 }
                 
@@ -441,6 +535,8 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
                     success, mensaje = clases_service.crear_horario(datos_horario)
                     if success:
                         st.success("✅ Horario creado correctamente")
+                        if aula_id:
+                            st.info("🏫 Este horario aparecerá en el cronograma de aulas")
                         st.rerun()
                     else:
                         st.error(f"❌ Error creando el horario: {mensaje}")
@@ -453,16 +549,17 @@ def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creaci
                         st.error("❌ Error actualizando el horario")
         
         if eliminar:
-            if st.session_state.get(f"confirmar_eliminar_horario_{horario_data['id']}"):
+            confirmar_key = f"confirmar_eliminar_horario_{horario_data['id']}"
+            if st.session_state.get(confirmar_key):
                 success = clases_service.eliminar_horario(horario_data["id"])
                 if success:
                     st.success("✅ Horario eliminado correctamente")
-                    del st.session_state[f"confirmar_eliminar_horario_{horario_data['id']}"]
+                    del st.session_state[confirmar_key]
                     st.rerun()
                 else:
                     st.error("❌ No se puede eliminar. El horario tiene reservas futuras.")
             else:
-                st.session_state[f"confirmar_eliminar_horario_{horario_data['id']}"] = True
+                st.session_state[confirmar_key] = True
                 st.warning("⚠️ Pulsa nuevamente para confirmar eliminación")
         
 # =========================
