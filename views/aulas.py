@@ -128,18 +128,17 @@ def exportar_cronograma_excel(eventos: list):
         st.error(f"Error exportando Excel: {e}")
 
 def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: date, fecha_fin: date):
-    """Exporta cronograma a PDF con vista semanal (todas las aulas incluidas, aunque no tengan reservas)."""
+    """Exporta cronograma a PDF con vista semanal unificada (reservas + clases)."""
     if not REPORTLAB_AVAILABLE:
         st.error("reportlab no está instalado. Ejecuta: pip install reportlab")
         return
 
     try:
-        # 🔹 obtener aulas desde la BD (respeta el orden)
         df_aulas = aulas_service.get_aulas_con_empresa()
         if df_aulas.empty:
             st.warning("No se encontraron aulas")
             return
-        aulas_list = df_aulas["nombre"].tolist()  # orden original
+        aulas_list = df_aulas["nombre"].tolist()
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -159,13 +158,26 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
             spaceAfter=12,
             alignment=TA_CENTER
         )
-        cell_style = ParagraphStyle("cell", fontSize=7, leading=8, alignment=1)
+        cell_style_reserva = ParagraphStyle("cellReserva", fontSize=7, leading=8, alignment=1)
+        cell_style_clase = ParagraphStyle(
+            "cellClase", 
+            fontSize=7, 
+            leading=8, 
+            alignment=1,
+            textColor=colors.HexColor("#7C3AED")  # Morado para clases
+        )
 
         titulo = f"Cronograma de Aulas - {fecha_inicio.strftime('%d/%m/%Y')} a {fecha_fin.strftime('%d/%m/%Y')}"
         elementos.append(Paragraph(titulo, title_style))
         elementos.append(Spacer(1, 12))
+        
+        # NUEVO: Leyenda
+        leyenda_style = ParagraphStyle("leyenda", fontSize=9, leading=10)
+        leyenda_text = "🔵 <b>Reserva de aula</b> | 🟣 <b>Clase programada</b>"
+        elementos.append(Paragraph(leyenda_text, leyenda_style))
+        elementos.append(Spacer(1, 8))
 
-        # 🔹 generar días (máximo 7)
+        # Generar días (máximo 7)
         dias = []
         fecha_actual = fecha_inicio
         while fecha_actual <= fecha_fin:
@@ -180,7 +192,7 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
         datos_tabla = [header]
 
         base_row_height = 1.2*cm
-        row_heights = [1*cm]  # cabecera
+        row_heights = [1*cm]
 
         for aula in aulas_list:
             fila = [aula]
@@ -193,11 +205,23 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
                         ev_inicio = pd.to_datetime(ev.get("start", ""))
                         ev_fin = pd.to_datetime(ev.get("end", ""))
                         ev_aula = ev.get("extendedProps", {}).get("aula_nombre", "")
-
+                        
+                        # NUEVO: Detectar tipo de evento
+                        tipo_evento = ev.get("extendedProps", {}).get("tipo", "RESERVA")
+                        
                         if ev_aula == aula and ev_inicio.date() == dia:
                             intervalo = f"{ev_inicio.strftime('%H:%M')} - {ev_fin.strftime('%H:%M')}"
-                            titulo = ev.get("title", "")
-                            eventos_dia.append(Paragraph(f"{intervalo}<br/>{titulo}", cell_style))
+                            titulo = ev.get("title", "").replace("📚 ", "")
+                            
+                            # NUEVO: Prefijo según tipo
+                            prefijo = "🟣" if tipo_evento == "CLASE" else "🔵"
+                            
+                            # NUEVO: Estilo según tipo
+                            estilo = cell_style_clase if tipo_evento == "CLASE" else cell_style_reserva
+                            
+                            eventos_dia.append(
+                                Paragraph(f"{prefijo} {intervalo}<br/>{titulo}", estilo)
+                            )
                     except:
                         continue
 
@@ -207,7 +231,6 @@ def exportar_cronograma_pdf_semanal(aulas_service, eventos: list, fecha_inicio: 
             datos_tabla.append(fila)
             row_heights.append(base_row_height * max(1, max_eventos_por_fila))
 
-        # ancho columnas
         col_widths = [4*cm] + [3.5*cm] * len(dias)
 
         tabla = Table(datos_tabla, colWidths=col_widths, rowHeights=row_heights)
