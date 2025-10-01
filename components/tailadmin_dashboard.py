@@ -10,10 +10,10 @@ class TailAdminDashboard:
         
         cambio_color = "#10B981" if cambio_positivo else "#EF4444"
         cambio_icon = "↑" if cambio_positivo else "↓"
-        cambio_html = ""
         
+        # Construir HTML de cambio DENTRO del mismo markdown
         if cambio:
-            cambio_html = f'''
+            cambio_section = f"""
             <div style="
                 display: inline-flex;
                 align-items: center;
@@ -26,8 +26,11 @@ class TailAdminDashboard:
                 <span>{cambio_icon}</span>
                 <span>{cambio}</span>
             </div>
-            '''
+            """
+        else:
+            cambio_section = ""
         
+        # TODO EL HTML EN UN SOLO BLOQUE
         st.markdown(f"""
         <div style="
             background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
@@ -39,9 +42,9 @@ class TailAdminDashboard:
         ">
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <div>
-                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem;">{titulo}</div>
-                    <div style="font-size: 2rem; font-weight: 700;">{valor}</div>
-                    {cambio_html}
+                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem; color: white;">{titulo}</div>
+                    <div style="font-size: 2rem; font-weight: 700; color: white;">{valor}</div>
+                    {cambio_section}
                 </div>
                 <div style="font-size: 2.5rem; opacity: 0.8;">{icono}</div>
             </div>
