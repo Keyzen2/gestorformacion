@@ -262,7 +262,7 @@ def mostrar_formulario_clase(clases_service, empresas_service, session_state, cl
 # GESTIÓN DE HORARIOS (TAB 2)
 # =========================
 def mostrar_gestion_horarios(clases_service, session_state):
-    """Gestión de horarios por clase."""
+    """Gestión de horarios por clase - CORREGIDO"""
     st.header("⏰ Gestión de Horarios")
     
     # Cargar clases disponibles
@@ -272,73 +272,134 @@ def mostrar_gestion_horarios(clases_service, session_state):
         st.warning("Primero debes crear clases antes de gestionar horarios")
         return
     
-    # Selector de clase
+    # Filtrar solo clases activas
     clases_activas = df_clases[df_clases["activa"] == True]
-    clase_options = {f"{row['nombre']} ({row['empresa_nombre']})": row["id"] for _, row in clases_activas.iterrows()}
     
-    if not clase_options:
+    if clases_activas.empty:
         st.warning("No hay clases activas disponibles")
         return
     
-    # Añadir opción "Todas las clases"
-    clase_options_full = {"Ver todos los horarios": None}
-    clase_options_full.update(clase_options)
+    # === SECCIÓN DE FILTROS ===
+    st.markdown("### 🔍 Filtros")
     
-    clase_seleccionada = st.selectbox(
-        "Seleccionar clase para gestionar horarios",
-        list(clase_options_full.keys()),
-        key="selector_clase_horarios"
-    )
-    
-    # Obtener clase_id seleccionada
-    clase_id = clase_options_full.get(clase_seleccionada)
-    
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.markdown("#### 📅 Horarios Actuales")
-        
-        # Cargar horarios - CORREGIDO
-        df_horarios = clases_service.get_horarios_con_clase(clase_id)
-        
-        # DEBUG temporal
-        if st.checkbox("Debug horarios"):
-            st.write(f"Clase seleccionada ID: {clase_id}")
-            st.write(f"DataFrame horarios shape: {df_horarios.shape}")
-            st.write(f"Columnas: {df_horarios.columns.tolist() if not df_horarios.empty else 'DataFrame vacío'}")
-        
-        if not df_horarios.empty:
-            # Tabla de horarios
-            evento_horario = st.dataframe(
-                df_horarios[["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", "capacidad_maxima", "activo"]],
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                column_config={
-                    "clase_nombre": "🏃‍♀️ Clase",
-                    "dia_nombre": "📅 Día",
-                    "hora_inicio": "🕐 Inicio",
-                    "hora_fin": "🕐 Fin",
-                    "capacidad_maxima": "👥 Capacidad",
-                    "activo": st.column_config.CheckboxColumn("✅ Activo")
-                }
-            )
-            
-            # Editar horario seleccionado
-            if evento_horario.selection.rows:
-                horario_seleccionado = df_horarios.iloc[evento_horario.selection.rows[0]]
-                st.divider()
-                mostrar_formulario_horario(clases_service, horario_seleccionado["clase_id"], horario_seleccionado, es_creacion=False)
-        else:
-            st.info("No hay horarios definidos para esta selección")
+        # Opción para ver todos o filtrar por clase
+        modo_vista = st.radio(
+            "Vista",
+            ["Ver todos los horarios", "Filtrar por clase"],
+            horizontal=True,
+            key="modo_vista_horarios"
+        )
     
     with col2:
-        if clase_id:  # Solo mostrar formulario si hay clase seleccionada específica
+        if modo_vista == "Filtrar por clase":
+            clase_options = {
+                f"{row['nombre']} ({row['empresa_nombre']})": row["id"] 
+                for _, row in clases_activas.iterrows()
+            }
+            
+            clase_seleccionada_nombre = st.selectbox(
+                "Seleccionar clase",
+                list(clase_options.keys()),
+                key="selector_clase_horarios"
+            )
+            
+            clase_id = clase_options[clase_seleccionada_nombre]
+        else:
+            clase_id = None  # Ver todos
+    
+    with col3:
+        filtro_activo = st.selectbox(
+            "Estado",
+            ["Todos", "Activos", "Inactivos"],
+            key="filtro_estado_horarios"
+        )
+    
+    st.markdown("---")
+    
+    # === CARGAR Y MOSTRAR HORARIOS ===
+    col_tabla, col_form = st.columns([2, 1])
+    
+    with col_tabla:
+        st.markdown("#### 📅 Horarios")
+        
+        try:
+            # Cargar horarios según filtro
+            df_horarios = clases_service.get_horarios_con_clase(clase_id)
+            
+            # Aplicar filtro de estado
+            if not df_horarios.empty:
+                if filtro_activo == "Activos":
+                    df_horarios = df_horarios[df_horarios["activo"] == True]
+                elif filtro_activo == "Inactivos":
+                    df_horarios = df_horarios[df_horarios["activo"] == False]
+            
+            if not df_horarios.empty:
+                # Añadir columna de aula si existe
+                if 'aula_id' in df_horarios.columns:
+                    df_horarios['aula_info'] = df_horarios.apply(
+                        lambda row: '🏫 Asignada' if row.get('aula_id') else '⚠️ Sin aula',
+                        axis=1
+                    )
+                    columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
+                                       "capacidad_maxima", "aula_info", "activo"]
+                else:
+                    columnas_mostrar = ["clase_nombre", "dia_nombre", "hora_inicio", "hora_fin", 
+                                       "capacidad_maxima", "activo"]
+                
+                st.info(f"📊 {len(df_horarios)} horarios encontrados")
+                
+                evento_horario = st.dataframe(
+                    df_horarios[columnas_mostrar],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    column_config={
+                        "clase_nombre": "🏃‍♀️ Clase",
+                        "dia_nombre": "📅 Día",
+                        "hora_inicio": "🕐 Inicio",
+                        "hora_fin": "🕐 Fin",
+                        "capacidad_maxima": "👥 Capacidad",
+                        "aula_info": "🏫 Aula",
+                        "activo": st.column_config.CheckboxColumn("✅ Activo")
+                    }
+                )
+                
+                # Editar horario seleccionado
+                if evento_horario.selection.rows:
+                    horario_seleccionado = df_horarios.iloc[evento_horario.selection.rows[0]]
+                    st.markdown("---")
+                    st.markdown("### ✏️ Editar Horario Seleccionado")
+                    mostrar_formulario_horario(
+                        clases_service, 
+                        horario_seleccionado["clase_id"], 
+                        horario_seleccionado, 
+                        es_creacion=False
+                    )
+            else:
+                st.info("No hay horarios que coincidan con los filtros aplicados")
+        
+        except Exception as e:
+            st.error(f"Error cargando horarios: {e}")
+            st.exception(e)
+    
+    with col_form:
+        # Formulario de creación solo si hay clase seleccionada
+        if modo_vista == "Filtrar por clase" and clase_id:
             st.markdown("#### ➕ Nuevo Horario")
             mostrar_formulario_horario(clases_service, clase_id, {}, es_creacion=True)
         else:
-            st.info("Selecciona una clase específica para crear horarios")
+            st.info("💡 **Selecciona una clase específica** para crear nuevos horarios")
+            
+            # Mostrar estadísticas generales
+            if not df_horarios.empty:
+                st.markdown("#### 📊 Resumen")
+                st.metric("Total Horarios", len(df_horarios))
+                st.metric("Activos", len(df_horarios[df_horarios["activo"] == True]))
+                st.metric("Clases con Horarios", df_horarios["clase_nombre"].nunique())
 
 def mostrar_formulario_horario(clases_service, clase_id, horario_data, es_creacion=False):
     """Formulario para crear/editar horarios CON selector de aula"""
