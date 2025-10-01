@@ -1691,14 +1691,23 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                     try:
                                         # 1. Preparar nombres de archivo
                                         file_name = f"{participante['id']}_{diploma_file.name}"
-                                        file_path = f"diplomas/{grupo_info.get('ano_inicio', datetime.now().year)}/{grupo_info.get('empresa_id')}/{grupo_info.get('id')}/{file_name}"
-                                
+                                        file_path = (
+                                            f"diplomas/"
+                                            f"{grupo_info.get('ano_inicio', datetime.now().year)}/"
+                                            f"{grupo_info.get('empresa_id')}/"
+                                            f"{grupo_info.get('id')}/"
+                                            f"{file_name}"
+                                        )
+                            
                                         # 2. Subir archivo al bucket
-                                        supabase.storage.from_("diplomas").upload(file_path, diploma_file.getvalue())
-                                
+                                        supabase.storage.from_("diplomas").upload(
+                                            file_path,
+                                            diploma_file.getvalue()
+                                        )
+                            
                                         # 3. Obtener URL pública
                                         url = supabase.storage.from_("diplomas").get_public_url(file_path)
-                                
+                            
                                         # 4. Insertar registro en tabla diplomas
                                         supabase.table("diplomas").insert({
                                             "participante_id": p_info.get("id"),
@@ -1706,12 +1715,13 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                             "url": url,
                                             "archivo_nombre": diploma_file.name
                                         }).execute()
-                                
+                            
                                         st.success("✅ Diploma subido y registrado correctamente")
                                         st.rerun()
-                                
-                                    except Exception as e:
+                            
+                                    except Exception as e:   # 🔧 alineado con el try
                                         st.error(f"❌ Error al subir diploma: {e}")
+
 
 # =========================
 # MAIN PARTICIPANTES
