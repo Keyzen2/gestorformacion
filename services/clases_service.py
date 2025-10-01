@@ -384,19 +384,49 @@ class ClasesService:
             if not self._validar_datos_horario(datos_horario):
                 return False, "Datos de horario inválidos - verifica día, horas y capacidad"
             
-            # 5. CORREGIDO: Verificar disponibilidad de aula SI está asignada
-            if datos_horario.get("aula_id"):
-                aula_disponible = self._verificar_disponibilidad_aula_recurrente(
-                    datos_horario["aula_id"],
-                    datos_horario["dia_semana"],
-                    datos_horario["hora_inicio"],
-                    datos_horario["hora_fin"]
-                )
-                
-                if not aula_disponible:
-                    return False, "El aula no está disponible en ese horario (conflicto con otro horario de clase)"
+            # 5. NUEVO: Verificar que no exista otro horario con mismo día/hora para esta clase
+            conflicto_clase = self.supabase.table("clases_horarios").select("id, hora_inicio, hora_fin").eq(
+                "clase_id", datos_horario["clase_id"]
+            ).eq("dia_semana", datos_horario["dia_semana"]).eq("activo", True).execute()
             
-            # 6. Insertar en base de datos
+            if conflicto_clase.data:
+                dias_semana = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+                dia_nombre = dias_semana[datos_horario["dia_semana"]]
+                
+                for horario_existente in conflicto_clase.data:
+                    # Verificar solapamiento de horas
+                    hora_inicio_nueva = datetime.strptime(datos_horario["hora_inicio"], "%H:%M:%S").time()
+                    hora_fin_nueva = datetime.strptime(datos_horario["hora_fin"], "%H:%M:%S").time()
+                    hora_inicio_exist = datetime.strptime(horario_existente["hora_inicio"], "%H:%M:%S").time()
+                    hora_fin_exist = datetime.strptime(horario_existente["hora_fin"], "%H:%M:%S").time()
+                    
+                    # Verificar solapamiento
+                    if not (hora_fin_nueva <= hora_inicio_exist or hora_inicio_nueva >= hora_fin_exist):
+                        return False, f"Ya existe un horario para esta clase el {dia_nombre} entre {hora_inicio_exist.strftime('%H:%M')} y {hora_fin_exist.strftime('%H:%M')}"
+            
+            # 6. Verificar disponibilidad de aula SI está asignada
+            if datos_horario.get("aula_id"):
+                # Verificar conflictos con otros horarios de clases en la misma aula
+                conflicto_aula = self.supabase.table("clases_horarios").select(
+                    "id, hora_inicio, hora_fin, clases(nombre)"
+                ).eq("aula_id", datos_horario["aula_id"]).eq(
+                    "dia_semana", datos_horario["dia_semana"]
+                ).eq("activo", True).execute()
+                
+                if conflicto_aula.data:
+                    hora_inicio_nueva = datetime.strptime(datos_horario["hora_inicio"], "%H:%M:%S").time()
+                    hora_fin_nueva = datetime.strptime(datos_horario["hora_fin"], "%H:%M:%S").time()
+                    
+                    for horario_aula in conflicto_aula.data:
+                        hora_inicio_exist = datetime.strptime(horario_aula["hora_inicio"], "%H:%M:%S").time()
+                        hora_fin_exist = datetime.strptime(horario_aula["hora_fin"], "%H:%M:%S").time()
+                        
+                        # Verificar solapamiento
+                        if not (hora_fin_nueva <= hora_inicio_exist or hora_inicio_nueva >= hora_fin_exist):
+                            clase_conflicto = horario_aula.get("clases", {}).get("nombre", "otra clase")
+                            return False, f"El aula ya está ocupada por '{clase_conflicto}' en ese horario"
+            
+            # 7. Insertar en base de datos
             result = self.supabase.table("clases_horarios").insert(datos_horario).execute()
             
             if result.data:
