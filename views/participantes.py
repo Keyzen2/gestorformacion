@@ -1683,19 +1683,35 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                 st.error("❌ Archivo muy grande. Máximo 10MB.")
                             else:
                                 if st.button(
-                                    f"📤 Subir diploma de {nombre_completo}",   # 🔧 aquí usamos nombre_completo
-                                    key=f"btn_upload_{participante['id']}",
+                                    f"📤 Subir diploma de {nombre_completo}", 
+                                    key=f"btn_upload_{participante['id']}", 
                                     type="primary",
                                     use_container_width=True
                                 ):
-                                    # Aquí iría la función de subida de diplomas
-                                    st.success("✅ Diploma subido correctamente")
-                                    st.rerun()
-                        else:
-                            st.info("📂 Selecciona un archivo PDF para continuar")
-
-    except Exception as e:
-        st.error(f"❌ Error en gestión de diplomas: {e}")
+                                    try:
+                                        # 1. Preparar nombres de archivo
+                                        file_name = f"{participante['id']}_{diploma_file.name}"
+                                        file_path = f"diplomas/{grupo_info.get('ano_inicio', datetime.now().year)}/{grupo_info.get('empresa_id')}/{grupo_info.get('id')}/{file_name}"
+                                
+                                        # 2. Subir archivo al bucket
+                                        supabase.storage.from_("diplomas").upload(file_path, diploma_file.getvalue())
+                                
+                                        # 3. Obtener URL pública
+                                        url = supabase.storage.from_("diplomas").get_public_url(file_path)
+                                
+                                        # 4. Insertar registro en tabla diplomas
+                                        supabase.table("diplomas").insert({
+                                            "participante_id": p_info.get("id"),
+                                            "grupo_id": grupo_info.get("id"),
+                                            "url": url,
+                                            "archivo_nombre": diploma_file.name
+                                        }).execute()
+                                
+                                        st.success("✅ Diploma subido y registrado correctamente")
+                                        st.rerun()
+                                
+                                    except Exception as e:
+                                        st.error(f"❌ Error al subir diploma: {e}")
 
 # =========================
 # MAIN PARTICIPANTES
