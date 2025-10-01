@@ -1169,42 +1169,285 @@ def mostrar_dashboard_gestor(ajustes, metricas):
     with col3:
         components.stat_card("Documentos", str(metricas.get('documentos', 0)), "📂", color="warning")
 
-def mostrar_dashboard_alumno(ajustes, aulas_service):
-    user = st.session_state.user
-    participante_id = user.get("participante_id")  # deberías mapear esto al login
-    nombre = user.get("nombre", "Alumno")
+# En app.py, reemplaza la función mostrar_dashboard_alumno:
 
-    st.markdown(f"### 👋 Bienvenido, {nombre}")
-    st.caption("Este es tu espacio personal para gestionar tus cursos y reservas.")
-
-    # Cursos
-    cursos = aulas_service.get_cursos_alumno(participante_id)
-    if cursos:
-        st.subheader("📚 Tus cursos")
-        for c in cursos:
-            g = c.get("grupos", {})
-            af = g.get("acciones_formativas", {})
-            progreso = aulas_service.get_progreso_curso(g)
-            st.write(f"**{af.get('nombre')}** ({progreso}% completado)")
-            st.progress(progreso)
-
-            # Próximas sesiones
-            sesiones = aulas_service.get_proximas_sesiones_alumno(g["id"])
-            if sesiones:
-                for s in sesiones:
-                    fi = pd.to_datetime(s["fecha_inicio"]).strftime("%d/%m %H:%M")
-                    ff = pd.to_datetime(s["fecha_fin"]).strftime("%H:%M")
-                    st.info(f"📅 {fi}-{ff} en {s['aulas']['nombre']} — {s['titulo']}")
-            st.markdown("---")
-    else:
-        st.write("No tienes cursos asignados todavía.")
-
-    # Diplomas
-    st.subheader("🎓 Diplomas disponibles")
-    diplomas = aulas_service.get_diplomas_alumno(participante_id)
-    if diplomas:
-        for d in diplomas:
-            st.success(f"Diploma disponible: [📄 {d['archivo_nombre']}]({d['url']})")
+def mostrar_dashboard_alumno(ajustes):
+    """Dashboard alumno mejorado estilo TailAdmin"""
+    
+    components = TailAdminComponents()
+    user_name = st.session_state.user.get("nombre", "Alumno")
+    user_email = st.session_state.user.get("email")
+    empresa_id = st.session_state.user.get("empresa_id")
+    
+    components.welcome_header(user_name, "Área del Estudiante")
+    components.breadcrumb(["Dashboard", "Mi Formación"])
+    
+    # === CARGAR DATOS DEL ALUMNO ===
+    try:
+        # Buscar participante por email
+        participante_res = supabase_admin.table("participantes")\
+            .select("*, grupos(codigo_grupo, fecha_inicio, fecha_fin_prevista, estado)")\
+            .eq("email", user_email)\
+            .execute()
+        
+        participaciones = participante_res.data or []
+        
+        # Diplomas del alumno
+        diplomas_res = supabase_admin.table("diplomas")\
+            .select("id, fecha_emision")\
+            .eq("participante_email", user_email)\
+            .execute()
+        
+        diplomas = diplomas_res.data or []
+        
+        # Verificar si tiene servicio de clases activo
+        servicio_clases = False
+        if empresa_id:
+            empresa_res = supabase_admin.table("empresas")\
+                .select("formacion_activo")\
+                .eq("id", empresa_id)\
+                .execute()
+            servicio_clases = empresa_res.data[0].get("formacion_activo", False) if empresa_res.data else False
+        
+    except Exception as e:
+        st.error(f"Error cargando datos: {e}")
+        participaciones = []
+        diplomas = []
+        servicio_clases = False
+    
+    # === MÉTRICAS PRINCIPALES ===
+    st.markdown("### 📊 Mi Progreso Formativo")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Grupos activos
+        grupos_activos = len([p for p in participaciones 
+                             if p.get('grupos') and p['grupos'].get('estado') in ['abierto', 'finalizar']])
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #3B82F6 0%, #60A5FA 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem;">Grupos Activos</div>
+                    <div style="font-size: 2rem; font-weight: 700;">{grupos_activos}</div>
+                </div>
+                <div style="font-size: 2.5rem; opacity: 0.8;">📚</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        # Total grupos (cursos realizados + activos)
+        total_grupos = len(participaciones)
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(16, 185, 129, 0.3);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem;">Cursos Realizados</div>
+                    <div style="font-size: 2rem; font-weight: 700;">{total_grupos}</div>
+                </div>
+                <div style="font-size: 2.5rem; opacity: 0.8;">🎓</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        # Diplomas obtenidos
+        total_diplomas = len(diplomas)
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(245, 158, 11, 0.3);
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <div style="font-size: 0.875rem; opacity: 0.9; margin-bottom: 0.5rem;">Diplomas</div>
+                    <div style="font-size: 2rem; font-weight: 700;">{total_diplomas}</div>
+                </div>
+                <div style="font-size: 2.5rem; opacity: 0.8;">🏆</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # === ALERTAS Y ESTADO ===
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Estado del servicio de clases
+        if servicio_clases:
+            st.success("✅ Servicio de Clases Activo")
+        else:
+            st.info("ℹ️ Servicio de Clases no disponible")
+    
+    with col2:
+        # Próximas clases (simulado - integrar con tabla clases_horarios)
+        try:
+            if servicio_clases:
+                # Buscar próximas clases del alumno
+                hoy = datetime.now().date()
+                proximas_clases = 0
+                
+                # Aquí integrarías con clases_horarios si existe
+                # proximas_clases_res = supabase_admin.table("clases_horarios")...
+                
+                if proximas_clases > 0:
+                    st.warning(f"⏰ {proximas_clases} clases próximas esta semana")
+                else:
+                    st.info("📅 No hay clases programadas próximamente")
+        except:
+            pass
+    
+    # === MIS GRUPOS ACTIVOS ===
+    if grupos_activos > 0:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📚 Mis Grupos Activos")
+        
+        for participacion in participaciones:
+            grupo = participacion.get('grupos')
+            if grupo and grupo.get('estado') in ['abierto', 'finalizar']:
+                codigo = grupo.get('codigo_grupo', 'Sin código')
+                fecha_inicio = grupo.get('fecha_inicio')
+                fecha_fin = grupo.get('fecha_fin_prevista')
+                
+                fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else 'N/A'
+                fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else 'N/A'
+                
+                st.markdown(f"""
+                <div style="
+                    background: #FFFFFF;
+                    border: 1px solid #E5E7EB;
+                    border-left: 4px solid #3B82F6;
+                    border-radius: 8px;
+                    padding: 1rem;
+                    margin-bottom: 0.75rem;
+                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+                ">
+                    <div style="font-weight: 600; color: #1F2937; margin-bottom: 0.5rem;">
+                        📖 {codigo}
+                    </div>
+                    <div style="font-size: 0.875rem; color: #6B7280;">
+                        📅 Inicio: {fecha_inicio_str} · 🏁 Fin: {fecha_fin_str}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+    
+    # === ACCIONES RÁPIDAS ===
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("### ⚡ Acciones Rápidas")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("""
+        <div style="
+            background: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        ">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">📘</div>
+            <h3 style="color: #1F2937; margin: 0 0 0.5rem 0; font-size: 1.125rem;">Ver Todos Mis Grupos</h3>
+            <p style="color: #6B7280; margin: 0 0 1.5rem 0; font-size: 0.875rem;">
+                Consulta el historial completo de tu formación
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.button("📚 Ver Grupos", key="btn_grupos", use_container_width=True):
+            st.session_state.page = "area_alumno"
+            st.rerun()
+    
+    with col2:
+        st.markdown("""
+        <div style="
+            background: white;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        ">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🎓</div>
+            <h3 style="color: #1F2937; margin: 0 0 0.5rem 0; font-size: 1.125rem;">Descargar Diplomas</h3>
+            <p style="color: #6B7280; margin: 0 0 1.5rem 0; font-size: 0.875rem;">
+                Accede a tus certificados acreditativos
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if total_diplomas > 0:
+            if st.button("🏆 Ver Diplomas", key="btn_cert", use_container_width=True):
+                # Aquí navegarías a una vista de diplomas
+                st.info("Funcionalidad de diplomas en desarrollo")
+        else:
+            st.button("🏆 Sin Diplomas", key="btn_cert_disabled", use_container_width=True, disabled=True)
+    
+    # === PROGRESO Y ESTADÍSTICAS ===
+    if total_grupos > 0:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("### 📈 Mi Progreso")
+        
+        # Calcular grupos finalizados
+        grupos_finalizados = len([p for p in participaciones 
+                                 if p.get('grupos') and p['grupos'].get('estado') == 'finalizado'])
+        
+        porcentaje_completado = (grupos_finalizados / total_grupos * 100) if total_grupos > 0 else 0
+        
+        st.markdown(f"""
+        <div style="
+            background: #FFFFFF;
+            border: 1px solid #E5E7EB;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        ">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem;">
+                <span style="font-weight: 600; color: #1F2937;">Cursos Completados</span>
+                <span style="font-weight: 700; color: #3B82F6;">{grupos_finalizados}/{total_grupos}</span>
+            </div>
+            <div style="
+                width: 100%;
+                height: 8px;
+                background: #E5E7EB;
+                border-radius: 4px;
+                overflow: hidden;
+            ">
+                <div style="
+                    width: {porcentaje_completado}%;
+                    height: 100%;
+                    background: linear-gradient(90deg, #3B82F6 0%, #60A5FA 100%);
+                    transition: width 0.3s ease;
+                "></div>
+            </div>
+            <div style="margin-top: 0.5rem; text-align: right; font-size: 0.875rem; color: #6B7280;">
+                {porcentaje_completado:.1f}% completado
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def mostrar_dashboard_comercial(ajustes):
     components = TailAdminComponents()
