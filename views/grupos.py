@@ -1576,7 +1576,7 @@ def mostrar_seccion_costes_por_empresa_schema_real(grupos_service, grupo_id):
             st.code(traceback.format_exc())
 
 
-def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, tarifa_max, horas, participantes):
+def procesar_empresa_individual_schema_real(grupos_service, empresa_grupo_data, tarifa_max, horas, participantes, modalidad):
     """
     CORREGIDO: Procesamiento individual usando campos exactos del schema.
     """
