@@ -276,11 +276,11 @@ class ClasesService:
         """Obtiene los avatares de los participantes con reserva en una clase/fecha."""
         try:
             result = (
-                self.supabase.table("clases_reservas")
+                self.supabase.table("reservas_clases")  # ← CORREGIDO
                 .select("""
                     id,
                     participante_id,
-                    participantes!clases_reservas_participante_id_fkey(
+                    participantes!reservas_clases_participante_id_fkey(
                         id,
                         participantes_avatars(archivo_url)
                     )
@@ -297,10 +297,11 @@ class ClasesService:
                     participante = r.get("participantes", {})
                     if participante and participante.get("participantes_avatars"):
                         for avatar in participante["participantes_avatars"]:
-                            avatares.append(avatar["archivo_url"])
+                            if avatar.get("archivo_url"):  # Verificar que existe
+                                avatares.append(avatar["archivo_url"])
             return avatares
         except Exception as e:
-            print("Error get_avatares_reserva:", e)
+            print(f"Error get_avatares_reserva: {e}")
             return []
 
     # =========================
