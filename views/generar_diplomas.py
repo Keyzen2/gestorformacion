@@ -544,7 +544,7 @@ def render(supabase, session_state):
         
                             supabase.storage.from_("diplomas").upload(
                                 file_path,
-                                pdf_buffer,
+                                pdf_buffer.getvalue(),
                                 {"content-type": "application/pdf"}
                             )
         
