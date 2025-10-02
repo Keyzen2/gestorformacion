@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import locale
 from datetime import datetime, date
 from io import BytesIO
 from typing import Optional, Dict
@@ -224,16 +225,12 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
     elementos.append(Paragraph(texto_detalles, style_datos))
     elementos.append(Spacer(1, 1*cm))
 
-    import locale
-    from datetime import datetime
-
     # Forzar a español (España)
     locale.setlocale(locale.LC_TIME, "es_ES.UTF-8")
     fecha_emision = datetime.now().strftime('%d de %B de %Y')
     elementos.append(Paragraph(f"Firmado a {fecha_emision}", style_datos))
     
-    
-    # CARA B
+        # CARA B
     elementos.append(PageBreak())
     style_titulo_b = ParagraphStyle('TituloB', parent=styles['Heading1'],
         fontSize=32, textColor=colors.HexColor("#2c3e50"),
