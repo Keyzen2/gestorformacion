@@ -563,7 +563,7 @@ def render(supabase, session_state):
                             try:
                                 supabase.storage.from_("diplomas").upload(
                                     file_path,
-                                    pdf_buffer,
+                                    pdf_buffer.getvalue(),  # 🔑 usar bytes
                                     {"content-type": "application/pdf"}
                                 )
         
@@ -572,7 +572,7 @@ def render(supabase, session_state):
                                 # Registrar en BD
                                 supabase.table("diplomas").insert({
                                     "participante_id": participante["id"],
-                                    "grupo_id", grupo_completo["id"],
+                                    "grupo_id": grupo_completo["id"],
                                     "url": url,
                                     "archivo_nombre": file_name,
                                     "fecha_subida": datetime.now().isoformat()
@@ -592,6 +592,7 @@ def render(supabase, session_state):
                             type="primary",
                             use_container_width=True
                         )
+
             
     # --- TAB 1: GESTIONAR FIRMAS ---
     with tabs[1]:
