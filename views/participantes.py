@@ -1505,11 +1505,11 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         grupos_dict_completo = {g["id"]: g for g in grupos_finalizados}
         
         # Obtener diplomas existentes
-        participantes_ids = [p["id"] for p in participantes_finalizados]
-        diplomas_res = supabase.table("diplomas").select("participante_id, id").in_(
+        participantes_ids = [p["participante"]["id"] for p in participantes_finalizados if p.get("participante")]
+        diplomas_res = supabase.table("diplomas").select("participante_id, id, url").in_(
             "participante_id", participantes_ids
         ).execute()
-        participantes_con_diploma = {d["participante_id"] for d in diplomas_res.data or []}
+        participantes_con_diploma = {d["participante_id"]: d for d in (diplomas_res.data or [])}
         
         # Métricas principales
         col1, col2, col3, col4 = st.columns(4)
@@ -1614,13 +1614,16 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                 
                 accion_info = grupo_info.get("accion_formativa") or {}
                 accion_nombre = accion_info.get("nombre", "Sin acción")
+                
+                # Datos del participante real
                 p_info = participante.get("participante", {})
+                p_id = p_info.get("id")   # <-- ID real del participante
                 nombre_completo = f"{p_info.get('nombre', '')} {p_info.get('apellidos', '')}".strip()
                 
-                # CONSULTA INDIVIDUAL Y FRESCA del diploma para este participante
+                # CONSULTA INDIVIDUAL Y FRESCA del diploma usando el ID REAL
                 try:
                     diploma_actual = supabase.table("diplomas").select("*").eq(
-                        "participante_id", participante["id"]
+                        "participante_id", p_id
                     ).limit(1).execute()
                     
                     tiene_diploma = bool(diploma_actual.data)
