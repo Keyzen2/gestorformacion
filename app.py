@@ -1633,7 +1633,7 @@ def render_page():
                     "panel_admin": "panel_admin", "usuarios_empresas": "usuarios_empresas",
                     "empresas": "empresas", "ajustes_app": "ajustes_app", "panel_gestor": "panel_gestor",
                     "acciones_formativas": "acciones_formativas", "grupos": "grupos",
-                    "participantes": "participantes", "tutores": "tutores", "aulas": "aulas", "generar diplomas": "generar_diplomas",
+                    "participantes": "participantes", "tutores": "tutores", "aulas": "aulas", "generar_diplomas": "generar_diplomas",
                     "gestion_clases": "gestion_clases", "proyectos": "proyectos", "documentos": "documentos",
                     "area_alumno": "area_alumno", "no_conformidades": "no_conformidades",
                     "acciones_correctivas": "acciones_correctivas", "auditorias": "auditorias",
