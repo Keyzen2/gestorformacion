@@ -27,7 +27,6 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
 
-# Después de los imports, antes de las funciones de exportación
 
 def obtener_eventos_unificados(aulas_service, clases_service, fecha_inicio, fecha_fin):
     """Obtiene TODOS los eventos: reservas de aulas + clases programadas"""
