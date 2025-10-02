@@ -813,7 +813,15 @@ def render(supabase, session_state):
         st.caption(f"👤 Usuario: {session_state.user.get('nombre', 'Usuario')} ({session_state.role})")
     with col2:
         if session_state.role == "gestor":
-            st.caption(f"🏢 Empresa: {session_state.get('empresa_nombre', 'N/A')}")
+            empresa_id = session_state.user.get("empresa_id")
+            if empresa_id:
+                try:
+                    # Obtener nombre de la empresa
+                    empresa_res = supabase.table("empresas").select("nombre").eq("id", empresa_id).execute()
+                    empresa_nombre = empresa_res.data[0]["nombre"] if empresa_res.data else "N/A"
+                    st.caption(f"🏢 Empresa: {empresa_nombre}")
+                except:
+                    st.caption("🏢 Empresa: N/A")
     
     # Tabs principales
     tabs = st.tabs([
