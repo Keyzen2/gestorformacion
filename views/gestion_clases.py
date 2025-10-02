@@ -607,19 +607,31 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        fecha_inicio = st.date_input("Desde", value=date.today() - timedelta(days=7), key="reservas_fecha_inicio")
+        fecha_inicio = st.date_input(
+            "Desde",
+            value=date.today() - timedelta(days=7),
+            key="reservas_fecha_inicio"
+        )
     
     with col2:
-        fecha_fin = st.date_input("Hasta", value=date.today() + timedelta(days=7), key="reservas_fecha_fin")
+        fecha_fin = st.date_input(
+            "Hasta",
+            value=date.today() + timedelta(days=7),
+            key="reservas_fecha_fin"
+        )
     
     with col3:
-        estado_filtro = st.selectbox("Estado", ["Todas", "Reservadas", "Asistió", "No Asistió", "Canceladas"], key="filtro_estado_reservas")
+        estado_filtro = st.selectbox(
+            "Estado",
+            ["Todas", "Reservadas", "Asistió", "No Asistió", "Canceladas"],
+            key="filtro_estado_reservas"
+        )
     
     if fecha_inicio > fecha_fin:
         st.error("La fecha de inicio debe ser anterior a la fecha de fin")
         return
     
-    # Filtro de empresa para gestores
+    # ✅ DETERMINAR EMPRESA_ID PARA FILTRO
     empresa_id_filtro = None
     if session_state.role == "gestor":
         empresa_id_filtro = session_state.user.get("empresa_id")
@@ -628,6 +640,7 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
             st.error("❌ No se pudo identificar tu empresa")
             return
         
+        # Mostrar nombre de empresa
         try:
             empresa_res = participantes_service.supabase.table("empresas").select("nombre").eq("id", empresa_id_filtro).execute()
             if empresa_res.data:
@@ -635,15 +648,21 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
         except:
             st.info("🏢 Mostrando reservas de tu empresa")
     
-    # Obtener reservas
+    # ✅ OBTENER RESERVAS CON FILTRO DE EMPRESA
     try:
-        df_reservas = clases_service.get_reservas_periodo(fecha_inicio, fecha_fin, estado_filtro, empresa_id=empresa_id_filtro)
+        df_reservas = clases_service.get_reservas_periodo(
+            fecha_inicio, 
+            fecha_fin, 
+            estado_filtro,
+            empresa_id=empresa_id_filtro  # ← CRÍTICO: pasar empresa_id
+        )
         
         if df_reservas.empty:
             st.warning("No hay reservas en el período seleccionado")
         else:
             st.success(f"📊 {len(df_reservas)} reservas encontradas")
             
+            # Mostrar tabla de reservas
             evento_reserva = st.dataframe(
                 df_reservas,
                 use_container_width=True,
@@ -660,6 +679,7 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
                 }
             )
             
+            # Gestión de asistencia si hay selección
             if evento_reserva.selection.rows:
                 reserva_seleccionada = df_reservas.iloc[evento_reserva.selection.rows[0]]
                 mostrar_gestion_asistencia(clases_service, reserva_seleccionada)
