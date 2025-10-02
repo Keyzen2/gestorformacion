@@ -520,61 +520,78 @@ def render(supabase, session_state):
             if st.button("📜 Generar Diploma Final", type="primary", use_container_width=True):
                 with st.spinner("Generando diploma final..."):
                     pdf_buffer = generar_diploma_pdf(
-                        participante,
-                        grupo_completo,
-                        accion_completa,
-                        firma_url,
-                        datos_personalizados
+                        participante, grupo_completo, accion_completa,
+                        firma_url, datos_personalizados
                     )
         
                     if pdf_buffer:
-                        # 1️⃣ Validar si ya existe diploma para este participante + grupo
+                        # Validar si ya existe diploma
                         diploma_existente = supabase.table("diplomas").select("*").eq(
                             "participante_id", participante["id"]
                         ).eq("grupo_id", grupo_completo["id"]).execute()
         
                         if diploma_existente.data:
                             st.warning("⚠️ Este participante ya tiene un diploma generado para este grupo.")
-                        else:
-                            # 2️⃣ Subir al bucket
-                            nif = participante.get("nif", "sin_nif").replace(" ", "_")
-                            timestamp = int(datetime.now().timestamp())
-                            file_name = f"diploma_{nif}_{timestamp}.pdf"
-                            file_path = f"diplomas/gestora_{grupo_completo['empresa_id']}/grupo_{grupo_completo['id']}/{file_name}"
+                            st.info("Puedes descargarlo de todos modos o eliminarlo desde Participantes > Diplomas")
+                        
+                        # Preparar datos para la ruta (usar estructura de participantes.py)
+                        codigo_accion = accion_completa.get("codigo_accion", "sin_codigo")
+                        accion_id = accion_completa.get("id", "sin_id")
+                        empresa_id_diploma = grupo_completo.get("empresa_id", "sin_empresa")
+                        ano_inicio = grupo_completo.get("ano_inicio", datetime.now().year)
+                        grupo_id_completo = grupo_completo.get("id")
+                        
+                        grupo_id_corto = str(grupo_id_completo)[-8:] if grupo_id_completo else "sin_id"
+                        grupo_numero = grupo_completo.get("codigo_grupo", "0").split("_")[-1] if grupo_completo.get("codigo_grupo") else "0"
+                        
+                        nif = participante.get("nif", "sin_nif").replace(" ", "_")
+                        timestamp = int(datetime.now().timestamp())
+                        file_name = f"diploma_{nif}_{timestamp}.pdf"
+                        
+                        # Ruta consistente con participantes.py
+                        file_path = (
+                            f"diplomas/"
+                            f"gestora_{empresa_id_diploma}/"
+                            f"ano_{ano_inicio}/"
+                            f"accion_{codigo_accion}_{accion_id}/"
+                            f"grupo_{grupo_numero}_{grupo_id_corto}/"
+                            f"{file_name}"
+                        )
         
-                            supabase.storage.from_("diplomas").upload(
-                                file_path,
-                                pdf_buffer.getvalue(),
-                                {"content-type": "application/pdf"}
-                            )
+                        # Subir al bucket (solo si no existe)
+                        if not diploma_existente.data:
+                            try:
+                                supabase.storage.from_("diplomas").upload(
+                                    file_path,
+                                    pdf_buffer,
+                                    {"content-type": "application/pdf"}
+                                )
         
-                            url = supabase.storage.from_("diplomas").get_public_url(file_path)
+                                url = supabase.storage.from_("diplomas").get_public_url(file_path)
         
-                            # 3️⃣ Insertar en tabla diplomas
-                            existe = supabase.table("diplomas").select("id") \
-                                .eq("participante_id", participante["id"]) \
-                                .eq("grupo_id", grupo["id"]) \
-                                .execute()
-                            
-                            if existe.data:
-                                st.warning("⚠️ Este participante ya tiene un diploma registrado en este grupo.")
-                            else:
+                                # Registrar en BD
                                 supabase.table("diplomas").insert({
                                     "participante_id": participante["id"],
-                                    "grupo_id": grupo["id"],
+                                    "grupo_id", grupo_completo["id"],
                                     "url": url,
                                     "archivo_nombre": file_name,
                                     "fecha_subida": datetime.now().isoformat()
                                 }).execute()
+                                
                                 st.success("✅ Diploma generado y registrado correctamente")
-                            st.download_button(
-                                "📥 Descargar Diploma",
-                                data=pdf_buffer,
-                                file_name=file_name,
-                                mime="application/pdf",
-                                type="primary",
-                                use_container_width=True
-                            )
+                            
+                            except Exception as e:
+                                st.error(f"❌ Error subiendo diploma: {e}")
+                        
+                        # Siempre ofrecer descarga
+                        st.download_button(
+                            "📥 Descargar Diploma",
+                            data=pdf_buffer,
+                            file_name=file_name,
+                            mime="application/pdf",
+                            type="primary",
+                            use_container_width=True
+                        )
             
     # --- TAB 1: GESTIONAR FIRMAS ---
     with tabs[1]:
