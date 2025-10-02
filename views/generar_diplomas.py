@@ -266,7 +266,6 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
         fontSize=11, alignment=TA_JUSTIFY, spaceAfter=8, leading=14, fontName='Helvetica')
     
     # CARA A
-    elementos.append(Spacer(1, 0.5*cm))
     elementos.append(Spacer(1, 0.3*cm))
     
     # Añadir logotipo si existe
@@ -280,8 +279,8 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
         except Exception as e:
             print(f"Error cargando logo: {e}")
     else:
-        elementos.append(Spacer(1, 0.5*cm))  # Más espacio si no hay logo
-
+        elementos.append(Spacer(1, 0.5*cm))
+    elementos.append(Spacer(1, 0.5*cm))
     elementos.append(Paragraph("DIPLOMA", style_titulo))
     elementos.append(Spacer(1, 0.8*cm))
     
