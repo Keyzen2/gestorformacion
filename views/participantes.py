@@ -1640,6 +1640,7 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
         
                 with col_actions:
                     if tiene_diploma:
+                        # El participante YA tiene diploma subido
                         diplomas_part = supabase.table("diplomas").select("*").eq(
                             "participante_id", participante["id"]
                         ).execute()
@@ -1647,10 +1648,10 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                         if diplomas_part.data:
                             diploma = diplomas_part.data[0]
                             st.markdown("**🏅 Diploma:**")
-                            if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}"):
+                            if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}", use_container_width=True):
                                 st.markdown(f"[🔗 Abrir diploma]({diploma['url']})")
         
-                            if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}"):
+                            if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}", use_container_width=True):
                                 confirmar_key = f"confirm_delete_{participante['id']}"
                                 if st.session_state.get(confirmar_key, False):
                                     supabase.table("diplomas").delete().eq("id", diploma["id"]).execute()
@@ -1659,34 +1660,39 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                 else:
                                     st.session_state[confirmar_key] = True
                                     st.warning("⚠️ Confirmar eliminación")
-                        else:
-                            # Sin el título redundante
-                            diploma_file = st.file_uploader(
-                                "Seleccionar diploma (PDF)",
-                                type=["pdf"],
-                                key=f"upload_diploma_{participante['id']}",
-                                help="Solo archivos PDF, máximo 10MB"
-                            )
-            
-                            if diploma_file is not None:
-                                file_size_mb = diploma_file.size / (1024 * 1024)
-                            
-                                col_info_file, col_size_file = st.columns(2)
-                                with col_info_file:
-                                    st.success(f"✅ **Archivo:** {diploma_file.name}")
-                                with col_size_file:
-                                    color = "🔴" if file_size_mb > 10 else "🟢"
-                                    st.write(f"{color} **Tamaño:** {file_size_mb:.2f} MB")
-                            
-                                if file_size_mb > 10:
-                                    st.error("❌ Archivo muy grande. Máximo 10MB.")
-                                else:
-                                    if st.button(
-                                        f"📤 Subir", 
-                                        key=f"btn_upload_{participante['id']}", 
-                                        type="primary",
-                                        use_container_width=True
-                                    ):
+                    
+                    else:
+                        # El participante NO tiene diploma - mostrar uploader
+                        st.markdown("**📤 Subir Diploma**")
+                        
+                        diploma_file = st.file_uploader(
+                            "Seleccionar PDF",
+                            type=["pdf"],
+                            key=f"upload_diploma_{participante['id']}",
+                            help="Máximo 10MB",
+                            label_visibility="collapsed"
+                        )
+        
+                        if diploma_file is not None:
+                            file_size_mb = diploma_file.size / (1024 * 1024)
+                        
+                            col_info_file, col_size_file = st.columns(2)
+                            with col_info_file:
+                                st.caption(f"📄 {diploma_file.name}")
+                            with col_size_file:
+                                color = "🔴" if file_size_mb > 10 else "🟢"
+                                st.caption(f"{color} {file_size_mb:.2f} MB")
+                        
+                            if file_size_mb > 10:
+                                st.error("❌ Archivo muy grande. Máximo 10MB.")
+                            else:
+                                if st.button(
+                                    "📤 Subir Diploma", 
+                                    key=f"btn_upload_{participante['id']}", 
+                                    type="primary",
+                                    use_container_width=True
+                                ):
+                                    with st.spinner("Subiendo diploma..."):
                                         try:
                                             # Obtener datos necesarios
                                             accion_info = grupo_info.get("accion_formativa") or {}
@@ -1739,11 +1745,11 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                         
                                         except Exception as e:
                                             st.error(f"❌ Error subiendo diploma: {str(e)}")
-                                            st.write("**Detalles del error:**")
-                                            st.code(str(e))
-                            
-                            else:
-                                st.info("📂 Selecciona un archivo PDF para continuar")
+                                            with st.expander("Ver detalles del error"):
+                                                st.code(str(e))
+                        
+                        else:
+                            st.info("📂 Selecciona un archivo PDF")
 
     except Exception as e:
         st.error(f"❌ Error en gestión de diplomas: {e}")
