@@ -551,7 +551,6 @@ def render(supabase, session_state):
                             url = supabase.storage.from_("diplomas").get_public_url(file_path)
         
                             # 3️⃣ Insertar en tabla diplomas
-                            # Verificar si ya existe diploma para este participante y grupo
                             existe = supabase.table("diplomas").select("id") \
                                 .eq("participante_id", participante["id"]) \
                                 .eq("grupo_id", grupo["id"]) \
