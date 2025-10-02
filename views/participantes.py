@@ -1610,155 +1610,155 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
 
         # Gestión individual de diplomas
             for participante in participantes_pagina:
-            grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
-            
-            accion_info = grupo_info.get("accion_formativa") or {}
-            accion_nombre = accion_info.get("nombre", "Sin acción")
-            p_info = participante.get("participante", {})
-            nombre_completo = f"{p_info.get('nombre', '')} {p_info.get('apellidos', '')}".strip()
-            
-            # CONSULTA INDIVIDUAL Y FRESCA del diploma para este participante
-            try:
-                diploma_actual = supabase.table("diplomas").select("*").eq(
-                    "participante_id", participante["id"]
-                ).limit(1).execute()
+                grupo_info = grupos_dict_completo.get(participante["grupo_id"], {})
                 
-                tiene_diploma = bool(diploma_actual.data)
-                diploma_data = diploma_actual.data[0] if diploma_actual.data else None
-            except Exception as e:
-                tiene_diploma = False
-                diploma_data = None
-            
-            status_emoji = "✅" if tiene_diploma else "⏳"
-            status_text = "Con diploma" if tiene_diploma else "Pendiente"
-            
-            with st.expander(
-                f"{status_emoji} {nombre_completo} - {grupo_info.get('codigo_grupo', 'Sin código')} ({status_text})",
-                expanded=False
-            ):
-                col_info, col_actions = st.columns([2, 1])
+                accion_info = grupo_info.get("accion_formativa") or {}
+                accion_nombre = accion_info.get("nombre", "Sin acción")
+                p_info = participante.get("participante", {})
+                nombre_completo = f"{p_info.get('nombre', '')} {p_info.get('apellidos', '')}".strip()
                 
-                with col_info:
-                    st.markdown(f"**📧 Email:** {p_info.get('email', '-')}")
-                    st.markdown(f"**🆔 NIF:** {p_info.get('nif', 'No disponible')}")
-                    st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
-                    st.markdown(f"**📖 Acción:** {accion_nombre}")
+                # CONSULTA INDIVIDUAL Y FRESCA del diploma para este participante
+                try:
+                    diploma_actual = supabase.table("diplomas").select("*").eq(
+                        "participante_id", participante["id"]
+                    ).limit(1).execute()
                     
-                    fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
-                    if fecha_fin:
-                        fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
-                        st.markdown(f"**📅 Finalizado:** {fecha_str}")
+                    tiene_diploma = bool(diploma_actual.data)
+                    diploma_data = diploma_actual.data[0] if diploma_actual.data else None
+                except Exception as e:
+                    tiene_diploma = False
+                    diploma_data = None
                 
-                with col_actions:
-                    if tiene_diploma and diploma_data:
-                        # Mostrar opciones de diploma existente
-                        st.markdown("**🏅 Diploma:**")
-                        
-                        if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}", use_container_width=True):
-                            st.markdown(f"[🔗 Abrir diploma]({diploma_data['url']})")
-                        
-                        if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}", use_container_width=True):
-                            confirmar_key = f"confirm_delete_{participante['id']}"
-                            if st.session_state.get(confirmar_key, False):
-                                try:
-                                    supabase.table("diplomas").delete().eq("id", diploma_data["id"]).execute()
-                                    st.success("✅ Diploma eliminado.")
-                                    del st.session_state[confirmar_key]
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error eliminando: {e}")
-                            else:
-                                st.session_state[confirmar_key] = True
-                                st.warning("⚠️ Confirmar eliminación")
+                status_emoji = "✅" if tiene_diploma else "⏳"
+                status_text = "Con diploma" if tiene_diploma else "Pendiente"
+                
+                with st.expander(
+                    f"{status_emoji} {nombre_completo} - {grupo_info.get('codigo_grupo', 'Sin código')} ({status_text})",
+                    expanded=False
+                ):
+                    col_info, col_actions = st.columns([2, 1])
                     
-                    else:
-                        # Formulario de subida de diploma
-                        st.markdown("**📤 Subir Diploma**")
+                    with col_info:
+                        st.markdown(f"**📧 Email:** {p_info.get('email', '-')}")
+                        st.markdown(f"**🆔 NIF:** {p_info.get('nif', 'No disponible')}")
+                        st.markdown(f"**📚 Grupo:** {grupo_info.get('codigo_grupo', 'Sin código')}")
+                        st.markdown(f"**📖 Acción:** {accion_nombre}")
                         
-                        diploma_file = st.file_uploader(
-                            "Seleccionar PDF",
-                            type=["pdf"],
-                            key=f"upload_diploma_{participante['id']}",
-                            help="Máximo 10MB",
-                            label_visibility="collapsed"
-                        )
-                        
-                        if diploma_file is not None:
-                            file_size_mb = diploma_file.size / (1024 * 1024)
+                        fecha_fin = grupo_info.get("fecha_fin") or grupo_info.get("fecha_fin_prevista")
+                        if fecha_fin:
+                            fecha_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y')
+                            st.markdown(f"**📅 Finalizado:** {fecha_str}")
+                    
+                    with col_actions:
+                        if tiene_diploma and diploma_data:
+                            # Mostrar opciones de diploma existente
+                            st.markdown("**🏅 Diploma:**")
                             
-                            col_info_file, col_size_file = st.columns(2)
-                            with col_info_file:
-                                st.caption(f"📄 {diploma_file.name}")
-                            with col_size_file:
-                                color = "🔴" if file_size_mb > 10 else "🟢"
-                                st.caption(f"{color} {file_size_mb:.2f} MB")
+                            if st.button("👁️ Ver", key=f"ver_diploma_{participante['id']}", use_container_width=True):
+                                st.markdown(f"[🔗 Abrir diploma]({diploma_data['url']})")
                             
-                            if file_size_mb > 10:
-                                st.error("❌ Archivo muy grande. Máximo 10MB.")
-                            else:
-                                if st.button(
-                                    "📤 Subir Diploma", 
-                                    key=f"btn_upload_{participante['id']}", 
-                                    type="primary",
-                                    use_container_width=True
-                                ):
-                                    with st.spinner("Subiendo diploma..."):
-                                        try:
-                                            # Preparar datos
-                                            codigo_accion = accion_info.get("codigo_accion", "sin_codigo")
-                                            accion_id = accion_info.get("id", "sin_id")
-                                            empresa_id = grupo_info.get("empresa_id", "sin_empresa")
-                                            ano_inicio = grupo_info.get("ano_inicio", datetime.now().year)
-                                            grupo_id_completo = grupo_info.get("id", "sin_grupo")
-                                            
-                                            grupo_id_corto = str(grupo_id_completo)[-8:] if grupo_id_completo else "sin_id"
-                                            grupo_numero = grupo_info.get("codigo_grupo", "0").split("_")[-1] if grupo_info.get("codigo_grupo") else "0"
-                                            
-                                            nif = p_info.get("nif", "sin_nif").replace(" ", "_")
-                                            timestamp = int(datetime.now().timestamp())
-                                            
-                                            file_name = f"diploma_{nif}_{timestamp}.pdf"
-                                            file_path = (
-                                                f"diplomas/"
-                                                f"gestora_{empresa_id}/"
-                                                f"ano_{ano_inicio}/"
-                                                f"accion_{codigo_accion}_{accion_id}/"
-                                                f"grupo_{grupo_numero}_{grupo_id_corto}/"
-                                                f"{file_name}"
-                                            )
-                                            
-                                            # Subir al storage
-                                            supabase.storage.from_("diplomas").upload(
-                                                file_path,
-                                                diploma_file.getvalue(),
-                                                {"content-type": "application/pdf"}
-                                            )
-                                            
-                                            # Obtener URL
-                                            url = supabase.storage.from_("diplomas").get_public_url(file_path)
-                                            
-                                            # Insertar en BD
-                                            insert_result = supabase.table("diplomas").insert({
-                                                "participante_id": p_info.get("id"),
-                                                "grupo_id": grupo_id_completo,
-                                                "url": url,
-                                                "archivo_nombre": file_name,
-                                                "fecha_subida": datetime.now().isoformat()
-                                            }).execute()
-                                            
-                                            if insert_result.data:
-                                                st.success("✅ Diploma subido correctamente")
-                                                st.rerun()
-                                            else:
-                                                st.error("❌ No se pudo registrar en la base de datos")
-                                        
-                                        except Exception as e:
-                                            st.error(f"❌ Error: {str(e)}")
-                                            with st.expander("Detalles técnicos"):
-                                                st.code(str(e))
+                            if st.button("🗑️ Eliminar", key=f"delete_diploma_{participante['id']}", use_container_width=True):
+                                confirmar_key = f"confirm_delete_{participante['id']}"
+                                if st.session_state.get(confirmar_key, False):
+                                    try:
+                                        supabase.table("diplomas").delete().eq("id", diploma_data["id"]).execute()
+                                        st.success("✅ Diploma eliminado.")
+                                        del st.session_state[confirmar_key]
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error eliminando: {e}")
+                                else:
+                                    st.session_state[confirmar_key] = True
+                                    st.warning("⚠️ Confirmar eliminación")
                         
                         else:
-                            st.info("📂 Selecciona un archivo PDF")
+                            # Formulario de subida de diploma
+                            st.markdown("**📤 Subir Diploma**")
+                            
+                            diploma_file = st.file_uploader(
+                                "Seleccionar PDF",
+                                type=["pdf"],
+                                key=f"upload_diploma_{participante['id']}",
+                                help="Máximo 10MB",
+                                label_visibility="collapsed"
+                            )
+                            
+                            if diploma_file is not None:
+                                file_size_mb = diploma_file.size / (1024 * 1024)
+                                
+                                col_info_file, col_size_file = st.columns(2)
+                                with col_info_file:
+                                    st.caption(f"📄 {diploma_file.name}")
+                                with col_size_file:
+                                    color = "🔴" if file_size_mb > 10 else "🟢"
+                                    st.caption(f"{color} {file_size_mb:.2f} MB")
+                                
+                                if file_size_mb > 10:
+                                    st.error("❌ Archivo muy grande. Máximo 10MB.")
+                                else:
+                                    if st.button(
+                                        "📤 Subir Diploma", 
+                                        key=f"btn_upload_{participante['id']}", 
+                                        type="primary",
+                                        use_container_width=True
+                                    ):
+                                        with st.spinner("Subiendo diploma..."):
+                                            try:
+                                                # Preparar datos
+                                                codigo_accion = accion_info.get("codigo_accion", "sin_codigo")
+                                                accion_id = accion_info.get("id", "sin_id")
+                                                empresa_id = grupo_info.get("empresa_id", "sin_empresa")
+                                                ano_inicio = grupo_info.get("ano_inicio", datetime.now().year)
+                                                grupo_id_completo = grupo_info.get("id", "sin_grupo")
+                                                
+                                                grupo_id_corto = str(grupo_id_completo)[-8:] if grupo_id_completo else "sin_id"
+                                                grupo_numero = grupo_info.get("codigo_grupo", "0").split("_")[-1] if grupo_info.get("codigo_grupo") else "0"
+                                                
+                                                nif = p_info.get("nif", "sin_nif").replace(" ", "_")
+                                                timestamp = int(datetime.now().timestamp())
+                                                
+                                                file_name = f"diploma_{nif}_{timestamp}.pdf"
+                                                file_path = (
+                                                    f"diplomas/"
+                                                    f"gestora_{empresa_id}/"
+                                                    f"ano_{ano_inicio}/"
+                                                    f"accion_{codigo_accion}_{accion_id}/"
+                                                    f"grupo_{grupo_numero}_{grupo_id_corto}/"
+                                                    f"{file_name}"
+                                                )
+                                                
+                                                # Subir al storage
+                                                supabase.storage.from_("diplomas").upload(
+                                                    file_path,
+                                                    diploma_file.getvalue(),
+                                                    {"content-type": "application/pdf"}
+                                                )
+                                                
+                                                # Obtener URL
+                                                url = supabase.storage.from_("diplomas").get_public_url(file_path)
+                                                
+                                                # Insertar en BD
+                                                insert_result = supabase.table("diplomas").insert({
+                                                    "participante_id": p_info.get("id"),
+                                                    "grupo_id": grupo_id_completo,
+                                                    "url": url,
+                                                    "archivo_nombre": file_name,
+                                                    "fecha_subida": datetime.now().isoformat()
+                                                }).execute()
+                                                
+                                                if insert_result.data:
+                                                    st.success("✅ Diploma subido correctamente")
+                                                    st.rerun()
+                                                else:
+                                                    st.error("❌ No se pudo registrar en la base de datos")
+                                            
+                                            except Exception as e:
+                                                st.error(f"❌ Error: {str(e)}")
+                                                with st.expander("Detalles técnicos"):
+                                                    st.code(str(e))
+                            
+                            else:
+                                st.info("📂 Selecciona un archivo PDF")
 
     except Exception as e:
         st.error(f"❌ Error en gestión de diplomas: {e}")
