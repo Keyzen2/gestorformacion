@@ -607,70 +607,43 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        fecha_inicio = st.date_input(
-            "Desde",
-            value=date.today() - timedelta(days=7),
-            key="reservas_fecha_inicio"
-        )
+        fecha_inicio = st.date_input("Desde", value=date.today() - timedelta(days=7), key="reservas_fecha_inicio")
     
     with col2:
-        fecha_fin = st.date_input(
-            "Hasta",
-            value=date.today() + timedelta(days=7),
-            key="reservas_fecha_fin"
-        )
+        fecha_fin = st.date_input("Hasta", value=date.today() + timedelta(days=7), key="reservas_fecha_fin")
     
     with col3:
-        estado_filtro = st.selectbox(
-            "Estado",
-            ["Todas", "Reservadas", "Asistió", "No Asistió", "Canceladas"],
-            key="filtro_estado_reservas"
-        )
+        estado_filtro = st.selectbox("Estado", ["Todas", "Reservadas", "Asistió", "No Asistió", "Canceladas"], key="filtro_estado_reservas")
     
     if fecha_inicio > fecha_fin:
         st.error("La fecha de inicio debe ser anterior a la fecha de fin")
         return
     
-    # === DEBUG: VERIFICAR EMPRESA DEL GESTOR ===
+    # Filtro de empresa para gestores
     empresa_id_filtro = None
     if session_state.role == "gestor":
         empresa_id_filtro = session_state.user.get("empresa_id")
         
         if not empresa_id_filtro:
             st.error("❌ No se pudo identificar tu empresa")
-            st.warning("Verifica que tu usuario tenga empresa_id asignado en la tabla usuarios")
             return
         
-        # Obtener nombre de empresa
         try:
             empresa_res = participantes_service.supabase.table("empresas").select("nombre").eq("id", empresa_id_filtro).execute()
             if empresa_res.data:
-                empresa_nombre = empresa_res.data[0]["nombre"]
-                st.info(f"🏢 Mostrando reservas de: **{empresa_nombre}**")
-            else:
-                st.info(f"🏢 Mostrando reservas de tu empresa (ID: {empresa_id_filtro})")
+                st.info(f"🏢 Mostrando reservas de: **{empresa_res.data[0]['nombre']}**")
         except:
-            st.info(f"🏢 Mostrando reservas de tu empresa")
+            st.info("🏢 Mostrando reservas de tu empresa")
     
-    # Obtener reservas usando el servicio
+    # Obtener reservas
     try:
-        df_reservas = clases_service.get_reservas_periodo(
-            fecha_inicio, 
-            fecha_fin, 
-            estado_filtro,
-            empresa_id=empresa_id_filtro
-        )
+        df_reservas = clases_service.get_reservas_periodo(fecha_inicio, fecha_fin, estado_filtro, empresa_id=empresa_id_filtro)
         
         if df_reservas.empty:
-            if empresa_id_filtro:
-                st.warning(f"No hay reservas de tu empresa en el período seleccionado")
-                st.caption(f"Buscando reservas con empresa_id = {empresa_id_filtro}")
-            else:
-                st.info("No hay reservas en el período seleccionado")
+            st.warning("No hay reservas en el período seleccionado")
         else:
-            st.markdown(f"#### 📊 {len(df_reservas)} reservas encontradas")
+            st.success(f"📊 {len(df_reservas)} reservas encontradas")
             
-            # Mostrar reservas con avatar
             evento_reserva = st.dataframe(
                 df_reservas,
                 use_container_width=True,
@@ -678,15 +651,8 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
                 on_select="rerun",
                 selection_mode="single-row",
                 column_config={
-                    "avatar_url": st.column_config.ImageColumn(
-                        "Avatar",
-                        width="small",
-                        help="Foto del participante"
-                    ),
-                    "fecha_clase": st.column_config.DateColumn(
-                        "Fecha",
-                        format="DD/MM/YYYY"
-                    ),
+                    "avatar_url": st.column_config.ImageColumn("Avatar", width="small"),
+                    "fecha_clase": st.column_config.DateColumn("Fecha", format="DD/MM/YYYY"),
                     "participante_nombre": "Participante",
                     "clase_nombre": "Clase",
                     "horario": "Horario",
@@ -694,7 +660,6 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
                 }
             )
             
-            # Gestión de asistencia para reserva seleccionada
             if evento_reserva.selection.rows:
                 reserva_seleccionada = df_reservas.iloc[evento_reserva.selection.rows[0]]
                 mostrar_gestion_asistencia(clases_service, reserva_seleccionada)
