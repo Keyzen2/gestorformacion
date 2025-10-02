@@ -816,92 +816,99 @@ def mostrar_mis_diplomas(participantes_service, session_state):
 # =========================
 # MAIN FUNCTION
 # =========================
+# =========================
+# MAIN FUNCTION
+# =========================
 def render(supabase, session_state):
     st.title("🎓 Área del Alumno")
-    
-    # Cargar datos del participante si no existen
-    if not hasattr(session_state, "participante_nombre"):
-        participantes_service = get_participantes_service(supabase, session_state)
-        participante_id = session_state.participante_id
-        participante_res = participantes_service.supabase.table("participantes").select("nombre").eq("id", participante_id).execute()
-        if participante_res.data:
-            session_state.participante_nombre = participante_res.data[0]["nombre"]
-    
-    # CARGA ROBUSTA DE SERVICIOS - CORREGIDA
+
+    # Asegurar que participante_id exista en session_state
+    if "participante_id" not in session_state:
+        auth_id = session_state.user.get("id") if hasattr(session_state, "user") else None
+        if auth_id:
+            res = supabase.table("participantes").select("id").eq("auth_id", auth_id).single().execute()
+            if res.data:
+                session_state.participante_id = res.data["id"]
+
+    # Cargar nombre del participante si no existe
+    if "participante_nombre" not in session_state:
+        participante_id = session_state.get("participante_id")
+        if participante_id:
+            participantes_service = get_participantes_service(supabase, session_state)
+            participante_res = (
+                participantes_service.supabase.table("participantes")
+                .select("nombre")
+                .eq("id", participante_id)
+                .execute()
+            )
+            if participante_res.data:
+                session_state.participante_nombre = participante_res.data[0]["nombre"]
+
+    # CARGA ROBUSTA DE SERVICIOS
     try:
-        # Crear servicios
         participantes_service = get_participantes_service(supabase, session_state)
         grupos_service = get_grupos_service(supabase, session_state)
         clases_service = get_clases_service(supabase, session_state)
-        
-        # Verificar que el servicio crítico tiene los métodos necesarios
-        if not hasattr(participantes_service, 'get_grupos_de_participante'):
+
+        if not hasattr(participantes_service, "get_grupos_de_participante"):
             st.warning("⚠️ Recargando servicios...")
-            
-            # Forzar recarga del módulo
-            import importlib
-            import sys
-            
-            modules_to_reload = [
-                'services.participantes_service',
-                'services.grupos_service', 
-                'services.clases_service'
-            ]
-            
-            for module_name in modules_to_reload:
+            import importlib, sys
+            for module_name in [
+                "services.participantes_service",
+                "services.grupos_service",
+                "services.clases_service",
+            ]:
                 if module_name in sys.modules:
                     importlib.reload(sys.modules[module_name])
-            
-            # Reimportar después de la recarga
+
             from services.participantes_service import get_participantes_service as get_participantes_service_reload
             from services.grupos_service import get_grupos_service as get_grupos_service_reload
             from services.clases_service import get_clases_service as get_clases_service_reload
-            
-            # Recrear servicios con nombres únicos
+
             participantes_service = get_participantes_service_reload(supabase, session_state)
             grupos_service = get_grupos_service_reload(supabase, session_state)
             clases_service = get_clases_service_reload(supabase, session_state)
-            
-            # Verificar nuevamente
-            if not hasattr(participantes_service, 'get_grupos_de_participante'):
+
+            if not hasattr(participantes_service, "get_grupos_de_participante"):
                 st.error("❌ Error crítico: No se pudo cargar el servicio de participantes correctamente")
                 st.info("Intenta recargar la página o contacta al administrador")
                 return
             else:
                 st.success("✅ Servicios recargados correctamente")
-    
+
     except Exception as e:
         st.error(f"❌ Error cargando servicios: {e}")
         st.info("Intenta recargar la página")
         return
-    
+
     # Mostrar información del usuario
     st.caption(
         f"👤 Bienvenido/a: {session_state.get('participante_nombre', 'Usuario')} "
         f"| 📧 {session_state.user.get('email', 'N/A')}"
     )
-    
+
     # Tabs principales
     tabs = st.tabs([
         "📚 Mis Grupos FUNDAE",
-        "🏃‍♀️ Mis Clases", 
+        "🏃‍♀️ Mis Clases",
         "📅 Reservar Clases",
         "👤 Mi Perfil",
-        "📜 Mis Diplomas"
+        "📜 Mis Diplomas",
     ])
-    
+
     with tabs[0]:
         mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_state)
-    
+
     with tabs[1]:
         mostrar_mis_clases_reservadas(clases_service, session_state)
-    
+
     with tabs[2]:
         mostrar_reservar_clases(clases_service, session_state)
-    
+
     with tabs[3]:
         mostrar_mi_perfil(participantes_service, clases_service, session_state)
 
     with tabs[4]:
         mostrar_mis_diplomas(participantes_service, session_state)
+
 
