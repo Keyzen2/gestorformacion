@@ -93,7 +93,82 @@ class FirmasService:
         except Exception as e:
             st.error(f"Error eliminando firma: {e}")
             return False
-
+            
+# =========================
+# SERVICIO DE LOGOTIPOS
+# =========================
+class LogosService:
+    """Gestión de logotipos de empresa para diplomas."""
+    
+    def __init__(self, supabase, session_state):
+        self.supabase = supabase
+        self.session_state = session_state
+    
+    def get_logo_empresa(self, empresa_id: str) -> Optional[Dict]:
+        """Obtiene el logotipo de una empresa."""
+        try:
+            result = self.supabase.table("empresas_logos_diplomas").select("*").eq(
+                "empresa_id", empresa_id
+            ).limit(1).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"Error obteniendo logo: {e}")
+            return None
+    
+    def subir_logo(self, empresa_id: str, archivo_logo) -> bool:
+        """Sube un nuevo logotipo."""
+        try:
+            # Validar tamaño (max 5MB para logos)
+            if archivo_logo.size > 5 * 1024 * 1024:
+                st.error("Archivo muy grande. Máximo 5MB")
+                return False
+            
+            timestamp = int(datetime.now().timestamp())
+            file_name = f"logo_{timestamp}.png"
+            file_path = f"logos_diplomas/{empresa_id}/{file_name}"
+            
+            # Subir al bucket
+            self.supabase.storage.from_("diplomas").upload(
+                file_path,
+                archivo_logo.getvalue(),
+                {"content-type": "image/png"}
+            )
+            
+            url = self.supabase.storage.from_("diplomas").get_public_url(file_path)
+            
+            # Actualizar o insertar en BD
+            logo_existente = self.get_logo_empresa(empresa_id)
+            
+            if logo_existente:
+                self.supabase.table("empresas_logos_diplomas").update({
+                    "archivo_url": url,
+                    "archivo_nombre": file_name,
+                    "updated_at": datetime.now().isoformat()
+                }).eq("empresa_id", empresa_id).execute()
+            else:
+                self.supabase.table("empresas_logos_diplomas").insert({
+                    "empresa_id": empresa_id,
+                    "archivo_url": url,
+                    "archivo_nombre": file_name
+                }).execute()
+            
+            return True
+        
+        except Exception as e:
+            st.error(f"Error subiendo logo: {e}")
+            return False
+    
+    def eliminar_logo(self, empresa_id: str) -> bool:
+        """Elimina el logotipo de una empresa."""
+        try:
+            self.supabase.table("empresas_logos_diplomas").delete().eq(
+                "empresa_id", empresa_id
+            ).execute()
+            return True
+        except Exception as e:
+            st.error(f"Error eliminando logo: {e}")
+            return False
+            
 # =========================
 # CANVAS PERSONALIZADO CON BORDE
 # =========================
@@ -192,6 +267,17 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
     
     # CARA A
     elementos.append(Spacer(1, 0.5*cm))
+    elementos.append(Spacer(1, 0.3*cm))
+    
+    # Añadir logotipo si existe
+    if logo_url:
+        try:
+            logo = Image(logo_url, width=8*cm, height=3*cm, kind='proportional')
+            logo.hAlign = 'CENTER'
+            elementos.append(logo)
+            elementos.append(Spacer(1, 0.5*cm))
+        except Exception as e:
+            print(f"Error cargando logo: {e}")
     elementos.append(Paragraph("DIPLOMA", style_titulo))
     elementos.append(Spacer(1, 1*cm))
     
@@ -410,7 +496,44 @@ def mostrar_gestion_firmas(firmas_service, empresa_id, session_state):
                 if firmas_service.subir_firma(empresa_id, archivo_firma):
                     st.success("✅ Firma guardada correctamente")
                     st.rerun()
-
+                    
+# =========================
+# GESTIÓN DE LOGOTIPOS
+# =========================
+def mostrar_gestion_logos(logos_service, empresa_id, session_state):
+    """Interfaz para gestionar logotipo de empresa."""
+    st.markdown("### 🏢 Logotipo de Empresa para Diplomas")
+    
+    logo_actual = logos_service.get_logo_empresa(empresa_id)
+    
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        if logo_actual and logo_actual.get("archivo_url"):
+            st.image(logo_actual["archivo_url"], width=200, caption="Logotipo actual")
+            
+            if st.button("🗑️ Eliminar logotipo", use_container_width=True, key="eliminar_logo"):
+                if logos_service.eliminar_logo(empresa_id):
+                    st.success("✅ Logotipo eliminado")
+                    st.rerun()
+        else:
+            st.info("🖼️ Sin logotipo configurado")
+    
+    with col2:
+        st.markdown("**📤 Subir/Actualizar Logotipo**")
+        archivo_logo = st.file_uploader(
+            "Seleccionar imagen PNG",
+            type=["png"],
+            key=f"logo_{empresa_id}",
+            help="Logotipo de tu empresa. Máximo 5MB. Fondo transparente recomendado."
+        )
+        if archivo_logo:
+            st.image(archivo_logo, width=200, caption="Vista previa")
+            if st.button("💾 Guardar logotipo", type="primary", use_container_width=True, key="guardar_logo"):
+                if logos_service.subir_logo(empresa_id, archivo_logo):
+                    st.success("✅ Logotipo guardado correctamente")
+                    st.rerun()
+                    
 # =========================
 # MAIN
 # =========================
@@ -430,8 +553,9 @@ def render(supabase, session_state):
     grupos_service = get_grupos_service(supabase, session_state)
     participantes_service = get_participantes_service(supabase, session_state)
     firmas_service = FirmasService(supabase, session_state)
+    logos_service = LogosService(supabase, session_state)
     
-    tabs = st.tabs(["📜 Generar Diplomas", "✍️ Gestionar Firma"])
+    tabs = st.tabs(["📜 Generar Diplomas", "✏️ Gestionar Firma", "🏢 Gestionar Logotipo"])
     
     # --- TAB 0: GENERAR DIPLOMAS ---
     with tabs[0]:
@@ -492,36 +616,53 @@ def render(supabase, session_state):
             "id", grupo_completo["accion_formativa_id"]
         ).execute().data[0]
         
+        # Obtener empresa_id, firma Y logo
         empresa_id = participante.get("empresa_id")
+        
         firma = firmas_service.get_firma_empresa(empresa_id)
         firma_url = firma["archivo_url"] if firma else None
+
+        logo = logos_service.get_logo_empresa(empresa_id)
+        logo_url = logo["archivo_url"] if logo else None
         
         st.divider()
         datos_personalizados = mostrar_editor_diploma(participante, grupo_completo, accion_completa)
         st.divider()
         
         col1, col2, col3 = st.columns(3)
+        
         with col1:
             if st.button("👁️ Previsualizar", type="secondary", use_container_width=True):
                 with st.spinner("Generando previsualización..."):
-                    pdf_buffer = generar_diploma_pdf(participante, grupo_completo, accion_completa, firma_url, datos_personalizados)
+                    # ✅ AÑADIR logo_url como parámetro
+                    pdf_buffer = generar_diploma_pdf(
+                        participante, grupo_completo, accion_completa,
+                        firma_url, logo_url, datos_personalizados
+                    )
                     if pdf_buffer:
                         st.success("✅ Previsualización generada")
-                        st.download_button("📥 Descargar Previsualización",
-                            data=pdf_buffer, file_name=f"preview_{participante['nif']}.pdf",
-                            mime="application/pdf", use_container_width=True)
+                        st.download_button(
+                            "📥 Descargar Previsualización",
+                            data=pdf_buffer,
+                            file_name=f"preview_{participante['nif']}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+        
         with col2:
             if st.button("🔄 Restablecer", use_container_width=True):
                 for key in list(st.session_state.keys()):
                     if key.startswith('edit_'):
                         del st.session_state[key]
                 st.rerun()
+        
         with col3:
             if st.button("📜 Generar Diploma Final", type="primary", use_container_width=True):
                 with st.spinner("Generando diploma final..."):
+                    # ✅ AÑADIR logo_url como parámetro
                     pdf_buffer = generar_diploma_pdf(
                         participante, grupo_completo, accion_completa,
-                        firma_url, datos_personalizados
+                        firma_url, logo_url, datos_personalizados
                     )
         
                     if pdf_buffer:
@@ -534,7 +675,7 @@ def render(supabase, session_state):
                             st.warning("⚠️ Este participante ya tiene un diploma generado para este grupo.")
                             st.info("Puedes descargarlo de todos modos o eliminarlo desde Participantes > Diplomas")
                         
-                        # Preparar datos para la ruta (usar estructura de participantes.py)
+                        # Preparar datos para la ruta
                         codigo_accion = accion_completa.get("codigo_accion", "sin_codigo")
                         accion_id = accion_completa.get("id", "sin_id")
                         empresa_id_diploma = grupo_completo.get("empresa_id", "sin_empresa")
@@ -548,7 +689,6 @@ def render(supabase, session_state):
                         timestamp = int(datetime.now().timestamp())
                         file_name = f"diploma_{nif}_{timestamp}.pdf"
                         
-                        # Ruta consistente con participantes.py
                         file_path = (
                             f"diplomas/"
                             f"gestora_{empresa_id_diploma}/"
@@ -563,7 +703,7 @@ def render(supabase, session_state):
                             try:
                                 supabase.storage.from_("diplomas").upload(
                                     file_path,
-                                    pdf_buffer.getvalue(),  # 🔑 usar bytes
+                                    pdf_buffer.getvalue(),
                                     {"content-type": "application/pdf"}
                                 )
         
@@ -593,7 +733,6 @@ def render(supabase, session_state):
                             use_container_width=True
                         )
 
-            
     # --- TAB 1: GESTIONAR FIRMAS ---
     with tabs[1]:
         if session_state.role == "admin":
@@ -615,4 +754,28 @@ def render(supabase, session_state):
             3. **Tamaño recomendado**: 500x200 píxeles
             4. **Color**: Azul oscuro o negro
             5. **Peso máximo**: 2MB
+            """)
+            
+    # --- TAB 2: GESTIONAR LOGOTIPOS (NUEVO) ---
+    with tabs[2]:
+        if session_state.role == "admin":
+            df_empresas = empresas_service.get_empresas_con_jerarquia()
+            empresas_dict = {row["nombre"]: row["id"] for _, row in df_empresas.iterrows()}
+            empresa_logo_sel = st.selectbox("Seleccionar empresa", list(empresas_dict.keys()), key="sel_empresa_logo")
+            empresa_logo_id = empresas_dict[empresa_logo_sel]
+        else:
+            empresa_logo_id = session_state.user.get("empresa_id")
+        
+        mostrar_gestion_logos(logos_service, empresa_logo_id, session_state)
+        
+        st.divider()
+        with st.expander("💡 Consejos para un buen logotipo"):
+            st.markdown("""
+            **Recomendaciones para la imagen del logotipo:**
+            1. **Formato PNG** con fondo transparente
+            2. **Resolución**: mínimo 300 DPI
+            3. **Tamaño recomendado**: 1000x400 píxeles (horizontal)
+            4. **Orientación**: Horizontal preferiblemente
+            5. **Peso máximo**: 5MB
+            6. **Colores**: Alta calidad, evitar pixelación
             """)
