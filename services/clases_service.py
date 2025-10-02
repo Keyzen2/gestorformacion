@@ -224,23 +224,21 @@ class ClasesService:
     def get_reservas_periodo(self, fecha_inicio, fecha_fin, estado_filtro="Todas", empresa_id=None):
         """
         Obtiene reservas en un período con filtro opcional por empresa.
-        
-        Args:
-            fecha_inicio: Fecha de inicio del período
-            fecha_fin: Fecha de fin del período
-            estado_filtro: Filtro de estado ("Todas", "Reservadas", etc.)
-            empresa_id: ID de empresa para filtrar (opcional, para gestores)
         """
         try:
-            # Construcción de query base
+            # Query base
             query = self.supabase.table("clases_reservas").select("""
                 id, fecha_clase, estado,
-                participante:participantes(id, nombre, apellidos, empresa_id, avatares(archivo_url)),
+                participante:participantes!inner(id, nombre, apellidos, empresa_id, avatares(archivo_url)),
                 horario:clases_horarios(
                     hora_inicio, hora_fin,
-                    clase:clases(id, nombre, empresa_id)
+                    clase:clases(id, nombre)
                 )
             """)
+            
+            # FILTRO DE EMPRESA A NIVEL DE QUERY (más eficiente)
+            if empresa_id:
+                query = query.eq("participante.empresa_id", empresa_id)
             
             # Filtros de fecha
             query = query.gte("fecha_clase", fecha_inicio.isoformat())
@@ -259,45 +257,16 @@ class ClasesService:
             # Ejecutar query
             response = query.execute()
             
-            print(f"\n=== DEBUG GET_RESERVAS_PERIODO ===")
-            print(f"Fecha inicio: {fecha_inicio}, Fecha fin: {fecha_fin}")
-            print(f"Estado filtro: {estado_filtro}")
-            print(f"Empresa ID filtro: {empresa_id}")
-            print(f"Total reservas obtenidas: {len(response.data) if response.data else 0}")
-            
             if not response.data:
-                print("No hay datos de reservas")
                 return pd.DataFrame()
-            
-            # Debug: Mostrar primera reserva completa
-            if response.data:
-                print("\n--- Primera reserva (estructura completa) ---")
-                import json
-                print(json.dumps(response.data[0], indent=2, default=str))
             
             # Procesar datos
             reservas_procesadas = []
             
-            for idx, reserva in enumerate(response.data):
+            for reserva in response.data:
                 participante = reserva.get("participante", {})
                 horario = reserva.get("horario", {})
                 clase = horario.get("clase", {}) if horario else {}
-                
-                participante_nombre = participante.get('nombre', 'Sin nombre')
-                participante_empresa_id = participante.get("empresa_id")
-                
-                print(f"\n[Reserva {idx+1}] Participante: {participante_nombre}")
-                print(f"  → Empresa participante: {participante_empresa_id}")
-                print(f"  → Empresa filtro: {empresa_id}")
-                print(f"  → Coincide: {participante_empresa_id == empresa_id if empresa_id else 'Sin filtro'}")
-                
-                # FILTRAR POR EMPRESA DEL PARTICIPANTE
-                if empresa_id:
-                    if participante_empresa_id != empresa_id:
-                        print(f"  → ❌ FILTRADO (empresa no coincide)")
-                        continue
-                    else:
-                        print(f"  → ✅ INCLUIDO (empresa coincide)")
                 
                 # Avatar
                 avatar_url = None
@@ -315,14 +284,10 @@ class ClasesService:
                     "avatar_url": avatar_url or "https://via.placeholder.com/50"
                 })
             
-            print(f"\n=== RESULTADO FINAL ===")
-            print(f"Reservas procesadas: {len(reservas_procesadas)}")
-            print("=" * 50 + "\n")
-            
             return pd.DataFrame(reservas_procesadas)
         
         except Exception as e:
-            print(f"❌ Error en get_reservas_periodo: {e}")
+            print(f"Error en get_reservas_periodo: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
