@@ -223,10 +223,15 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
     )
     elementos.append(Paragraph(texto_detalles, style_datos))
     elementos.append(Spacer(1, 1*cm))
-    
+
+    import locale
+    from datetime import datetime
+
+    # Forzar a español (España)
+    locale.setlocale(locale.LC_TIME, "es_ES.UTF-8")
     fecha_emision = datetime.now().strftime('%d de %B de %Y')
     elementos.append(Paragraph(f"Firmado a {fecha_emision}", style_datos))
-    elementos.append(Spacer(1, 3*cm))  # espacio reservado para firma
+    
     
     # CARA B
     elementos.append(PageBreak())
@@ -543,4 +548,3 @@ def render(supabase, session_state):
             4. **Color**: Azul oscuro o negro
             5. **Peso máximo**: 2MB
             """)
-
