@@ -292,7 +292,7 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
     elementos.append(Paragraph(f"con {tipo_doc} <b>{num_doc}</b>", style_datos))
     elementos.append(Spacer(1, 0.8*cm))
     elementos.append(Paragraph("ha realizado con aprovechamiento este curso:", style_datos))
-    elementos.append(Spacer(1, 0.5*cm))
+    elementos.append(Spacer(1, 0.3*cm))
     
     accion_nombre = accion.get('nombre', 'Curso no especificado')
     elementos.append(Paragraph(accion_nombre, style_accion))
