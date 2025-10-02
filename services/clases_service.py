@@ -221,55 +221,81 @@ class ClasesService:
             print("Error get_reservas_por_horario:", e)
             return []
 
-    def get_reservas_periodo(self, fecha_inicio: date, fecha_fin: date, estado: str = "Todas") -> pd.DataFrame:
-        """Obtiene todas las reservas de un periodo con datos de participante y clase, incluyendo avatar."""
+    def get_reservas_periodo(self, fecha_inicio, fecha_fin, estado_filtro="Todas", empresa_id=None):
+        """
+        Obtiene reservas en un período con filtro opcional por empresa.
+        
+        Args:
+            fecha_inicio: Fecha de inicio del período
+            fecha_fin: Fecha de fin del período
+            estado_filtro: Filtro de estado ("Todas", "Reservadas", etc.)
+            empresa_id: ID de empresa para filtrar (opcional, para gestores)
+        """
         try:
+            # Construcción de query base
             query = self.supabase.table("clases_reservas").select("""
                 id, fecha_clase, estado,
-                participantes(id, nombre, apellidos,
-                    avatar:participantes_avatares(archivo_url)
-                ),
-                clases_horarios(hora_inicio, hora_fin,
-                    clases(nombre)
+                participante:participantes(id, nombre, apellidos, empresa_id, avatares(archivo_url)),
+                horario:clases_horarios(
+                    hora_inicio, hora_fin,
+                    clase:clases(id, nombre, empresa_id)
                 )
-            """).gte("fecha_clase", fecha_inicio.isoformat()
-            ).lte("fecha_clase", fecha_fin.isoformat())
+            """)
             
-            if estado != "Todas":
+            # Filtros de fecha
+            query = query.gte("fecha_clase", fecha_inicio.isoformat())
+            query = query.lte("fecha_clase", fecha_fin.isoformat())
+            
+            # Filtro de estado
+            if estado_filtro != "Todas":
                 estado_map = {
                     "Reservadas": "RESERVADA",
-                    "Asistió": "ASISTIO",
-                    "No Asistió": "NO_ASISTIO",
+                    "Asistió": "ASISTIÓ",
+                    "No Asistió": "NO_ASISTIÓ",
                     "Canceladas": "CANCELADA"
                 }
-                query = query.eq("estado", estado_map.get(estado, estado))
+                query = query.eq("estado", estado_map.get(estado_filtro, estado_filtro.upper()))
             
-            result = query.order("fecha_clase").execute()
+            # Ejecutar query
+            response = query.execute()
             
-            if result.data:
-                reservas = []
-                for r in result.data:
-                    participante = r.get("participantes", {})
-                    avatar_url = None
-                    if participante.get("avatar"):
-                        avatar_url = participante["avatar"][0]["archivo_url"]
-                    horario = r.get("clases_horarios", {})
-                    clase = horario.get("clases", {})
-                    
-                    reservas.append({
-                        "id": r["id"],
-                        "fecha_clase": r["fecha_clase"],
-                        "estado": r["estado"],
-                        "participante_nombre": f"{participante.get('nombre','')} {participante.get('apellidos','')}",
-                        "avatar_url": avatar_url,
-                        "clase_nombre": clase.get("nombre",""),
-                        "horario": f"{horario.get('hora_inicio','')} - {horario.get('hora_fin','')}"
-                    })
-                return pd.DataFrame(reservas)
+            if not response.data:
+                return pd.DataFrame()
             
-            return pd.DataFrame()
+            # Procesar datos
+            reservas_procesadas = []
+            
+            for reserva in response.data:
+                participante = reserva.get("participante", {})
+                horario = reserva.get("horario", {})
+                clase = horario.get("clase", {}) if horario else {}
+                
+                # ✅ FILTRAR POR EMPRESA DEL PARTICIPANTE (para gestores)
+                if empresa_id:
+                    participante_empresa_id = participante.get("empresa_id")
+                    if participante_empresa_id != empresa_id:
+                        continue  # Saltar esta reserva
+                
+                # Avatar
+                avatar_url = None
+                avatares = participante.get("avatares")
+                if avatares and len(avatares) > 0:
+                    avatar_url = avatares[0].get("archivo_url")
+                
+                reservas_procesadas.append({
+                    "id": reserva["id"],
+                    "fecha_clase": reserva["fecha_clase"],
+                    "participante_nombre": f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip(),
+                    "clase_nombre": clase.get("nombre", "N/A"),
+                    "horario": f"{horario.get('hora_inicio', '')} - {horario.get('hora_fin', '')}",
+                    "estado": reserva["estado"],
+                    "avatar_url": avatar_url or "https://via.placeholder.com/50"
+                })
+            
+            return pd.DataFrame(reservas_procesadas)
+        
         except Exception as e:
-            print("Error get_reservas_periodo:", e)
+            print(f"Error en get_reservas_periodo: {e}")
             return pd.DataFrame()
             
     def get_avatares_reserva(self, horario_id: str, fecha_clase: date) -> list:
