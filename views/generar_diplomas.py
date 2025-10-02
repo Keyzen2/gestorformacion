@@ -250,9 +250,9 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
                 canvas.drawImage(
                     firma_url,
                     x=doc.pagesize[0] / 2 - 60,  # centrado horizontal
-                    y=120,                       # 120 pt desde abajo
-                    width=100,
-                    height=50,
+                    y=80,                       # 120 pt desde abajo
+                    width=160,
+                    height=60,
                     mask="auto"
                 )
             except Exception as e:
