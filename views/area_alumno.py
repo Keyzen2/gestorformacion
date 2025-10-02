@@ -212,6 +212,33 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                         if modalidad:
                             st.write(f"**Modalidad:** {modalidad}")
                         
+                        if modalidad and modalidad.upper() in ['PRESENCIAL', 'MIXTA']:
+                            # Obtener detalles del grupo para horarios
+                            grupo_id = grupo.get('grupo_id', grupo.get('id'))
+                            
+                            try:
+                                if hasattr(grupos_service, 'get_grupo_completo'):
+                                    grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
+                                else:
+                                    grupo_res = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
+                                    grupo_detalle = grupo_res.data[0] if grupo_res.data else None
+                                
+                                if grupo_detalle and grupo_detalle.get('horarios'):
+                                    st.markdown("---")
+                                    st.markdown("**📅 Horarios**")
+                                    
+                                    horarios_texto = grupo_detalle['horarios']
+                                    
+                                    if isinstance(horarios_texto, str):
+                                        lineas = horarios_texto.strip().split('\n')
+                                        for linea in lineas:
+                                            if linea.strip():
+                                                st.caption(f"• {linea.strip()}")
+                                    else:
+                                        st.caption(horarios_texto)
+                            except Exception:
+                                pass
+                        
                         lugar_imparticion = grupo.get('lugar_imparticion')
                         if lugar_imparticion:
                             st.write(f"**Lugar:** {lugar_imparticion}")
@@ -251,35 +278,7 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                             st.warning(f"{estado_emoji} {estado_texto}")
                         else:
                             st.write(f"{estado_emoji} {estado_texto}")
-                
-                with tab_horarios:
-                    # Obtener detalles del grupo para horarios
-                    grupo_id = grupo.get('grupo_id', grupo.get('id'))
-                    
-                    try:
-                        if hasattr(grupos_service, 'get_grupo_completo'):
-                            grupo_detalle = grupos_service.get_grupo_completo(grupo_id)
-                        else:
-                            grupo_res = grupos_service.supabase.table("grupos").select("*").eq("id", grupo_id).execute()
-                            grupo_detalle = grupo_res.data[0] if grupo_res.data else None
-                        
-                        if grupo_detalle and grupo_detalle.get('horarios'):
-                            st.markdown("**📅 Horarios de Formación**")
-                            
-                            # Mostrar horarios formateados
-                            horarios_texto = grupo_detalle['horarios']
-                            
-                            # Intentar formatear si es texto plano
-                            if isinstance(horarios_texto, str):
-                                lineas = horarios_texto.strip().split('\n')
-                                for linea in lineas:
-                                    if linea.strip():
-                                        st.write(f"• {linea.strip()}")
-                            else:
-                                st.text(horarios_texto)
-                        else:
-                            st.info("📅 No hay horarios detallados disponibles")
-                            st.caption("Los horarios específicos se comunicarán por email o por tu empresa")
+            
                         
                         # Observaciones si existen
                         if grupo_detalle and grupo_detalle.get('observaciones'):
@@ -366,9 +365,21 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
         # Filtros
         col1, col2 = st.columns(2)
         with col1:
-            fecha_inicio = st.date_input("Ver reservas desde", value=date.today(), key="mis_reservas_inicio")
+            st.markdown("**📅 Ver reservas desde:**")
+            fecha_inicio = st.date_input(
+                "Fecha inicio",
+                value=date.today(),
+                key="mis_reservas_inicio",
+                label_visibility="collapsed"
+            )
         with col2:
-            fecha_fin = st.date_input("Hasta", value=date.today() + timedelta(days=30), key="mis_reservas_fin")
+            st.markdown("**📅 Hasta:**")
+            fecha_fin = st.date_input(
+                "Fecha fin",
+                value=date.today() + timedelta(days=30),
+                key="mis_reservas_fin",
+                label_visibility="collapsed"
+            )
         
         # Obtener reservas
         df_reservas = clases_service.get_reservas_participante(participante_id, fecha_inicio, fecha_fin)
@@ -390,7 +401,9 @@ def mostrar_mis_clases_reservadas(clases_service, session_state):
                     
                     with col1:
                         st.markdown(f"**🏃‍♀️ {row['clase_nombre']}**")
-                        st.caption(f"{row['fecha_clase']} | {row['horario_display']}")
+                        
+                        fecha_display = pd.to_datetime(row['fecha_clase']).strftime('%d/%m/%Y')
+                        st.markdown(f"**📅 {fecha_display}** | **⏰ {row['horario_display']}**")
                         
                         # Avatares de otros alumnos - CORREGIDO
                         try:
