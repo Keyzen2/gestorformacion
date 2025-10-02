@@ -228,10 +228,6 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
     elementos.append(Paragraph(f"Firmado a {fecha_emision}", style_datos))
     elementos.append(Spacer(1, 3*cm))  # espacio reservado para firma
     
-    # Solo un placeholder de texto, la firma real se dibuja con onFirstPage
-    elementos.append(Paragraph("Firma del responsable", style_datos))
-
-    
     # CARA B
     elementos.append(PageBreak())
     style_titulo_b = ParagraphStyle('TituloB', parent=styles['Heading1'],
@@ -255,7 +251,7 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
                     firma_url,
                     x=doc.pagesize[0] / 2 - 60,  # centrado horizontal
                     y=120,                       # 120 pt desde abajo
-                    width=120,
+                    width=100,
                     height=50,
                     mask="auto"
                 )
