@@ -517,17 +517,58 @@ def render(supabase, session_state):
                         del st.session_state[key]
                 st.rerun()
         with col3:
-            if st.button("📜 Generar Final", type="primary", use_container_width=True):
-                with st.spinner("Generando diploma..."):
-                    pdf_buffer = generar_diploma_pdf(participante, grupo_completo, accion_completa, firma_url, datos_personalizados)
+            if st.button("📜 Generar Diploma Final", type="primary", use_container_width=True):
+                with st.spinner("Generando diploma final..."):
+                    pdf_buffer = generar_diploma_pdf(
+                        participante,
+                        grupo_completo,
+                        accion_completa,
+                        firma_url,
+                        datos_personalizados
+                    )
+        
                     if pdf_buffer:
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        filename = f"diploma_{participante['nif']}_{timestamp}.pdf"
-                        st.success("✅ Diploma generado")
-                        st.download_button("📥 Descargar Diploma",
-                            data=pdf_buffer, file_name=filename,
-                            mime="application/pdf", type="primary", use_container_width=True)
-    
+                        # 1️⃣ Validar si ya existe diploma para este participante + grupo
+                        diploma_existente = supabase.table("diplomas").select("*").eq(
+                            "participante_id", participante["id"]
+                        ).eq("grupo_id", grupo_completo["id"]).execute()
+        
+                        if diploma_existente.data:
+                            st.warning("⚠️ Este participante ya tiene un diploma generado para este grupo.")
+                        else:
+                            # 2️⃣ Subir al bucket
+                            nif = participante.get("nif", "sin_nif").replace(" ", "_")
+                            timestamp = int(datetime.now().timestamp())
+                            file_name = f"diploma_{nif}_{timestamp}.pdf"
+                            file_path = f"diplomas/gestora_{grupo_completo['empresa_id']}/grupo_{grupo_completo['id']}/{file_name}"
+        
+                            supabase.storage.from_("diplomas").upload(
+                                file_path,
+                                pdf_buffer,
+                                {"content-type": "application/pdf"}
+                            )
+        
+                            url = supabase.storage.from_("diplomas").get_public_url(file_path)
+        
+                            # 3️⃣ Insertar en tabla diplomas
+                            supabase.table("diplomas").insert({
+                                "participante_id": participante["id"],
+                                "grupo_id": grupo_completo["id"],
+                                "url": url,
+                                "archivo_nombre": file_name,
+                                "fecha_subida": datetime.now().isoformat()
+                            }).execute()
+        
+                            st.success("✅ Diploma generado y registrado correctamente")
+                            st.download_button(
+                                "📥 Descargar Diploma",
+                                data=pdf_buffer,
+                                file_name=file_name,
+                                mime="application/pdf",
+                                type="primary",
+                                use_container_width=True
+                            )
+            
     # --- TAB 1: GESTIONAR FIRMAS ---
     with tabs[1]:
         if session_state.role == "admin":
