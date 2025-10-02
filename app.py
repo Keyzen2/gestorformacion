@@ -1515,7 +1515,8 @@ def render_sidebar_light():
         for label, page in [("📚 Acciones Formativas", "acciones_formativas"), ("👨‍🎓 Grupos", "grupos"),
                            ("🧑‍🎓 Participantes", "participantes"), ("👩‍🏫 Tutores", "tutores"),
                            ("🏫 Aulas", "aulas"), ("📅 Gestión Clases", "gestion_clases"),
-                           ("📂 Documentos", "documentos"), ("🧑‍🎓Generar Diplomas", "generar_diplomas"), ("📁 Proyectos", "proyectos")]:
+                           ("📂 Documentos", "documentos"), ("🧑‍🎓 Generar Diplomas", "generar_diplomas"), 
+                           ("📚 Proyectos", "proyectos")]:
             if st.sidebar.button(label, use_container_width=True, key=f"nav_{page}"):
                 st.session_state.page = page
                 st.rerun()
@@ -1563,7 +1564,8 @@ def render_sidebar_light():
                                ("📚 Acciones Formativas", "acciones_formativas"), ("👨‍🎓 Grupos", "grupos"),
                                ("🧑‍🎓 Participantes", "participantes"), ("👩‍🏫 Tutores", "tutores"),
                                ("🏫 Aulas", "aulas"), ("📅 Gestión Clases", "gestion_clases"),
-                               ("📂 Documentos", "documentos"), ("🧑‍🎓Generar Diplomas", "generar_diplomas"), ("📁 Proyectos", "proyectos")]:
+                               ("📂 Documentos", "documentos"), ("🧑‍🎓 Generar Diplomas", "generar_diplomas"), 
+                               ("📚 Proyectos", "proyectos")]:
                 if st.sidebar.button(label, use_container_width=True, key=f"nav_{page}"):
                     st.session_state.page = page
                     st.rerun()
