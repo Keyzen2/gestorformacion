@@ -180,14 +180,14 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
         alignment=TA_CENTER, spaceAfter=30, fontName='Helvetica-Bold')
     
     style_accion = ParagraphStyle('Accion', parent=styles['Heading2'],
-        fontSize=32, textColor=colors.HexColor("#3498db"),
+        fontSize=36, textColor=colors.HexColor("#3498db"),
         alignment=TA_CENTER, spaceAfter=20, fontName='Helvetica-Bold')
     
     style_datos = ParagraphStyle('Datos', parent=styles['Normal'],
-        fontSize=16, alignment=TA_CENTER, spaceAfter=12, fontName='Helvetica')
+        fontSize=14, alignment=TA_CENTER, spaceAfter=12, fontName='Helvetica')
     
     style_contenidos = ParagraphStyle('Contenidos', parent=styles['Normal'],
-        fontSize=12, alignment=TA_JUSTIFY, spaceAfter=8, leading=14, fontName='Helvetica')
+        fontSize=11, alignment=TA_JUSTIFY, spaceAfter=8, leading=14, fontName='Helvetica')
     
     # CARA A
     elementos.append(Spacer(1, 0.5*cm))
@@ -226,24 +226,11 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
     
     fecha_emision = datetime.now().strftime('%d de %B de %Y')
     elementos.append(Paragraph(f"Firmado a {fecha_emision}", style_datos))
-    elementos.append(Spacer(1, 1.5*cm))
+    elementos.append(Spacer(1, 3*cm))  # espacio reservado para firma
     
-    if firma_url:
-        try:
-            from reportlab.platypus import Image as RLImage
-            firma_img = RLImage(firma_url, width=5*cm, height=2*cm)
-            firma_data = [[firma_img]]
-            firma_table = Table(firma_data, colWidths=[landscape(A4)[0] - 6*cm])
-            firma_table.setStyle(TableStyle([
-                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ]))
-            elementos.append(firma_table)
-            elementos.append(Spacer(1, 0.3*cm))
-        except:
-            pass
-    
+    # Solo un placeholder de texto, la firma real se dibuja con onFirstPage
     elementos.append(Paragraph("Firma del responsable", style_datos))
+
     
     # CARA B
     elementos.append(PageBreak())
@@ -259,8 +246,28 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
         elementos.append(Paragraph(contenidos_texto, style_contenidos))
     else:
         elementos.append(Paragraph("Los contenidos de este curso no han sido especificados.", style_contenidos))
-    
-    doc.build(elementos, canvasmaker=DiplomaCanvas)
+        
+    # === FUNCIÓN INTERNA PARA DIBUJAR FIRMA ===
+    def dibujar_firma(canvas, doc, firma_url=firma_url):
+        if firma_url:
+            try:
+                canvas.drawImage(
+                    firma_url,
+                    x=doc.pagesize[0] / 2 - 60,  # centrado horizontal
+                    y=120,                       # 120 pt desde abajo
+                    width=120,
+                    height=50,
+                    mask="auto"
+                )
+            except Exception as e:
+                print("Error dibujando firma:", e)
+                
+    # === CONSTRUIR DOCUMENTO ===
+    doc.build(
+        elementos,
+        onFirstPage=lambda c, d: dibujar_firma(c, d, firma_url),
+        canvasmaker=DiplomaCanvas
+    )
     buffer.seek(0)
     return buffer
 
