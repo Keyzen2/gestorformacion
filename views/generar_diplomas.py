@@ -1,10 +1,3 @@
-"""
-Archivo: views/generar_diplomas.py
-Sistema profesional de generación de diplomas PDF con editor interactivo
-Autor: Sistema DataFor
-Fecha: 2025
-"""
-
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
@@ -26,6 +19,15 @@ try:
     REPORTLAB_AVAILABLE = True
 except ImportError:
     REPORTLAB_AVAILABLE = False
+    
+# =========================
+# CONFIG
+# =========================
+st.set_page_config(
+    page_title="📜 Generador de Diplomas",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # =========================
 # SERVICIO DE FIRMAS
