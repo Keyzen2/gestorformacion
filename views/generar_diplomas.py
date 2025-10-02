@@ -271,15 +271,19 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
     
     # Añadir logotipo si existe
     if logo_url:
+        elementos.append(Spacer(1, 0.2*cm))  # Menos espacio inicial
         try:
-            logo = Image(logo_url, width=8*cm, height=3*cm, kind='proportional')
+            logo = Image(logo_url, width=6*cm, height=2*cm, kind='proportional')
             logo.hAlign = 'CENTER'
             elementos.append(logo)
-            elementos.append(Spacer(1, 0.5*cm))
+            elementos.append(Spacer(1, 0.3*cm))
         except Exception as e:
             print(f"Error cargando logo: {e}")
+    else:
+        elementos.append(Spacer(1, 0.5*cm))  # Más espacio si no hay logo
+
     elementos.append(Paragraph("DIPLOMA", style_titulo))
-    elementos.append(Spacer(1, 1*cm))
+    elementos.append(Spacer(1, 0.8*cm))
     
     nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip()
     tipo_doc = participante.get('tipo_documento', 'NIF')
