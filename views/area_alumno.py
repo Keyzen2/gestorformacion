@@ -288,9 +288,9 @@ def mostrar_mis_grupos_fundae(grupos_service, participantes_service, session_sta
                                 st.markdown("**📝 Observaciones**")
                                 st.info(observaciones)
                     
-                    except Exception as e:
-                        st.warning("⚠️ No se pudieron cargar los horarios detallados")
-        
+            except Exception as e:
+                st.warning("⚠️ No se pudieron cargar los horarios detallados")
+
         # Información adicional al final
         st.divider()
         
