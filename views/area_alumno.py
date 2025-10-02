@@ -819,9 +819,13 @@ def mostrar_mis_diplomas(participantes_service, session_state):
 def render(supabase, session_state):
     st.title("🎓 Área del Alumno")
     
-    # Verificar acceso
-    if not verificar_acceso_alumno(session_state, supabase):
-        return
+    # Cargar datos del participante si no existen
+    if not hasattr(session_state, "participante_nombre"):
+        participantes_service = get_participantes_service(supabase, session_state)
+        participante_id = session_state.participante_id
+        participante_res = participantes_service.supabase.table("participantes").select("nombre").eq("id", participante_id).execute()
+        if participante_res.data:
+            session_state.participante_nombre = participante_res.data[0]["nombre"]
     
     # CARGA ROBUSTA DE SERVICIOS - CORREGIDA
     try:
@@ -878,7 +882,7 @@ def render(supabase, session_state):
     
     # Mostrar información del usuario
     st.caption(
-        f"👤 Bienvenido/a: {session_state.user.get('nombre', 'Usuario')} "
+        f"👤 Bienvenido/a: {session_state.get('participante_nombre', 'Usuario')} "
         f"| 📧 {session_state.user.get('email', 'N/A')}"
     )
     
