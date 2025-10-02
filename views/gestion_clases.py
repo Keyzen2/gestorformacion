@@ -848,7 +848,7 @@ def render(supabase, session_state):
         st.caption(f"👤 Usuario: {session_state.user.get('nombre', 'Usuario')} ({session_state.role})")
     with col2:
         if session_state.role == "gestor":
-            st.caption(f"🏢 Empresa: {session_state.get('empresa_nombre', 'N/A')}")}")
+            st.caption(f"🏢 Empresa: {session_state.get('empresa_nombre', 'N/A')}")
     
     # Tabs principales
     tabs = st.tabs([
