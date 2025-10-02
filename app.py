@@ -1563,7 +1563,7 @@ def render_sidebar_light():
                                ("📚 Acciones Formativas", "acciones_formativas"), ("👨‍🎓 Grupos", "grupos"),
                                ("🧑‍🎓 Participantes", "participantes"), ("👩‍🏫 Tutores", "tutores"),
                                ("🏫 Aulas", "aulas"), ("📅 Gestión Clases", "gestion_clases"),
-                               ("📂 Documentos", "documentos"), ("📁 Proyectos", "proyectos")]:
+                               ("📂 Documentos", "documentos"), ("🧑‍🎓Generar Diplomas", "generar_diplomas"), ("📁 Proyectos", "proyectos")]:
                 if st.sidebar.button(label, use_container_width=True, key=f"nav_{page}"):
                     st.session_state.page = page
                     st.rerun()
@@ -1631,7 +1631,7 @@ def render_page():
                     "panel_admin": "panel_admin", "usuarios_empresas": "usuarios_empresas",
                     "empresas": "empresas", "ajustes_app": "ajustes_app", "panel_gestor": "panel_gestor",
                     "acciones_formativas": "acciones_formativas", "grupos": "grupos",
-                    "participantes": "participantes", "tutores": "tutores", "aulas": "aulas",
+                    "participantes": "participantes", "tutores": "tutores", "aulas": "aulas", "Generar Diplomas": "generar_diplomas",
                     "gestion_clases": "gestion_clases", "proyectos": "proyectos", "documentos": "documentos",
                     "area_alumno": "area_alumno", "no_conformidades": "no_conformidades",
                     "acciones_correctivas": "acciones_correctivas", "auditorias": "auditorias",
