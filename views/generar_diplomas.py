@@ -551,15 +551,23 @@ def render(supabase, session_state):
                             url = supabase.storage.from_("diplomas").get_public_url(file_path)
         
                             # 3️⃣ Insertar en tabla diplomas
-                            supabase.table("diplomas").insert({
-                                "participante_id": participante["id"],
-                                "grupo_id": grupo_completo["id"],
-                                "url": url,
-                                "archivo_nombre": file_name,
-                                "fecha_subida": datetime.now().isoformat()
-                            }).execute()
-        
-                            st.success("✅ Diploma generado y registrado correctamente")
+                            # Verificar si ya existe diploma para este participante y grupo
+                            existe = supabase.table("diplomas").select("id") \
+                                .eq("participante_id", participante["id"]) \
+                                .eq("grupo_id", grupo["id"]) \
+                                .execute()
+                            
+                            if existe.data:
+                                st.warning("⚠️ Este participante ya tiene un diploma registrado en este grupo.")
+                            else:
+                                supabase.table("diplomas").insert({
+                                    "participante_id": participante["id"],
+                                    "grupo_id": grupo["id"],
+                                    "url": url,
+                                    "archivo_nombre": file_name,
+                                    "fecha_subida": datetime.now().isoformat()
+                                }).execute()
+                                st.success("✅ Diploma generado y registrado correctamente")
                             st.download_button(
                                 "📥 Descargar Diploma",
                                 data=pdf_buffer,
