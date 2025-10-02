@@ -631,16 +631,32 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
         st.error("La fecha de inicio debe ser anterior a la fecha de fin")
         return
     
+    empresa_id_filtro = None
+    if session_state.role == "gestor":
+        empresa_id_filtro = session_state.user.get("empresa_id")
+        
+        if not empresa_id_filtro:
+            st.error("❌ No se pudo identificar tu empresa")
+            return
+        
+        st.info(f"🏢 Mostrando solo reservas de tu empresa")
+        
     # Obtener reservas usando el servicio
     try:
-        df_reservas = clases_service.get_reservas_periodo(fecha_inicio, fecha_fin, estado_filtro)
+
+        df_reservas = clases_service.get_reservas_periodo(
+            fecha_inicio, 
+            fecha_fin, 
+            estado_filtro,
+            empresa_id=empresa_id_filtro  # ← NUEVO PARÁMETRO
+        )
         
         if df_reservas.empty:
             st.info("No hay reservas en el período seleccionado")
         else:
             st.markdown(f"#### 📊 {len(df_reservas)} reservas encontradas")
             
-            # Mostrar reservas con avatar usando st.data_editor
+            # Mostrar reservas con avatar
             evento_reserva = st.dataframe(
                 df_reservas,
                 use_container_width=True,
