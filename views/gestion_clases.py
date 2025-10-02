@@ -631,28 +631,49 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
         st.error("La fecha de inicio debe ser anterior a la fecha de fin")
         return
     
+    # === DEBUG: VERIFICAR EMPRESA DEL GESTOR ===
     empresa_id_filtro = None
     if session_state.role == "gestor":
         empresa_id_filtro = session_state.user.get("empresa_id")
         
+        # DEBUG TEMPORAL
+        with st.expander("🔍 DEBUG - Info del gestor", expanded=True):
+            st.write("**Session State User:**")
+            st.json(session_state.user)
+            st.write(f"**Empresa ID extraído:** `{empresa_id_filtro}`")
+            st.write(f"**Tipo:** {type(empresa_id_filtro)}")
+        
         if not empresa_id_filtro:
             st.error("❌ No se pudo identificar tu empresa")
+            st.warning("Verifica que tu usuario tenga empresa_id asignado en la tabla usuarios")
             return
         
-        st.info(f"🏢 Mostrando solo reservas de tu empresa")
-        
+        # Obtener nombre de empresa
+        try:
+            empresa_res = participantes_service.supabase.table("empresas").select("nombre").eq("id", empresa_id_filtro).execute()
+            if empresa_res.data:
+                empresa_nombre = empresa_res.data[0]["nombre"]
+                st.info(f"🏢 Mostrando reservas de: **{empresa_nombre}**")
+            else:
+                st.info(f"🏢 Mostrando reservas de tu empresa (ID: {empresa_id_filtro})")
+        except:
+            st.info(f"🏢 Mostrando reservas de tu empresa")
+    
     # Obtener reservas usando el servicio
     try:
-
         df_reservas = clases_service.get_reservas_periodo(
             fecha_inicio, 
             fecha_fin, 
             estado_filtro,
-            empresa_id=empresa_id_filtro  # ← NUEVO PARÁMETRO
+            empresa_id=empresa_id_filtro
         )
         
         if df_reservas.empty:
-            st.info("No hay reservas en el período seleccionado")
+            if empresa_id_filtro:
+                st.warning(f"No hay reservas de tu empresa en el período seleccionado")
+                st.caption(f"Buscando reservas con empresa_id = {empresa_id_filtro}")
+            else:
+                st.info("No hay reservas en el período seleccionado")
         else:
             st.markdown(f"#### 📊 {len(df_reservas)} reservas encontradas")
             
