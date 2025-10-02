@@ -1622,9 +1622,10 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                 
                 # CONSULTA INDIVIDUAL Y FRESCA del diploma usando el ID REAL
                 try:
-                    diploma_actual = supabase.table("diplomas").select("*").eq(
-                        "participante_id", p_id
-                    ).limit(1).execute()
+                    diploma_actual = supabase.table("diplomas").select("*")\
+                        .eq("participante_id", p_info["id"])\
+                        .eq("grupo_id", participante["grupo_id"])\
+                        .limit(1).execute()
                     
                     tiene_diploma = bool(diploma_actual.data)
                     diploma_data = diploma_actual.data[0] if diploma_actual.data else None
@@ -1664,7 +1665,10 @@ def mostrar_gestion_diplomas_participantes(supabase, session_state, participante
                                 confirmar_key = f"confirm_delete_{participante['id']}"
                                 if st.session_state.get(confirmar_key, False):
                                     try:
-                                        supabase.table("diplomas").delete().eq("id", diploma_data["id"]).execute()
+                                        supabase.table("diplomas").delete()\
+                                            .eq("id", diploma_data["id"])\
+                                            .eq("grupo_id", participante["grupo_id"])\
+                                            .execute()
                                         st.success("✅ Diploma eliminado.")
                                         del st.session_state[confirmar_key]
                                         st.rerun()
