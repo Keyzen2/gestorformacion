@@ -180,14 +180,14 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
         alignment=TA_CENTER, spaceAfter=30, fontName='Helvetica-Bold')
     
     style_accion = ParagraphStyle('Accion', parent=styles['Heading2'],
-        fontSize=24, textColor=colors.HexColor("#3498db"),
+        fontSize=32, textColor=colors.HexColor("#3498db"),
         alignment=TA_CENTER, spaceAfter=20, fontName='Helvetica-Bold')
     
     style_datos = ParagraphStyle('Datos', parent=styles['Normal'],
-        fontSize=14, alignment=TA_CENTER, spaceAfter=12, fontName='Helvetica')
+        fontSize=16, alignment=TA_CENTER, spaceAfter=12, fontName='Helvetica')
     
     style_contenidos = ParagraphStyle('Contenidos', parent=styles['Normal'],
-        fontSize=11, alignment=TA_JUSTIFY, spaceAfter=8, leading=14, fontName='Helvetica')
+        fontSize=12, alignment=TA_JUSTIFY, spaceAfter=8, leading=14, fontName='Helvetica')
     
     # CARA A
     elementos.append(Spacer(1, 0.5*cm))
@@ -243,7 +243,6 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, datos_perso
         except:
             pass
     
-    elementos.append(Paragraph("_______________________", style_datos))
     elementos.append(Paragraph("Firma del responsable", style_datos))
     
     # CARA B
