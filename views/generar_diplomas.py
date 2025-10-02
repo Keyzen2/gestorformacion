@@ -20,14 +20,6 @@ try:
 except ImportError:
     REPORTLAB_AVAILABLE = False
     
-# =========================
-# CONFIG
-# =========================
-st.set_page_config(
-    page_title="📜 Generador de Diplomas",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # =========================
 # SERVICIO DE FIRMAS
