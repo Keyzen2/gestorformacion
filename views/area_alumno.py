@@ -829,11 +829,6 @@ def render(supabase, session_state):
     
     # CARGA ROBUSTA DE SERVICIOS - CORREGIDA
     try:
-        # Importaciones al inicio
-        from services.participantes_service import get_participantes_service
-        from services.grupos_service import get_grupos_service
-        from services.clases_service import get_clases_service
-        
         # Crear servicios
         participantes_service = get_participantes_service(supabase, session_state)
         grupos_service = get_grupos_service(supabase, session_state)
