@@ -214,7 +214,7 @@ class DiplomaCanvas(canvas.Canvas):
 # =========================
 # GENERADOR DE PDF
 # =========================
-def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None): -> BytesIO:
+def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None) -> BytesIO:
     """Genera el PDF del diploma con diseño profesional y borde decorativo."""
     if not REPORTLAB_AVAILABLE:
         st.error("reportlab no está instalado")
