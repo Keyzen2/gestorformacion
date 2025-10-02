@@ -224,7 +224,6 @@ class ClasesService:
     def get_reservas_periodo(self, fecha_inicio, fecha_fin, estado_filtro="Todas", empresa_id=None):
         """Obtiene reservas en un período con filtro opcional por empresa"""
         try:
-            # ✅ CORREGIDO: participantes_avatars en lugar de avatares
             query = self.supabase.table("clases_reservas").select("""
                 id, fecha_clase, estado,
                 participante:participantes(id, nombre, apellidos, empresa_id, 
@@ -262,19 +261,13 @@ class ClasesService:
                     continue
                 
                 # Filtro por empresa
-                if empresa_id:
-                    if self.role == "gestor":
-                        empresas_gestionadas = self._get_empresas_gestionadas()
-                        if participante.get("empresa_id") not in empresas_gestionadas:
-                            continue
-                    else:
-                        if participante.get("empresa_id") != empresa_id:
-                            continue
+                if empresa_id and participante.get("empresa_id") != empresa_id:
+                    continue
                 
                 horario = reserva.get("horario", {})
                 clase = horario.get("clase", {}) if horario else {}
                 
-                # Avatar - CORREGIDO
+                # Avatar
                 avatar_url = None
                 avatars = participante.get("participantes_avatars")
                 if avatars and len(avatars) > 0:
