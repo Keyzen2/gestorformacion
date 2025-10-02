@@ -262,8 +262,14 @@ class ClasesService:
                     continue
                 
                 # Filtro por empresa
-                if empresa_id and participante.get("empresa_id") != empresa_id:
-                    continue
+                if empresa_id:
+                    if self.role == "gestor":
+                        empresas_gestionadas = self._get_empresas_gestionadas()
+                        if participante.get("empresa_id") not in empresas_gestionadas:
+                            continue
+                    else:
+                        if participante.get("empresa_id") != empresa_id:
+                            continue
                 
                 horario = reserva.get("horario", {})
                 clase = horario.get("clase", {}) if horario else {}
