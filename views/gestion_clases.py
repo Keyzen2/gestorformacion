@@ -636,13 +636,6 @@ def mostrar_gestion_reservas(clases_service, participantes_service, session_stat
     if session_state.role == "gestor":
         empresa_id_filtro = session_state.user.get("empresa_id")
         
-        # DEBUG TEMPORAL
-        with st.expander("🔍 DEBUG - Info del gestor", expanded=True):
-            st.write("**Session State User:**")
-            st.json(session_state.user)
-            st.write(f"**Empresa ID extraído:** `{empresa_id_filtro}`")
-            st.write(f"**Tipo:** {type(empresa_id_filtro)}")
-        
         if not empresa_id_filtro:
             st.error("❌ No se pudo identificar tu empresa")
             st.warning("Verifica que tu usuario tenga empresa_id asignado en la tabla usuarios")
