@@ -296,12 +296,12 @@ class ClasesService:
         """Obtiene los avatares de los participantes con reserva en una clase/fecha."""
         try:
             result = (
-                self.supabase.table("clases_reservas")  # ✅ CORREGIDO
+                self.supabase.table("clases_reservas")
                 .select("""
                     id,
                     participante:participantes!inner(
                         id,
-                        avatares:participantes_avatares(archivo_url)
+                        participantes_avatars(archivo_url)
                     )
                 """)
                 .eq("horario_id", horario_id)
@@ -314,9 +314,9 @@ class ClasesService:
             if result.data:
                 for r in result.data:
                     participante = r.get("participante", {})
-                    avatares_data = participante.get("avatares", [])
+                    avatars_data = participante.get("participantes_avatars", [])
                     
-                    for avatar in avatares_data:
+                    for avatar in avatars_data:
                         if avatar.get("archivo_url"):
                             avatares.append(avatar["archivo_url"])
             
@@ -324,6 +324,7 @@ class ClasesService:
         except Exception as e:
             print(f"Error get_avatares_reserva: {e}")
             return []
+            
     # =========================
     # GESTIÓN DE HORARIOS
     # =========================
