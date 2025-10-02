@@ -6,14 +6,6 @@ from services.clases_service import get_clases_service
 from services.empresas_service import get_empresas_service
 from services.participantes_service import get_participantes_service
 
-# =========================
-# CONFIG STREAMLIT
-# =========================
-st.set_page_config(
-    page_title="🏃‍♀️ Gestión de Clases",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # =========================
 # GESTIÓN DE CLASES (TAB 1)
