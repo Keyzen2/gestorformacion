@@ -707,7 +707,22 @@ def mostrar_formulario_participante_nn(
             )
             telefono = st.text_input("Teléfono", value=datos.get("telefono",""), key=f"{form_id}_tel")
             email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
+            
+        col1, col2 = st.columns(2)
 
+        with col1:
+            provincia = st.text_input(
+                "🗺️ Provincia",
+                value=datos.get("provincia", ""),
+                key=f"{form_id}_provincia"
+            )
+        
+        with col2:
+            localidad = st.text_input(
+                "🏘️ Localidad",
+                value=datos.get("localidad", ""),
+                key=f"{form_id}_localidad"
+            )
         # =========================
         # EMPRESA
         # =========================
@@ -821,6 +836,8 @@ def mostrar_formulario_participante_nn(
                 datos_payload = {
                     "nombre": nombre,
                     "apellidos": apellidos,
+                    "provincia": provincia or None,
+                    "localidad": localidad or None,
                     "tipo_documento": tipo_documento or None,
                     "nif": documento or None,
                     "niss": niss or None,
