@@ -598,60 +598,70 @@ class ParticipantesService:
         except Exception as e:
             print(f"Error obteniendo participante completo: {e}")
             return None
-        
     def get_participantes_con_grupos_nn(self) -> pd.DataFrame:
-        """NUEVO: Obtiene participantes con todos sus grupos usando tabla N:N."""
+        """Obtiene participantes con todos sus grupos usando tabla N:N (con provincias y localidades bien mapeadas)."""
         try:
             query = self.supabase.table("participantes").select("""
                 id, nif, nombre, apellidos, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, empresa_id,
+                provincia_id, localidad_id,
+                provincia:provincias(id, nombre),
+                localidad:localidades(id, nombre),
                 empresa:empresas(id, nombre, cif),
                 participantes_grupos(
-                    id, grupo_id, fecha_asignacion,
-                    grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
+                        id, grupo_id, fecha_asignacion,
+                        grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
                                accion_formativa:acciones_formativas(nombre))
                 )
-            """)
-            
+            """.)
+        
             # Aplicar filtro según rol
             query = self._apply_empresa_filter(query)
-            
+        
             res = query.order("created_at", desc=True).execute()
-            
+        
             if not res or not res.data:
                 return pd.DataFrame(columns=[
                     'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
-                    'empresa_id', 'empresa_nombre', 'grupos_ids', 'grupos_codigos'
+                    'empresa_id', 'empresa_nombre', 
+                    'provincia_id', 'provincia_nombre',
+                    'localidad_id', 'localidad_nombre',
+                    'grupos_ids', 'grupos_codigos'
                 ])
-            
-            # Procesar datos N:N
+        
             participantes_procesados = []
             for participante in res.data:
                 grupos_participante = participante.get("participantes_grupos", [])
-                
-                # Extraer empresa
+
+                # Empresa
                 empresa_data = participante.get("empresa", {})
                 empresa_nombre = empresa_data.get("nombre", "") if isinstance(empresa_data, dict) else ""
-                
+    
+                # Provincia y localidad
+                provincia_data = participante.get("provincia", {})
+                localidad_data = participante.get("localidad", {})
+
+                provincia_nombre = provincia_data.get("nombre", "") if isinstance(provincia_data, dict) else ""
+                localidad_nombre = localidad_data.get("nombre", "") if isinstance(localidad_data, dict) else ""
+
                 # Procesar grupos
-                grupos_ids = []
-                grupos_codigos = []
-                
+                grupos_ids, grupos_codigos = [], []
                 for grupo_rel in grupos_participante:
                     grupo_data = grupo_rel.get("grupo", {})
                     if isinstance(grupo_data, dict):
                         grupos_ids.append(grupo_data.get("id", ""))
                         grupos_codigos.append(grupo_data.get("codigo_grupo", ""))
-                
-                # Crear fila del participante
+
                 participante_row = {
                     "id": participante.get("id"),
                     "nif": participante.get("nif", ""),
                     "nombre": participante.get("nombre", ""),
                     "apellidos": participante.get("apellidos", ""),
-                    "provincia": participante.get("provincia", ""),
-                    "localidad": participante.get("localidad", ""),
+                    "provincia_id": participante.get("provincia_id"),
+                    "provincia_nombre": provincia_nombre,
+                    "localidad_id": participante.get("localidad_id"),
+                    "localidad_nombre": localidad_nombre,
                     "email": participante.get("email", ""),
                     "telefono": participante.get("telefono", ""),
                     "fecha_nacimiento": participante.get("fecha_nacimiento"),
@@ -664,11 +674,11 @@ class ParticipantesService:
                     "grupos_codigos": ", ".join(grupos_codigos),
                     "num_grupos": len(grupos_ids)
                 }
-                
+            
                 participantes_procesados.append(participante_row)
-            
+        
             return pd.DataFrame(participantes_procesados)
-            
+        
         except Exception as e:
             return self._handle_query_error("participantes con grupos N:N", e)
             
