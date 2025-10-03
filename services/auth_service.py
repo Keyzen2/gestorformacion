@@ -184,19 +184,95 @@ class AuthService:
     def actualizar_usuario_con_auth(
         self, tabla: str, registro_id: str, datos_editados: Dict[str, Any]
     ) -> bool:
+        """Actualiza usuario en tabla y sincroniza con Auth."""
         try:
-            # CORREGIDO: Solo añadir updated_at si la tabla lo soporta
+            # Obtener auth_id y email actual
+            registro = self.supabase.table(tabla).select("auth_id, email").eq(
+                "id", registro_id
+            ).execute()
+            
+            if not registro.data:
+                st.error(f"{tabla.title()} no encontrado")
+                return False
+            
+            auth_id = registro.data[0].get("auth_id")
+            email_actual = registro.data[0].get("email")
+            
+            # ✅ MAPEO CORRECTO según la tabla
+            if tabla == "participantes":
+                datos_tabla = {
+                    "nombre": datos_editados.get("nombre"),
+                    "apellidos": datos_editados.get("apellidos"),
+                    "email": datos_editados.get("email"),
+                    "telefono": datos_editados.get("telefono"),
+                    "nif": datos_editados.get("nif"),
+                    "tipo_documento": datos_editados.get("tipo_documento"),
+                    "niss": datos_editados.get("niss"),
+                    "fecha_nacimiento": datos_editados.get("fecha_nacimiento"),
+                    "sexo": datos_editados.get("sexo"),
+                    "provincia_id": datos_editados.get("provincia_id"),  # ✅ ID
+                    "localidad_id": datos_editados.get("localidad_id"),  # ✅ ID
+                    "empresa_id": datos_editados.get("empresa_id")
+                }
+            elif tabla == "usuarios":
+                datos_tabla = {
+                    "nombre_completo": datos_editados.get("nombre_completo"),
+                    "email": datos_editados.get("email"),
+                    "telefono": datos_editados.get("telefono"),
+                    "nif": datos_editados.get("nif"),
+                    "rol": datos_editados.get("rol"),
+                    "empresa_id": datos_editados.get("empresa_id")
+                }
+            else:
+                # Para otras tablas, usar datos directamente
+                datos_tabla = datos_editados.copy()
+            
+            # Añadir updated_at si la tabla lo soporta
             schema = self._get_schema_fields(tabla)
             if schema["updated_at"]:
-                datos_editados["updated_at"] = datetime.utcnow().isoformat()
-                
-            res = (
-                self.supabase.table(tabla)
-                .update(datos_editados)
-                .eq("id", registro_id)
-                .execute()
-            )
-            return bool(res.data)
+                datos_tabla["updated_at"] = datetime.utcnow().isoformat()
+            
+            # Actualizar en la tabla
+            res = self.supabase.table(tabla).update(datos_tabla).eq("id", registro_id).execute()
+            
+            if not res.data:
+                st.error(f"Error actualizando {tabla}")
+                return False
+            
+            # Sincronizar con Auth si existe auth_id
+            if auth_id:
+                try:
+                    auth_update = {}
+                    
+                    # Actualizar email si cambió
+                    nuevo_email = datos_editados.get("email")
+                    if nuevo_email and nuevo_email != email_actual:
+                        auth_update["email"] = nuevo_email
+                    
+                    # Actualizar metadata según tabla
+                    if tabla == "participantes":
+                        auth_update["user_metadata"] = {
+                            "rol": "alumno",
+                            "nombre": datos_editados.get("nombre"),
+                            "apellidos": datos_editados.get("apellidos"),
+                            "tabla": "participantes"
+                        }
+                    elif tabla == "usuarios":
+                        auth_update["user_metadata"] = {
+                            "rol": datos_editados.get("rol", "gestor"),
+                            "nombre_completo": datos_editados.get("nombre_completo"),
+                            "tabla": "usuarios"
+                        }
+                    
+                    if auth_update:
+                        self.supabase.auth.admin.update_user_by_id(auth_id, auth_update)
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ No se pudo sincronizar con Auth: {e}")
+                    # No fallar la operación completa si solo falla Auth
+            
+            return True
+            
         except Exception as e:
             st.error(f"❌ Error actualizando {tabla}: {e}")
             return False
