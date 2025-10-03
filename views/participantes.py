@@ -1867,6 +1867,7 @@ def render(supabase, session_state):
                         grupos_service, 
                         auth_service, 
                         clases_service,
+                        supabase,
                         session_state, 
                         es_creacion=False
                     )
