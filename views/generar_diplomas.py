@@ -1282,16 +1282,24 @@ def render(supabase, session_state):
         with col1:
             if st.button("👁️ Previsualizar", type="secondary", use_container_width=True):
                 with st.spinner("Generando previsualización..."):
-                        
                     plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
                     plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
                     
-                    pdf_buffer = generar_diploma_pdf(
+                    st.write(f"DEBUG 1: Plantilla '{plantilla_codigo}'")
+                    st.write(f"DEBUG 2: Función: {plantilla_info['funcion'].__name__}")
+                    
+                    st.write("DEBUG 3: A punto de llamar a la función...")
+                    
+                    pdf_buffer = plantilla_info['funcion'](
                         participante, grupo_completo, accion_completa,
                         firma_url, logo_url, datos_personalizados
                     )
+                    
+                    st.write("DEBUG 4: Función ejecutada")
+                    st.write(f"DEBUG 5: pdf_buffer es None? {pdf_buffer is None}")
+                    
                     if pdf_buffer:
-                        st.success("✅ Previsualización generada")
+                        st.success("PDF generado correctamente")
                         st.download_button(
                             "📥 Descargar Previsualización",
                             data=pdf_buffer,
@@ -1299,6 +1307,8 @@ def render(supabase, session_state):
                             mime="application/pdf",
                             use_container_width=True
                         )
+                    else:
+                        st.error("pdf_buffer es None")
         
         with col2:
             if st.button("🔄 Restablecer", use_container_width=True):
