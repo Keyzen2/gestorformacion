@@ -88,28 +88,35 @@ def preparar_datos_tabla_nn(participantes_service, session_state):
     """Prepara los datos de participantes con información de grupos N:N para la tabla."""
     try:
         df_participantes = participantes_service.get_participantes_con_grupos_nn()
-
+        
         if df_participantes.empty:
             return pd.DataFrame(columns=[
-                'id', 'nif', 'nombre', 'apellidos', 'provincia, 'localidad', 'email', 'telefono',
-                'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
+                'id', 'nif', 'nombre', 'apellidos', 
+                'provincia_id', 'localidad_id', 'provincia_nombre', 'localidad_nombre',
+                'email', 'telefono', 'empresa_id', 'empresa_nombre', 
+                'num_grupos', 'grupos_codigos'
             ])
-
+        
+        # Verificar si tiene columnas N:N
         if 'num_grupos' not in df_participantes.columns or 'grupos_codigos' not in df_participantes.columns:
             df_tradicional = participantes_service.get_participantes_completos()
-
+            
             if not df_tradicional.empty:
-                df_tradicional['num_grupos'] = df_tradicional['grupo_id'].apply(lambda x: 1 if pd.notna(x) else 0)
+                df_tradicional['num_grupos'] = df_tradicional['grupo_id'].apply(
+                    lambda x: 1 if pd.notna(x) else 0
+                )
                 df_tradicional['grupos_codigos'] = df_tradicional.get('grupo_codigo', '')
                 return df_tradicional
-
+        
         return df_participantes
-
+        
     except Exception as e:
         st.error(f"❌ Error preparando datos de participantes: {e}")
         return pd.DataFrame(columns=[
-            'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
-            'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
+            'id', 'nif', 'nombre', 'apellidos',
+            'provincia_id', 'localidad_id', 'provincia_nombre', 'localidad_nombre',
+            'email', 'telefono', 'empresa_id', 'empresa_nombre',
+            'num_grupos', 'grupos_codigos'
         ])
 
 # =========================
@@ -249,7 +256,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     end_idx = start_idx + page_size
     df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    columnas = ["nombre", "apellidos", "nif", "provincia", "localidad", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    columnas = ["nombre", "apellidos", "nif", "provincia_nombre", "localidad_nombre", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
     
     columnas_disponibles = []
     for col in columnas:
@@ -271,8 +278,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
-        "provincia": st.column_config.TextColumn("🏢 Provincia", width="medium"),
-        "localidad": st.column_config.TextColumn("🏘️ Localidad", width="medium"),
+        "provincia_nombre": st.column_config.TextColumn("🗺️ Provincia", width="medium"),
+        "localidad_nombre": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
@@ -657,7 +664,6 @@ def mostrar_formulario_participante_nn(
     grupos_service,
     auth_service,
     clases_service,
-    supabase,
     session_state,
     es_creacion=False
 ):
@@ -720,37 +726,65 @@ def mostrar_formulario_participante_nn(
         col1, col2 = st.columns(2)
         
         try:
+            # Obtener provincias
             provincias = grupos_service.get_provincias()
             prov_opciones = {p["nombre"]: p["id"] for p in provincias}
-        
-            provincia_actual = datos.get("provincia") if datos else None
-        
-            provincia_sel = st.selectbox(
-                "🗺️ Provincia",
-                options=[""] + list(prov_opciones.keys()),
-                index=([""] + list(prov_opciones.keys())).index(provincia_actual) if provincia_actual in prov_opciones else 0,
-                key=f"{form_id}_provincia",
-                help="Provincia de residencia"
-            )
-        
-            localidad_sel = ""
-            if provincia_sel:
-                localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
-                loc_nombres = [l["nombre"] for l in localidades]
-                localidad_actual = datos.get("localidad") if datos else None
-        
-                localidad_sel = st.selectbox(
-                    "🏘️ Localidad",
-                    options=[""] + loc_nombres,
-                    index=([""] + loc_nombres).index(localidad_actual) if localidad_actual in loc_nombres else 0,
-                    key=f"{form_id}_localidad",
-                    help="Localidad de residencia"
+            
+            # Provincia actual del participante
+            provincia_id_actual = datos.get("provincia_id")
+            provincia_nombre_actual = None
+            
+            if provincia_id_actual:
+                for nombre, pid in prov_opciones.items():
+                    if pid == provincia_id_actual:
+                        provincia_nombre_actual = nombre
+                        break
+            
+            with col1:
+                provincia_sel = st.selectbox(
+                    "🗺️ Provincia",
+                    options=[""] + list(prov_opciones.keys()),
+                    index=([""] + list(prov_opciones.keys())).index(provincia_nombre_actual) 
+                        if provincia_nombre_actual else 0,
+                    key=f"{form_id}_provincia"
                 )
+            
+            # Localidades según provincia seleccionada
+            localidad_id_sel = None
+            provincia_id_sel = prov_opciones.get(provincia_sel) if provincia_sel else None
+            
+            if provincia_sel:
+                localidades = grupos_service.get_localidades_por_provincia(provincia_id_sel)
+                loc_opciones = {l["nombre"]: l["id"] for l in localidades}
+                
+                # Localidad actual
+                localidad_id_actual = datos.get("localidad_id")
+                localidad_nombre_actual = None
+                
+                if localidad_id_actual:
+                    for nombre, lid in loc_opciones.items():
+                        if lid == localidad_id_actual:
+                            localidad_nombre_actual = nombre
+                            break
+                
+                with col2:
+                    localidad_sel = st.selectbox(
+                        "🏙️ Localidad",
+                        options=[""] + list(loc_opciones.keys()),
+                        index=([""] + list(loc_opciones.keys())).index(localidad_nombre_actual)
+                            if localidad_nombre_actual else 0,
+                        key=f"{form_id}_localidad"
+                    )
+                    
+                    localidad_id_sel = loc_opciones.get(localidad_sel) if localidad_sel else None
+            else:
+                with col2:
+                    st.info("Selecciona provincia primero")
         
         except Exception as e:
-            st.error(f"Error al cargar provincias/localidades: {e}")
-            provincia_sel = st.text_input("🗺️ Provincia", value=datos.get("provincia", ""))
-            localidad_sel = st.text_input("🏘️ Localidad", value=datos.get("localidad", ""))
+            st.error(f"Error cargando provincias/localidades: {e}")
+            provincia_id_sel = None
+            localidad_id_sel = None
 
         # =========================
         # EMPRESA
@@ -865,8 +899,8 @@ def mostrar_formulario_participante_nn(
                 datos_payload = {
                     "nombre": nombre,
                     "apellidos": apellidos,
-                    "provincia": provincia_sel,
-                    "localidad": localidad_sel,
+                    "provincia_id": provincia_id_sel,
+                    "localidad_id": localidad_id_sel,
                     "tipo_documento": tipo_documento or None,
                     "nif": documento or None,
                     "niss": niss or None,
@@ -1868,7 +1902,6 @@ def render(supabase, session_state):
                         grupos_service, 
                         auth_service, 
                         clases_service,
-                        supabase,
                         session_state, 
                         es_creacion=False
                     )
@@ -1905,7 +1938,6 @@ def render(supabase, session_state):
                 grupos_service, 
                 auth_service, 
                 clases_service,
-                supabase,
                 session_state, 
                 es_creacion=True
             )
