@@ -91,7 +91,7 @@ def preparar_datos_tabla_nn(participantes_service, session_state):
 
         if df_participantes.empty:
             return pd.DataFrame(columns=[
-                'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+                'id', 'nif', 'nombre', 'apellidos', 'provincia, 'localidad', 'email', 'telefono',
                 'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
             ])
 
@@ -108,7 +108,7 @@ def preparar_datos_tabla_nn(participantes_service, session_state):
     except Exception as e:
         st.error(f"❌ Error preparando datos de participantes: {e}")
         return pd.DataFrame(columns=[
-            'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
+            'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
             'empresa_id', 'empresa_nombre', 'num_grupos', 'grupos_codigos'
         ])
 
@@ -249,7 +249,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     end_idx = start_idx + page_size
     df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    columnas = ["nombre", "apellidos", "nif", "provincia_nombre", "localidad_nombre", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    columnas = ["nombre", "apellidos", "nif", "provincia", "localidad", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
     
     columnas_disponibles = []
     for col in columnas:
@@ -271,8 +271,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
-        "provincia_nombre": st.column_config.TextColumn("🏢 Provincia", width="medium"),
-        "localidad_nombre": st.column_config.TextColumn("🏘️ Localidad", width="medium"),
+        "provincia": st.column_config.TextColumn("🏢 Provincia", width="medium"),
+        "localidad": st.column_config.TextColumn("🏘️ Localidad", width="medium"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
@@ -685,73 +685,73 @@ def mostrar_formulario_participante_nn(
         col1, col2 = st.columns(2)
         
         with col1:
-            nombre = st.text_input("Nombre", value=datos.get("nombre",""), key=f"{form_id}_nombre")
-            apellidos = st.text_input("Apellidos", value=datos.get("apellidos",""), key=f"{form_id}_apellidos")
+            nombre = st.text_input("Nombre", value=datos.get("nombre", ""), key=f"{form_id}_nombre")
+            apellidos = st.text_input("Apellidos", value=datos.get("apellidos", ""), key=f"{form_id}_apellidos")
             tipo_documento = st.selectbox(
                 "Tipo de Documento",
                 options=["", "NIF", "NIE", "PASAPORTE"],
-                index=["","NIF","NIE","PASAPORTE"].index(datos.get("tipo_documento","")) if datos.get("tipo_documento","") in ["","NIF","NIE","PASAPORTE"] else 0,
+                index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("tipo_documento", "")) 
+                if datos.get("tipo_documento", "") in ["", "NIF", "NIE", "PASAPORTE"] else 0,
                 key=f"{form_id}_tipo_doc"
             )
-            documento = st.text_input("Número de Documento", value=datos.get("nif",""), key=f"{form_id}_documento", help="NIF, NIE, CIF o Pasaporte")
-            niss = st.text_input("NISS", value=datos.get("niss",""), key=f"{form_id}_niss", help="Número de la Seguridad Social")
+            documento = st.text_input(
+                "Número de Documento", 
+                value=datos.get("nif", ""), 
+                key=f"{form_id}_documento", 
+                help="NIF, NIE o Pasaporte"
+            )
+            niss = st.text_input("NISS", value=datos.get("niss", ""), key=f"{form_id}_niss", help="Número de la Seguridad Social")
         
         with col2:
             fecha_nacimiento = st.date_input(
                 "Fecha de nacimiento",
-                value=datos.get("fecha_nacimiento") if datos.get("fecha_nacimiento") else date(1990,1,1),
+                value=datos.get("fecha_nacimiento") if datos.get("fecha_nacimiento") else date(1990, 1, 1),
                 key=f"{form_id}_fecha_nac"
             )
             sexo = st.selectbox(
                 "Sexo",
                 options=["", "M", "F", "O"],
-                index=["","M","F","O"].index(datos.get("sexo","")) if datos.get("sexo","") in ["","M","F","O"] else 0,
+                index=["", "M", "F", "O"].index(datos.get("sexo", "")) if datos.get("sexo", "") in ["", "M", "F", "O"] else 0,
                 key=f"{form_id}_sexo"
             )
-            telefono = st.text_input("Teléfono", value=datos.get("telefono",""), key=f"{form_id}_tel")
-            email = st.text_input("Email", value=datos.get("email",""), key=f"{form_id}_email")
-            
+            telefono = st.text_input("Teléfono", value=datos.get("telefono", ""), key=f"{form_id}_tel")
+            email = st.text_input("Email", value=datos.get("email", ""), key=f"{form_id}_email")
+        
         col1, col2 = st.columns(2)
-
-        # Obtener provincias
-        provincias_res = supabase.table("provincias").select("id, nombre").order("nombre").execute()
-        provincias_data = provincias_res.data or []
-        provincias_dict = {p["nombre"]: p["id"] for p in provincias_data}
         
-        provincia_nombre = next(
-            (p["nombre"] for p in provincias_data if p["id"] == datos.get("provincia_id")), 
-            ""
-        )
+        try:
+            provincias = grupos_service.get_provincias()
+            prov_opciones = {p["nombre"]: p["id"] for p in provincias}
         
-        with col1:
+            provincia_actual = datos.get("provincia") if datos else None
+        
             provincia_sel = st.selectbox(
                 "🗺️ Provincia",
-                options=[""] + list(provincias_dict.keys()),
-                index=([""] + list(provincias_dict.keys())).index(provincia_nombre) if provincia_nombre else 0,
-                key=f"{form_id}_provincia"
-            )
-            provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
-        
-        # Cargar localidades según provincia
-        localidades_dict = {}
-        localidad_nombre = ""
-        if provincia_id:
-            localidades_res = supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
-            localidades_data = localidades_res.data or []
-            localidades_dict = {l["nombre"]: l["id"] for l in localidades_data}
-            localidad_nombre = next(
-                (l["nombre"] for l in localidades_data if l["id"] == datos.get("localidad_id")),
-                ""
+                options=[""] + list(prov_opciones.keys()),
+                index=([""] + list(prov_opciones.keys())).index(provincia_actual) if provincia_actual in prov_opciones else 0,
+                key=f"{form_id}_provincia",
+                help="Provincia de residencia"
             )
         
-        with col2:
-            localidad_sel = st.selectbox(
-                "🏘️ Localidad",
-                options=[""] + list(localidades_dict.keys()),
-                index=([""] + list(localidades_dict.keys())).index(localidad_nombre) if localidad_nombre else 0,
-                key=f"{form_id}_localidad"
-            )
-            localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
+            localidad_sel = ""
+            if provincia_sel:
+                localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
+                loc_nombres = [l["nombre"] for l in localidades]
+                localidad_actual = datos.get("localidad") if datos else None
+        
+                localidad_sel = st.selectbox(
+                    "🏘️ Localidad",
+                    options=[""] + loc_nombres,
+                    index=([""] + loc_nombres).index(localidad_actual) if localidad_actual in loc_nombres else 0,
+                    key=f"{form_id}_localidad",
+                    help="Localidad de residencia"
+                )
+        
+        except Exception as e:
+            st.error(f"Error al cargar provincias/localidades: {e}")
+            provincia_sel = st.text_input("🗺️ Provincia", value=datos.get("provincia", ""))
+            localidad_sel = st.text_input("🏘️ Localidad", value=datos.get("localidad", ""))
+
         # =========================
         # EMPRESA
         # =========================
@@ -865,8 +865,8 @@ def mostrar_formulario_participante_nn(
                 datos_payload = {
                     "nombre": nombre,
                     "apellidos": apellidos,
-                    "provincia_id": provincia_id,
-                    "localidad_id": localidad_id,
+                    "provincia": provincia_sel,
+                    "localidad": localidad_sel,
                     "tipo_documento": tipo_documento or None,
                     "nif": documento or None,
                     "niss": niss or None,
