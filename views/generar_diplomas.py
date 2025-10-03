@@ -363,217 +363,532 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
     buffer.seek(0)
     return buffer
     
-    # =========================
-    # PLANTILLA MODERNA
-    # =========================
-    def generar_diploma_moderno(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None) -> BytesIO:
-        """Genera diploma con diseño moderno y minimalista."""
-        if not REPORTLAB_AVAILABLE:
-            return None
-        
-        # Aplicar datos personalizados (igual que clásico)
-        if datos_personalizados:
-            if 'nombre_completo' in datos_personalizados:
-                partes = datos_personalizados['nombre_completo'].split(' ', 1)
-                participante['nombre'] = partes[0]
-                participante['apellidos'] = partes[1] if len(partes) > 1 else ''
-            for key in ['tipo_documento', 'nif']:
-                if key in datos_personalizados:
-                    participante[key] = datos_personalizados[key]
-            if 'accion_nombre' in datos_personalizados:
-                accion['nombre'] = datos_personalizados['accion_nombre']
-            for key in ['horas', 'modalidad']:
-                if key in datos_personalizados:
-                    if key == 'horas':
-                        accion['horas'] = datos_personalizados[key]
-                    else:
-                        grupo[key] = datos_personalizados[key]
-            for key in ['fecha_inicio', 'fecha_fin']:
-                if key in datos_personalizados:
+# =========================
+# PLANTILLA MODERNA
+# =========================
+def generar_diploma_moderno(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None) -> BytesIO:
+    """Genera diploma con diseño moderno y minimalista."""
+    if not REPORTLAB_AVAILABLE:
+        return None
+    
+    # Aplicar datos personalizados (igual que clásico)
+    if datos_personalizados:
+        if 'nombre_completo' in datos_personalizados:
+            partes = datos_personalizados['nombre_completo'].split(' ', 1)
+            participante['nombre'] = partes[0]
+            participante['apellidos'] = partes[1] if len(partes) > 1 else ''
+        for key in ['tipo_documento', 'nif']:
+            if key in datos_personalizados:
+                participante[key] = datos_personalizados[key]
+        if 'accion_nombre' in datos_personalizados:
+            accion['nombre'] = datos_personalizados['accion_nombre']
+        for key in ['horas', 'modalidad']:
+            if key in datos_personalizados:
+                if key == 'horas':
+                    accion['horas'] = datos_personalizados[key]
+                else:
                     grupo[key] = datos_personalizados[key]
-            if 'contenidos' in datos_personalizados:
-                accion['contenidos'] = datos_personalizados['contenidos']
-        
-        buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
-                                leftMargin=2*cm, rightMargin=2*cm,
-                                topMargin=2*cm, bottomMargin=2*cm)
-        
-        elementos = []
-        styles = getSampleStyleSheet()
-        
-        # Estilos modernos (sin serif, colores más neutros)
-        style_titulo = ParagraphStyle('TituloModerno',
-            fontSize=56,
-            textColor=colors.HexColor("#1a1a1a"),
-            alignment=TA_CENTER,
-            fontName='Helvetica',
-            spaceAfter=15,
-            leading=60
-        )
-        
-        style_subtitulo = ParagraphStyle('SubtituloModerno',
-            fontSize=18,
-            textColor=colors.HexColor("#666666"),
-            alignment=TA_CENTER,
-            fontName='Helvetica',
-            spaceAfter=25
-        )
-        
-        style_nombre = ParagraphStyle('NombreModerno',
-            fontSize=32,
-            textColor=colors.HexColor("#2563eb"),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=10
-        )
-        
-        style_accion = ParagraphStyle('AccionModerno',
-            fontSize=24,
-            textColor=colors.HexColor("#1a1a1a"),
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold',
-            spaceAfter=15,
-            leading=28
-        )
-        
-        style_datos = ParagraphStyle('DatosModerno',
-            fontSize=13,
-            textColor=colors.HexColor("#4b5563"),
-            alignment=TA_CENTER,
-            fontName='Helvetica',
-            spaceAfter=8
-        )
-        
-        style_contenidos = ParagraphStyle('ContenidosModerno',
-            fontSize=11,
-            textColor=colors.HexColor("#374151"),
-            alignment=TA_JUSTIFY,
-            fontName='Helvetica',
-            spaceAfter=8,
-            leading=14
-        )
-        
-        # CARA A - Diseño moderno
-        elementos.append(Spacer(1, 1*cm))
-        
-        # Logo más grande y prominente
-        if logo_url:
+        for key in ['fecha_inicio', 'fecha_fin']:
+            if key in datos_personalizados:
+                grupo[key] = datos_personalizados[key]
+        if 'contenidos' in datos_personalizados:
+            accion['contenidos'] = datos_personalizados['contenidos']
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                            leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2*cm, bottomMargin=2*cm)
+    
+    elementos = []
+    styles = getSampleStyleSheet()
+    
+    # Estilos modernos (sin serif, colores más neutros)
+    style_titulo = ParagraphStyle('TituloModerno',
+        fontSize=56,
+        textColor=colors.HexColor("#1a1a1a"),
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        spaceAfter=15,
+        leading=60
+    )
+    
+    style_subtitulo = ParagraphStyle('SubtituloModerno',
+        fontSize=18,
+        textColor=colors.HexColor("#666666"),
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        spaceAfter=25
+    )
+    
+    style_nombre = ParagraphStyle('NombreModerno',
+        fontSize=32,
+        textColor=colors.HexColor("#2563eb"),
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=10
+    )
+    
+    style_accion = ParagraphStyle('AccionModerno',
+        fontSize=24,
+        textColor=colors.HexColor("#1a1a1a"),
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=15,
+        leading=28
+    )
+    
+    style_datos = ParagraphStyle('DatosModerno',
+        fontSize=13,
+        textColor=colors.HexColor("#4b5563"),
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        spaceAfter=8
+    )
+    
+    style_contenidos = ParagraphStyle('ContenidosModerno',
+        fontSize=11,
+        textColor=colors.HexColor("#374151"),
+        alignment=TA_JUSTIFY,
+        fontName='Helvetica',
+        spaceAfter=8,
+        leading=14
+    )
+    
+    # CARA A - Diseño moderno
+    elementos.append(Spacer(1, 1*cm))
+    
+    # Logo más grande y prominente
+    if logo_url:
+        try:
+            logo = Image(logo_url, width=10*cm, height=3.5*cm, kind='proportional')
+            logo.hAlign = 'CENTER'
+            elementos.append(logo)
+            elementos.append(Spacer(1, 1*cm))
+        except Exception as e:
+            print(f"Error cargando logo: {e}")
+            elementos.append(Spacer(1, 0.5*cm))
+    
+    # Título sin "DIPLOMA" - más moderno
+    elementos.append(Paragraph("CERTIFICADO DE FORMACIÓN", style_titulo))
+    elementos.append(Paragraph("Se certifica que", style_subtitulo))
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    # Nombre destacado
+    nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip()
+    elementos.append(Paragraph(nombre_completo, style_nombre))
+    
+    tipo_doc = participante.get('tipo_documento', 'NIF')
+    num_doc = participante.get('nif', 'Sin documento')
+    elementos.append(Paragraph(f"{tipo_doc}: {num_doc}", style_datos))
+    elementos.append(Spacer(1, 0.8*cm))
+    
+    # Acción formativa
+    elementos.append(Paragraph("ha completado satisfactoriamente", style_datos))
+    elementos.append(Spacer(1, 0.3*cm))
+    
+    accion_nombre = accion.get('nombre', 'Curso no especificado')
+    elementos.append(Paragraph(accion_nombre, style_accion))
+    elementos.append(Spacer(1, 0.8*cm))
+    
+    # Detalles en formato moderno (tabla limpia)
+    horas = accion.get('horas', 0) or accion.get('num_horas', 0)
+    modalidad = grupo.get('modalidad', 'PRESENCIAL')
+    fecha_inicio = grupo.get('fecha_inicio')
+    fecha_fin = grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista')
+    
+    fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else "No especificada"
+    fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else "No especificada"
+    
+    # Tabla de detalles minimalista
+    datos_tabla = [
+        ["Duración:", f"{horas} horas"],
+        ["Modalidad:", modalidad],
+        ["Período:", f"{fecha_inicio_str} - {fecha_fin_str}"]
+    ]
+    
+    tabla = Table(datos_tabla, colWidths=[6*cm, 10*cm])
+    tabla.setStyle(TableStyle([
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor("#4b5563")),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    
+    tabla.hAlign = 'CENTER'
+    elementos.append(tabla)
+    elementos.append(Spacer(1, 1*cm))
+    
+    # Fecha de emisión
+    meses = {
+        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+    }
+    hoy = datetime.now()
+    fecha_emision = f"{hoy.day} de {meses[hoy.month]} de {hoy.year}"
+    elementos.append(Paragraph(fecha_emision, style_datos))
+    
+    # CARA B - Contenidos
+    elementos.append(PageBreak())
+    
+    style_titulo_contenidos = ParagraphStyle('TituloContenidosModerno',
+        fontSize=28,
+        textColor=colors.HexColor("#1a1a1a"),
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=20
+    )
+    
+    elementos.append(Spacer(1, 1*cm))
+    elementos.append(Paragraph("Contenidos del programa", style_titulo_contenidos))
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    contenidos = accion.get('contenidos', '')
+    if contenidos and contenidos.strip():
+        contenidos_texto = contenidos.replace('\n\n', '<br/><br/>').replace('\n', '<br/>')
+        elementos.append(Paragraph(contenidos_texto, style_contenidos))
+    else:
+        elementos.append(Paragraph("Los contenidos de este programa no han sido especificados.", style_contenidos))
+    
+    # Función para dibujar firma (sin borde)
+    def dibujar_firma(canvas, doc, firma_url=firma_url):
+        if firma_url:
             try:
-                logo = Image(logo_url, width=10*cm, height=3.5*cm, kind='proportional')
-                logo.hAlign = 'CENTER'
-                elementos.append(logo)
-                elementos.append(Spacer(1, 1*cm))
+                canvas.drawImage(
+                    firma_url,
+                    x=doc.pagesize[0] / 2 - 60,
+                    y=60,
+                    width=160,
+                    height=60,
+                    mask="auto"
+                )
             except Exception as e:
-                print(f"Error cargando logo: {e}")
-                elementos.append(Spacer(1, 0.5*cm))
+                print("Error dibujando firma:", e)
+    
+    doc.build(
+        elementos,
+        onFirstPage=lambda c, d: dibujar_firma(c, d, firma_url)
+    )
+    buffer.seek(0)
+    return buffer
+
+# =========================
+# PLANTILLA FUNDAE (OFICIAL)
+# =========================
+def generar_diploma_fundae(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None) -> BytesIO:
+    """Genera diploma con diseño oficial FUNDAE."""
+    if not REPORTLAB_AVAILABLE:
+        return None
+    
+    # Aplicar datos personalizados (igual que otras plantillas)
+    if datos_personalizados:
+        if 'nombre_completo' in datos_personalizados:
+            partes = datos_personalizados['nombre_completo'].split(' ', 1)
+            participante['nombre'] = partes[0]
+            participante['apellidos'] = partes[1] if len(partes) > 1 else ''
+        for key in ['tipo_documento', 'nif']:
+            if key in datos_personalizados:
+                participante[key] = datos_personalizados[key]
+        if 'accion_nombre' in datos_personalizados:
+            accion['nombre'] = datos_personalizados['accion_nombre']
+        for key in ['horas', 'modalidad']:
+            if key in datos_personalizados:
+                if key == 'horas':
+                    accion['horas'] = datos_personalizados[key]
+                else:
+                    grupo[key] = datos_personalizados[key]
+        for key in ['fecha_inicio', 'fecha_fin']:
+            if key in datos_personalizados:
+                grupo[key] = datos_personalizados[key]
+        if 'contenidos' in datos_personalizados:
+            accion['contenidos'] = datos_personalizados['contenidos']
+    
+    buffer = BytesIO()
+    
+    # Canvas personalizado para dibujar elementos decorativos
+    class FundaeCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            canvas.Canvas.__init__(self, *args, **kwargs)
+            self.pages = []
         
-        # Título sin "DIPLOMA" - más moderno
-        elementos.append(Paragraph("CERTIFICADO DE FORMACIÓN", style_titulo))
-        elementos.append(Paragraph("Se certifica que", style_subtitulo))
-        elementos.append(Spacer(1, 0.5*cm))
+        def showPage(self):
+            self.pages.append(dict(self.__dict__))
+            self._startPage()
         
-        # Nombre destacado
-        nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip()
-        elementos.append(Paragraph(nombre_completo, style_nombre))
+        def save(self):
+            for page_num, page in enumerate(self.pages):
+                self.__dict__.update(page)
+                if page_num == 0:
+                    self.draw_decorations()
+                canvas.Canvas.showPage(self)
+            canvas.Canvas.save(self)
         
-        tipo_doc = participante.get('tipo_documento', 'NIF')
-        num_doc = participante.get('nif', 'Sin documento')
-        elementos.append(Paragraph(f"{tipo_doc}: {num_doc}", style_datos))
-        elementos.append(Spacer(1, 0.8*cm))
-        
-        # Acción formativa
-        elementos.append(Paragraph("ha completado satisfactoriamente", style_datos))
-        elementos.append(Spacer(1, 0.3*cm))
-        
-        accion_nombre = accion.get('nombre', 'Curso no especificado')
-        elementos.append(Paragraph(accion_nombre, style_accion))
-        elementos.append(Spacer(1, 0.8*cm))
-        
-        # Detalles en formato moderno (tabla limpia)
-        horas = accion.get('horas', 0) or accion.get('num_horas', 0)
-        modalidad = grupo.get('modalidad', 'PRESENCIAL')
-        fecha_inicio = grupo.get('fecha_inicio')
-        fecha_fin = grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista')
-        
-        fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else "No especificada"
-        fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else "No especificada"
-        
-        # Tabla de detalles minimalista
-        datos_tabla = [
-            ["Duración:", f"{horas} horas"],
-            ["Modalidad:", modalidad],
-            ["Período:", f"{fecha_inicio_str} - {fecha_fin_str}"]
-        ]
-        
-        tabla = Table(datos_tabla, colWidths=[6*cm, 10*cm])
-        tabla.setStyle(TableStyle([
-            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor("#4b5563")),
-            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
-            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 0), (-1, -1), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ]))
-        
-        tabla.hAlign = 'CENTER'
-        elementos.append(tabla)
-        elementos.append(Spacer(1, 1*cm))
-        
-        # Fecha de emisión
-        meses = {
-            1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
-            5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
-            9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
-        }
-        hoy = datetime.now()
-        fecha_emision = f"{hoy.day} de {meses[hoy.month]} de {hoy.year}"
-        elementos.append(Paragraph(fecha_emision, style_datos))
-        
-        # CARA B - Contenidos
-        elementos.append(PageBreak())
-        
-        style_titulo_contenidos = ParagraphStyle('TituloContenidosModerno',
-            fontSize=28,
-            textColor=colors.HexColor("#1a1a1a"),
-            alignment=TA_LEFT,
-            fontName='Helvetica-Bold',
-            spaceAfter=20
+        def draw_decorations(self):
+            """Dibuja líneas diagonales decorativas y bordes."""
+            width, height = landscape(A4)
+            
+            # Borde doble azul
+            self.setStrokeColor(colors.HexColor("#003d7a"))
+            self.setLineWidth(3)
+            margen = 1*cm
+            self.rect(margen, margen, width - 2*margen, height - 2*margen)
+            
+            self.setLineWidth(1)
+            margen_interno = margen + 0.2*cm
+            self.rect(margen_interno, margen_interno, width - 2*margen_interno, height - 2*margen_interno)
+            
+            # Líneas diagonales decorativas (izquierda)
+            colores_lineas = ["#003d7a", "#f39200", "#e63946"]
+            x_start = 2*cm
+            y_start = height - 3*cm
+            
+            for i, color in enumerate(colores_lineas * 3):
+                self.setStrokeColor(colors.HexColor(color))
+                self.setLineWidth(2)
+                offset = i * 0.3*cm
+                self.line(x_start + offset, y_start, x_start + offset + 3*cm, y_start - 6*cm)
+    
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                            leftMargin=2*cm, rightMargin=2*cm,
+                            topMargin=2.5*cm, bottomMargin=2*cm)
+    
+    elementos = []
+    styles = getSampleStyleSheet()
+    
+    # Estilos FUNDAE
+    style_titulo = ParagraphStyle('TituloFundae',
+        fontSize=42,
+        textColor=colors.HexColor("#003d7a"),
+        alignment=TA_CENTER,
+        fontName='Helvetica-Bold',
+        spaceAfter=5,
+        leading=45
+    )
+    
+    style_subtitulo = ParagraphStyle('SubtituloFundae',
+        fontSize=24,
+        textColor=colors.HexColor("#999999"),
+        alignment=TA_CENTER,
+        fontName='Helvetica',
+        spaceAfter=20
+    )
+    
+    style_label = ParagraphStyle('LabelFundae',
+        fontSize=11,
+        textColor=colors.HexColor("#333333"),
+        alignment=TA_LEFT,
+        fontName='Helvetica',
+        spaceAfter=3
+    )
+    
+    style_valor = ParagraphStyle('ValorFundae',
+        fontSize=13,
+        textColor=colors.HexColor("#000000"),
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=8
+    )
+    
+    style_contenidos = ParagraphStyle('ContenidosFundae',
+        fontSize=10,
+        textColor=colors.HexColor("#333333"),
+        alignment=TA_JUSTIFY,
+        fontName='Helvetica',
+        spaceAfter=6,
+        leading=12
+    )
+    
+    # CARA A
+    # Logos en tabla (empresa izquierda, FUNDAE derecha)
+    logos_tabla = []
+    
+    if logo_url:
+        try:
+            logo_empresa = Image(logo_url, width=6*cm, height=2*cm, kind='proportional')
+        except:
+            logo_empresa = Paragraph("", style_label)
+    else:
+        logo_empresa = Paragraph("", style_label)
+    
+    # Logo FUNDAE (siempre fijo)
+    try:
+        logo_fundae = Paragraph(
+            '<para align="right"><b><font size="14" color="#003d7a">Fundación Estatal</font></b><br/>'
+            '<font size="10" color="#f39200">PARA LA FORMACIÓN EN EL EMPLEO</font></para>',
+            style_label
         )
-        
-        elementos.append(Spacer(1, 1*cm))
-        elementos.append(Paragraph("Contenidos del programa", style_titulo_contenidos))
-        elementos.append(Spacer(1, 0.5*cm))
-        
-        contenidos = accion.get('contenidos', '')
-        if contenidos and contenidos.strip():
-            contenidos_texto = contenidos.replace('\n\n', '<br/><br/>').replace('\n', '<br/>')
-            elementos.append(Paragraph(contenidos_texto, style_contenidos))
+    except:
+        logo_fundae = Paragraph("", style_label)
+    
+    logos_tabla.append([logo_empresa, logo_fundae])
+    
+    tabla_logos = Table(logos_tabla, colWidths=[12*cm, 12*cm])
+    tabla_logos.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+    ]))
+    elementos.append(tabla_logos)
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    # Título
+    elementos.append(Paragraph("DIPLOMA", style_titulo))
+    elementos.append(Paragraph("ACREDITATIVO", style_subtitulo))
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    # Datos en formato tabla (como el original)
+    nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip()
+    tipo_doc = participante.get('tipo_documento', 'NIF')
+    num_doc = participante.get('nif', 'Sin documento')
+    
+    # Obtener empresa (puede ser diferente a la gestora)
+    try:
+        empresa_participante = grupo.get('centro_gestor_empresa_id') or grupo.get('empresa_id')
+        if empresa_participante:
+            from services.empresas_service import get_empresas_service
+            # Nota: necesitarías pasar estos servicios como parámetro
+            empresa_info = {"nombre": "Empresa", "cif": ""}
         else:
-            elementos.append(Paragraph("Los contenidos de este programa no han sido especificados.", style_contenidos))
+            empresa_info = {"nombre": "Empresa", "cif": ""}
+    except:
+        empresa_info = {"nombre": "Empresa", "cif": ""}
+    
+    datos = [
+        [Paragraph("D./Dña.", style_label), 
+         Paragraph(f"<b>{nombre_completo.upper()}</b>", style_valor),
+         Paragraph("con NIF", style_label),
+         Paragraph(f"<b>{num_doc}</b>", style_valor)],
         
-        # Función para dibujar firma (sin borde)
-        def dibujar_firma(canvas, doc, firma_url=firma_url):
-            if firma_url:
-                try:
-                    canvas.drawImage(
-                        firma_url,
-                        x=doc.pagesize[0] / 2 - 60,
-                        y=60,
-                        width=160,
-                        height=60,
-                        mask="auto"
-                    )
-                except Exception as e:
-                    print("Error dibujando firma:", e)
+        [Paragraph("que presta sus servicios en la Empresa", style_label),
+         Paragraph(f"<b>{empresa_info['nombre']}</b>", style_valor),
+         Paragraph("con CIF", style_label),
+         Paragraph(f"<b>{empresa_info.get('cif', 'N/A')}</b>", style_valor)]
+    ]
+    
+    tabla_datos = Table(datos, colWidths=[4*cm, 10*cm, 2*cm, 4*cm])
+    tabla_datos.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    elementos.append(tabla_datos)
+    elementos.append(Spacer(1, 0.4*cm))
+    
+    # Acción formativa
+    accion_nombre = accion.get('nombre', 'Curso no especificado')
+    elementos.append(Paragraph(f"Ha superado con evaluación positiva la Acción Formativa <b>{accion_nombre}</b>", style_label))
+    elementos.append(Spacer(1, 0.3*cm))
+    
+    # Código AF/Grupo y fechas
+    codigo_grupo = grupo.get('codigo_grupo', 'N/A')
+    fecha_inicio = grupo.get('fecha_inicio')
+    fecha_fin = grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista')
+    
+    fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else "N/A"
+    fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else "N/A"
+    
+    # Desglose de horas
+    horas_totales = accion.get('horas', 0) or accion.get('num_horas', 0)
+    modalidad = grupo.get('modalidad', 'PRESENCIAL')
+    
+    if modalidad == 'TELEFORMACION':
+        horas_tele = horas_totales
+        horas_pres = 0
+    elif modalidad == 'PRESENCIAL':
+        horas_pres = horas_totales
+        horas_tele = 0
+    else:  # MIXTA
+        horas_pres = horas_totales // 2
+        horas_tele = horas_totales - horas_pres
+    
+    datos_curso = [
+        [Paragraph(f"Código AF / Grupo <b>{codigo_grupo}</b>", style_label),
+         Paragraph(f"Durante los días <b>{fecha_inicio_str}</b> al <b>{fecha_fin_str}</b>", style_label)],
         
-        doc.build(
-            elementos,
-            onFirstPage=lambda c, d: dibujar_firma(c, d, firma_url)
-        )
-        buffer.seek(0)
-        return buffer
+        [Paragraph(f"con una duración total de <b>{horas_totales}</b> horas en la modalidad formativa <b>Teleformación</b>", style_label),
+         Paragraph("", style_label)],
+        
+        [Paragraph(f"<b>{horas_pres}</b> horas en la modalidad formativa <b>Presencial</b>", style_label),
+         Paragraph("", style_label)]
+    ]
+    
+    tabla_curso = Table(datos_curso, colWidths=[14*cm, 10*cm])
+    tabla_curso.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    elementos.append(tabla_curso)
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    elementos.append(Paragraph("Contenidos impartidos (Ver dorso)", style_label))
+    elementos.append(Spacer(1, 0.8*cm))
+    
+    # Pie de página con firma y fecha
+    fecha_expedicion = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else datetime.now().strftime('%d/%m/%Y')
+    
+    pie_datos = [
+        [Paragraph("Firma y sello de la entidad responsable de<br/>impartir la formación", style_label),
+         Paragraph(f"Fecha de expedición<br/><b>{fecha_expedicion}</b>", style_label),
+         Paragraph("Firma del trabajador/a", style_label)]
+    ]
+    
+    tabla_pie = Table(pie_datos, colWidths=[8*cm, 8*cm, 8*cm])
+    tabla_pie.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+    ]))
+    elementos.append(tabla_pie)
+    
+    # CARA B - Contenidos
+    elementos.append(PageBreak())
+    
+    style_titulo_contenidos = ParagraphStyle('TituloContenidosFundae',
+        fontSize=16,
+        textColor=colors.HexColor("#003d7a"),
+        alignment=TA_LEFT,
+        fontName='Helvetica-Bold',
+        spaceAfter=15
+    )
+    
+    elementos.append(Spacer(1, 1*cm))
+    elementos.append(Paragraph("Contenidos impartidos:", style_titulo_contenidos))
+    elementos.append(Spacer(1, 0.5*cm))
+    
+    contenidos = accion.get('contenidos', '')
+    if contenidos and contenidos.strip():
+        # Formatear contenidos con estilo de unidades didácticas
+        contenidos_html = contenidos.replace('\n\n', '<br/><br/>').replace('\n', '<br/>')
+        elementos.append(Paragraph(contenidos_html, style_contenidos))
+    else:
+        elementos.append(Paragraph("Los contenidos de este programa no han sido especificados.", style_contenidos))
+    
+    # Función para dibujar firma
+    def dibujar_firma(canvas, doc, firma_url=firma_url):
+        if firma_url:
+            try:
+                canvas.drawImage(
+                    firma_url,
+                    x=3*cm,
+                    y=4*cm,
+                    width=4*cm,
+                    height=2*cm,
+                    preserveAspectRatio=True,
+                    mask="auto"
+                )
+            except Exception as e:
+                print("Error dibujando firma:", e)
+    
+    doc.build(
+        elementos,
+        onFirstPage=lambda c, d: dibujar_firma(c, d, firma_url),
+        canvasmaker=FundaeCanvas
+    )
+    buffer.seek(0)
+    return buffer
 # =========================
 # REGISTRO DE PLANTILLAS
 # =========================
@@ -589,8 +904,14 @@ PLANTILLAS_DISPONIBLES = {
         'descripcion': 'Diseño minimalista con tipografía sans-serif y colores neutros',
         'funcion': generar_diploma_moderno,
         'preview': '✨ Estilo limpio y contemporáneo'
+    },
+    'fundae': {
+        'nombre': 'FUNDAE Oficial',
+        'descripcion': 'Formato oficial FUNDAE con líneas decorativas y estructura reglamentaria',
+        'funcion': generar_diploma_fundae,
+        'preview': '📋 Cumplimiento normativo FUNDAE'
     }
-}          
+}        
 # =========================
 # SERVICIO DE PLANTILLAS
 # =========================
