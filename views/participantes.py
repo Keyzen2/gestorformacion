@@ -693,11 +693,13 @@ def mostrar_formulario_participante_nn(
         with col1:
             nombre = st.text_input("Nombre", value=datos.get("nombre", ""), key=f"{form_id}_nombre")
             apellidos = st.text_input("Apellidos", value=datos.get("apellidos", ""), key=f"{form_id}_apellidos")
+            tipo_documento_actual = datos.get("tipo_documento") or ""
+
             tipo_documento = st.selectbox(
                 "Tipo de Documento",
                 options=["", "NIF", "NIE", "PASAPORTE"],
-                index=["", "NIF", "NIE", "PASAPORTE"].index(datos.get("tipo_documento", "")) 
-                if datos.get("tipo_documento", "") in ["", "NIF", "NIE", "PASAPORTE"] else 0,
+                index=["", "NIF", "NIE", "PASAPORTE"].index(tipo_documento_actual) 
+                    if tipo_documento_actual in ["", "NIF", "NIE", "PASAPORTE"] else 0,
                 key=f"{form_id}_tipo_doc"
             )
             documento = st.text_input(
