@@ -943,9 +943,10 @@ def mostrar_formulario_participante_nn(
                         except Exception as e:
                             st.warning(f"⚠️ Error actualizando contraseña en Auth: {e}")
                     
-                    ok = participantes_service.update_participante_con_jerarquia(
-                        datos["id"], 
-                        datos_payload
+                    ok = auth_service.actualizar_usuario_con_auth(
+                        tabla="participantes",
+                        registro_id=datos["id"],
+                        datos_editados=datos_payload
                     )
                     
                     if ok:
