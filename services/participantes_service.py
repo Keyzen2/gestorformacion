@@ -28,52 +28,54 @@ class ParticipantesService:
     # CONSULTAS PRINCIPALES
     # =========================
     def get_participantes_completos(self) -> pd.DataFrame:
-        """CORREGIDO: Retorna siempre DataFrame válido, nunca None."""
+        """Retorna participantes con provincias y localidades desde FK."""
         try:
             query = self.supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, provincia, localidad, email, telefono, 
-                fecha_nacimiento, sexo, created_at, updated_at, grupo_id, empresa_id,
+                id, nif, nombre, apellidos, email, telefono, 
+                fecha_nacimiento, sexo, created_at, updated_at, 
+                grupo_id, empresa_id, provincia_id, localidad_id,
+                provincia:provincias(id, nombre),
+                localidad:localidades(id, nombre),
                 empresa:empresas(id, nombre, cif)
             """)
             query = self._apply_empresa_filter(query)
     
             res = query.order("created_at", desc=True).execute()
             
-            # CORRECCIÓN: Manejar todos los casos None
             if not res or not res.data:
-                # Retornar DataFrame vacío con columnas correctas
                 return pd.DataFrame(columns=[
-                    'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
+                    'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
-                    'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
+                    'grupo_id', 'empresa_id', 'provincia_id', 'localidad_id',
+                    'provincia_nombre', 'localidad_nombre', 'empresa_nombre'
                 ])
             
             df = pd.DataFrame(res.data)
             
-            # Verificar que df no esté vacío antes de procesar relaciones
             if not df.empty:
-                if "empresa" in df.columns:
-                    df["empresa_nombre"] = df["empresa"].apply(
-                        lambda x: x.get("nombre") if isinstance(x, dict) else ""
-                    )
-                else:
-                    df["empresa_nombre"] = ""
-                    
-                df["grupo_codigo"] = ""
-            else:
-                # DataFrame vacío - añadir columnas necesarias
-                df["empresa_nombre"] = ""
-                df["grupo_codigo"] = ""
+                # Extraer nombres desde FK
+                df["provincia_nombre"] = df["provincia"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["localidad_nombre"] = df["localidad"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["empresa_nombre"] = df["empresa"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                
+                # Eliminar columnas de relación
+                df = df.drop(columns=['provincia', 'localidad', 'empresa'], errors='ignore')
             
             return df
             
         except Exception as e:
-            # IMPORTANTE: Siempre retornar DataFrame, nunca None
             st.error(f"Error al cargar participantes: {e}")
             return pd.DataFrame(columns=[
-                'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
+                'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                 'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
-                'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
+                'grupo_id', 'empresa_id', 'provincia_id', 'localidad_id',
+                'provincia_nombre', 'localidad_nombre', 'empresa_nombre'
             ])
             
     def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
