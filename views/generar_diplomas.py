@@ -1267,13 +1267,12 @@ def render(supabase, session_state):
 
         logo = logos_service.get_logo_empresa(empresa_id)
         logo_url = logo["archivo_url"] if logo else None
-    
+        
         plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
         plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
+        st.info(f"🎨 Plantilla activa: **{plantilla_info['nombre']}** - {plantilla_info['descripcion']}")
         
-        st.info(f"🎨 Plantilla: **{plantilla_info['nombre']}**")
         st.divider()
-        
         datos_personalizados = mostrar_editor_diploma(participante, grupo_completo, accion_completa)
         st.divider()
         
@@ -1282,6 +1281,9 @@ def render(supabase, session_state):
         with col1:
             if st.button("👁️ Previsualizar", type="secondary", use_container_width=True):
                 with st.spinner("Generando previsualización..."):
+                        
+                    plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
+                    plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
                     # ✅ AÑADIR logo_url como parámetro
                     pdf_buffer = generar_diploma_pdf(
                         participante, grupo_completo, accion_completa,
@@ -1307,6 +1309,8 @@ def render(supabase, session_state):
         with col3:
             if st.button("📜 Generar Diploma Final", type="primary", use_container_width=True):
                 with st.spinner("Generando diploma final..."):
+                    plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
+                    plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
                     # ✅ AÑADIR logo_url como parámetro
                     pdf_buffer = generar_diploma_pdf(
                         participante, grupo_completo, accion_completa,
