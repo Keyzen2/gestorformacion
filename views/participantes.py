@@ -249,7 +249,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
     end_idx = start_idx + page_size
     df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    columnas = ["nombre", "apellidos", "nif", "provincia_id", "localidad_id", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    columnas = ["nombre", "apellidos", "nif", "provincia_nombre", "localidad_nombre", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
     
     columnas_disponibles = []
     for col in columnas:
@@ -271,8 +271,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
-        "provincia_id": st.column_config.TextColumn("🏢 Provincia", width="medium"),
-        "localidad_id": st.column_config.TextColumn("🏢 Localidad", width="medium"),
+        "provincia_nombre": st.column_config.TextColumn("🏢 Provincia", width="medium"),
+        "localidad_nombre": st.column_config.TextColumn("🏘️ Localidad", width="medium"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
