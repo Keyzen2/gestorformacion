@@ -1126,6 +1126,7 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error al calcular estadísticas: {e}")
             return {}
+
     # =========================
     # OPERACIONES CRUD
     # =========================
@@ -1142,8 +1143,8 @@ class ParticipantesService:
             if not datos.get("nombre") or not datos.get("apellidos"):
                 st.error("⚠️ Nombre y apellidos son obligatorios.")
                 return False
-            if datos.get("dni") and not validar_dni_cif(datos["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
+            if datos.get("nif") and not validar_dni_cif(datos["nif"]):
+                st.error("⚠️ NIF/NIE/Pasaporte no válido.")
                 return False
     
             # Ajustar empresa si es gestor
@@ -1161,6 +1162,7 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"⚠️ Error al crear participante con Auth: {e}")
             return False
+
     
     def update_participante(self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
         """Actualiza un participante y sincroniza datos con Auth."""
