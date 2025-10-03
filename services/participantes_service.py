@@ -598,6 +598,7 @@ class ParticipantesService:
         except Exception as e:
             print(f"Error obteniendo participante completo: {e}")
             return None
+            
     def get_participantes_con_grupos_nn(self) -> pd.DataFrame:
         """Obtiene participantes con todos sus grupos usando tabla N:N (con provincias y localidades bien mapeadas)."""
         try:
@@ -613,7 +614,7 @@ class ParticipantesService:
                         grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
                                accion_formativa:acciones_formativas(nombre))
                 )
-            """.)
+            """)
         
             # Aplicar filtro según rol
             query = self._apply_empresa_filter(query)
