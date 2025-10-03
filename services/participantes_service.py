@@ -1234,8 +1234,8 @@ class ParticipantesService:
                 "telefono": datos_editados.get("telefono"),
                 "email": datos_editados.get("email"),
                 "empresa_id": datos_editados.get("empresa_id"),
-                "provincia": datos_editados.get("provincia"),
-                "localidad": datos_editados.get("localidad"),
+                "provincia_id": datos_editados.get("provincia_id"),
+                "localidad_id": datos_editados.get("localidad_id"),
                 "updated_at": datetime.utcnow().isoformat(),
             }
     
