@@ -271,6 +271,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
+        "provincia": st.column_config.TextColumn("🏢 Provincia", width="medium"),
+        "localidad": st.column_config.TextColumn("🏢 Localidad", width="medium"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
@@ -710,19 +712,45 @@ def mostrar_formulario_participante_nn(
             
         col1, col2 = st.columns(2)
 
+        # Obtener provincias
+        provincias_res = supabase.table("provincias").select("id, nombre").order("nombre").execute()
+        provincias_data = provincias_res.data or []
+        provincias_dict = {p["nombre"]: p["id"] for p in provincias_data}
+        
+        provincia_nombre = next(
+            (p["nombre"] for p in provincias_data if p["id"] == datos.get("provincia_id")), 
+            ""
+        )
+        
         with col1:
-            provincia = st.text_input(
+            provincia_sel = st.selectbox(
                 "🗺️ Provincia",
-                value=datos.get("provincia", ""),
+                options=[""] + list(provincias_dict.keys()),
+                index=([""] + list(provincias_dict.keys())).index(provincia_nombre) if provincia_nombre else 0,
                 key=f"{form_id}_provincia"
+            )
+            provincia_id = provincias_dict.get(provincia_sel) if provincia_sel else None
+        
+        # Cargar localidades según provincia
+        localidades_dict = {}
+        localidad_nombre = ""
+        if provincia_id:
+            localidades_res = supabase.table("localidades").select("id, nombre").eq("provincia_id", provincia_id).order("nombre").execute()
+            localidades_data = localidades_res.data or []
+            localidades_dict = {l["nombre"]: l["id"] for l in localidades_data}
+            localidad_nombre = next(
+                (l["nombre"] for l in localidades_data if l["id"] == datos.get("localidad_id")),
+                ""
             )
         
         with col2:
-            localidad = st.text_input(
+            localidad_sel = st.selectbox(
                 "🏘️ Localidad",
-                value=datos.get("localidad", ""),
+                options=[""] + list(localidades_dict.keys()),
+                index=([""] + list(localidades_dict.keys())).index(localidad_nombre) if localidad_nombre else 0,
                 key=f"{form_id}_localidad"
             )
+            localidad_id = localidades_dict.get(localidad_sel) if localidad_sel else None
         # =========================
         # EMPRESA
         # =========================
@@ -836,8 +864,8 @@ def mostrar_formulario_participante_nn(
                 datos_payload = {
                     "nombre": nombre,
                     "apellidos": apellidos,
-                    "provincia": provincia or None,
-                    "localidad": localidad or None,
+                    "provincia_id": provincia_id,
+                    "localidad_id": localidad_id,
                     "tipo_documento": tipo_documento or None,
                     "nif": documento or None,
                     "niss": niss or None,
