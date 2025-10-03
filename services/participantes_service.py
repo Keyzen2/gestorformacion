@@ -1163,7 +1163,7 @@ class ParticipantesService:
             st.error(f"⚠️ Error al crear participante con Auth: {e}")
             return False
 
-    
+
     def update_participante(self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
         """Actualiza un participante y sincroniza datos con Auth."""
         try:
@@ -1171,7 +1171,12 @@ class ParticipantesService:
             alumnos_service = AlumnosService(self.supabase)
     
             # Verificar existencia del participante
-            participante = self.supabase.table("participantes").select("auth_id, email").eq("id", participante_id).execute()
+            participante = (
+                self.supabase.table("participantes")
+                .select("auth_id, email")
+                .eq("id", participante_id)
+                .execute()
+            )
             if not participante.data:
                 st.error("⚠️ Participante no encontrado.")
                 return False
@@ -1183,8 +1188,8 @@ class ParticipantesService:
             if not datos_editados.get("email"):
                 st.error("⚠️ El email es obligatorio.")
                 return False
-            if datos_editados.get("dni") and not validar_dni_cif(datos_editados["dni"]):
-                st.error("⚠️ DNI/CIF no válido.")
+            if datos_editados.get("nif") and not validar_dni_cif(datos_editados["nif"]):
+                st.error("⚠️ NIF/NIE/Pasaporte no válido.")
                 return False
     
             # Verificar email único (excluyendo el actual)
@@ -1202,14 +1207,37 @@ class ParticipantesService:
     
             # Control de permisos para gestor
             if self.rol == "gestor":
-                participante_check = self.supabase.table("participantes").select("empresa_id").eq("id", participante_id).execute()
-                if not participante_check.data or participante_check.data[0].get("empresa_id") != self.empresa_id:
+                participante_check = (
+                    self.supabase.table("participantes")
+                    .select("empresa_id")
+                    .eq("id", participante_id)
+                    .execute()
+                )
+                if (
+                    not participante_check.data
+                    or participante_check.data[0].get("empresa_id") != self.empresa_id
+                ):
                     st.error("⚠️ No tienes permisos para editar este participante.")
                     return False
     
             # --- Actualizar tabla participantes ---
-            datos_editados["updated_at"] = datetime.utcnow().isoformat()
-            self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+            datos_update = {
+                "nombre": datos_editados.get("nombre"),
+                "apellidos": datos_editados.get("apellidos"),
+                "tipo_documento": datos_editados.get("tipo_documento"),
+                "nif": datos_editados.get("nif"),
+                "niss": datos_editados.get("niss"),
+                "fecha_nacimiento": datos_editados.get("fecha_nacimiento"),
+                "sexo": datos_editados.get("sexo"),
+                "telefono": datos_editados.get("telefono"),
+                "email": datos_editados.get("email"),
+                "empresa_id": datos_editados.get("empresa_id"),
+                "provincia": datos_editados.get("provincia"),
+                "localidad": datos_editados.get("localidad"),
+                "updated_at": datetime.utcnow().isoformat(),
+            }
+    
+            self.supabase.table("participantes").update(datos_update).eq("id", participante_id).execute()
     
             # --- Sincronizar con Auth ---
             if auth_id:
