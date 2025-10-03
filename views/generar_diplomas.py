@@ -1271,7 +1271,27 @@ def render(supabase, session_state):
         plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
         plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
         st.info(f"🎨 Plantilla activa: **{plantilla_info['nombre']}** - {plantilla_info['descripcion']}")
-        
+       
+        with st.expander("🔍 DEBUG - Plantilla Activa", expanded=True):
+            st.write(f"**Empresa ID:** {empresa_id}")
+            st.write(f"**Código plantilla obtenido:** {plantilla_codigo}")
+            st.write(f"**Nombre plantilla:** {plantilla_info['nombre']}")
+            
+            try:
+                result = plantillas_service.supabase.table("empresas_plantillas_diplomas").select("*").eq(
+                    "empresa_id", empresa_id
+                ).execute()
+                
+                st.write("**Registros en BD:**")
+                if result.data:
+                    for idx, registro in enumerate(result.data):
+                        st.json(registro)
+                else:
+                    st.warning("⚠️ No hay registros en empresas_plantillas_diplomas para esta empresa")
+            except Exception as e:
+                st.error(f"❌ Error consultando BD: {e}")
+                st.write("La tabla empresas_plantillas_diplomas probablemente no existe")
+                
         st.divider()
         datos_personalizados = mostrar_editor_diploma(participante, grupo_completo, accion_completa)
         st.divider()
