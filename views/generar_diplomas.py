@@ -1304,6 +1304,9 @@ def render(supabase, session_state):
                         
                     plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
                     plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
+                    # ✅ DEBUG: Ver qué función se está llamando
+                    st.write(f"🔍 DEBUG: Usando plantilla '{plantilla_codigo}'")
+                    st.write(f"🔍 DEBUG: Función a llamar: {plantilla_info['funcion'].__name__}")
                     # ✅ AÑADIR logo_url como parámetro
                     pdf_buffer = generar_diploma_pdf(
                         participante, grupo_completo, accion_completa,
