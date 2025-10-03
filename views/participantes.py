@@ -688,11 +688,11 @@ def mostrar_formulario_participante_nn(
             apellidos = st.text_input("Apellidos", value=datos.get("apellidos",""), key=f"{form_id}_apellidos")
             tipo_documento = st.selectbox(
                 "Tipo de Documento",
-                options=["", "DNI", "NIE", "PASAPORTE"],
-                index=["","DNI","NIE","PASAPORTE"].index(datos.get("tipo_documento","")) if datos.get("tipo_documento","") in ["","DNI","NIE","PASAPORTE"] else 0,
+                options=["", "NIF", "NIE", "PASAPORTE"],
+                index=["","NIF","NIE","PASAPORTE"].index(datos.get("tipo_documento","")) if datos.get("tipo_documento","") in ["","NIF","NIE","PASAPORTE"] else 0,
                 key=f"{form_id}_tipo_doc"
             )
-            documento = st.text_input("Número de Documento", value=datos.get("nif",""), key=f"{form_id}_documento", help="DNI, NIE, CIF o Pasaporte")
+            documento = st.text_input("Número de Documento", value=datos.get("nif",""), key=f"{form_id}_documento", help="NIF, NIE, CIF o Pasaporte")
             niss = st.text_input("NISS", value=datos.get("niss",""), key=f"{form_id}_niss", help="Número de la Seguridad Social")
         
         with col2:
