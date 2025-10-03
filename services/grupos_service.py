@@ -1072,12 +1072,10 @@ class GruposService:
     # =========================
     # GRUPOS - CONSULTAS PRINCIPALES
     # =========================
-
-    @st.cache_data(ttl=300)
-    def get_grupos_completos(_self) -> pd.DataFrame:
+    def get_grupos_completos(self) -> pd.DataFrame:
         """Obtiene grupos con información completa usando FK para provincia/localidad."""
         try:
-            query = _self.supabase.table("grupos").select("""
+            query = self.supabase.table("grupos").select("""
                 id, codigo_grupo, fecha_inicio, fecha_fin, fecha_fin_prevista,
                 modalidad, horario, provincia_id, localidad_id, cp, lugar_imparticion,
                 n_participantes_previstos, n_participantes_finalizados,
@@ -1088,7 +1086,7 @@ class GruposService:
                 accion_formativa:acciones_formativas!fk_grupo_accion(id, nombre, modalidad, num_horas, codigo_accion)
             """)
             
-            query = _self._apply_empresa_filter(query, "grupos")
+            query = self._apply_empresa_filter(query, "grupos")
             res = query.order("fecha_inicio", desc=True).execute()
             
             df = pd.DataFrame(res.data or [])
