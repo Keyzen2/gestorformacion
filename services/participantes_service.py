@@ -444,19 +444,31 @@ class ParticipantesService:
                 st.error("Ya existe un usuario con ese email.")
                 return False
     
-            # Preparar datos finales
-            datos_finales = datos.copy()
-            datos_finales.update({
+            # ✅ MAPEAR CORRECTAMENTE LOS CAMPOS
+            datos_finales = {
+                "nombre": datos.get("nombre"),
+                "apellidos": datos.get("apellidos"),
+                "email": datos.get("email"),
+                "telefono": datos.get("telefono"),
+                "nif": datos.get("nif"),
+                "tipo_documento": datos.get("tipo_documento"),
+                "niss": datos.get("niss"),
+                "fecha_nacimiento": datos.get("fecha_nacimiento"),
+                "sexo": datos.get("sexo"),
+                "provincia_id": datos.get("provincia_id"),
+                "localidad_id": datos.get("localidad_id"),
+                "empresa_id": empresa_id_part,
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
-            })
+            }
     
             # Crear participante
             result = self.supabase.table("participantes").insert(datos_finales).execute()
     
             if result.data:
                 # Limpiar cache
-                self.get_participantes_con_jerarquia.clear()
+                if hasattr(self.get_participantes_con_jerarquia, 'clear'):
+                    self.get_participantes_con_jerarquia.clear()
                 return True
             else:
                 st.error("Error al crear el participante.")
@@ -465,7 +477,7 @@ class ParticipantesService:
         except Exception as e:
             st.error(f"Error al crear participante: {e}")
             return False
-    
+
     def update_participante_con_jerarquia(self, participante_id: str, datos_editados: Dict[str, Any]) -> bool:
         """Actualiza participante validando permisos jerárquicos."""
         try:
@@ -512,14 +524,29 @@ class ParticipantesService:
                     st.error("Ya existe otro participante con ese email.")
                     return False
     
-            # Añadir timestamp de actualización
-            datos_editados["updated_at"] = datetime.utcnow().isoformat()
+            # ✅ MAPEAR CORRECTAMENTE LOS CAMPOS PARA UPDATE
+            datos_update = {
+                "nombre": datos_editados.get("nombre"),
+                "apellidos": datos_editados.get("apellidos"),
+                "email": datos_editados.get("email"),
+                "telefono": datos_editados.get("telefono"),
+                "nif": datos_editados.get("nif"),
+                "tipo_documento": datos_editados.get("tipo_documento"),
+                "niss": datos_editados.get("niss"),
+                "fecha_nacimiento": datos_editados.get("fecha_nacimiento"),
+                "sexo": datos_editados.get("sexo"),
+                "provincia_id": datos_editados.get("provincia_id"),
+                "localidad_id": datos_editados.get("localidad_id"),
+                "empresa_id": nueva_empresa,
+                "updated_at": datetime.utcnow().isoformat()
+            }
     
             # Actualizar participante
-            self.supabase.table("participantes").update(datos_editados).eq("id", participante_id).execute()
+            self.supabase.table("participantes").update(datos_update).eq("id", participante_id).execute()
     
             # Limpiar cache
-            self.get_participantes_con_jerarquia.clear()
+            if hasattr(self.get_participantes_con_jerarquia, 'clear'):
+                self.get_participantes_con_jerarquia.clear()
     
             return True
     
