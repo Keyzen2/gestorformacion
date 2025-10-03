@@ -686,45 +686,85 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 )
             
             with col2:
-                # Localidad y Provincia
+                # Provincia y Localidad con FK
                 try:
                     provincias = grupos_service.get_provincias()
                     prov_opciones = {p["nombre"]: p["id"] for p in provincias}
                     
-                    provincia_actual = datos_grupo.get("provincia") if datos_grupo else None
+                    # Obtener provincia actual desde provincia_id
+                    provincia_id_actual = datos_grupo.get("provincia_id") if datos_grupo else None
+                    provincia_nombre_actual = None
+                    
+                    if provincia_id_actual:
+                        # Buscar nombre de la provincia por su ID
+                        for nombre, pid in prov_opciones.items():
+                            if pid == provincia_id_actual:
+                                provincia_nombre_actual = nombre
+                                break
                     
                     provincia_sel = st.selectbox(
                         "🗺️ Provincia *",
                         options=list(prov_opciones.keys()),
-                        index=list(prov_opciones.keys()).index(provincia_actual) if provincia_actual in prov_opciones else 0,
+                        index=list(prov_opciones.keys()).index(provincia_nombre_actual) 
+                            if provincia_nombre_actual in prov_opciones else 0,
                         help="Provincia de impartición"
                     )
                     
+                    # Obtener ID de provincia seleccionada
+                    provincia_id_sel = prov_opciones[provincia_sel]
+                    
+                    # Cargar localidades de la provincia seleccionada
                     if provincia_sel:
-                        localidades = grupos_service.get_localidades_por_provincia(prov_opciones[provincia_sel])
-                        loc_nombres = [l["nombre"] for l in localidades]
+                        localidades = grupos_service.get_localidades_por_provincia(provincia_id_sel)
+                        loc_opciones = {l["nombre"]: l["id"] for l in localidades}
                         
-                        localidad_actual = datos_grupo.get("localidad") if datos_grupo else None
+                        # Obtener localidad actual desde localidad_id
+                        localidad_id_actual = datos_grupo.get("localidad_id") if datos_grupo else None
+                        localidad_nombre_actual = None
+                        
+                        if localidad_id_actual:
+                            # Buscar nombre de la localidad por su ID
+                            for nombre, lid in loc_opciones.items():
+                                if lid == localidad_id_actual:
+                                    localidad_nombre_actual = nombre
+                                    break
                         
                         localidad_sel = st.selectbox(
-                            "🏘️ Localidad *",
-                            options=loc_nombres,
-                            index=loc_nombres.index(localidad_actual) if localidad_actual in loc_nombres else 0 if loc_nombres else -1,
+                            "🏙️ Localidad *",
+                            options=list(loc_opciones.keys()),
+                            index=list(loc_opciones.keys()).index(localidad_nombre_actual)
+                                if localidad_nombre_actual in loc_opciones else 0 if loc_opciones else -1,
                             help="Localidad de impartición"
                         )
+                        
+                        # Obtener ID de localidad seleccionada
+                        localidad_id_sel = loc_opciones.get(localidad_sel)
                     else:
                         localidad_sel = None
+                        localidad_id_sel = None
+                        
                 except Exception as e:
                     st.error(f"Error al cargar provincias/localidades: {e}")
-                    provincia_sel = st.text_input("🗺️ Provincia *", value=datos_grupo.get("provincia", ""))
-                    localidad_sel = st.text_input("🏘️ Localidad *", value=datos_grupo.get("localidad", ""))
+                    # Fallback a inputs numéricos en caso de error
+                    provincia_id_sel = st.number_input(
+                        "🗺️ Provincia ID *", 
+                        value=datos_grupo.get("provincia_id", 1),
+                        min_value=1,
+                        help="ID de provincia (fallback)"
+                    )
+                    localidad_id_sel = st.number_input(
+                        "🏙️ Localidad ID *",
+                        value=datos_grupo.get("localidad_id", 1),
+                        min_value=1,
+                        help="ID de localidad (fallback)"
+                    )
                 
                 cp = st.text_input(
                     "📮 Código Postal",
                     value=datos_grupo.get("cp", ""),
                     help="Código postal de impartición"
                 )
-
+                
                 responsable = st.text_input(
                     "👤 Responsable del Grupo",
                     value=str(datos_grupo.get("responsable") or ""),
@@ -739,10 +779,10 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
             
             # Campos de área completa
             lugar_imparticion = st.text_area(
-                "📍 Lugar de Impartición",
+                "📍 Lugar de Impartición *",
                 value=datos_grupo.get("lugar_imparticion", ""),
                 height=60,
-                help="Descripción detallada del lugar donde se impartirá la formación"
+                help="Dirección completa: Calle, número, piso... (requerido para XML FUNDAE)"
             )
             
             observaciones = st.text_area(
@@ -835,6 +875,7 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
 
         # VALIDACIONES Y BOTONES
         errores = []
+        
         if not codigo_grupo:
             errores.append("Código del grupo requerido")
         if not accion_formativa:
@@ -843,13 +884,19 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
             errores.append("Fecha de inicio requerida")
         if not fecha_fin_prevista:
             errores.append("Fecha fin prevista requerida")
-        if not localidad_sel:
+        if not provincia_id_sel:  # ✅ Validar ID en lugar de texto
+            errores.append("Provincia requerida")
+        if not localidad_id_sel:  # ✅ Validar ID en lugar de texto
             errores.append("Localidad requerida")
+        if not cp or len(cp.strip()) == 0:  # ✅ Validar CP (requerido FUNDAE)
+            errores.append("Código postal requerido")
+        if not lugar_imparticion or len(lugar_imparticion.strip()) == 0:  # ✅ Validar dirección (requerido FUNDAE)
+            errores.append("Lugar de impartición requerido")
         if grupos_service.rol == "admin" and not empresa_id:
             errores.append("Empresa propietaria requerida")
         if not horario_nuevo:
             errores.append("Horario requerido")
-
+        
         if errores:
             st.error("Faltan campos obligatorios:")
             for error in errores:
@@ -883,8 +930,8 @@ def mostrar_formulario_grupo_separado(grupos_service, es_creacion=False, context
                 "modalidad": modalidad_grupo,
                 "fecha_inicio": fecha_inicio.isoformat(),
                 "fecha_fin_prevista": fecha_fin_prevista.isoformat() if fecha_fin_prevista else None,
-                "provincia": provincia_sel,
-                "localidad": localidad_sel,
+                "provincia_id": provincia_id_sel, 
+                "localidad_id": localidad_id_sel,
                 "cp": cp,
                 "responsable": responsable.strip() if responsable and responsable.strip() else None,
                 "telefono_contacto": telefono_contacto.strip() if telefono_contacto and telefono_contacto.strip() else None,
@@ -1914,7 +1961,12 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
             estado_filtro = st.selectbox("📊 Estado", estados)
         
         with col3:
-            localidades = ["Todas"] + sorted(df_display["localidad"].dropna().unique().tolist())
+            # Usar localidad_nombre (extraído de la FK)
+            if "localidad_nombre" in df_display.columns:
+                localidades = ["Todas"] + sorted(df_display["localidad_nombre"].dropna().unique().tolist())
+            else:
+                localidades = ["Todas"]
+            
             localidad_filtro = st.selectbox("🏙️ Localidad", localidades)
         
         with col4:
@@ -1948,7 +2000,8 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
         df_filtrado = df_filtrado[df_filtrado["Estado"] == estado_filtro]
         
     if localidad_filtro != "Todas":
-        df_filtrado = df_filtrado[df_filtrado["localidad"] == localidad_filtro]
+        # Filtrar por localidad_nombre
+        df_filtrado = df_filtrado[df_filtrado["localidad_nombre"] == localidad_filtro]
     
     if session_state.role == "admin" and empresa_filtro != "Todas":
         df_filtrado = df_filtrado[df_filtrado["empresa_nombre"] == empresa_filtro]
@@ -1994,12 +2047,13 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
             fecha_str = datetime.now().strftime("%Y%m%d")
             filename = f"grupos_filtrados_{fecha_str}.xlsx"
             
-            # Preparar datos para exportación (sin columnas internas)
             columnas_export = [
                 "codigo_grupo", "accion_nombre", "modalidad",
-                "fecha_inicio", "fecha_fin_prevista", "localidad", "provincia",
+                "fecha_inicio", "fecha_fin_prevista", 
+                "provincia_nombre", "localidad_nombre",  # ✅ Cambio aquí
+                "cp", "lugar_imparticion",  # ✅ Añadido cp para completitud FUNDAE
                 "n_participantes_previstos", "Estado", "responsable", 
-                "telefono_contacto", "lugar_imparticion"
+                "telefono_contacto"
             ]
             
             if session_state.role == "admin":
@@ -2042,7 +2096,8 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
     # Columnas para mostrar
     columnas_mostrar = [
         "codigo_grupo", "accion_nombre", "modalidad", 
-        "fecha_inicio", "fecha_fin_prevista", "localidad", 
+        "fecha_inicio", "fecha_fin_prevista", 
+        "provincia_nombre", "localidad_nombre",  # ✅ Cambio aquí
         "n_participantes_previstos", "Estado"
     ]
     
@@ -2062,7 +2117,8 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
         ),
         "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
         "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
-        "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+        "provincia_nombre": st.column_config.TextColumn("🗺️ Provincia", width="small"),  # ✅ Añadido
+        "localidad_nombre": st.column_config.TextColumn("🏙️ Localidad", width="medium"),  # ✅ Cambio
         "n_participantes_previstos": st.column_config.NumberColumn(
             "👥 Participantes", 
             width="small", 
@@ -2072,7 +2128,8 @@ def mostrar_tabla_grupos_con_filtros_y_export(df_grupos, session_state):
             "📊 Estado", 
             width="small",
             options=["ABIERTO", "FINALIZAR", "FINALIZADO"]
-        )
+        ),
+        "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")  # ✅ Asegurar que está
     }
     
     if session_state.role == "admin":
@@ -2247,7 +2304,7 @@ def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
     # Seleccionar columnas para mostrar
     columnas_mostrar = [
         "codigo_grupo", "accion_nombre", "modalidad", 
-        "fecha_inicio", "fecha_fin_prevista", "localidad", 
+        "fecha_inicio", "fecha_fin_prevista", "localidad_nombre", 
         "n_participantes_previstos", "Estado"
     ]
     
@@ -2263,7 +2320,7 @@ def mostrar_tabla_grupos_consistente(df_grupos, session_state, grupos_service):
         "modalidad": st.column_config.TextColumn("🎯 Modalidad", width="small"),
         "fecha_inicio": st.column_config.DateColumn("📅 Inicio", width="small"),
         "fecha_fin_prevista": st.column_config.DateColumn("📅 Fin Previsto", width="small"),
-        "localidad": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+        "localidad_nombre": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
         "n_participantes_previstos": st.column_config.NumberColumn("👥 Participantes", width="small"),
         "Estado": st.column_config.TextColumn("📊 Estado", width="small"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="medium")
