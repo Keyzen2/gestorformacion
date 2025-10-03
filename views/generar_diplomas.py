@@ -170,59 +170,6 @@ class LogosService:
             return False
             
 # =========================
-# SERVICIO DE PLANTILLAS
-# =========================
-class PlantillasService:
-    """Gestión de plantillas de diplomas por empresa."""
-    
-    def __init__(self, supabase, session_state):
-        self.supabase = supabase
-        self.session_state = session_state
-    
-    def get_plantilla_activa(self, empresa_id: str) -> str:
-        """Obtiene el código de la plantilla activa de una empresa."""
-        try:
-            result = self.supabase.table("empresas_plantillas_diplomas").select("codigo").eq(
-                "empresa_id", empresa_id
-            ).eq("activa", True).limit(1).execute()
-            
-            return result.data[0]["codigo"] if result.data else "clasica"
-        except:
-            return "clasica"
-    
-    def set_plantilla_activa(self, empresa_id: str, codigo_plantilla: str) -> bool:
-        """Establece una plantilla como activa."""
-        try:
-            # Desactivar todas las plantillas de la empresa
-            self.supabase.table("empresas_plantillas_diplomas").update({
-                "activa": False
-            }).eq("empresa_id", empresa_id).execute()
-            
-            # Buscar si ya existe registro para esta plantilla
-            existing = self.supabase.table("empresas_plantillas_diplomas").select("id").eq(
-                "empresa_id", empresa_id
-            ).eq("codigo", codigo_plantilla).execute()
-            
-            if existing.data:
-                # Activar existente
-                self.supabase.table("empresas_plantillas_diplomas").update({
-                    "activa": True
-                }).eq("id", existing.data[0]["id"]).execute()
-            else:
-                # Crear nuevo
-                self.supabase.table("empresas_plantillas_diplomas").insert({
-                    "empresa_id": empresa_id,
-                    "nombre": PLANTILLAS_DISPONIBLES[codigo_plantilla]["nombre"],
-                    "codigo": codigo_plantilla,
-                    "activa": True
-                }).execute()
-            
-            return True
-        except Exception as e:
-            print(f"Error estableciendo plantilla: {e}")
-            return False
-            
-# =========================
 # CANVAS PERSONALIZADO CON BORDE CLASICO
 # =========================
 class DiplomaCanvas(canvas.Canvas):
@@ -415,6 +362,7 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
     )
     buffer.seek(0)
     return buffer
+    
     # =========================
     # PLANTILLA MODERNA
     # =========================
@@ -626,25 +574,75 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
         )
         buffer.seek(0)
         return buffer
-
-    # =========================
-    # REGISTRO DE PLANTILLAS
-    # =========================
-    PLANTILLAS_DISPONIBLES = {
-        'clasica': {
-            'nombre': 'Clásica',
-            'descripcion': 'Diseño tradicional con borde decorativo y tipografía serif',
-            'funcion': generar_diploma_pdf,
-            'preview': '🎓 Estilo formal con marcos'
-        },
-        'moderna': {
-            'nombre': 'Moderna',
-            'descripcion': 'Diseño minimalista con tipografía sans-serif y colores neutros',
-            'funcion': generar_diploma_moderno,
-            'preview': '✨ Estilo limpio y contemporáneo'
-        }
+# =========================
+# REGISTRO DE PLANTILLAS
+# =========================
+PLANTILLAS_DISPONIBLES = {
+    'clasica': {
+        'nombre': 'Clásica',
+        'descripcion': 'Diseño tradicional con borde decorativo y tipografía serif',
+        'funcion': generar_diploma_pdf,
+        'preview': '🎓 Estilo formal con marcos'
+    },
+    'moderna': {
+        'nombre': 'Moderna',
+        'descripcion': 'Diseño minimalista con tipografía sans-serif y colores neutros',
+        'funcion': generar_diploma_moderno,
+        'preview': '✨ Estilo limpio y contemporáneo'
     }
-
+}          
+# =========================
+# SERVICIO DE PLANTILLAS
+# =========================
+class PlantillasService:
+    """Gestión de plantillas de diplomas por empresa."""
+    
+    def __init__(self, supabase, session_state):
+        self.supabase = supabase
+        self.session_state = session_state
+    
+    def get_plantilla_activa(self, empresa_id: str) -> str:
+        """Obtiene el código de la plantilla activa de una empresa."""
+        try:
+            result = self.supabase.table("empresas_plantillas_diplomas").select("codigo").eq(
+                "empresa_id", empresa_id
+            ).eq("activa", True).limit(1).execute()
+            
+            return result.data[0]["codigo"] if result.data else "clasica"
+        except:
+            return "clasica"
+    
+    def set_plantilla_activa(self, empresa_id: str, codigo_plantilla: str) -> bool:
+        """Establece una plantilla como activa."""
+        try:
+            # Desactivar todas las plantillas de la empresa
+            self.supabase.table("empresas_plantillas_diplomas").update({
+                "activa": False
+            }).eq("empresa_id", empresa_id).execute()
+            
+            # Buscar si ya existe registro para esta plantilla
+            existing = self.supabase.table("empresas_plantillas_diplomas").select("id").eq(
+                "empresa_id", empresa_id
+            ).eq("codigo", codigo_plantilla).execute()
+            
+            if existing.data:
+                # Activar existente
+                self.supabase.table("empresas_plantillas_diplomas").update({
+                    "activa": True
+                }).eq("id", existing.data[0]["id"]).execute()
+            else:
+                # Crear nuevo
+                self.supabase.table("empresas_plantillas_diplomas").insert({
+                    "empresa_id": empresa_id,
+                    "nombre": PLANTILLAS_DISPONIBLES[codigo_plantilla]["nombre"],
+                    "codigo": codigo_plantilla,
+                    "activa": True
+                }).execute()
+            
+            return True
+        except Exception as e:
+            print(f"Error estableciendo plantilla: {e}")
+            return False
 # =========================
 # EDITOR INTERACTIVO
 # =========================
