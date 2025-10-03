@@ -31,7 +31,7 @@ class ParticipantesService:
         """CORREGIDO: Retorna siempre DataFrame válido, nunca None."""
         try:
             query = self.supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, dni, email, telefono, 
+                id, nif, nombre, apellidos, provincia, localidad, email, telefono, 
                 fecha_nacimiento, sexo, created_at, updated_at, grupo_id, empresa_id,
                 empresa:empresas(id, nombre, cif)
             """)
@@ -43,7 +43,7 @@ class ParticipantesService:
             if not res or not res.data:
                 # Retornar DataFrame vacío con columnas correctas
                 return pd.DataFrame(columns=[
-                    'id', 'nif', 'nombre', 'apellidos', 'dni', 'email', 'telefono',
+                    'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                     'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
                 ])
@@ -71,7 +71,7 @@ class ParticipantesService:
             # IMPORTANTE: Siempre retornar DataFrame, nunca None
             st.error(f"Error al cargar participantes: {e}")
             return pd.DataFrame(columns=[
-                'id', 'nif', 'nombre', 'apellidos', 'dni', 'email', 'telefono',
+                'id', 'nif', 'nombre', 'apellidos', 'provincia', 'localidad', 'email', 'telefono',
                 'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                 'grupo_id', 'empresa_id', 'empresa_nombre', 'grupo_codigo'
             ])
@@ -621,6 +621,8 @@ class ParticipantesService:
                     "nif": participante.get("nif", ""),
                     "nombre": participante.get("nombre", ""),
                     "apellidos": participante.get("apellidos", ""),
+                    "provincia": participante.get("provincia", ""),
+                    "localidad": participante.get("localidad", ""),
                     "email": participante.get("email", ""),
                     "telefono": participante.get("telefono", ""),
                     "fecha_nacimiento": participante.get("fecha_nacimiento"),
