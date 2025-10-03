@@ -1074,23 +1074,34 @@ class GruposService:
     # =========================
 
     @st.cache_data(ttl=300)
-    def get_grupos_completos(_self) -> pd.DataFrame:
-        """Obtiene grupos con información completa."""
+    def get_grupos_completos(self) -> pd.DataFrame:
+        """Obtiene grupos con información completa usando FK para provincia/localidad."""
         try:
-            query = _self.supabase.table("grupos").select("""
+            query = self.supabase.table("grupos").select("""
                 id, codigo_grupo, fecha_inicio, fecha_fin, fecha_fin_prevista,
-                modalidad, horario, localidad, provincia, cp, lugar_imparticion,
+                modalidad, horario, provincia_id, localidad_id, cp, lugar_imparticion,
                 n_participantes_previstos, n_participantes_finalizados,
-                n_aptos, n_no_aptos, observaciones, empresa_id, created_at,
-                empresa:empresas!fk_grupo_empresa (id, nombre, cif),
-                accion_formativa:acciones_formativas!fk_grupo_accion (id, nombre, modalidad, num_horas, codigo_accion)
+                n_aptos, n_no_aptos, observaciones, empresa_id, created_at, estado,
+                provincia:provincias(id, nombre),
+                localidad:localidades(id, nombre),
+                empresa:empresas!fk_grupo_empresa(id, nombre, cif),
+                accion_formativa:acciones_formativas!fk_grupo_accion(id, nombre, modalidad, num_horas, codigo_accion)
             """)
-            query = _self._apply_empresa_filter(query, "grupos")
-
+            
+            query = self._apply_empresa_filter(query, "grupos")
             res = query.order("fecha_inicio", desc=True).execute()
+            
             df = pd.DataFrame(res.data or [])
-
+            
             if not df.empty:
+                # Procesar provincia y localidad desde FK
+                df["provincia_nombre"] = df["provincia"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                df["localidad_nombre"] = df["localidad"].apply(
+                    lambda x: x.get("nombre") if isinstance(x, dict) else ""
+                )
+                
                 # Procesar acción formativa
                 if "accion_formativa" in df.columns:
                     df["accion_nombre"] = df["accion_formativa"].apply(
@@ -1102,16 +1113,26 @@ class GruposService:
                     df["accion_horas"] = df["accion_formativa"].apply(
                         lambda x: x.get("num_horas") if isinstance(x, dict) else 0
                     )
-        
+                    df["accion_codigo"] = df["accion_formativa"].apply(
+                        lambda x: x.get("codigo_accion") if isinstance(x, dict) else ""
+                    )
+                
                 # Procesar empresa
                 if "empresa" in df.columns:
                     df["empresa_nombre"] = df["empresa"].apply(
                         lambda x: x.get("nombre") if isinstance(x, dict) else ""
                     )
-
+                    df["empresa_cif"] = df["empresa"].apply(
+                        lambda x: x.get("cif") if isinstance(x, dict) else ""
+                    )
+                
+                # Limpiar columnas de relación (opcional, para reducir tamaño)
+                df = df.drop(columns=['provincia', 'localidad', 'accion_formativa', 'empresa'], errors='ignore')
+            
             return df
+            
         except Exception as e:
-            return _self._handle_query_error("cargar grupos completos", e)
+            return self._handle_query_error("cargar grupos completos", e)
 
     @st.cache_data(ttl=600)
     def get_grupos_dict(_self) -> Dict[str, str]:
