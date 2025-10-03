@@ -249,7 +249,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="ð
     end_idx = start_idx + page_size
     df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    columnas = ["nombre", "apellidos", "nif", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    columnas = ["nombre", "apellidos", "nif", "provincia_id", "localidad_id", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
     
     columnas_disponibles = []
     for col in columnas:
