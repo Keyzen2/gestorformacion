@@ -170,7 +170,60 @@ class LogosService:
             return False
             
 # =========================
-# CANVAS PERSONALIZADO CON BORDE
+# SERVICIO DE PLANTILLAS
+# =========================
+class PlantillasService:
+    """Gestión de plantillas de diplomas por empresa."""
+    
+    def __init__(self, supabase, session_state):
+        self.supabase = supabase
+        self.session_state = session_state
+    
+    def get_plantilla_activa(self, empresa_id: str) -> str:
+        """Obtiene el código de la plantilla activa de una empresa."""
+        try:
+            result = self.supabase.table("empresas_plantillas_diplomas").select("codigo").eq(
+                "empresa_id", empresa_id
+            ).eq("activa", True).limit(1).execute()
+            
+            return result.data[0]["codigo"] if result.data else "clasica"
+        except:
+            return "clasica"
+    
+    def set_plantilla_activa(self, empresa_id: str, codigo_plantilla: str) -> bool:
+        """Establece una plantilla como activa."""
+        try:
+            # Desactivar todas las plantillas de la empresa
+            self.supabase.table("empresas_plantillas_diplomas").update({
+                "activa": False
+            }).eq("empresa_id", empresa_id).execute()
+            
+            # Buscar si ya existe registro para esta plantilla
+            existing = self.supabase.table("empresas_plantillas_diplomas").select("id").eq(
+                "empresa_id", empresa_id
+            ).eq("codigo", codigo_plantilla).execute()
+            
+            if existing.data:
+                # Activar existente
+                self.supabase.table("empresas_plantillas_diplomas").update({
+                    "activa": True
+                }).eq("id", existing.data[0]["id"]).execute()
+            else:
+                # Crear nuevo
+                self.supabase.table("empresas_plantillas_diplomas").insert({
+                    "empresa_id": empresa_id,
+                    "nombre": PLANTILLAS_DISPONIBLES[codigo_plantilla]["nombre"],
+                    "codigo": codigo_plantilla,
+                    "activa": True
+                }).execute()
+            
+            return True
+        except Exception as e:
+            print(f"Error estableciendo plantilla: {e}")
+            return False
+            
+# =========================
+# CANVAS PERSONALIZADO CON BORDE CLASICO
 # =========================
 class DiplomaCanvas(canvas.Canvas):
     """Canvas personalizado con borde decorativo."""
@@ -362,6 +415,235 @@ def generar_diploma_pdf(participante, grupo, accion, firma_url=None, logo_url=No
     )
     buffer.seek(0)
     return buffer
+    # =========================
+    # PLANTILLA MODERNA
+    # =========================
+    def generar_diploma_moderno(participante, grupo, accion, firma_url=None, logo_url=None, datos_personalizados=None) -> BytesIO:
+        """Genera diploma con diseño moderno y minimalista."""
+        if not REPORTLAB_AVAILABLE:
+            return None
+        
+        # Aplicar datos personalizados (igual que clásico)
+        if datos_personalizados:
+            if 'nombre_completo' in datos_personalizados:
+                partes = datos_personalizados['nombre_completo'].split(' ', 1)
+                participante['nombre'] = partes[0]
+                participante['apellidos'] = partes[1] if len(partes) > 1 else ''
+            for key in ['tipo_documento', 'nif']:
+                if key in datos_personalizados:
+                    participante[key] = datos_personalizados[key]
+            if 'accion_nombre' in datos_personalizados:
+                accion['nombre'] = datos_personalizados['accion_nombre']
+            for key in ['horas', 'modalidad']:
+                if key in datos_personalizados:
+                    if key == 'horas':
+                        accion['horas'] = datos_personalizados[key]
+                    else:
+                        grupo[key] = datos_personalizados[key]
+            for key in ['fecha_inicio', 'fecha_fin']:
+                if key in datos_personalizados:
+                    grupo[key] = datos_personalizados[key]
+            if 'contenidos' in datos_personalizados:
+                accion['contenidos'] = datos_personalizados['contenidos']
+        
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
+                                leftMargin=2*cm, rightMargin=2*cm,
+                                topMargin=2*cm, bottomMargin=2*cm)
+        
+        elementos = []
+        styles = getSampleStyleSheet()
+        
+        # Estilos modernos (sin serif, colores más neutros)
+        style_titulo = ParagraphStyle('TituloModerno',
+            fontSize=56,
+            textColor=colors.HexColor("#1a1a1a"),
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            spaceAfter=15,
+            leading=60
+        )
+        
+        style_subtitulo = ParagraphStyle('SubtituloModerno',
+            fontSize=18,
+            textColor=colors.HexColor("#666666"),
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            spaceAfter=25
+        )
+        
+        style_nombre = ParagraphStyle('NombreModerno',
+            fontSize=32,
+            textColor=colors.HexColor("#2563eb"),
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=10
+        )
+        
+        style_accion = ParagraphStyle('AccionModerno',
+            fontSize=24,
+            textColor=colors.HexColor("#1a1a1a"),
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold',
+            spaceAfter=15,
+            leading=28
+        )
+        
+        style_datos = ParagraphStyle('DatosModerno',
+            fontSize=13,
+            textColor=colors.HexColor("#4b5563"),
+            alignment=TA_CENTER,
+            fontName='Helvetica',
+            spaceAfter=8
+        )
+        
+        style_contenidos = ParagraphStyle('ContenidosModerno',
+            fontSize=11,
+            textColor=colors.HexColor("#374151"),
+            alignment=TA_JUSTIFY,
+            fontName='Helvetica',
+            spaceAfter=8,
+            leading=14
+        )
+        
+        # CARA A - Diseño moderno
+        elementos.append(Spacer(1, 1*cm))
+        
+        # Logo más grande y prominente
+        if logo_url:
+            try:
+                logo = Image(logo_url, width=10*cm, height=3.5*cm, kind='proportional')
+                logo.hAlign = 'CENTER'
+                elementos.append(logo)
+                elementos.append(Spacer(1, 1*cm))
+            except Exception as e:
+                print(f"Error cargando logo: {e}")
+                elementos.append(Spacer(1, 0.5*cm))
+        
+        # Título sin "DIPLOMA" - más moderno
+        elementos.append(Paragraph("CERTIFICADO DE FORMACIÓN", style_titulo))
+        elementos.append(Paragraph("Se certifica que", style_subtitulo))
+        elementos.append(Spacer(1, 0.5*cm))
+        
+        # Nombre destacado
+        nombre_completo = f"{participante.get('nombre', '')} {participante.get('apellidos', '')}".strip()
+        elementos.append(Paragraph(nombre_completo, style_nombre))
+        
+        tipo_doc = participante.get('tipo_documento', 'NIF')
+        num_doc = participante.get('nif', 'Sin documento')
+        elementos.append(Paragraph(f"{tipo_doc}: {num_doc}", style_datos))
+        elementos.append(Spacer(1, 0.8*cm))
+        
+        # Acción formativa
+        elementos.append(Paragraph("ha completado satisfactoriamente", style_datos))
+        elementos.append(Spacer(1, 0.3*cm))
+        
+        accion_nombre = accion.get('nombre', 'Curso no especificado')
+        elementos.append(Paragraph(accion_nombre, style_accion))
+        elementos.append(Spacer(1, 0.8*cm))
+        
+        # Detalles en formato moderno (tabla limpia)
+        horas = accion.get('horas', 0) or accion.get('num_horas', 0)
+        modalidad = grupo.get('modalidad', 'PRESENCIAL')
+        fecha_inicio = grupo.get('fecha_inicio')
+        fecha_fin = grupo.get('fecha_fin') or grupo.get('fecha_fin_prevista')
+        
+        fecha_inicio_str = pd.to_datetime(fecha_inicio).strftime('%d/%m/%Y') if fecha_inicio else "No especificada"
+        fecha_fin_str = pd.to_datetime(fecha_fin).strftime('%d/%m/%Y') if fecha_fin else "No especificada"
+        
+        # Tabla de detalles minimalista
+        datos_tabla = [
+            ["Duración:", f"{horas} horas"],
+            ["Modalidad:", modalidad],
+            ["Período:", f"{fecha_inicio_str} - {fecha_fin_str}"]
+        ]
+        
+        tabla = Table(datos_tabla, colWidths=[6*cm, 10*cm])
+        tabla.setStyle(TableStyle([
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor("#4b5563")),
+            ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+            ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        
+        tabla.hAlign = 'CENTER'
+        elementos.append(tabla)
+        elementos.append(Spacer(1, 1*cm))
+        
+        # Fecha de emisión
+        meses = {
+            1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+            5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+            9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+        }
+        hoy = datetime.now()
+        fecha_emision = f"{hoy.day} de {meses[hoy.month]} de {hoy.year}"
+        elementos.append(Paragraph(fecha_emision, style_datos))
+        
+        # CARA B - Contenidos
+        elementos.append(PageBreak())
+        
+        style_titulo_contenidos = ParagraphStyle('TituloContenidosModerno',
+            fontSize=28,
+            textColor=colors.HexColor("#1a1a1a"),
+            alignment=TA_LEFT,
+            fontName='Helvetica-Bold',
+            spaceAfter=20
+        )
+        
+        elementos.append(Spacer(1, 1*cm))
+        elementos.append(Paragraph("Contenidos del programa", style_titulo_contenidos))
+        elementos.append(Spacer(1, 0.5*cm))
+        
+        contenidos = accion.get('contenidos', '')
+        if contenidos and contenidos.strip():
+            contenidos_texto = contenidos.replace('\n\n', '<br/><br/>').replace('\n', '<br/>')
+            elementos.append(Paragraph(contenidos_texto, style_contenidos))
+        else:
+            elementos.append(Paragraph("Los contenidos de este programa no han sido especificados.", style_contenidos))
+        
+        # Función para dibujar firma (sin borde)
+        def dibujar_firma(canvas, doc, firma_url=firma_url):
+            if firma_url:
+                try:
+                    canvas.drawImage(
+                        firma_url,
+                        x=doc.pagesize[0] / 2 - 60,
+                        y=60,
+                        width=160,
+                        height=60,
+                        mask="auto"
+                    )
+                except Exception as e:
+                    print("Error dibujando firma:", e)
+        
+        doc.build(
+            elementos,
+            onFirstPage=lambda c, d: dibujar_firma(c, d, firma_url)
+        )
+        buffer.seek(0)
+        return buffer
+
+    # =========================
+    # REGISTRO DE PLANTILLAS
+    # =========================
+    PLANTILLAS_DISPONIBLES = {
+        'clasica': {
+            'nombre': 'Clásica',
+            'descripcion': 'Diseño tradicional con borde decorativo y tipografía serif',
+            'funcion': generar_diploma_pdf,
+            'preview': '🎓 Estilo formal con marcos'
+        },
+        'moderna': {
+            'nombre': 'Moderna',
+            'descripcion': 'Diseño minimalista con tipografía sans-serif y colores neutros',
+            'funcion': generar_diploma_moderno,
+            'preview': '✨ Estilo limpio y contemporáneo'
+        }
+    }
 
 # =========================
 # EDITOR INTERACTIVO
@@ -538,6 +820,39 @@ def mostrar_gestion_logos(logos_service, empresa_id, session_state):
                     st.rerun()
                     
 # =========================
+# GESTIÓN DE PLANTILLAS
+# =========================
+def mostrar_selector_plantillas(plantillas_service, empresa_id):
+    """Interfaz para seleccionar plantilla de diploma."""
+    st.markdown("### 🎨 Seleccionar Plantilla de Diploma")
+    st.caption("Elige el diseño que mejor se adapte a tu marca")
+    
+    plantilla_activa_codigo = plantillas_service.get_plantilla_activa(empresa_id)
+    
+    cols = st.columns(len(PLANTILLAS_DISPONIBLES))
+    
+    for idx, (codigo, plantilla) in enumerate(PLANTILLAS_DISPONIBLES.items()):
+        with cols[idx]:
+            es_activa = plantilla_activa_codigo == codigo
+            
+            # Contenedor con borde si está activa
+            if es_activa:
+                st.success(f"✅ **{plantilla['nombre']}** (Activa)")
+            else:
+                st.markdown(f"**{plantilla['nombre']}**")
+            
+            st.caption(plantilla['descripcion'])
+            st.info(plantilla['preview'])
+            
+            if not es_activa:
+                if st.button(f"Usar {plantilla['nombre']}", key=f"btn_plantilla_{codigo}", use_container_width=True):
+                    if plantillas_service.set_plantilla_activa(empresa_id, codigo):
+                        st.success(f"Plantilla '{plantilla['nombre']}' activada")
+                        st.rerun()
+            else:
+                st.button("En uso", disabled=True, use_container_width=True) 
+                
+# =========================
 # MAIN
 # =========================
 def render(supabase, session_state):
@@ -557,8 +872,14 @@ def render(supabase, session_state):
     participantes_service = get_participantes_service(supabase, session_state)
     firmas_service = FirmasService(supabase, session_state)
     logos_service = LogosService(supabase, session_state)
+    plantillas_service = PlantillasService(supabase, session_state)
     
-    tabs = st.tabs(["📜 Generar Diplomas", "✏️ Gestionar Firma", "🏢 Gestionar Logotipo"])
+    tabs = st.tabs([
+        "📜 Generar Diplomas",
+        "✏️ Gestionar Firma",
+        "🏢 Gestionar Logotipo",
+        "🎨 Plantillas"
+    ])
     
     # --- TAB 0: GENERAR DIPLOMAS ---
     with tabs[0]:
@@ -627,8 +948,13 @@ def render(supabase, session_state):
 
         logo = logos_service.get_logo_empresa(empresa_id)
         logo_url = logo["archivo_url"] if logo else None
+    
+        plantilla_codigo = plantillas_service.get_plantilla_activa(empresa_id)
+        plantilla_info = PLANTILLAS_DISPONIBLES[plantilla_codigo]
         
+        st.info(f"🎨 Plantilla: **{plantilla_info['nombre']}**")
         st.divider()
+        
         datos_personalizados = mostrar_editor_diploma(participante, grupo_completo, accion_completa)
         st.divider()
         
@@ -782,3 +1108,14 @@ def render(supabase, session_state):
             5. **Peso máximo**: 5MB
             6. **Colores**: Alta calidad, evitar pixelación
             """)
+    # --- TAB 3: PLANTILLAS ---
+    with tabs[3]:
+        if session_state.role == "admin":
+            df_empresas = empresas_service.get_empresas_con_jerarquia()
+            empresas_dict = {row["nombre"]: row["id"] for _, row in df_empresas.iterrows()}
+            empresa_plantilla_sel = st.selectbox("Seleccionar empresa", list(empresas_dict.keys()), key="sel_empresa_plantilla")
+            empresa_plantilla_id = empresas_dict[empresa_plantilla_sel]
+        else:
+            empresa_plantilla_id = session_state.user.get("empresa_id")
+        
+        mostrar_selector_plantillas(plantillas_service, empresa_plantilla_id)
