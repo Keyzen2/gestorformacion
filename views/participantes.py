@@ -657,6 +657,7 @@ def mostrar_formulario_participante_nn(
     grupos_service,
     auth_service,
     clases_service,
+    supabase,
     session_state,
     es_creacion=False
 ):
