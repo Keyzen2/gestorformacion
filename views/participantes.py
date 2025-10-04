@@ -316,7 +316,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="ğ
             
             return fila_seleccionada, df_paged
     
-return None, df_paged
+        return None, df_paged
         
     except Exception as e:
         st.error(f"âŒ Error mostrando tabla: {e}")
