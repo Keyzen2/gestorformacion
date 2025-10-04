@@ -291,36 +291,40 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         st.info(f"📊 Mostrando {total_rows} de {len(df_participantes)} participantes (filtrados)")
 
     try:
-        evento = st.dataframe(
-            df_paged[columnas_disponibles],
-            column_config={k: v for k, v in column_config.items() if k in columnas_disponibles},
-            use_container_width=True,
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row"
-        )
-
-        if evento.selection.rows:
-            fila_seleccionada = df_paged.iloc[evento.selection.rows[0]]
-            participante_id = fila_seleccionada["id"]
-            
-            # Recargar datos limpios desde BD
-            participante_limpio = participantes_service.supabase.table("participantes").select("""
-                id, nif, nombre, apellidos, email, telefono, 
-                fecha_nacimiento, sexo, empresa_id, provincia_id, localidad_id,
-                tipo_documento, niss
-            """).eq("id", participante_id).execute()
-            
-            if participante_limpio.data:
-                return participante_limpio.data[0], df_paged
-            
-            return fila_seleccionada, df_paged
+    evento = st.dataframe(
+        df_paged[columnas_disponibles],
+        column_config={k: v for k, v in column_config.items() if k in columnas_disponibles},
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
     
-        return None, df_paged
+except Exception as e:
+    st.error(f"❌ Error mostrando tabla: {e}")
+    return None, df_paged
+
+# Fuera del try-except
+if evento.selection.rows:
+    fila_seleccionada = df_paged.iloc[evento.selection.rows[0]]
+    participante_id = fila_seleccionada["id"]
+    
+    # Recargar datos limpios desde BD
+    try:
+        participante_limpio = participantes_service.supabase.table("participantes").select("""
+            id, nif, nombre, apellidos, email, telefono, 
+            fecha_nacimiento, sexo, empresa_id, provincia_id, localidad_id,
+            tipo_documento, niss
+        """).eq("id", participante_id).execute()
         
+        if participante_limpio.data:
+            return participante_limpio.data[0], df_paged
     except Exception as e:
-        st.error(f"❌ Error mostrando tabla: {e}")
-        return None, df_paged
+        st.error(f"Error recargando participante: {e}")
+    
+    return fila_seleccionada, df_paged
+
+return None, df_paged
 
 # =========================
 # SECCIÓN DE GRUPOS N:N PARA PARTICIPANTES
