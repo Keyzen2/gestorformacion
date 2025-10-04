@@ -623,9 +623,9 @@ class ParticipantesService:
                 localidad:localidades(id, nombre),
                 empresa:empresas(id, nombre, cif),
                 participantes_grupos(
-                        id, grupo_id, fecha_asignacion,
-                        grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
-                               accion_formativa:acciones_formativas(nombre))
+                    id, grupo_id, fecha_asignacion,
+                    grupo:grupos(id, codigo_grupo, fecha_inicio, fecha_fin_prevista,
+                           accion_formativa:acciones_formativas(nombre))
                 )
             """)
         
@@ -647,18 +647,18 @@ class ParticipantesService:
             participantes_procesados = []
             for participante in res.data:
                 grupos_participante = participante.get("participantes_grupos", [])
-
+    
                 # Empresa
                 empresa_data = participante.get("empresa", {})
                 empresa_nombre = empresa_data.get("nombre", "") if isinstance(empresa_data, dict) else ""
     
-                # Provincia y localidad
+                # ✅ CORREGIDO: Extraer provincia y localidad desde la relación FK
                 provincia_data = participante.get("provincia", {})
                 localidad_data = participante.get("localidad", {})
-
+    
                 provincia_nombre = provincia_data.get("nombre", "") if isinstance(provincia_data, dict) else ""
                 localidad_nombre = localidad_data.get("nombre", "") if isinstance(localidad_data, dict) else ""
-
+    
                 # Procesar grupos
                 grupos_ids, grupos_codigos = [], []
                 for grupo_rel in grupos_participante:
@@ -666,7 +666,7 @@ class ParticipantesService:
                     if isinstance(grupo_data, dict):
                         grupos_ids.append(grupo_data.get("id", ""))
                         grupos_codigos.append(grupo_data.get("codigo_grupo", ""))
-
+    
                 participante_row = {
                     "id": participante.get("id"),
                     "nif": participante.get("nif", ""),
