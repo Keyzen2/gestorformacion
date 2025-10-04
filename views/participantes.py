@@ -301,7 +301,22 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         )
 
         if evento.selection.rows:
-            return df_paged.iloc[evento.selection.rows[0]], df_paged
+            fila_seleccionada = df_paged.iloc[evento.selection.rows[0]]
+            participante_id = fila_seleccionada["id"]
+            
+            # 🔧 CORRECCIÓN: Re-cargar datos limpios directamente de BD
+            participante_limpio_res = st.session_state.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, 
+                fecha_nacimiento, sexo, empresa_id, provincia_id, localidad_id,
+                tipo_documento, niss
+            """).eq("id", participante_id).execute()
+            
+            if participante_limpio_res.data:
+                return participante_limpio_res.data[0], df_paged
+            else:
+                st.error(f"No se pudieron cargar datos del participante {participante_id}")
+                return fila_seleccionada, df_paged
+                
         return None, df_paged
         
     except Exception as e:
