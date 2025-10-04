@@ -912,7 +912,10 @@ def mostrar_formulario_participante_nn(
                     "email": email or None,
                     "empresa_id": empresa_id,
                 }
-
+                # 🔍 DEBUG: Ver qué se está enviando
+                st.write("🔍 DEBUG - Datos que se enviarán a auth_service:")
+                st.json(datos_payload)
+                
                 if es_creacion:
                     password_final = password if password and password != "" else None
                     
