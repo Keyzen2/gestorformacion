@@ -304,11 +304,19 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
             fila_seleccionada = df_paged.iloc[evento.selection.rows[0]]
             participante_id = fila_seleccionada["id"]
             
-            # Necesitas pasar participantes_service a esta función
-            # Por ahora, re-cargar desde la función que llama
-            return {"id": participante_id, "requiere_recarga": True}, df_paged
+            # Recargar datos limpios desde BD
+            participante_limpio = participantes_service.supabase.table("participantes").select("""
+                id, nif, nombre, apellidos, email, telefono, 
+                fecha_nacimiento, sexo, empresa_id, provincia_id, localidad_id,
+                tipo_documento, niss
+            """).eq("id", participante_id).execute()
             
-        return None, df_paged
+            if participante_limpio.data:
+                return participante_limpio.data[0], df_paged
+            
+            return fila_seleccionada, df_paged
+    
+return None, df_paged
         
     except Exception as e:
         st.error(f"❌ Error mostrando tabla: {e}")
