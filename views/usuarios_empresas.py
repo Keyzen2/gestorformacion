@@ -338,6 +338,7 @@ def mostrar_formulario_usuario(usuario_data, data_service, auth_service, empresa
             datos_usuario = {
                 "email": email.strip(),
                 "nombre_completo": nombre_completo.strip(),
+                "nombre": nombre_completo.strip(),
                 "telefono": telefono.strip() if telefono else None,
                 "nif": nif.strip() if nif else None,
                 "rol": rol,
