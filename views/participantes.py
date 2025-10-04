@@ -692,17 +692,7 @@ def mostrar_formulario_participante_nn(
     else:
         st.subheader(f"✏️ Editar Participante: {participante_data['nombre']} {participante_data.get('apellidos','')}")
         datos = participante_data.copy()
-        
-# 🔍 DEBUG: Ver qué trae participante_data
-        st.write("🔍 DEBUG - participante_data recibido:")
-        st.json({
-            "id": datos.get("id"),
-            "nombre": datos.get("nombre"),
-            "apellidos": datos.get("apellidos"),
-            "provincia_nombre": datos.get("provincia_nombre"),
-            "localidad_nombre": datos.get("localidad_nombre")
-        })
-        
+               
     form_id = f"participante_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
 
     # Cargar datos para selectboxes
@@ -970,51 +960,6 @@ def mostrar_formulario_participante_nn(
                         except Exception as e:
                             st.warning(f"⚠️ Error actualizando contraseña en Auth: {e}")
                     
-                    # ==================== DEBUG INICIO ====================
-                    st.write("=" * 60)
-                    st.write("🔍 DEBUG - Valores capturados del formulario:")
-                    st.write(f"  nombre: '{nombre}'")
-                    st.write(f"  apellidos: '{apellidos}'")
-                    st.write(f"  tipo_documento: '{tipo_documento}'")
-                    st.write(f"  provincia_id_sel: {provincia_id_sel}")
-                    st.write(f"  localidad_id_sel: {localidad_id_sel}")
-                    st.write("=" * 60)
-                    st.write("🔍 DEBUG - datos_payload que se enviará:")
-                    st.json(datos_payload)
-                    st.write("=" * 60)
-                    # ==================== DEBUG FIN ====================
-                    
-                    ok = auth_service.actualizar_usuario_con_auth(
-                        tabla="participantes",
-                        registro_id=datos["id"],
-                        datos_editados=datos_payload
-                    )
-                    
-                    # ==================== DEBUG RESULTADO ====================
-                    if ok:
-                        st.write("✅ auth_service.actualizar_usuario_con_auth retornó True")
-                        
-                        # Verificar qué quedó en BD inmediatamente
-                        verificacion = participantes_service.supabase.table("participantes").select(
-                            "id, nombre, apellidos, tipo_documento, provincia_id, localidad_id"
-                        ).eq("id", datos["id"]).execute()
-                        
-                        st.write("🔍 DEBUG - Datos en BD DESPUÉS del UPDATE:")
-                        if verificacion.data:
-                            st.json(verificacion.data[0])
-                        else:
-                            st.error("❌ No se encontraron datos en la verificación")
-                        
-                        st.write("=" * 60)
-                        st.success("✅ Cambios guardados correctamente")
-                        # 🔴 COMENTAR TEMPORALMENTE el st.rerun() para ver el debug
-                        st.warning("⚠️ DEBUG ACTIVO - st.rerun() desactivado temporalmente")
-                        # st.rerun()  # <-- COMENTADO PARA DEBUG
-                    else:
-                        st.write("❌ auth_service.actualizar_usuario_con_auth retornó False")
-                        st.write("=" * 60)
-                    # ==================== DEBUG FIN ====================
-
         # =========================
         # ELIMINAR O CANCELAR
         # =========================
