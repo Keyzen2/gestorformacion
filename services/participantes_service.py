@@ -47,25 +47,22 @@ class ParticipantesService:
                     'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                     'grupo_id', 'empresa_id', 'provincia_id', 'localidad_id',
-                    'provincia_nombre', 'localidad_nombre', 'empresa_nombre'
+                    'provincia_display', 'localidad_display', 'empresa_nombre'
                 ])
             
             df = pd.DataFrame(res.data)
             
             if not df.empty:
                 # Extraer nombres desde FK
-                df["provincia_nombre"] = df["provincia"].apply(
+                df["provincia_display"] = df["provincia"].apply(
                     lambda x: x.get("nombre") if isinstance(x, dict) else ""
                 )
-                df["localidad_nombre"] = df["localidad"].apply(
+                df["localidad_display"] = df["localidad"].apply(
                     lambda x: x.get("nombre") if isinstance(x, dict) else ""
                 )
                 df["empresa_nombre"] = df["empresa"].apply(
                     lambda x: x.get("nombre") if isinstance(x, dict) else ""
                 )
-                
-                # Eliminar columnas de relación
-                df = df.drop(columns=['provincia', 'localidad', 'empresa'], errors='ignore')
             
             return df
             
@@ -75,7 +72,7 @@ class ParticipantesService:
                 'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                 'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                 'grupo_id', 'empresa_id', 'provincia_id', 'localidad_id',
-                'provincia_nombre', 'localidad_nombre', 'empresa_nombre'
+                'provincia_display', 'localidad_display', 'empresa_nombre'
             ])
             
     def get_participante_id_from_auth(self, auth_id: str) -> Optional[str]:
@@ -656,8 +653,8 @@ class ParticipantesService:
                 provincia_data = participante.get("provincia", {})
                 localidad_data = participante.get("localidad", {})
     
-                provincia_nombre = provincia_data.get("nombre", "") if isinstance(provincia_data, dict) else ""
-                localidad_nombre = localidad_data.get("nombre", "") if isinstance(localidad_data, dict) else ""
+                provincia_display = provincia_data.get("nombre", "") if isinstance(provincia_data, dict) else ""
+                localidad_display = localidad_data.get("nombre", "") if isinstance(localidad_data, dict) else ""
     
                 # Procesar grupos
                 grupos_ids, grupos_codigos = [], []
