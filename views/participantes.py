@@ -215,7 +215,7 @@ def mostrar_metricas_participantes(participantes_service, session_state):
 # =========================
 # TABLA GENERAL
 # =========================
-def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="📋 Lista de Participantes"):
+def mostrar_tabla_participantes(df_participantes, session_state, participantes_service, titulo_tabla="📋 Lista de Participantes"):
     """Muestra tabla de participantes con filtros, paginación y selección de fila."""
     if df_participantes.empty:
         st.info("📋 No hay participantes para mostrar")
@@ -291,15 +291,14 @@ def mostrar_tabla_participantes(df_participantes, session_state, titulo_tabla="�
         st.info(f"📊 Mostrando {total_rows} de {len(df_participantes)} participantes (filtrados)")
 
     try:
-    evento = st.dataframe(
-        df_paged[columnas_disponibles],
-        column_config={k: v for k, v in column_config.items() if k in columnas_disponibles},
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row"
-    )
-    
+        evento = st.dataframe(
+            df_paged[columnas_disponibles],
+            column_config={k: v for k, v in column_config.items() if k in columnas_disponibles},
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
     except Exception as e:
         st.error(f"❌ Error mostrando tabla: {e}")
         return None, df_paged
