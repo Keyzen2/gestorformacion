@@ -92,7 +92,7 @@ def preparar_datos_tabla_nn(participantes_service, session_state):
         if df_participantes.empty:
             return pd.DataFrame(columns=[
                 'id', 'nif', 'nombre', 'apellidos', 
-                'provincia_id', 'localidad_id', 'provincia_nombre', 'localidad_nombre',
+                'provincia_id', 'localidad_id', 'provincia_display', 'localidad_display',
                 'email', 'telefono', 'empresa_id', 'empresa_nombre', 
                 'num_grupos', 'grupos_codigos'
             ])
@@ -114,7 +114,7 @@ def preparar_datos_tabla_nn(participantes_service, session_state):
         st.error(f"❌ Error preparando datos de participantes: {e}")
         return pd.DataFrame(columns=[
             'id', 'nif', 'nombre', 'apellidos',
-            'provincia_id', 'localidad_id', 'provincia_nombre', 'localidad_nombre',
+            'provincia_id', 'localidad_id', 'provincia_display', 'localidad_display',
             'email', 'telefono', 'empresa_id', 'empresa_nombre',
             'num_grupos', 'grupos_codigos'
         ])
@@ -256,7 +256,7 @@ def mostrar_tabla_participantes(df_participantes, session_state, participantes_s
     end_idx = start_idx + page_size
     df_paged = df_filtrado.iloc[start_idx:end_idx]
 
-    columnas = ["nombre", "apellidos", "nif", "provincia_nombre", "localidad_nombre", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
+    columnas = ["nombre", "apellidos", "nif", "provincia_display", "localidad_display", "email", "telefono", "empresa_nombre", "num_grupos", "grupos_codigos"]
     
     columnas_disponibles = []
     for col in columnas:
@@ -278,8 +278,8 @@ def mostrar_tabla_participantes(df_participantes, session_state, participantes_s
         "nombre": st.column_config.TextColumn("👤 Nombre", width="medium"),
         "apellidos": st.column_config.TextColumn("👥 Apellidos", width="large"),
         "nif": st.column_config.TextColumn("🆔 Documento", width="small"),
-        "provincia_nombre": st.column_config.TextColumn("🗺️ Provincia", width="medium"),
-        "localidad_nombre": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
+        "provincia_display": st.column_config.TextColumn("🗺️ Provincia", width="medium"),
+        "localidad_display": st.column_config.TextColumn("🏙️ Localidad", width="medium"),
         "email": st.column_config.TextColumn("📧 Email", width="large"),
         "telefono": st.column_config.TextColumn("📞 Teléfono", width="medium"),
         "empresa_nombre": st.column_config.TextColumn("🏢 Empresa", width="large"),
@@ -751,20 +751,20 @@ def mostrar_formulario_participante_nn(
             
             # Provincia actual del participante
             provincia_id_actual = datos.get("provincia_id")
-            provincia_nombre_actual = None
+            provincia_display_actual = None
             
             if provincia_id_actual:
                 for nombre, pid in prov_opciones.items():
                     if pid == provincia_id_actual:
-                        provincia_nombre_actual = nombre
+                        provincia_display_actual = nombre
                         break
             
             with col1:
                 provincia_sel = st.selectbox(
                     "🗺️ Provincia",
                     options=[""] + list(prov_opciones.keys()),
-                    index=([""] + list(prov_opciones.keys())).index(provincia_nombre_actual) 
-                        if provincia_nombre_actual else 0,
+                    index=([""] + list(prov_opciones.keys())).index(provincia_display_actual) 
+                        if provincia_display_actual else 0,
                     key=f"{form_id}_provincia"
                 )
             
@@ -778,20 +778,20 @@ def mostrar_formulario_participante_nn(
                 
                 # Localidad actual
                 localidad_id_actual = datos.get("localidad_id")
-                localidad_nombre_actual = None
+                localidad_display_actual = None
                 
                 if localidad_id_actual:
                     for nombre, lid in loc_opciones.items():
                         if lid == localidad_id_actual:
-                            localidad_nombre_actual = nombre
+                            localidad_display_actual = nombre
                             break
                 
                 with col2:
                     localidad_sel = st.selectbox(
                         "🏙️ Localidad",
                         options=[""] + list(loc_opciones.keys()),
-                        index=([""] + list(loc_opciones.keys())).index(localidad_nombre_actual)
-                            if localidad_nombre_actual else 0,
+                        index=([""] + list(loc_opciones.keys())).index(localidad_display_actual)
+                            if localidad_display_actual else 0,
                         key=f"{form_id}_localidad"
                     )
                     
