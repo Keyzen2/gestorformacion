@@ -1947,7 +1947,7 @@ def render(supabase, session_state):
                 df_participantes = df_participantes[df_participantes["empresa_id"].isin(empresas_ids)]
     
             # Mostrar tabla
-            resultado = mostrar_tabla_participantes(df_participantes, session_state)
+            resultado = mostrar_tabla_participantes(df_participantes, session_state, participantes_service)
             if resultado is not None and len(resultado) == 2:
                 seleccionado, df_paged = resultado
             else:
