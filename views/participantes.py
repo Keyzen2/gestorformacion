@@ -675,15 +675,16 @@ def mostrar_formulario_participante_nn(
     else:
         st.subheader(f"✏️ Editar Participante: {participante_data['nombre']} {participante_data.get('apellidos','')}")
         datos = participante_data.copy()
-        # 🔍 DEBUG: Ver qué trae participante_data
-                st.write("🔍 DEBUG - participante_data recibido:")
-                st.json({
-                    "id": datos.get("id"),
-                    "nombre": datos.get("nombre"),
-                    "apellidos": datos.get("apellidos"),
-                    "provincia_nombre": datos.get("provincia_nombre"),
-                    "localidad_nombre": datos.get("localidad_nombre")
-                })
+        
+# 🔍 DEBUG: Ver qué trae participante_data
+        st.write("🔍 DEBUG - participante_data recibido:")
+        st.json({
+            "id": datos.get("id"),
+            "nombre": datos.get("nombre"),
+            "apellidos": datos.get("apellidos"),
+            "provincia_nombre": datos.get("provincia_nombre"),
+            "localidad_nombre": datos.get("localidad_nombre")
+        })
         
     form_id = f"participante_{datos.get('id','nuevo')}_{'crear' if es_creacion else 'editar'}"
 
