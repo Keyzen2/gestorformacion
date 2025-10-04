@@ -636,8 +636,8 @@ class ParticipantesService:
                     'id', 'nif', 'nombre', 'apellidos', 'email', 'telefono',
                     'fecha_nacimiento', 'sexo', 'created_at', 'updated_at', 
                     'empresa_id', 'empresa_nombre', 
-                    'provincia_id', 'provincia_nombre',
-                    'localidad_id', 'localidad_nombre',
+                    'provincia_id', 'provincia_display',
+                    'localidad_id', 'localidad_display',
                     'grupos_ids', 'grupos_codigos'
                 ])
         
