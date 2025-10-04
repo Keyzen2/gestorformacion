@@ -184,110 +184,110 @@ class AuthService:
     def actualizar_usuario_con_auth(
         self, tabla: str, registro_id: str, datos_editados: Dict[str, Any]
     ) -> bool:
+        """
+        Actualiza registro en tabla principal filtrando campos None.
+        Maneja correctamente campos que pueden ser vacíos vs None.
+        """
         try:
-            registro = self.supabase.table(tabla).select("auth_id, email").eq(
-                "id", registro_id
-            ).execute()
+            datos_finales = {}
             
-            if not registro.data:
-                st.error(f"{tabla.title()} no encontrado")
-                return False
-            
-            auth_id = registro.data[0].get("auth_id")
-            email_actual = registro.data[0].get("email")
-            
-            # ✅ MAPEO EXPLÍCITO - Solo incluir campos que NO son None
             if tabla == "participantes":
-                datos_tabla = {}
-                
-                # Solo añadir campos que tienen valor
+                # Campos de texto que requieren valor no-None
                 if datos_editados.get("nombre") is not None:
-                    datos_tabla["nombre"] = datos_editados["nombre"]
+                    datos_finales["nombre"] = datos_editados["nombre"]
                 if datos_editados.get("apellidos") is not None:
-                    datos_tabla["apellidos"] = datos_editados["apellidos"]
-                if datos_editados.get("email") is not None:
-                    datos_tabla["email"] = datos_editados["email"]
-                if datos_editados.get("telefono") is not None:
-                    datos_tabla["telefono"] = datos_editados["telefono"]
+                    datos_finales["apellidos"] = datos_editados["apellidos"]
                 if datos_editados.get("nif") is not None:
-                    datos_tabla["nif"] = datos_editados["nif"]
-                if datos_editados.get("tipo_documento") is not None:
-                    datos_tabla["tipo_documento"] = datos_editados["tipo_documento"]
+                    datos_finales["nif"] = datos_editados["nif"]
                 if datos_editados.get("niss") is not None:
-                    datos_tabla["niss"] = datos_editados["niss"]
-                if datos_editados.get("fecha_nacimiento") is not None:
-                    datos_tabla["fecha_nacimiento"] = datos_editados["fecha_nacimiento"]
-                if datos_editados.get("sexo") is not None:
-                    datos_tabla["sexo"] = datos_editados["sexo"]
-                if datos_editados.get("provincia_id") is not None:
-                    datos_tabla["provincia_id"] = datos_editados["provincia_id"]
-                if datos_editados.get("localidad_id") is not None:
-                    datos_tabla["localidad_id"] = datos_editados["localidad_id"]
-                if datos_editados.get("empresa_id") is not None:
-                    datos_tabla["empresa_id"] = datos_editados["empresa_id"]
-                    
-            elif tabla == "usuarios":
-                datos_tabla = {}
-                if datos_editados.get("nombre_completo") is not None:
-                    datos_tabla["nombre_completo"] = datos_editados["nombre_completo"]
-                if datos_editados.get("email") is not None:
-                    datos_tabla["email"] = datos_editados["email"]
+                    datos_finales["niss"] = datos_editados["niss"]
                 if datos_editados.get("telefono") is not None:
-                    datos_tabla["telefono"] = datos_editados["telefono"]
-                if datos_editados.get("nif") is not None:
-                    datos_tabla["nif"] = datos_editados["nif"]
-                if datos_editados.get("rol") is not None:
-                    datos_tabla["rol"] = datos_editados["rol"]
+                    datos_finales["telefono"] = datos_editados["telefono"]
+                if datos_editados.get("email") is not None:
+                    datos_finales["email"] = datos_editados["email"]
+                
+                # Fechas
+                if datos_editados.get("fecha_nacimiento") is not None:
+                    datos_finales["fecha_nacimiento"] = datos_editados["fecha_nacimiento"]
+                
+                # Foreign keys (solo si tienen valor)
                 if datos_editados.get("empresa_id") is not None:
-                    datos_tabla["empresa_id"] = datos_editados["empresa_id"]
+                    datos_finales["empresa_id"] = datos_editados["empresa_id"]
+                if datos_editados.get("provincia_id") is not None:
+                    datos_finales["provincia_id"] = datos_editados["provincia_id"]
+                if datos_editados.get("localidad_id") is not None:
+                    datos_finales["localidad_id"] = datos_editados["localidad_id"]
+                if datos_editados.get("grupo_id") is not None:
+                    datos_finales["grupo_id"] = datos_editados["grupo_id"]
+                
+                # Campos que pueden ser "" (vacío) y es válido
+                # Usar "in" en lugar de "is not None"
+                if "tipo_documento" in datos_editados:
+                    datos_finales["tipo_documento"] = datos_editados["tipo_documento"]
+                if "sexo" in datos_editados:
+                    datos_finales["sexo"] = datos_editados["sexo"]
+            
+            elif tabla == "tutores":
+                # Campos obligatorios
+                if datos_editados.get("nombre") is not None:
+                    datos_finales["nombre"] = datos_editados["nombre"]
+                if datos_editados.get("email") is not None:
+                    datos_finales["email"] = datos_editados["email"]
+                
+                # Campos opcionales
+                if datos_editados.get("apellidos") is not None:
+                    datos_finales["apellidos"] = datos_editados["apellidos"]
+                if datos_editados.get("nif") is not None:
+                    datos_finales["nif"] = datos_editados["nif"]
+                if datos_editados.get("telefono") is not None:
+                    datos_finales["telefono"] = datos_editados["telefono"]
+                if datos_editados.get("direccion") is not None:
+                    datos_finales["direccion"] = datos_editados["direccion"]
+                if datos_editados.get("ciudad") is not None:
+                    datos_finales["ciudad"] = datos_editados["ciudad"]
+                if datos_editados.get("provincia") is not None:
+                    datos_finales["provincia"] = datos_editados["provincia"]
+                if datos_editados.get("codigo_postal") is not None:
+                    datos_finales["codigo_postal"] = datos_editados["codigo_postal"]
+                if datos_editados.get("especialidad") is not None:
+                    datos_finales["especialidad"] = datos_editados["especialidad"]
+                if datos_editados.get("titulacion") is not None:
+                    datos_finales["titulacion"] = datos_editados["titulacion"]
+                if datos_editados.get("empresa_id") is not None:
+                    datos_finales["empresa_id"] = datos_editados["empresa_id"]
+                
+                # Campos selectbox que pueden ser vacíos
+                if "tipo_documento" in datos_editados:
+                    datos_finales["tipo_documento"] = datos_editados["tipo_documento"]
+                if "tipo_tutor" in datos_editados:
+                    datos_finales["tipo_tutor"] = datos_editados["tipo_tutor"]
+                if "tipo_tutoria" in datos_editados:
+                    datos_finales["tipo_tutoria"] = datos_editados["tipo_tutoria"]
+                if "descripcion_tutoria" in datos_editados:
+                    datos_finales["descripcion_tutoria"] = datos_editados["descripcion_tutoria"]
+            
+            elif tabla == "usuarios":
+                # Para usuarios, copiar todos los campos
+                datos_finales = datos_editados.copy()
+            
             else:
-                datos_tabla = {k: v for k, v in datos_editados.items() if v is not None}
+                # Para cualquier otra tabla, usar datos completos
+                datos_finales = datos_editados.copy()
             
-            # Añadir updated_at
+            # Añadir timestamp según schema
             schema = self._get_schema_fields(tabla)
-            if schema["updated_at"]:
-                datos_tabla["updated_at"] = datetime.utcnow().isoformat()
+            if schema.get("updated_at"):
+                datos_finales["updated_at"] = datetime.utcnow().isoformat()
             
-            if not datos_tabla:
-                st.warning("No hay cambios para actualizar")
-                return False
+            # Ejecutar actualización
+            res = (
+                self.supabase.table(tabla)
+                .update(datos_finales)
+                .eq("id", registro_id)
+                .execute()
+            )
             
-            # Actualizar
-            res = self.supabase.table(tabla).update(datos_tabla).eq("id", registro_id).execute()
-            
-            if not res.data:
-                st.error(f"Error actualizando {tabla}")
-                return False
-            
-            # Sincronizar Auth
-            if auth_id:
-                try:
-                    auth_update = {}
-                    nuevo_email = datos_editados.get("email")
-                    if nuevo_email and nuevo_email != email_actual:
-                        auth_update["email"] = nuevo_email
-                    
-                    if tabla == "participantes":
-                        auth_update["user_metadata"] = {
-                            "rol": "alumno",
-                            "nombre": datos_editados.get("nombre"),
-                            "apellidos": datos_editados.get("apellidos"),
-                            "tabla": "participantes"
-                        }
-                    elif tabla == "usuarios":
-                        auth_update["user_metadata"] = {
-                            "rol": datos_editados.get("rol", "gestor"),
-                            "nombre_completo": datos_editados.get("nombre_completo"),
-                            "tabla": "usuarios"
-                        }
-                    
-                    if auth_update:
-                        self.supabase.auth.admin.update_user_by_id(auth_id, auth_update)
-                        
-                except Exception as e:
-                    st.warning(f"⚠️ No se pudo sincronizar con Auth: {e}")
-            
-            return True
+            return bool(res.data)
             
         except Exception as e:
             st.error(f"❌ Error actualizando {tabla}: {e}")
