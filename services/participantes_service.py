@@ -524,22 +524,35 @@ class ParticipantesService:
                     st.error("Ya existe otro participante con ese email.")
                     return False
     
-            # ✅ MAPEAR CORRECTAMENTE LOS CAMPOS PARA UPDATE
-            datos_update = {
-                "nombre": datos_editados.get("nombre"),
-                "apellidos": datos_editados.get("apellidos"),
-                "email": datos_editados.get("email"),
-                "telefono": datos_editados.get("telefono"),
-                "nif": datos_editados.get("nif"),
-                "tipo_documento": datos_editados.get("tipo_documento"),
-                "niss": datos_editados.get("niss"),
-                "fecha_nacimiento": datos_editados.get("fecha_nacimiento"),
-                "sexo": datos_editados.get("sexo"),
-                "provincia_id": datos_editados.get("provincia_id"),
-                "localidad_id": datos_editados.get("localidad_id"),
-                "empresa_id": nueva_empresa,
-                "updated_at": datetime.utcnow().isoformat()
-            }
+            # ✅ MAPEO CORRECTO - Solo campos con valor
+            datos_update = {}
+            
+            if datos_editados.get("nombre") is not None:
+                datos_update["nombre"] = datos_editados["nombre"]
+            if datos_editados.get("apellidos") is not None:
+                datos_update["apellidos"] = datos_editados["apellidos"]
+            if datos_editados.get("email") is not None:
+                datos_update["email"] = datos_editados["email"]
+            if datos_editados.get("telefono") is not None:
+                datos_update["telefono"] = datos_editados["telefono"]
+            if datos_editados.get("nif") is not None:
+                datos_update["nif"] = datos_editados["nif"]
+            if datos_editados.get("tipo_documento") is not None:
+                datos_update["tipo_documento"] = datos_editados["tipo_documento"]
+            if datos_editados.get("niss") is not None:
+                datos_update["niss"] = datos_editados["niss"]
+            if datos_editados.get("fecha_nacimiento") is not None:
+                datos_update["fecha_nacimiento"] = datos_editados["fecha_nacimiento"]
+            if datos_editados.get("sexo") is not None:
+                datos_update["sexo"] = datos_editados["sexo"]
+            if datos_editados.get("provincia_id") is not None:
+                datos_update["provincia_id"] = datos_editados["provincia_id"]
+            if datos_editados.get("localidad_id") is not None:
+                datos_update["localidad_id"] = datos_editados["localidad_id"]
+            if nueva_empresa is not None:
+                datos_update["empresa_id"] = nueva_empresa
+            
+            datos_update["updated_at"] = datetime.utcnow().isoformat()
     
             # Actualizar participante
             self.supabase.table("participantes").update(datos_update).eq("id", participante_id).execute()
