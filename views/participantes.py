@@ -980,7 +980,9 @@ def mostrar_formulario_participante_nn(
                         
                         st.write("=" * 60)
                         st.success("✅ Cambios guardados correctamente")
-                        st.rerun()
+                        # 🔴 COMENTAR TEMPORALMENTE el st.rerun() para ver el debug
+                        st.warning("⚠️ DEBUG ACTIVO - st.rerun() desactivado temporalmente")
+                        # st.rerun()  # <-- COMENTADO PARA DEBUG
                     else:
                         st.write("❌ auth_service.actualizar_usuario_con_auth retornó False")
                         st.write("=" * 60)
