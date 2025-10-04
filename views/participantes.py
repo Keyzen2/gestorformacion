@@ -685,7 +685,13 @@ def mostrar_formulario_participante_nn(
     es_creacion=False
 ):
     """Formulario de participante con gestión N:N de grupos y nuevas funcionalidades."""
-
+# 🔍 DEBUG CRÍTICO - Ver TODOS los campos que llegan
+    st.write("=" * 60)
+    st.write("🔍 TODOS LOS CAMPOS DE participante_data:")
+    for key, value in participante_data.items():
+        st.write(f"  {key}: {value}")
+    st.write("=" * 60)
+    
     if es_creacion:
         st.subheader("➕ Crear Participante")
         datos = {}
