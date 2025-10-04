@@ -912,9 +912,6 @@ def mostrar_formulario_participante_nn(
                     "email": email or None,
                     "empresa_id": empresa_id,
                 }
-                # 🔍 DEBUG: Ver qué se está enviando
-                st.write("🔍 DEBUG - Datos que se enviarán a auth_service:")
-                st.json(datos_payload)
                 
                 if es_creacion:
                     password_final = password if password and password != "" else None
@@ -946,15 +943,48 @@ def mostrar_formulario_participante_nn(
                         except Exception as e:
                             st.warning(f"⚠️ Error actualizando contraseña en Auth: {e}")
                     
+                    # ==================== DEBUG INICIO ====================
+                    st.write("=" * 60)
+                    st.write("🔍 DEBUG - Valores capturados del formulario:")
+                    st.write(f"  nombre: '{nombre}'")
+                    st.write(f"  apellidos: '{apellidos}'")
+                    st.write(f"  tipo_documento: '{tipo_documento}'")
+                    st.write(f"  provincia_id_sel: {provincia_id_sel}")
+                    st.write(f"  localidad_id_sel: {localidad_id_sel}")
+                    st.write("=" * 60)
+                    st.write("🔍 DEBUG - datos_payload que se enviará:")
+                    st.json(datos_payload)
+                    st.write("=" * 60)
+                    # ==================== DEBUG FIN ====================
+                    
                     ok = auth_service.actualizar_usuario_con_auth(
                         tabla="participantes",
                         registro_id=datos["id"],
                         datos_editados=datos_payload
                     )
                     
+                    # ==================== DEBUG RESULTADO ====================
                     if ok:
+                        st.write("✅ auth_service.actualizar_usuario_con_auth retornó True")
+                        
+                        # Verificar qué quedó en BD inmediatamente
+                        verificacion = participantes_service.supabase.table("participantes").select(
+                            "id, nombre, apellidos, tipo_documento, provincia_id, localidad_id"
+                        ).eq("id", datos["id"]).execute()
+                        
+                        st.write("🔍 DEBUG - Datos en BD DESPUÉS del UPDATE:")
+                        if verificacion.data:
+                            st.json(verificacion.data[0])
+                        else:
+                            st.error("❌ No se encontraron datos en la verificación")
+                        
+                        st.write("=" * 60)
                         st.success("✅ Cambios guardados correctamente")
                         st.rerun()
+                    else:
+                        st.write("❌ auth_service.actualizar_usuario_con_auth retornó False")
+                        st.write("=" * 60)
+                    # ==================== DEBUG FIN ====================
 
         # =========================
         # ELIMINAR O CANCELAR
